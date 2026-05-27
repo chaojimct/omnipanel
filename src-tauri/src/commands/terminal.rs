@@ -1,7 +1,7 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use tauri::ipc::Channel;
-use tauri::{Emitter, State};
+use tauri::{AppHandle, Emitter, State};
 
 use crate::state::AppState;
 use crate::terminal::{LocalSession, TerminalSession, detect_shell};
@@ -25,6 +25,7 @@ pub async fn get_shell_type() -> Result<(String, String), String> {
 
 #[tauri::command]
 pub async fn create_terminal(
+    app: AppHandle,
     state: State<'_, AppState>,
     cols: u16,
     rows: u16,

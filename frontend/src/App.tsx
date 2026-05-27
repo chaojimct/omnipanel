@@ -5,17 +5,18 @@ import { StatusBar } from "./components/shell/StatusBar";
 import { CommandPalette } from "./components/shell/CommandPalette";
 import { NotificationDrawer } from "./components/shell/NotificationDrawer";
 import { AiDrawer, AiPinnedPanel } from "./components/ai/AiDrawer";
-import { Dashboard } from "./components/panels/Dashboard";
-import { TerminalPanel } from "./components/panels/TerminalPanel";
-import { SshManager } from "./components/panels/SshManager";
-import { DatabasePanel } from "./components/panels/DatabasePanel";
-import { DockerPanel } from "./components/panels/DockerPanel";
-import { ServerPanel } from "./components/panels/ServerPanel";
-import { ProtocolPanel } from "./components/panels/ProtocolPanel";
-import { WorkflowPanel } from "./components/panels/WorkflowPanel";
-import { KnowledgePanel } from "./components/panels/KnowledgePanel";
-import { TasksPanel } from "./components/panels/TasksPanel";
-import { SettingsPanel } from "./components/panels/SettingsPanel";
+import { WindowResize } from "./components/shell/WindowResize";
+import { Dashboard } from "./modules/workspace/Dashboard";
+import { TerminalPanel } from "./modules/terminal/TerminalPanel";
+import { SshManager } from "./modules/ssh/SshManager";
+import { DatabasePanel } from "./modules/database/DatabasePanel";
+import { DockerPanel } from "./modules/docker/DockerPanel";
+import { ServerPanel } from "./modules/server/ServerPanel";
+import { ProtocolPanel } from "./modules/protocol/ProtocolPanel";
+import { WorkflowPanel } from "./modules/workflow/WorkflowPanel";
+import { KnowledgePanel } from "./modules/knowledge/KnowledgePanel";
+import { TasksPanel } from "./modules/tasks/TasksPanel";
+import { SettingsPanel } from "./modules/settings/SettingsPanel";
 import { useAiStore } from "./stores/aiStore";
 
 const routeTitles: Record<string, string> = {
@@ -79,6 +80,7 @@ function AppShell() {
       <AiDrawer />
       <CommandPalette />
       <NotificationDrawer />
+      <WindowResize />
     </div>
   );
 }

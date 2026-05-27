@@ -16,6 +16,7 @@ tauri-plugin-shell = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-fs = "2"
 portable-pty = "0.8"
+tauri-plugin-updater = "2"
 omnipanel-core = { path = "../crates/omnipanel-core" }
 omnipanel-ai = { path = "../crates/omnipanel-ai" }
 omnipanel-renderer = { path = "../crates/omnipanel-renderer" }

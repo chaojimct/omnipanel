@@ -1,5 +1,7 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { useAiStore } from "../../stores/aiStore";
+import { useThemeStore } from "../../store/theme";
 
 type Section = "general" | "appearance" | "keybindings" | "ai" | "security" | "terminal" | "data";
 
@@ -7,6 +9,12 @@ interface NavItem {
   id: Section;
   label: string;
   icon: JSX.Element;
+}
+
+interface UpdateInfo {
+  available: boolean;
+  version: string;
+  body: string;
 }
 
 const NAV_ITEMS: NavItem[] = [
@@ -123,7 +131,7 @@ export function SettingsPanel() {
   const [telemetry, setTelemetry] = useState(false);
 
   // Appearance settings state
-  const [theme, setTheme] = useState("Dark (Default)");
+  const { theme, setTheme } = useThemeStore();
   const [uiDensity, setUiDensity] = useState("Standard");
   const [sidebarPos, setSidebarPos] = useState("Left");
 
@@ -152,6 +160,40 @@ export function SettingsPanel() {
   const [scrollback, setScrollback] = useState("10000");
   const [gpuAccel, setGpuAccel] = useState(true);
   const [copyOnSelect, setCopyOnSelect] = useState(false);
+
+  // Update state
+  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
+  const [checking, setChecking] = useState(false);
+  const [updating, setUpdating] = useState(false);
+
+  const checkUpdate = async () => {
+    setChecking(true);
+    try {
+      const info = await invoke<UpdateInfo>("check_update");
+      setUpdateInfo(info);
+    } catch (e) {
+      console.error("Failed to check update:", e);
+    } finally {
+      setChecking(false);
+    }
+  };
+
+  const installUpdate = async () => {
+    setUpdating(true);
+    try {
+      await invoke("install_update");
+    } catch (e) {
+      console.error("Failed to install update:", e);
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  useEffect(() => {
+    if (checkUpdates) {
+      checkUpdate();
+    }
+  }, [checkUpdates]);
 
   return (
     <div className="settings-workspace">
@@ -205,6 +247,37 @@ export function SettingsPanel() {
               </div>
               <div className="setting-row">
                 <div className="setting-label">
+                  <h4>Software Update</h4>
+                  <p>
+                    Current version: v0.1.0
+                    {updateInfo?.available && (
+                      <span style={{ color: "var(--accent)", marginLeft: "var(--sp-2)" }}>
+                        New version available: v{updateInfo.version}
+                      </span>
+                    )}
+                  </p>
+                </div>
+                <div style={{ display: "flex", gap: "var(--sp-2)" }}>
+                  <button
+                    className="btn btn-secondary btn-sm"
+                    onClick={checkUpdate}
+                    disabled={checking}
+                  >
+                    {checking ? "Checking..." : "Check for Updates"}
+                  </button>
+                  {updateInfo?.available && (
+                    <button
+                      className="btn btn-primary btn-sm"
+                      onClick={installUpdate}
+                      disabled={updating}
+                    >
+                      {updating ? "Updating..." : "Update Now"}
+                    </button>
+                  )}
+                </div>
+              </div>
+              <div className="setting-row">
+                <div className="setting-label">
                   <h4>Telemetry</h4>
                   <p>Send anonymous usage data (no personal data collected)</p>
                 </div>
@@ -225,7 +298,15 @@ export function SettingsPanel() {
                   <h4>Theme</h4>
                   <p>Application color scheme</p>
                 </div>
-                <SettingSelect value={theme} onChange={setTheme} options={["Dark (Default)", "Light", "System"]} />
+                <select
+                  className="setting-select"
+                  value={theme}
+                  onChange={(e) => setTheme(e.target.value as "system" | "light" | "dark")}
+                >
+                  <option value="system">System</option>
+                  <option value="light">Light</option>
+                  <option value="dark">Dark</option>
+                </select>
               </div>
               <div className="setting-row">
                 <div className="setting-label">

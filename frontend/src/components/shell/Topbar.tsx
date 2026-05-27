@@ -41,9 +41,18 @@ export function Topbar({ title, tabs, children, onTabClose }: TopbarProps) {
 
   const aiDrawerOpen = useAiStore((s) => s.drawerOpen);
 
+  const handleDoubleClick = (e: React.MouseEvent) => {
+    const target = e.target as HTMLElement;
+    if (target.closest(".win-controls") || target.closest(".topbar-btn") || target.closest(".topbar-actions")) {
+      return;
+    }
+    getCurrentWindow().toggleMaximize();
+  };
+
+
   return (
-    <div className="topbar" data-tauri-drag-region>
-      <span className="topbar-title">{title}</span>
+    <div className="topbar" onDoubleClick={handleDoubleClick} data-tauri-drag-region>
+      <span className="topbar-title" data-tauri-drag-region>{title}</span>
 
       {/* Tabs (e.g. terminal) */}
       {tabs && tabs.length > 0 && (

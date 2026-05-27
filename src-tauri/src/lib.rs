@@ -14,6 +14,7 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             app.manage(AppState::new(app.handle().clone()));
             Ok(())
@@ -53,6 +54,9 @@ pub fn run() {
             commands::protocol::mqtt_unsubscribe,
             commands::protocol::mqtt_publish,
             commands::protocol::mqtt_disconnect,
+            // Updater
+            commands::updater::check_update,
+            commands::updater::install_update,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -1,8 +1,10 @@
 use std::collections::HashMap;
+use std::process::Child;
 use std::sync::Arc;
 
 use tauri::AppHandle;
 use tokio::sync::Mutex;
+use std::io::Write;
 
 use crate::protocol::mqtt::MqttSession;
 use crate::protocol::serial::SerialSession;
