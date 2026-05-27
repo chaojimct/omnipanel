@@ -44,7 +44,7 @@ export function Topbar({ title, tabs, children, onTabClose }: TopbarProps) {
 
   return (
     <div className="topbar" onDoubleClick={handleDoubleClick} data-tauri-drag-region>
-      <span className="topbar-title">{title}</span>
+      <span className="topbar-title" data-tauri-drag-region>{title}</span>
 
       {/* Tabs (e.g. terminal) */}
       {tabs && tabs.length > 0 && (
@@ -72,7 +72,7 @@ export function Topbar({ title, tabs, children, onTabClose }: TopbarProps) {
       )}
 
       {/* Draggable spacer */}
-      <div className="topbar-spacer" />
+      <div className="topbar-spacer" data-tauri-drag-region />
 
       {/* Actions — NOT draggable */}
       <div className="topbar-actions">
