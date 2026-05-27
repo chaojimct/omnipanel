@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "kind": "html",
+  "title": "OmniPanel — AI 原生跨平台运维工作站",
+  "entry": "omnipanel-landing.html",
+  "renderer": "html",
+  "status": "complete",
+  "exports": [
+    "html",
+    "pdf",
+    "zip"
+  ],
+  "createdAt": "2026-05-26T06:36:25.719Z",
+  "updatedAt": "2026-05-26T06:36:25.725Z",
+  "sourceSkillId": "agent-browser",
+  "designSystemId": "opencode-ai",
+  "metadata": {
+    "identifier": "omnipanel-landing",
+    "artifactType": "text/html",
+    "inferred": false
+  }
+}

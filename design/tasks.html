@@ -1,0 +1,459 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OmniPanel — Task Center</title>
+<link rel="stylesheet" href="css/omnipanel.css">
+<style>
+  .tasks-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: var(--sp-4);
+  }
+
+  /* Task cards */
+  .task-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+    padding: var(--sp-4);
+    margin-bottom: var(--sp-3);
+  }
+  .task-header {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-3);
+    margin-bottom: var(--sp-3);
+  }
+  .task-header h3 { font-size: 13px; font-weight: 600; flex: 1; }
+  .task-progress {
+    height: 6px;
+    background: var(--bg-deeper);
+    border-radius: 3px;
+    overflow: hidden;
+    margin-bottom: var(--sp-2);
+  }
+  .task-progress-fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 0.3s ease;
+  }
+  .task-meta {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-3);
+    font-size: 11px;
+    color: var(--meta);
+  }
+  .task-steps {
+    margin-top: var(--sp-3);
+    padding-top: var(--sp-3);
+    border-top: 1px solid var(--border-soft);
+  }
+  .task-step {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    padding: var(--sp-1) 0;
+    font-size: 11px;
+  }
+  .task-step .step-icon {
+    width: 16px; height: 16px;
+    display: grid; place-items: center;
+    flex-shrink: 0;
+  }
+  .task-step .step-icon svg { width: 12px; height: 12px; }
+  .task-step .step-name { flex: 1; }
+  .task-step .step-status { font-size: 10px; }
+  .task-actions {
+    display: flex;
+    gap: var(--sp-1);
+    margin-top: var(--sp-3);
+  }
+
+  /* Draft box */
+  .draft-item {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+    padding: var(--sp-3) var(--sp-4);
+    margin-bottom: var(--sp-2);
+    display: flex;
+    align-items: center;
+    gap: var(--sp-3);
+  }
+  .draft-item .draft-icon {
+    width: 28px; height: 28px;
+    display: grid; place-items: center;
+    border-radius: var(--r-sm);
+    flex-shrink: 0;
+  }
+  .draft-item .draft-icon svg { width: 14px; height: 14px; }
+  .draft-item .draft-body { flex: 1; min-width: 0; }
+  .draft-item .draft-title { font-size: 12px; font-weight: 500; }
+  .draft-item .draft-desc { font-size: 11px; color: var(--muted); }
+  .draft-item .draft-actions { display: flex; gap: var(--sp-1); }
+
+  /* Tabs */
+  .task-tabs {
+    display: flex;
+    gap: 0;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: var(--sp-4);
+  }
+  .task-tab {
+    padding: var(--sp-2) var(--sp-4);
+    font-size: 12px;
+    color: var(--meta);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: color 0.12s, border-color 0.12s;
+  }
+  .task-tab:hover { color: var(--fg); }
+  .task-tab.active { color: var(--fg); border-bottom-color: var(--accent); }
+  .task-panel { display: none; }
+  .task-panel.active { display: block; }
+</style>
+</head>
+<body>
+<div class="app" id="app">
+  <aside class="sidebar">
+    <a class="sidebar-logo" href="index.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></a>
+    <a class="sidebar-item" href="terminal.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 17l6-6-6-6"/><path d="M12 19h8"/></svg></a>
+    <a class="sidebar-item" href="ssh.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg></a>
+    <a class="sidebar-item" href="database.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4.03 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5"/></svg></a>
+    <a class="sidebar-item" href="docker.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="7" width="6" height="5" rx="1"/><rect x="10" y="7" width="6" height="5" rx="1"/><rect x="18" y="7" width="4" height="5" rx="1"/><rect x="6" y="2" width="6" height="5" rx="1"/><path d="M2 17h20c0 2.76-4.48 5-10 5S2 19.76 2 17z"/></svg></a>
+    <a class="sidebar-item" href="server.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><circle cx="6" cy="6" r="1" fill="currentColor"/><circle cx="6" cy="18" r="1" fill="currentColor"/></svg></a>
+    <div class="sidebar-divider"></div>
+    <a class="sidebar-item" href="protocol.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></a>
+    <a class="sidebar-item" href="workflow.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v18M3 12h18"/><circle cx="12" cy="12" r="3"/></svg></a>
+    <a class="sidebar-item" href="knowledge.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg></a>
+    <a class="sidebar-item active" href="tasks.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg></a>
+    <div class="sidebar-spacer"></div>
+    <a class="sidebar-item" href="settings.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg></a>
+  </aside>
+
+  <div class="main-content">
+    <div class="topbar">
+      <span class="topbar-title">Task Center</span>
+      <div class="topbar-tabs">
+        <div class="topbar-tab active" data-ttab="active">
+          <span>Active Tasks</span>
+          <span class="badge badge-accent" style="margin-left: 4px;">3</span>
+        </div>
+        <div class="topbar-tab" data-ttab="drafts">
+          <span>Draft Box</span>
+          <span class="badge badge-warn" style="margin-left: 4px;">5</span>
+        </div>
+        <div class="topbar-tab" data-ttab="history">History</div>
+      </div>
+      <div class="topbar-right">
+        <div class="topbar-page-actions">
+          <button class="btn btn-ghost btn-sm">Clear Completed</button>
+        </div>
+        <div class="topbar-actions">
+          <button class="topbar-btn" title="Notifications">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+            <span class="notif-badge">3</span>
+          </button>
+          <button class="topbar-btn" title="Search (Ctrl+K)" onclick="toggleCmdPalette()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+          </button>
+          <div class="win-controls">
+            <button class="win-btn close" title="Close"></button>
+            <button class="win-btn minimize" title="Minimize"></button>
+            <button class="win-btn maximize" title="Maximize"></button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tasks-content">
+      <!-- Active Tasks -->
+      <div class="task-panel active" id="panel-active">
+        <div class="task-card">
+          <div class="task-header">
+            <svg viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" width="18" height="18"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
+            <h3>Upload backup to S3</h3>
+            <span class="badge badge-accent">Running</span>
+          </div>
+          <div class="task-progress">
+            <div class="task-progress-fill" style="width: 67%; background: var(--accent);"></div>
+          </div>
+          <div class="task-meta">
+            <span>67% · 2.1 GB / 3.2 GB</span>
+            <span>Speed: 12 MB/s</span>
+            <span>ETA: 1m 32s</span>
+            <span>Target: s3://backups/prod-db/</span>
+          </div>
+          <div class="task-steps">
+            <div class="task-step">
+              <span class="step-icon text-success"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg></span>
+              <span class="step-name">Compress database dump</span>
+              <span class="step-status text-success">Done · 45s</span>
+            </div>
+            <div class="task-step">
+              <span class="step-icon text-success"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg></span>
+              <span class="step-name">Generate checksum</span>
+              <span class="step-status text-success">Done · 12s</span>
+            </div>
+            <div class="task-step">
+              <span class="step-icon text-accent"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg></span>
+              <span class="step-name">Upload to S3</span>
+              <span class="step-status text-accent">Uploading...</span>
+            </div>
+            <div class="task-step">
+              <span class="step-icon text-muted"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/></svg></span>
+              <span class="step-name">Verify integrity</span>
+              <span class="step-status text-muted">Pending</span>
+            </div>
+          </div>
+          <div class="task-actions">
+            <button class="btn btn-ghost btn-sm">Pause</button>
+            <button class="btn btn-danger btn-sm">Cancel</button>
+          </div>
+        </div>
+
+        <div class="task-card">
+          <div class="task-header">
+            <svg viewBox="0 0 24 24" fill="none" stroke="var(--warn)" stroke-width="2" width="18" height="18"><rect x="2" y="7" width="6" height="5" rx="1"/><rect x="10" y="7" width="6" height="5" rx="1"/><rect x="18" y="7" width="4" height="5" rx="1"/></svg>
+            <h3>Pull nginx:1.25-alpine image</h3>
+            <span class="badge badge-accent">Running</span>
+          </div>
+          <div class="task-progress">
+            <div class="task-progress-fill" style="width: 34%; background: var(--warn);"></div>
+          </div>
+          <div class="task-meta">
+            <span>34% · 8.2 MB / 24.1 MB</span>
+            <span>Layer 3/7</span>
+            <span>Target: prod-web-01</span>
+          </div>
+          <div class="task-actions">
+            <button class="btn btn-ghost btn-sm">Pause</button>
+            <button class="btn btn-danger btn-sm">Cancel</button>
+          </div>
+        </div>
+
+        <div class="task-card">
+          <div class="task-header">
+            <svg viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2" width="18" height="18"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            <h3>Daily server patrol</h3>
+            <span class="badge badge-warn">Queued</span>
+          </div>
+          <div class="task-meta">
+            <span>Scheduled: 08:00 daily</span>
+            <span>Targets: All Servers</span>
+          </div>
+          <div class="task-actions">
+            <button class="btn btn-primary btn-sm">Run Now</button>
+            <button class="btn btn-ghost btn-sm">Edit Schedule</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Draft Box -->
+      <div class="task-panel" id="panel-drafts">
+        <div style="margin-bottom: var(--sp-4);">
+          <h2 style="font-size: 16px; font-weight: 700; margin-bottom: 4px;">Draft Box</h2>
+          <p class="text-muted" style="font-size: 12px;">AI 生成或用户准备的命令、SQL、脚本先进入草稿箱，确认后执行</p>
+        </div>
+
+        <div class="draft-item">
+          <div class="draft-icon" style="background: var(--danger-soft); color: var(--danger);">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 17l6-6-6-6"/><path d="M12 19h8"/></svg>
+          </div>
+          <div class="draft-body">
+            <div class="draft-title">Block IP range 45.33.32.0/24</div>
+            <div class="draft-desc">AI suggested: nginx.conf deny rule to block flood source · prod-web-01</div>
+          </div>
+          <div class="draft-actions">
+            <button class="btn btn-ghost btn-sm">Edit</button>
+            <button class="btn btn-primary btn-sm">Execute</button>
+            <button class="btn btn-ghost btn-sm" style="color: var(--danger);">Discard</button>
+          </div>
+        </div>
+
+        <div class="draft-item">
+          <div class="draft-icon" style="background: var(--accent-soft); color: var(--accent);">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5"/></svg>
+          </div>
+          <div class="draft-body">
+            <div class="draft-title">CREATE INDEX idx_orders_status_created</div>
+            <div class="draft-desc">AI suggested: add composite index for dashboard query optimization · prod-db-master</div>
+          </div>
+          <div class="draft-actions">
+            <button class="btn btn-ghost btn-sm">Edit</button>
+            <button class="btn btn-primary btn-sm">Execute</button>
+            <button class="btn btn-ghost btn-sm" style="color: var(--danger);">Discard</button>
+          </div>
+        </div>
+
+        <div class="draft-item">
+          <div class="draft-icon" style="background: var(--success-soft); color: var(--success);">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="6" height="5" rx="1"/><rect x="10" y="7" width="6" height="5" rx="1"/></svg>
+          </div>
+          <div class="draft-body">
+            <div class="draft-title">docker system prune -af --volumes</div>
+            <div class="draft-desc">User prepared: clean all unused Docker resources · staging-api</div>
+          </div>
+          <div class="draft-actions">
+            <button class="btn btn-ghost btn-sm">Edit</button>
+            <button class="btn btn-primary btn-sm">Execute</button>
+            <button class="btn btn-ghost btn-sm" style="color: var(--danger);">Discard</button>
+          </div>
+        </div>
+
+        <div class="draft-item">
+          <div class="draft-icon" style="background: var(--accent-soft); color: var(--accent);">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 17l6-6-6-6"/><path d="M12 19h8"/></svg>
+          </div>
+          <div class="draft-body">
+            <div class="draft-title">SELECT * FROM users WHERE last_login < NOW() - INTERVAL '90 days'</div>
+            <div class="draft-desc">AI generated: find inactive users for cleanup · prod-db-master</div>
+          </div>
+          <div class="draft-actions">
+            <button class="btn btn-ghost btn-sm">Edit</button>
+            <button class="btn btn-primary btn-sm">Execute</button>
+            <button class="btn btn-ghost btn-sm" style="color: var(--danger);">Discard</button>
+          </div>
+        </div>
+
+        <div class="draft-item">
+          <div class="draft-icon" style="background: var(--warn-soft); color: var(--warn);">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          </div>
+          <div class="draft-body">
+            <div class="draft-title">ufw allow from 10.0.0.0/8 to any port 5432</div>
+            <div class="draft-desc">User prepared: allow internal network access to PostgreSQL · prod-db-master</div>
+          </div>
+          <div class="draft-actions">
+            <button class="btn btn-ghost btn-sm">Edit</button>
+            <button class="btn btn-primary btn-sm">Execute</button>
+            <button class="btn btn-ghost btn-sm" style="color: var(--danger);">Discard</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- History -->
+      <div class="task-panel" id="panel-history">
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Task</th><th>Type</th><th>Status</th><th>Duration</th><th>Target</th><th>Time</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td style="font-weight: 500;">DB Backup & Verify</td>
+                <td><span class="badge badge-accent">Workflow</span></td>
+                <td><span class="badge badge-success">Success</span></td>
+                <td>1m 15s</td>
+                <td>prod-db-master</td>
+                <td class="text-muted">6h ago</td>
+              </tr>
+              <tr>
+                <td style="font-weight: 500;">Docker Cleanup</td>
+                <td><span class="badge badge-accent">Script</span></td>
+                <td><span class="badge badge-success">Success</span></td>
+                <td>28s</td>
+                <td>staging-api</td>
+                <td class="text-muted">1d ago</td>
+              </tr>
+              <tr>
+                <td style="font-weight: 500;">Export users table</td>
+                <td><span class="badge badge-warn">SQL</span></td>
+                <td><span class="badge badge-success">Success</span></td>
+                <td>45s</td>
+                <td>prod-db-master</td>
+                <td class="text-muted">2d ago</td>
+              </tr>
+              <tr>
+                <td style="font-weight: 500;">Image pull: redis:7-alpine</td>
+                <td><span class="badge badge-accent">Docker</span></td>
+                <td><span class="badge badge-success">Success</span></td>
+                <td>12s</td>
+                <td>prod-web-01</td>
+                <td class="text-muted">3d ago</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="statusbar">
+      <span class="statusbar-item"><span class="statusbar-dot green"></span> 3 tasks active</span>
+      <span class="statusbar-item text-muted">5 drafts pending</span>
+      <span class="statusbar-spacer"></span>
+      <span class="statusbar-item text-muted">Ctrl+K: Command Palette</span>
+    </div>
+  </div>
+</div>
+
+<script>
+  // Command palette toggle
+  function toggleCmdPalette() {
+    const el = document.getElementById('cmdPalette');
+    el.classList.toggle('show');
+    if (el.classList.contains('show')) {
+      document.getElementById('cmdInput').focus();
+    }
+  }
+
+  document.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+      e.preventDefault();
+      toggleCmdPalette();
+    }
+    if (e.key === 'Escape') {
+      document.getElementById('cmdPalette').classList.remove('show');
+    }
+  });
+
+  document.getElementById('cmdPalette').addEventListener('click', (e) => {
+    if (e.target === e.currentTarget) {
+      e.target.classList.remove('show');
+    }
+  });
+
+  document.querySelectorAll('.topbar-tab[data-ttab]').forEach(tab => {
+    tab.addEventListener('click', function() {
+      const target = this.dataset.ttab;
+      document.querySelectorAll('.topbar-tab[data-ttab]').forEach(t => t.classList.remove('active'));
+      this.classList.add('active');
+      document.querySelectorAll('.task-panel').forEach(p => p.classList.remove('active'));
+      document.getElementById('panel-' + target).classList.add('active');
+    });
+  });
+</script>
+
+<!-- Command Palette -->
+<div class="cmd-palette-overlay" id="cmdPalette">
+  <div class="cmd-palette">
+    <input class="cmd-palette-input" placeholder="Search connections, commands..." id="cmdInput">
+    <div class="cmd-palette-list">
+      <div class="cmd-palette-item selected">
+        <div class="item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 17l6-6-6-6"/><path d="M12 19h8"/></svg></div>
+        <span class="item-label">Terminal</span>
+        <span class="item-hint">Local</span>
+      </div>
+      <div class="cmd-palette-item">
+        <div class="item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg></div>
+        <span class="item-label">prod-web-01</span>
+        <span class="item-hint">SSH</span>
+      </div>
+      <div class="cmd-palette-item">
+        <div class="item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5"/></svg></div>
+        <span class="item-label">prod-db-master</span>
+        <span class="item-hint">PostgreSQL</span>
+      </div>
+      <div class="cmd-palette-item">
+        <div class="item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="6" height="5" rx="1"/><rect x="10" y="7" width="6" height="5" rx="1"/></svg></div>
+        <span class="item-label">nginx-proxy</span>
+        <span class="item-hint">Container</span>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

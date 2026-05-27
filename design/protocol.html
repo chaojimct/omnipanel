@@ -1,0 +1,1021 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OmniPanel — Protocol Lab</title>
+<link rel="stylesheet" href="css/omnipanel.css">
+<style>
+  .proto-workspace {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .proto-sidebar {
+    width: 200px;
+    background: var(--bg-deeper);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    overflow-y: auto;
+  }
+  .proto-nav-item {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    padding: var(--sp-2) var(--sp-4);
+    font-size: 12px;
+    color: var(--muted);
+    cursor: pointer;
+    transition: background 0.12s, color 0.12s;
+  }
+  .proto-nav-item:hover { background: var(--surface); color: var(--fg); }
+  .proto-nav-item.active { background: var(--surface); color: var(--fg); }
+  .proto-nav-item svg { width: 14px; height: 14px; }
+  .proto-section-title {
+    padding: var(--sp-3) var(--sp-4) var(--sp-1);
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--meta);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .proto-main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    overflow: hidden;
+  }
+  .proto-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: var(--sp-4);
+  }
+
+  /* HTTP Request Builder */
+  .http-builder {
+    display: flex;
+    gap: var(--sp-2);
+    margin-bottom: var(--sp-4);
+  }
+  .method-select {
+    padding: 6px 8px;
+    background: var(--bg-deeper);
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    color: var(--success);
+    font-size: 12px;
+    font-weight: 600;
+    min-width: 80px;
+  }
+  .url-input {
+    flex: 1;
+    padding: 6px 12px;
+    background: var(--bg-deeper);
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    color: var(--fg);
+    font-size: 12px;
+  }
+  .url-input:focus { border-color: var(--accent); outline: none; }
+
+  /* Tabs for request sections */
+  .req-tabs {
+    display: flex;
+    gap: 0;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: var(--sp-3);
+  }
+  .req-tab {
+    padding: var(--sp-2) var(--sp-3);
+    font-size: 11px;
+    color: var(--meta);
+    cursor: pointer;
+    border-bottom: 1px solid transparent;
+    transition: color 0.12s;
+  }
+  .req-tab:hover { color: var(--fg); }
+  .req-tab.active { color: var(--fg); border-bottom-color: var(--accent); }
+  .req-panel { display: none; }
+  .req-panel.active { display: block; }
+
+  /* Key-value editor */
+  .kv-editor { margin-bottom: var(--sp-3); }
+  .kv-row {
+    display: flex;
+    gap: var(--sp-2);
+    margin-bottom: var(--sp-1);
+    align-items: center;
+  }
+  .kv-row input {
+    flex: 1;
+    padding: 4px 8px;
+    background: var(--bg-deeper);
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    color: var(--fg);
+    font-size: 11px;
+  }
+  .kv-row input:focus { border-color: var(--accent); outline: none; }
+  .kv-row .kv-check {
+    width: 14px; height: 14px;
+    accent-color: var(--accent);
+  }
+  .kv-row .kv-del {
+    width: 20px; height: 20px;
+    display: grid; place-items: center;
+    color: var(--meta);
+    cursor: pointer;
+    border-radius: 2px;
+  }
+  .kv-row .kv-del:hover { color: var(--danger); background: var(--danger-soft); }
+
+  /* Body editor */
+  .body-editor {
+    width: 100%;
+    min-height: 120px;
+    padding: var(--sp-3);
+    background: var(--bg-deeper);
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    color: var(--fg);
+    font-family: var(--font);
+    font-size: 12px;
+    resize: vertical;
+  }
+  .body-editor:focus { border-color: var(--accent); outline: none; }
+
+  /* Response area */
+  .response-area {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+    overflow: hidden;
+  }
+  .response-header {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-3);
+    padding: var(--sp-2) var(--sp-4);
+    border-bottom: 1px solid var(--border);
+    font-size: 11px;
+  }
+  .response-status {
+    padding: 1px 6px;
+    border-radius: 999px;
+    font-weight: 600;
+    font-size: 11px;
+  }
+  .response-meta { color: var(--meta); }
+  .response-body {
+    padding: var(--sp-4);
+    font-size: 12px;
+    line-height: 1.6;
+    max-height: 400px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+
+  /* WebSocket panel */
+  .ws-messages {
+    background: var(--bg-deeper);
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    padding: var(--sp-3);
+    min-height: 300px;
+    max-height: 500px;
+    overflow-y: auto;
+    margin-bottom: var(--sp-3);
+  }
+  .ws-msg {
+    display: flex;
+    gap: var(--sp-2);
+    margin-bottom: var(--sp-2);
+    font-size: 11px;
+  }
+  .ws-msg .ws-dir {
+    width: 20px; text-align: center;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+  .ws-msg .ws-dir.in { color: var(--success); }
+  .ws-msg .ws-dir.out { color: var(--accent); }
+  .ws-msg .ws-time { color: var(--meta); flex-shrink: 0; }
+  .ws-msg .ws-data { color: var(--fg-2); word-break: break-all; }
+  .ws-input-row {
+    display: flex;
+    gap: var(--sp-2);
+  }
+  .ws-input-row input {
+    flex: 1;
+    padding: 6px 10px;
+    background: var(--bg-deeper);
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    color: var(--fg);
+    font-size: 12px;
+  }
+  .ws-input-row input:focus { border-color: var(--accent); outline: none; }
+
+  /* MQTT panel */
+  .mqtt-topics {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sp-1);
+    margin-bottom: var(--sp-3);
+  }
+  .mqtt-topic {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    background: var(--accent-soft);
+    border-radius: 999px;
+    font-size: 10px;
+    color: var(--accent);
+  }
+  .mqtt-topic .topic-remove {
+    cursor: pointer;
+    opacity: 0.6;
+  }
+  .mqtt-topic .topic-remove:hover { opacity: 1; }
+  .mqtt-messages {
+    background: var(--bg-deeper);
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    min-height: 250px;
+    max-height: 400px;
+    overflow-y: auto;
+    margin-bottom: var(--sp-3);
+  }
+  .mqtt-msg {
+    display: flex;
+    gap: var(--sp-3);
+    padding: var(--sp-2) var(--sp-3);
+    border-bottom: 1px solid var(--border-soft);
+    font-size: 11px;
+  }
+  .mqtt-msg:last-child { border-bottom: none; }
+  .mqtt-msg .mqtt-topic-name { color: var(--accent); min-width: 120px; font-weight: 500; }
+  .mqtt-msg .mqtt-payload { color: var(--fg-2); flex: 1; word-break: break-all; }
+  .mqtt-msg .mqtt-meta { color: var(--meta); flex-shrink: 0; }
+
+  /* Serial panel */
+  .serial-config {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: var(--sp-2);
+    margin-bottom: var(--sp-3);
+  }
+  .serial-field label {
+    display: block;
+    font-size: 10px;
+    color: var(--meta);
+    margin-bottom: 2px;
+  }
+  .serial-field select, .serial-field input {
+    width: 100%;
+    padding: 4px 6px;
+    background: var(--bg-deeper);
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    color: var(--fg);
+    font-size: 11px;
+  }
+  .serial-io {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--sp-3);
+  }
+  .serial-panel {
+    background: var(--bg-deeper);
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    display: flex;
+    flex-direction: column;
+  }
+  .serial-panel-header {
+    padding: var(--sp-2) var(--sp-3);
+    border-bottom: 1px solid var(--border);
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--meta);
+  }
+  .serial-panel-body {
+    flex: 1;
+    padding: var(--sp-3);
+    min-height: 200px;
+    max-height: 300px;
+    overflow-y: auto;
+    font-size: 11px;
+    line-height: 1.6;
+    color: var(--fg-2);
+  }
+  .serial-panel-input {
+    padding: var(--sp-2);
+    border-top: 1px solid var(--border);
+    display: flex;
+    gap: var(--sp-2);
+  }
+  .serial-panel-input input {
+    flex: 1;
+    padding: 4px 8px;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    color: var(--fg);
+    font-size: 11px;
+  }
+  .serial-panel-input input:focus { border-color: var(--accent); outline: none; }
+
+  /* History sidebar */
+  .history-item {
+    padding: var(--sp-2) var(--sp-4);
+    border-bottom: 1px solid var(--border-soft);
+    cursor: pointer;
+    transition: background 0.12s;
+  }
+  .history-item:hover { background: var(--surface); }
+  .history-item .h-method {
+    font-size: 10px;
+    font-weight: 700;
+    margin-right: 4px;
+  }
+  .history-item .h-url {
+    font-size: 11px;
+    color: var(--fg-2);
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .history-item .h-time {
+    font-size: 10px;
+    color: var(--meta);
+  }
+  .method-get { color: var(--success); }
+  .method-post { color: var(--accent); }
+  .method-put { color: var(--warn); }
+  .method-delete { color: var(--danger); }
+
+  .proto-panel { display: none; }
+  .proto-panel.active { display: block; }
+
+  @media (max-width: 800px) {
+    .proto-sidebar { display: none; }
+    .serial-config { grid-template-columns: repeat(2, 1fr); }
+    .serial-io { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="app" id="app">
+  <aside class="sidebar">
+    <a class="sidebar-logo" href="index.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></a>
+    <a class="sidebar-item" href="terminal.html" title="Terminal">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 17l6-6-6-6"/><path d="M12 19h8"/></svg>
+    </a>
+    <a class="sidebar-item" href="ssh.html" title="SSH">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+    </a>
+    <a class="sidebar-item" href="database.html" title="Database">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4.03 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5"/></svg>
+    </a>
+    <a class="sidebar-item" href="docker.html" title="Docker">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="7" width="6" height="5" rx="1"/><rect x="10" y="7" width="6" height="5" rx="1"/><rect x="18" y="7" width="4" height="5" rx="1"/><rect x="6" y="2" width="6" height="5" rx="1"/><path d="M2 17h20c0 2.76-4.48 5-10 5S2 19.76 2 17z"/></svg>
+    </a>
+    <a class="sidebar-item" href="server.html" title="Servers">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><circle cx="6" cy="6" r="1" fill="currentColor"/><circle cx="6" cy="18" r="1" fill="currentColor"/></svg>
+    </a>
+
+    <div class="sidebar-divider"></div>
+
+    <a class="sidebar-item active" href="protocol.html" title="Protocol Lab">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+    </a>
+    <a class="sidebar-item" href="workflow.html" title="Workflows">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v18M3 12h18"/><circle cx="12" cy="12" r="3"/></svg>
+    </a>
+    <a class="sidebar-item" href="knowledge.html" title="Knowledge">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>
+    </a>
+    <a class="sidebar-item" href="tasks.html" title="Tasks">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+    </a>
+
+    <div class="sidebar-spacer"></div>
+
+    <a class="sidebar-item" href="settings.html" title="Settings">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+    </a>
+  </aside>
+
+  <div class="main-content">
+    <div class="topbar">
+      <span class="topbar-title">Protocol Lab</span>
+      <div class="topbar-right">
+        <div class="topbar-page-actions">
+          <button class="btn-icon" title="New Request">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+          </button>
+          <button class="btn-icon" title="Import cURL">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
+          </button>
+          <button class="btn btn-primary btn-sm">+ New Tab</button>
+        </div>
+        <div class="topbar-actions">
+          <button class="topbar-btn" title="Notifications">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+            <span class="notif-badge">3</span>
+          </button>
+          <button class="topbar-btn" title="Search (Ctrl+K)" onclick="toggleCmdPalette()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+          </button>
+          <div class="win-controls">
+            <button class="win-btn close" title="Close"></button>
+            <button class="win-btn minimize" title="Minimize"></button>
+            <button class="win-btn maximize" title="Maximize"></button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="proto-workspace">
+      <!-- Protocol Navigation -->
+      <div class="proto-sidebar">
+        <div class="proto-section-title">Protocol</div>
+        <div class="proto-nav-item active" data-proto="http">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+          HTTP / REST
+        </div>
+        <div class="proto-nav-item" data-proto="ws">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/><path d="M2 12h20"/></svg>
+          WebSocket
+        </div>
+        <div class="proto-nav-item" data-proto="mqtt">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>
+          MQTT
+        </div>
+        <div class="proto-nav-item" data-proto="serial">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 12h.01M10 12h.01M14 12h.01"/></svg>
+          Serial
+        </div>
+
+        <div class="proto-section-title" style="margin-top: var(--sp-4);">History</div>
+        <div class="history-item">
+          <span class="h-method method-get">GET</span>
+          <span class="h-url">/api/users</span>
+          <span class="h-time">200 · 12ms</span>
+        </div>
+        <div class="history-item">
+          <span class="h-method method-post">POST</span>
+          <span class="h-url">/api/auth/login</span>
+          <span class="h-time">200 · 89ms</span>
+        </div>
+        <div class="history-item">
+          <span class="h-method method-get">GET</span>
+          <span class="h-url">/api/products?page=1</span>
+          <span class="h-time">200 · 45ms</span>
+        </div>
+        <div class="history-item">
+          <span class="h-method method-put">PUT</span>
+          <span class="h-url">/api/users/123</span>
+          <span class="h-time">204 · 23ms</span>
+        </div>
+        <div class="history-item">
+          <span class="h-method method-delete">DEL</span>
+          <span class="h-url">/api/sessions/expired</span>
+          <span class="h-time">200 · 67ms</span>
+        </div>
+      </div>
+
+      <!-- Main Content -->
+      <div class="proto-main">
+        <div class="proto-content">
+          <!-- HTTP Panel -->
+          <div class="proto-panel active" id="panel-http">
+            <!-- Request Builder -->
+            <div class="http-builder">
+              <select class="method-select">
+                <option>GET</option>
+                <option>POST</option>
+                <option>PUT</option>
+                <option>PATCH</option>
+                <option>DELETE</option>
+                <option>HEAD</option>
+                <option>OPTIONS</option>
+              </select>
+              <input class="url-input" placeholder="https://api.example.com/v1/users" value="https://api.example.com/v1/users">
+              <button class="btn btn-primary">Send</button>
+              <button class="btn btn-secondary">Save</button>
+            </div>
+
+            <!-- Request Config -->
+            <div class="req-tabs">
+              <span class="req-tab active" data-req="params">Params</span>
+              <span class="req-tab" data-req="headers">Headers</span>
+              <span class="req-tab" data-req="body">Body</span>
+              <span class="req-tab" data-req="auth">Auth</span>
+              <span class="req-tab" data-req="scripts">Scripts</span>
+            </div>
+
+            <div class="req-panel active" id="req-params">
+              <div class="kv-editor">
+                <div class="kv-row">
+                  <input type="checkbox" class="kv-check" checked>
+                  <input placeholder="Key" value="page">
+                  <input placeholder="Value" value="1">
+                  <div class="kv-del">&times;</div>
+                </div>
+                <div class="kv-row">
+                  <input type="checkbox" class="kv-check" checked>
+                  <input placeholder="Key" value="limit">
+                  <input placeholder="Value" value="20">
+                  <div class="kv-del">&times;</div>
+                </div>
+                <div class="kv-row">
+                  <input type="checkbox" class="kv-check">
+                  <input placeholder="Key" value="sort">
+                  <input placeholder="Value" value="created_at">
+                  <div class="kv-del">&times;</div>
+                </div>
+              </div>
+              <button class="btn btn-ghost btn-sm">+ Add Parameter</button>
+            </div>
+
+            <div class="req-panel" id="req-headers">
+              <div class="kv-editor">
+                <div class="kv-row">
+                  <input type="checkbox" class="kv-check" checked>
+                  <input placeholder="Key" value="Content-Type">
+                  <input placeholder="Value" value="application/json">
+                  <div class="kv-del">&times;</div>
+                </div>
+                <div class="kv-row">
+                  <input type="checkbox" class="kv-check" checked>
+                  <input placeholder="Key" value="Authorization">
+                  <input placeholder="Value" value="Bearer eyJhbG...token">
+                  <div class="kv-del">&times;</div>
+                </div>
+                <div class="kv-row">
+                  <input type="checkbox" class="kv-check" checked>
+                  <input placeholder="Key" value="Accept">
+                  <input placeholder="Value" value="application/json">
+                  <div class="kv-del">&times;</div>
+                </div>
+              </div>
+              <button class="btn btn-ghost btn-sm">+ Add Header</button>
+            </div>
+
+            <div class="req-panel" id="req-body">
+              <div style="margin-bottom: var(--sp-2); display: flex; gap: var(--sp-2);">
+                <span class="tag" style="cursor: pointer; border-color: var(--accent); color: var(--accent);">JSON</span>
+                <span class="tag" style="cursor: pointer;">Form</span>
+                <span class="tag" style="cursor: pointer;">Multipart</span>
+                <span class="tag" style="cursor: pointer;">Raw</span>
+                <span class="tag" style="cursor: pointer;">Binary</span>
+              </div>
+              <textarea class="body-editor" placeholder="Request body...">{
+  "name": "John Doe",
+  "email": "john@example.com",
+  "role": "admin"
+}</textarea>
+            </div>
+
+            <div class="req-panel" id="req-auth">
+              <div style="margin-bottom: var(--sp-3);">
+                <div style="display: flex; gap: var(--sp-2); margin-bottom: var(--sp-3);">
+                  <span class="tag" style="cursor: pointer; border-color: var(--accent); color: var(--accent);">Bearer Token</span>
+                  <span class="tag" style="cursor: pointer;">Basic Auth</span>
+                  <span class="tag" style="cursor: pointer;">API Key</span>
+                  <span class="tag" style="cursor: pointer;">OAuth 2.0</span>
+                </div>
+                <div class="kv-editor">
+                  <div class="kv-row">
+                    <input placeholder="Token" value="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." style="flex: 3;">
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="req-panel" id="req-scripts">
+              <div style="margin-bottom: var(--sp-2);">
+                <h4 style="font-size: 12px; font-weight: 600; margin-bottom: var(--sp-2);">Pre-request Script</h4>
+                <textarea class="body-editor" style="min-height: 80px;" placeholder="// Execute before request...">// Set timestamp
+env.set("timestamp", Date.now());
+
+// Generate signature
+const hash = crypto.createHmac("sha256", env.get("secret"))
+  .update(env.get("timestamp")).digest("hex");
+env.set("signature", hash);</textarea>
+              </div>
+              <div>
+                <h4 style="font-size: 12px; font-weight: 600; margin-bottom: var(--sp-2);">Test Script</h4>
+                <textarea class="body-editor" style="min-height: 80px;" placeholder="// Validate response...">// Assert status code
+assert(response.status === 200);
+
+// Extract token from response
+env.set("token", response.body.data.token);</textarea>
+              </div>
+            </div>
+
+            <!-- Response -->
+            <div class="response-area" style="margin-top: var(--sp-4);">
+              <div class="response-header">
+                <span class="response-status badge-success">200 OK</span>
+                <span class="response-meta">89ms · 1.2 KB</span>
+                <span class="response-meta">·</span>
+                <span class="response-meta">application/json</span>
+              </div>
+              <div class="response-body">{
+  "data": [
+    {
+      "id": 1,
+      "name": "John Doe",
+      "email": "john@example.com",
+      "role": "admin",
+      "created_at": "2026-05-20T08:30:00Z"
+    },
+    {
+      "id": 2,
+      "name": "Jane Smith",
+      "email": "jane@example.com",
+      "role": "editor",
+      "created_at": "2026-05-21T14:22:00Z"
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "limit": 20,
+    "total": 47,
+    "pages": 3
+  }
+}</div>
+            </div>
+          </div>
+
+          <!-- WebSocket Panel -->
+          <div class="proto-panel" id="panel-ws">
+            <div style="display: flex; gap: var(--sp-2); margin-bottom: var(--sp-4);">
+              <input class="url-input" placeholder="wss://echo.websocket.org" value="wss://api.example.com/ws" style="flex: 1;">
+              <button class="btn btn-primary">Connect</button>
+              <button class="btn btn-danger" style="display: none;">Disconnect</button>
+            </div>
+            <div style="display: flex; align-items: center; gap: var(--sp-3); margin-bottom: var(--sp-3); font-size: 11px;">
+              <span class="badge badge-success">Connected</span>
+              <span class="text-muted">Latency: 12ms</span>
+              <span class="text-muted">Messages: 24</span>
+            </div>
+            <div class="ws-messages">
+              <div class="ws-msg">
+                <span class="ws-dir out">↑</span>
+                <span class="ws-time">09:14:01</span>
+                <span class="ws-data">{"type":"subscribe","channel":"user_updates"}</span>
+              </div>
+              <div class="ws-msg">
+                <span class="ws-dir in">↓</span>
+                <span class="ws-time">09:14:01</span>
+                <span class="ws-data">{"type":"subscribed","channel":"user_updates","status":"ok"}</span>
+              </div>
+              <div class="ws-msg">
+                <span class="ws-dir in">↓</span>
+                <span class="ws-time">09:14:15</span>
+                <span class="ws-data">{"type":"update","user_id":123,"field":"status","value":"online"}</span>
+              </div>
+              <div class="ws-msg">
+                <span class="ws-dir out">↑</span>
+                <span class="ws-time">09:14:20</span>
+                <span class="ws-data">{"type":"ping"}</span>
+              </div>
+              <div class="ws-msg">
+                <span class="ws-dir in">↓</span>
+                <span class="ws-time">09:14:20</span>
+                <span class="ws-data">{"type":"pong"}</span>
+              </div>
+              <div class="ws-msg">
+                <span class="ws-dir in">↓</span>
+                <span class="ws-time">09:14:32</span>
+                <span class="ws-data">{"type":"update","user_id":456,"field":"last_seen","value":"2026-05-26T09:14:32Z"}</span>
+              </div>
+            </div>
+            <div class="ws-input-row">
+              <select class="input" style="width: 80px;">
+                <option>JSON</option>
+                <option>Text</option>
+                <option>Binary</option>
+              </select>
+              <input placeholder='{"type":"subscribe","channel":"..."}'>
+              <button class="btn btn-primary btn-sm">Send</button>
+            </div>
+          </div>
+
+          <!-- MQTT Panel -->
+          <div class="proto-panel" id="panel-mqtt">
+            <div style="display: flex; gap: var(--sp-2); margin-bottom: var(--sp-4);">
+              <input class="url-input" placeholder="mqtt://broker.example.com:1883" value="mqtt://broker.hivemq.com:1883" style="flex: 1;">
+              <input class="input" placeholder="Client ID" value="omnipanel-001" style="width: 140px;">
+              <button class="btn btn-primary">Connect</button>
+            </div>
+            <div style="display: flex; align-items: center; gap: var(--sp-3); margin-bottom: var(--sp-3); font-size: 11px;">
+              <span class="badge badge-success">Connected</span>
+              <span class="text-muted">Broker: HiveMQ</span>
+              <span class="text-muted">Messages: 156</span>
+            </div>
+
+            <!-- Subscriptions -->
+            <div style="margin-bottom: var(--sp-3);">
+              <div style="display: flex; align-items: center; gap: var(--sp-2); margin-bottom: var(--sp-2);">
+                <span style="font-size: 11px; font-weight: 600;">Subscriptions</span>
+                <input class="input" placeholder="Topic to subscribe..." style="width: 240px; font-size: 11px;">
+                <select class="input" style="width: 60px; font-size: 11px;">
+                  <option>QoS 0</option>
+                  <option>QoS 1</option>
+                  <option>QoS 2</option>
+                </select>
+                <button class="btn btn-ghost btn-sm">Subscribe</button>
+              </div>
+              <div class="mqtt-topics">
+                <span class="mqtt-topic">sensors/temperature <span class="topic-remove">&times;</span></span>
+                <span class="mqtt-topic">sensors/humidity <span class="topic-remove">&times;</span></span>
+                <span class="mqtt-topic">devices/+/status <span class="topic-remove">&times;</span></span>
+                <span class="mqtt-topic">alerts/# <span class="topic-remove">&times;</span></span>
+              </div>
+            </div>
+
+            <!-- Messages -->
+            <div class="mqtt-messages">
+              <div class="mqtt-msg">
+                <span class="mqtt-topic-name">sensors/temperature</span>
+                <span class="mqtt-payload">{"device":"DHT22-01","temp":23.5,"unit":"C"}</span>
+                <span class="mqtt-meta">QoS 0 · 09:14:01</span>
+              </div>
+              <div class="mqtt-msg">
+                <span class="mqtt-topic-name">sensors/humidity</span>
+                <span class="mqtt-payload">{"device":"DHT22-01","humidity":65.2,"unit":"%"}</span>
+                <span class="mqtt-meta">QoS 0 · 09:14:01</span>
+              </div>
+              <div class="mqtt-msg">
+                <span class="mqtt-topic-name">devices/esp32-01/status</span>
+                <span class="mqtt-payload">{"online":true,"battery":87,"firmware":"2.1.0"}</span>
+                <span class="mqtt-meta">QoS 1 · 09:14:15</span>
+              </div>
+              <div class="mqtt-msg">
+                <span class="mqtt-topic-name">alerts/temperature</span>
+                <span class="mqtt-payload">{"level":"warning","device":"DHT22-01","temp":35.2,"threshold":30}</span>
+                <span class="mqtt-meta">QoS 1 · 09:14:22</span>
+              </div>
+              <div class="mqtt-msg">
+                <span class="mqtt-topic-name">sensors/temperature</span>
+                <span class="mqtt-payload">{"device":"DHT22-02","temp":21.8,"unit":"C"}</span>
+                <span class="mqtt-meta">QoS 0 · 09:14:30</span>
+              </div>
+            </div>
+
+            <!-- Publish -->
+            <div style="display: flex; gap: var(--sp-2);">
+              <input class="input" placeholder="Topic" value="devices/esp32-01/cmd" style="width: 200px;">
+              <select class="input" style="width: 70px;">
+                <option>QoS 0</option>
+                <option>QoS 1</option>
+                <option>QoS 2</option>
+              </select>
+              <input class="input" placeholder='{"action":"reboot"}' style="flex: 1;">
+              <button class="btn btn-primary btn-sm">Publish</button>
+            </div>
+          </div>
+
+          <!-- Serial Panel -->
+          <div class="proto-panel" id="panel-serial">
+            <div class="serial-config">
+              <div class="serial-field">
+                <label>Port</label>
+                <select>
+                  <option>COM3 — USB Serial</option>
+                  <option>COM5 — Arduino Uno</option>
+                  <option>/dev/ttyUSB0</option>
+                </select>
+              </div>
+              <div class="serial-field">
+                <label>Baud Rate</label>
+                <select>
+                  <option>9600</option>
+                  <option>19200</option>
+                  <option>38400</option>
+                  <option selected>115200</option>
+                  <option>230400</option>
+                  <option>921600</option>
+                </select>
+              </div>
+              <div class="serial-field">
+                <label>Data Bits</label>
+                <select>
+                  <option>7</option>
+                  <option selected>8</option>
+                </select>
+              </div>
+              <div class="serial-field">
+                <label>Stop Bits</label>
+                <select>
+                  <option selected>1</option>
+                  <option>1.5</option>
+                  <option>2</option>
+                </select>
+              </div>
+              <div class="serial-field">
+                <label>Parity</label>
+                <select>
+                  <option selected>None</option>
+                  <option>Even</option>
+                  <option>Odd</option>
+                  <option>Mark</option>
+                  <option>Space</option>
+                </select>
+              </div>
+              <div class="serial-field">
+                <label>Flow Control</label>
+                <select>
+                  <option selected>None</option>
+                  <option>RTS/CTS</option>
+                  <option>XON/XOFF</option>
+                </select>
+              </div>
+              <div class="serial-field">
+                <label>Encoding</label>
+                <select>
+                  <option selected>UTF-8</option>
+                  <option>ASCII</option>
+                  <option>HEX</option>
+                </select>
+              </div>
+              <div class="serial-field">
+                <label>&nbsp;</label>
+                <button class="btn btn-primary" style="width: 100%;">Connect</button>
+              </div>
+            </div>
+
+            <div style="display: flex; align-items: center; gap: var(--sp-3); margin-bottom: var(--sp-3); font-size: 11px;">
+              <span class="badge badge-success">Connected</span>
+              <span class="text-muted">COM3 · 115200 8N1</span>
+              <span class="text-muted">RX: 1,247 bytes · TX: 342 bytes</span>
+              <div style="margin-left: auto; display: flex; gap: var(--sp-2);">
+                <label style="display: flex; align-items: center; gap: 4px; font-size: 11px; cursor: pointer;">
+                  <input type="checkbox" checked style="accent-color: var(--accent);"> Timestamp
+                </label>
+                <label style="display: flex; align-items: center; gap: 4px; font-size: 11px; cursor: pointer;">
+                  <input type="checkbox" style="accent-color: var(--accent);"> HEX
+                </label>
+                <label style="display: flex; align-items: center; gap: 4px; font-size: 11px; cursor: pointer;">
+                  <input type="checkbox" checked style="accent-color: var(--accent);"> Auto-scroll
+                </label>
+              </div>
+            </div>
+
+            <div class="serial-io">
+              <div class="serial-panel">
+                <div class="serial-panel-header">Received</div>
+                <div class="serial-panel-body">
+                  <div>[09:14:01.234] Device: ESP32-01 v2.1.0</div>
+                  <div>[09:14:01.456] WiFi: Connected (RSSI: -42)</div>
+                  <div>[09:14:02.012] Sensor: DHT22 init OK</div>
+                  <div>[09:14:02.567] MQTT: Connected to broker</div>
+                  <div>[09:14:03.123] Temp: 23.5°C Humidity: 65.2%</div>
+                  <div>[09:14:13.124] Temp: 23.6°C Humidity: 65.1%</div>
+                  <div>[09:14:23.125] Temp: 23.7°C Humidity: 65.0%</div>
+                  <div>[09:14:33.126] Temp: 23.8°C Humidity: 64.9%</div>
+                </div>
+                <div class="serial-panel-input">
+                  <input placeholder="Send data...">
+                  <button class="btn btn-primary btn-sm">Send</button>
+                  <button class="btn btn-ghost btn-sm">Hex</button>
+                </div>
+              </div>
+              <div class="serial-panel">
+                <div class="serial-panel-header">Sent</div>
+                <div class="serial-panel-body">
+                  <div>[09:14:01.000] AT+RST</div>
+                  <div>[09:14:01.100] OK</div>
+                  <div>[09:14:05.000] AT+CIPSTART="TCP","broker.mqtt.com",1883</div>
+                  <div>[09:14:05.200] CONNECT</div>
+                  <div>[09:14:10.000] {"cmd":"read_sensor"}</div>
+                </div>
+                <div class="serial-panel-input">
+                  <div style="display: flex; gap: var(--sp-1); flex-wrap: wrap;">
+                    <button class="btn btn-ghost btn-sm">AT</button>
+                    <button class="btn btn-ghost btn-sm">AT+RST</button>
+                    <button class="btn btn-ghost btn-sm">AT+GMR</button>
+                    <button class="btn btn-ghost btn-sm">Read</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Periodic send -->
+            <div style="margin-top: var(--sp-3); display: flex; align-items: center; gap: var(--sp-2); font-size: 11px;">
+              <label style="display: flex; align-items: center; gap: 4px;">
+                <input type="checkbox" style="accent-color: var(--accent);"> Periodic Send
+              </label>
+              <input class="input" placeholder="Interval (ms)" value="1000" style="width: 80px; font-size: 11px;">
+              <input class="input" placeholder='{"cmd":"read_sensor"}' style="flex: 1; font-size: 11px;">
+              <button class="btn btn-ghost btn-sm">Start</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="statusbar">
+      <span class="statusbar-item">
+        <span class="statusbar-dot green"></span>
+        Ready
+      </span>
+      <span class="statusbar-item text-muted">Protocol Lab</span>
+      <span class="statusbar-spacer"></span>
+      <span class="statusbar-item text-muted">Ctrl+K: Command Palette</span>
+      <span class="statusbar-item">UTF-8</span>
+    </div>
+  </div>
+</div>
+
+<script>
+  // Command palette toggle
+  function toggleCmdPalette() {
+    const el = document.getElementById('cmdPalette');
+    el.classList.toggle('show');
+    if (el.classList.contains('show')) {
+      document.getElementById('cmdInput').focus();
+    }
+  }
+
+  document.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+      e.preventDefault();
+      toggleCmdPalette();
+    }
+    if (e.key === 'Escape') {
+      document.getElementById('cmdPalette').classList.remove('show');
+    }
+  });
+
+  document.getElementById('cmdPalette').addEventListener('click', (e) => {
+    if (e.target === e.currentTarget) {
+      e.target.classList.remove('show');
+    }
+  });
+
+  // Protocol switching
+  document.querySelectorAll('.proto-nav-item[data-proto]').forEach(item => {
+    item.addEventListener('click', function() {
+      const proto = this.dataset.proto;
+      document.querySelectorAll('.proto-nav-item').forEach(i => i.classList.remove('active'));
+      this.classList.add('active');
+      document.querySelectorAll('.proto-panel').forEach(p => p.classList.remove('active'));
+      document.getElementById('panel-' + proto).classList.add('active');
+    });
+  });
+
+  // Request tab switching
+  document.querySelectorAll('.req-tab[data-req]').forEach(tab => {
+    tab.addEventListener('click', function() {
+      const req = this.dataset.req;
+      document.querySelectorAll('.req-tab').forEach(t => t.classList.remove('active'));
+      this.classList.add('active');
+      document.querySelectorAll('.req-panel').forEach(p => p.classList.remove('active'));
+      document.getElementById('req-' + req).classList.add('active');
+    });
+  });
+</script>
+
+<!-- Command Palette -->
+<div class="cmd-palette-overlay" id="cmdPalette">
+  <div class="cmd-palette">
+    <input class="cmd-palette-input" placeholder="Search connections, commands..." id="cmdInput">
+    <div class="cmd-palette-list">
+      <div class="cmd-palette-item selected">
+        <div class="item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 17l6-6-6-6"/><path d="M12 19h8"/></svg></div>
+        <span class="item-label">Terminal</span>
+        <span class="item-hint">Local</span>
+      </div>
+      <div class="cmd-palette-item">
+        <div class="item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg></div>
+        <span class="item-label">prod-web-01</span>
+        <span class="item-hint">SSH</span>
+      </div>
+      <div class="cmd-palette-item">
+        <div class="item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5"/></svg></div>
+        <span class="item-label">prod-db-master</span>
+        <span class="item-hint">PostgreSQL</span>
+      </div>
+      <div class="cmd-palette-item">
+        <div class="item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="6" height="5" rx="1"/><rect x="10" y="7" width="6" height="5" rx="1"/></svg></div>
+        <span class="item-label">nginx-proxy</span>
+        <span class="item-hint">Container</span>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

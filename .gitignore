@@ -1,0 +1,30 @@
+# Rust / Cargo
+target/
+**/*.rs.bk
+
+# Node
+node_modules/
+dist/
+
+# Tauri
+src-tauri/target/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# CodeGraph (local index)
+.codegraph/
+
+# Claude Code local config
+.claude/
+
+# Environment
+.env
+.env.local

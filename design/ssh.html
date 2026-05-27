@@ -1,0 +1,511 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OmniPanel — SSH Manager</title>
+<link rel="stylesheet" href="css/omnipanel.css">
+<style>
+  .ssh-layout {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
+  /* Host list panel */
+  .host-list-panel {
+    width: 280px;
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+  }
+  .host-list-header {
+    padding: var(--sp-3) var(--sp-4);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+  }
+  .host-list-header h3 { font-size: 13px; font-weight: 600; flex: 1; }
+  .host-list-search {
+    padding: var(--sp-2) var(--sp-3);
+    border-bottom: 1px solid var(--border);
+  }
+  .host-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: var(--sp-2);
+  }
+  .host-group-label {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--meta);
+    padding: var(--sp-3) var(--sp-2) var(--sp-1);
+  }
+  .host-item {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-3);
+    padding: var(--sp-2) var(--sp-3);
+    border-radius: var(--r-sm);
+    cursor: pointer;
+    transition: background 0.12s;
+  }
+  .host-item:hover { background: var(--surface); }
+  .host-item.active { background: var(--accent-soft); }
+  .host-item .host-icon {
+    width: 32px; height: 32px;
+    display: grid; place-items: center;
+    background: var(--surface);
+    border-radius: var(--r-sm);
+    color: var(--muted);
+    flex-shrink: 0;
+  }
+  .host-item.active .host-icon { background: var(--accent); color: #fff; }
+  .host-item .host-icon svg { width: 16px; height: 16px; }
+  .host-item .host-info { flex: 1; min-width: 0; }
+  .host-item .host-name { font-size: 12px; font-weight: 500; color: var(--fg); }
+  .host-item .host-addr { font-size: 11px; color: var(--meta); }
+  .host-item .host-status {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .host-item .host-status.online { background: var(--success); }
+  .host-item .host-status.offline { background: var(--muted); }
+
+  /* Detail area */
+  .ssh-detail {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+  .ssh-detail-header {
+    padding: var(--sp-4) var(--sp-6);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: var(--sp-4);
+  }
+  .ssh-detail-header .host-title {
+    font-size: 18px;
+    font-weight: 700;
+  }
+  .ssh-detail-header .host-addr-detail {
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .ssh-detail-tabs {
+    display: flex;
+    gap: 0;
+    border-bottom: 1px solid var(--border);
+    padding: 0 var(--sp-6);
+  }
+  .ssh-detail-tab {
+    padding: var(--sp-3) var(--sp-4);
+    font-size: 12px;
+    color: var(--muted);
+    border-bottom: 2px solid transparent;
+    cursor: pointer;
+    transition: color 0.12s, border-color 0.12s;
+  }
+  .ssh-detail-tab:hover { color: var(--fg); }
+  .ssh-detail-tab.active { color: var(--fg); border-bottom-color: var(--accent); }
+  .ssh-detail-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: var(--sp-6);
+  }
+
+  /* Connection form */
+  .form-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--sp-4) var(--sp-6);
+    max-width: 640px;
+  }
+  .form-field { display: flex; flex-direction: column; gap: var(--sp-1); }
+  .form-field label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--meta);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .form-field.full { grid-column: 1 / -1; }
+
+  /* SFTP file list */
+  .sftp-toolbar {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    padding: var(--sp-2) 0;
+    margin-bottom: var(--sp-3);
+  }
+  .sftp-path {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-1);
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .sftp-path span { cursor: pointer; }
+  .sftp-path span:hover { color: var(--fg); }
+  .sftp-path .sep { color: var(--border); }
+
+  /* Quick stats */
+  .quick-stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: var(--sp-3);
+    margin-bottom: var(--sp-6);
+  }
+  .quick-stat {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+    padding: var(--sp-3) var(--sp-4);
+  }
+  .quick-stat .stat-label { font-size: 10px; color: var(--meta); text-transform: uppercase; letter-spacing: 0.05em; }
+  .quick-stat .stat-value { font-size: 20px; font-weight: 700; color: var(--fg); margin-top: var(--sp-1); }
+  .quick-stat .stat-unit { font-size: 12px; color: var(--muted); font-weight: 400; }
+
+  /* Connection actions */
+  .conn-actions {
+    display: flex;
+    gap: var(--sp-2);
+    margin-top: var(--sp-6);
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <a class="sidebar-logo" href="index.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></a>
+    <a class="sidebar-item" href="terminal.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 17l6-6-6-6"/><path d="M12 19h8"/></svg></a>
+    <a class="sidebar-item active" href="ssh.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg></a>
+    <a class="sidebar-item" href="database.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4.03 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5"/></svg></a>
+    <a class="sidebar-item" href="docker.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="7" width="6" height="5" rx="1"/><rect x="10" y="7" width="6" height="5" rx="1"/><rect x="18" y="7" width="4" height="5" rx="1"/><rect x="6" y="2" width="6" height="5" rx="1"/><path d="M2 17h20c0 2.76-4.48 5-10 5S2 19.76 2 17z"/></svg></a>
+    <a class="sidebar-item" href="server.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><circle cx="6" cy="6" r="1" fill="currentColor"/><circle cx="6" cy="18" r="1" fill="currentColor"/></svg></a>
+    <div class="sidebar-divider"></div>
+    <a class="sidebar-item" href="protocol.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></a>
+    <a class="sidebar-item" href="workflow.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v18M3 12h18"/><circle cx="12" cy="12" r="3"/></svg></a>
+    <a class="sidebar-item" href="knowledge.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg></a>
+    <a class="sidebar-item" href="tasks.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg></a>
+    <div class="sidebar-spacer"></div>
+    <a class="sidebar-item" href="settings.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg></a>
+  </aside>
+
+  <!-- Main -->
+  <div class="main-content">
+    <div class="topbar">
+      <span class="topbar-title">SSH Manager</span>
+      <div class="topbar-tabs">
+        <div class="topbar-tab active">Hosts</div>
+        <div class="topbar-tab">Tunnels</div>
+        <div class="topbar-tab">Keys</div>
+      </div>
+      <div class="topbar-right">
+        <div class="topbar-page-actions">
+          <button class="btn btn-primary btn-sm">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M12 5v14M5 12h14"/></svg>
+            New Connection
+          </button>
+        </div>
+        <div class="topbar-actions">
+          <button class="topbar-btn" title="Notifications">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+            <span class="notif-badge">3</span>
+          </button>
+          <button class="topbar-btn" title="Search (Ctrl+K)" onclick="toggleCmdPalette()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+          </button>
+          <div class="win-controls">
+            <button class="win-btn close" title="Close"></button>
+            <button class="win-btn minimize" title="Minimize"></button>
+            <button class="win-btn maximize" title="Maximize"></button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="ssh-layout">
+      <!-- Host List -->
+      <div class="host-list-panel">
+        <div class="host-list-header">
+          <h3>Connections</h3>
+          <span class="badge badge-muted">12</span>
+        </div>
+        <div class="host-list-search">
+          <input class="input input-search" placeholder="Search hosts..." style="width: 100%;">
+        </div>
+        <div class="host-list">
+          <div class="host-group-label">Production</div>
+          <div class="host-item active">
+            <div class="host-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><circle cx="6" cy="6" r="1" fill="currentColor"/></svg>
+            </div>
+            <div class="host-info">
+              <div class="host-name">prod-web-01</div>
+              <div class="host-addr">10.0.1.10:22</div>
+            </div>
+            <span class="host-status online"></span>
+          </div>
+          <div class="host-item">
+            <div class="host-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><circle cx="6" cy="6" r="1" fill="currentColor"/></svg>
+            </div>
+            <div class="host-info">
+              <div class="host-name">prod-web-02</div>
+              <div class="host-addr">10.0.1.11:22</div>
+            </div>
+            <span class="host-status online"></span>
+          </div>
+          <div class="host-item">
+            <div class="host-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><circle cx="6" cy="6" r="1" fill="currentColor"/></svg>
+            </div>
+            <div class="host-info">
+              <div class="host-name">prod-db-master</div>
+              <div class="host-addr">10.0.1.20:22</div>
+            </div>
+            <span class="host-status online"></span>
+          </div>
+          <div class="host-item">
+            <div class="host-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><circle cx="6" cy="6" r="1" fill="currentColor"/></svg>
+            </div>
+            <div class="host-info">
+              <div class="host-name">prod-redis</div>
+              <div class="host-addr">10.0.1.30:22</div>
+            </div>
+            <span class="host-status online"></span>
+          </div>
+
+          <div class="host-group-label">Staging</div>
+          <div class="host-item">
+            <div class="host-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><circle cx="6" cy="6" r="1" fill="currentColor"/></svg>
+            </div>
+            <div class="host-info">
+              <div class="host-name">staging-api</div>
+              <div class="host-addr">10.0.2.10:22</div>
+            </div>
+            <span class="host-status online"></span>
+          </div>
+          <div class="host-item">
+            <div class="host-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><circle cx="6" cy="6" r="1" fill="currentColor"/></svg>
+            </div>
+            <div class="host-info">
+              <div class="host-name">staging-worker</div>
+              <div class="host-addr">10.0.2.11:22</div>
+            </div>
+            <span class="host-status offline"></span>
+          </div>
+
+          <div class="host-group-label">Development</div>
+          <div class="host-item">
+            <div class="host-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><circle cx="6" cy="6" r="1" fill="currentColor"/></svg>
+            </div>
+            <div class="host-info">
+              <div class="host-name">dev-build</div>
+              <div class="host-addr">192.168.1.50:22</div>
+            </div>
+            <span class="host-status online"></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Detail Area -->
+      <div class="ssh-detail">
+        <div class="ssh-detail-header">
+          <div>
+            <div class="host-title">prod-web-01</div>
+            <div class="host-addr-detail">root@10.0.1.10:22 &middot; Ubuntu 22.04 &middot; Connected 3d 14h</div>
+          </div>
+          <span class="badge badge-success" style="margin-left: auto;">Online</span>
+          <span class="badge badge-danger">PROD</span>
+        </div>
+
+        <div class="ssh-detail-tabs">
+          <div class="ssh-detail-tab active">Overview</div>
+          <div class="ssh-detail-tab">Terminal</div>
+          <div class="ssh-detail-tab">SFTP</div>
+          <div class="ssh-detail-tab">Tunnels</div>
+          <div class="ssh-detail-tab">Monitoring</div>
+        </div>
+
+        <div class="ssh-detail-body">
+          <!-- Quick Stats -->
+          <div class="quick-stats">
+            <div class="quick-stat">
+              <div class="stat-label">CPU</div>
+              <div class="stat-value">23<span class="stat-unit">%</span></div>
+            </div>
+            <div class="quick-stat">
+              <div class="stat-label">Memory</div>
+              <div class="stat-value">6.2<span class="stat-unit">/ 16 GB</span></div>
+            </div>
+            <div class="quick-stat">
+              <div class="stat-label">Disk</div>
+              <div class="stat-value">47<span class="stat-unit">%</span></div>
+            </div>
+            <div class="quick-stat">
+              <div class="stat-label">Uptime</div>
+              <div class="stat-value">142<span class="stat-unit">days</span></div>
+            </div>
+          </div>
+
+          <!-- Connection Config -->
+          <h3 style="font-size: 14px; margin-bottom: var(--sp-4);">Connection Details</h3>
+          <div class="form-grid">
+            <div class="form-field">
+              <label>Host</label>
+              <input class="input" value="10.0.1.10">
+            </div>
+            <div class="form-field">
+              <label>Port</label>
+              <input class="input" value="22">
+            </div>
+            <div class="form-field">
+              <label>Username</label>
+              <input class="input" value="root">
+            </div>
+            <div class="form-field">
+              <label>Auth Method</label>
+              <select class="input">
+                <option>SSH Key</option>
+                <option>Password</option>
+              </select>
+            </div>
+            <div class="form-field">
+              <label>Key File</label>
+              <input class="input" value="~/.ssh/id_ed25519_prod">
+            </div>
+            <div class="form-field">
+              <label>Environment</label>
+              <select class="input">
+                <option>Production</option>
+                <option>Staging</option>
+                <option>Development</option>
+              </select>
+            </div>
+            <div class="form-field full">
+              <label>Tags</label>
+              <div class="flex gap-2" style="flex-wrap: wrap;">
+                <span class="tag">web</span>
+                <span class="tag">nginx</span>
+                <span class="tag">docker</span>
+                <span class="tag">frontend</span>
+                <button class="btn btn-ghost btn-sm">+ Add</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="conn-actions">
+            <button class="btn btn-primary">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M4 17l6-6-6-6"/><path d="M12 19h8"/></svg>
+              Open Terminal
+            </button>
+            <button class="btn btn-secondary">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg>
+              Browse Files
+            </button>
+            <button class="btn btn-secondary">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M12 3v18M3 12h18"/></svg>
+              New Tunnel
+            </button>
+            <button class="btn btn-ghost text-danger" style="margin-left: auto;">Disconnect</button>
+          </div>
+
+          <!-- Recent Activity -->
+          <h3 style="font-size: 14px; margin-top: var(--sp-8); margin-bottom: var(--sp-4);">Recent Activity</h3>
+          <table>
+            <thead>
+              <tr><th>Time</th><th>Command</th><th>Status</th></tr>
+            </thead>
+            <tbody>
+              <tr><td class="text-muted">09:14:02</td><td>docker ps</td><td><span class="badge badge-success">OK</span></td></tr>
+              <tr><td class="text-muted">09:12:01</td><td>curl localhost:8080/health</td><td><span class="badge badge-success">OK</span></td></tr>
+              <tr><td class="text-muted">09:10:45</td><td>docker logs nginx-proxy --tail 50</td><td><span class="badge badge-success">OK</span></td></tr>
+              <tr><td class="text-muted">09:08:33</td><td>systemctl restart nginx</td><td><span class="badge badge-warn">Warn</span></td></tr>
+              <tr><td class="text-muted">08:55:12</td><td>apt update && apt upgrade -y</td><td><span class="badge badge-success">OK</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="statusbar">
+      <span class="statusbar-item"><span class="statusbar-dot green"></span> 8 hosts online</span>
+      <span class="statusbar-item"><span class="statusbar-dot red"></span> 1 host offline</span>
+      <span class="statusbar-spacer"></span>
+      <span class="statusbar-item text-muted">Ctrl+K: Command Palette</span>
+    </div>
+  </div>
+</div>
+
+<!-- Command Palette -->
+<div class="cmd-palette-overlay" id="cmdPalette">
+  <div class="cmd-palette">
+    <input class="cmd-palette-input" placeholder="Search connections, commands..." id="cmdInput">
+    <div class="cmd-palette-list">
+      <div class="cmd-palette-item selected">
+        <div class="item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 17l6-6-6-6"/><path d="M12 19h8"/></svg></div>
+        <span class="item-label">Terminal</span>
+        <span class="item-hint">Local</span>
+      </div>
+      <div class="cmd-palette-item">
+        <div class="item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg></div>
+        <span class="item-label">prod-web-01</span>
+        <span class="item-hint">SSH</span>
+      </div>
+      <div class="cmd-palette-item">
+        <div class="item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5"/></svg></div>
+        <span class="item-label">prod-db-master</span>
+        <span class="item-hint">PostgreSQL</span>
+      </div>
+      <div class="cmd-palette-item">
+        <div class="item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="6" height="5" rx="1"/><rect x="10" y="7" width="6" height="5" rx="1"/></svg></div>
+        <span class="item-label">nginx-proxy</span>
+        <span class="item-hint">Container</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // Command palette toggle
+  function toggleCmdPalette() {
+    const el = document.getElementById('cmdPalette');
+    el.classList.toggle('show');
+    if (el.classList.contains('show')) {
+      document.getElementById('cmdInput').focus();
+    }
+  }
+
+  document.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+      e.preventDefault();
+      toggleCmdPalette();
+    }
+    if (e.key === 'Escape') {
+      document.getElementById('cmdPalette').classList.remove('show');
+    }
+  });
+
+  document.getElementById('cmdPalette').addEventListener('click', (e) => {
+    if (e.target === e.currentTarget) {
+      e.target.classList.remove('show');
+    }
+  });
+</script>
+</body>
+</html>

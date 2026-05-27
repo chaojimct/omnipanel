@@ -1,0 +1,1062 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OmniPanel — Server Management</title>
+<link rel="stylesheet" href="css/omnipanel.css">
+<style>
+  .server-workspace {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .server-sidebar {
+    width: 220px;
+    background: var(--bg-deeper);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    overflow-y: auto;
+  }
+  .server-sidebar-header {
+    padding: var(--sp-3) var(--sp-4);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .server-group { padding: var(--sp-2) 0; }
+  .server-group-title {
+    padding: var(--sp-1) var(--sp-4);
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--meta);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .server-item {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    padding: var(--sp-2) var(--sp-4);
+    cursor: pointer;
+    font-size: 12px;
+    color: var(--fg-2);
+    transition: background 0.12s;
+  }
+  .server-item:hover { background: var(--surface); }
+  .server-item.active { background: var(--surface); color: var(--fg); }
+  .server-item .status-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .server-item .status-dot.online { background: var(--success); }
+  .server-item .status-dot.warning { background: var(--warn); }
+  .server-item .status-dot.offline { background: var(--danger); }
+  .server-item .server-name { flex: 1; truncate: overflow; }
+  .server-item .env-tag {
+    font-size: 9px;
+    padding: 0 4px;
+    border-radius: 2px;
+    font-weight: 700;
+    text-transform: uppercase;
+  }
+
+  .server-main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    overflow: hidden;
+  }
+  .server-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: var(--sp-4);
+  }
+
+  /* Monitoring Cards */
+  .monitor-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: var(--sp-3);
+    margin-bottom: var(--sp-4);
+  }
+  .monitor-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+    padding: var(--sp-4);
+  }
+  .monitor-card .monitor-label {
+    font-size: 11px;
+    color: var(--meta);
+    margin-bottom: var(--sp-2);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .monitor-card .monitor-value {
+    font-size: 28px;
+    font-weight: 700;
+    line-height: 1;
+    margin-bottom: var(--sp-2);
+  }
+  .monitor-card .monitor-bar {
+    height: 4px;
+    background: var(--bg-deeper);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .monitor-card .monitor-bar-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.3s ease;
+  }
+  .monitor-card .monitor-detail {
+    font-size: 10px;
+    color: var(--meta);
+    margin-top: var(--sp-2);
+  }
+
+  /* Chart placeholder */
+  .chart-area {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+    padding: var(--sp-4);
+    margin-bottom: var(--sp-4);
+  }
+  .chart-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: var(--sp-3);
+  }
+  .chart-header h3 { font-size: 13px; font-weight: 600; }
+  .chart-tabs {
+    display: flex;
+    gap: 0;
+  }
+  .chart-tab {
+    padding: 2px 8px;
+    font-size: 10px;
+    color: var(--meta);
+    cursor: pointer;
+    border-bottom: 1px solid transparent;
+    transition: color 0.12s;
+  }
+  .chart-tab:hover { color: var(--fg); }
+  .chart-tab.active { color: var(--fg); border-bottom-color: var(--accent); }
+  .chart-body {
+    height: 180px;
+    background: var(--bg-deeper);
+    border-radius: var(--r-sm);
+    display: flex;
+    align-items: flex-end;
+    padding: var(--sp-3);
+    gap: 2px;
+  }
+  .chart-bar {
+    flex: 1;
+    background: var(--accent);
+    border-radius: 1px 1px 0 0;
+    opacity: 0.6;
+    transition: opacity 0.12s;
+    min-width: 4px;
+  }
+  .chart-bar:hover { opacity: 1; }
+
+  /* Server Info Panel */
+  .info-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--sp-3);
+    margin-bottom: var(--sp-4);
+  }
+  .info-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+    padding: var(--sp-4);
+  }
+  .info-card h4 {
+    font-size: 12px;
+    font-weight: 600;
+    margin-bottom: var(--sp-3);
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+  }
+  .info-card h4 svg { width: 14px; height: 14px; color: var(--accent); }
+  .info-row {
+    display: flex;
+    justify-content: space-between;
+    padding: var(--sp-1) 0;
+    font-size: 11px;
+    border-bottom: 1px solid var(--border-soft);
+  }
+  .info-row:last-child { border-bottom: none; }
+  .info-row .label { color: var(--meta); }
+  .info-row .value { color: var(--fg-2); font-weight: 500; }
+
+  /* Process Table */
+  .process-section {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+    margin-bottom: var(--sp-4);
+  }
+  .process-header {
+    display: flex;
+    align-items: center;
+    padding: var(--sp-3) var(--sp-4);
+    border-bottom: 1px solid var(--border);
+    gap: var(--sp-3);
+  }
+  .process-header h3 { font-size: 13px; font-weight: 600; }
+  .process-search {
+    margin-left: auto;
+    padding: 3px 8px 3px 24px;
+    background: var(--bg-deeper);
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    color: var(--fg);
+    font-size: 11px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236e6e73' stroke-width='2'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cpath d='m21 21-4.3-4.3'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: 6px center;
+  }
+  .process-search:focus { border-color: var(--accent); outline: none; }
+
+  /* Service list */
+  .service-list {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+    margin-bottom: var(--sp-4);
+  }
+  .service-item {
+    display: flex;
+    align-items: center;
+    padding: var(--sp-2) var(--sp-4);
+    border-bottom: 1px solid var(--border-soft);
+    font-size: 12px;
+    gap: var(--sp-3);
+  }
+  .service-item:last-child { border-bottom: none; }
+  .service-item .svc-name { font-weight: 500; min-width: 140px; }
+  .service-item .svc-status {
+    padding: 1px 6px;
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 600;
+  }
+  .service-item .svc-desc { color: var(--meta); flex: 1; font-size: 11px; }
+  .service-item .svc-actions { display: flex; gap: var(--sp-1); }
+
+  /* Tabs for server detail */
+  .server-tabs {
+    display: flex;
+    gap: 0;
+    border-bottom: 1px solid var(--border);
+    padding: 0 var(--sp-4);
+    flex-shrink: 0;
+  }
+  .server-tab {
+    padding: var(--sp-3) var(--sp-4);
+    font-size: 12px;
+    color: var(--meta);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: color 0.12s, border-color 0.12s;
+  }
+  .server-tab:hover { color: var(--fg); }
+  .server-tab.active { color: var(--fg); border-bottom-color: var(--accent); }
+
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  /* Multi-server overview */
+  .overview-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--sp-3);
+    margin-bottom: var(--sp-4);
+  }
+  .overview-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+    padding: var(--sp-4);
+    cursor: pointer;
+    transition: border-color 0.12s;
+  }
+  .overview-card:hover { border-color: var(--accent); }
+  .overview-card .ov-header {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    margin-bottom: var(--sp-3);
+  }
+  .overview-card .ov-name { font-size: 13px; font-weight: 600; }
+  .overview-card .ov-ip { font-size: 10px; color: var(--meta); }
+  .overview-card .ov-metrics {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--sp-2);
+  }
+  .overview-card .ov-metric {
+    font-size: 10px;
+    color: var(--meta);
+  }
+  .overview-card .ov-metric .ov-val {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--fg);
+    display: block;
+    margin-top: 2px;
+  }
+
+  @media (max-width: 1200px) {
+    .monitor-grid { grid-template-columns: repeat(2, 1fr); }
+    .overview-grid { grid-template-columns: repeat(2, 1fr); }
+  }
+  @media (max-width: 800px) {
+    .server-sidebar { display: none; }
+    .monitor-grid { grid-template-columns: 1fr; }
+    .info-grid { grid-template-columns: 1fr; }
+    .overview-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="app" id="app">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <a class="sidebar-logo" href="index.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></a>
+    <a class="sidebar-item" href="terminal.html" title="Terminal">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 17l6-6-6-6"/><path d="M12 19h8"/></svg>
+    </a>
+    <a class="sidebar-item" href="ssh.html" title="SSH">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+    </a>
+    <a class="sidebar-item" href="database.html" title="Database">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4.03 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5"/></svg>
+    </a>
+    <a class="sidebar-item" href="docker.html" title="Docker">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="7" width="6" height="5" rx="1"/><rect x="10" y="7" width="6" height="5" rx="1"/><rect x="18" y="7" width="4" height="5" rx="1"/><rect x="6" y="2" width="6" height="5" rx="1"/><path d="M2 17h20c0 2.76-4.48 5-10 5S2 19.76 2 17z"/></svg>
+    </a>
+    <a class="sidebar-item active" href="server.html" title="Servers">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><circle cx="6" cy="6" r="1" fill="currentColor"/><circle cx="6" cy="18" r="1" fill="currentColor"/></svg>
+    </a>
+
+    <div class="sidebar-divider"></div>
+
+    <a class="sidebar-item" href="protocol.html" title="Protocol Lab">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+    </a>
+    <a class="sidebar-item" href="workflow.html" title="Workflows">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v18M3 12h18"/><circle cx="12" cy="12" r="3"/></svg>
+    </a>
+    <a class="sidebar-item" href="knowledge.html" title="Knowledge">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>
+    </a>
+    <a class="sidebar-item" href="tasks.html" title="Tasks">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+    </a>
+
+    <div class="sidebar-spacer"></div>
+
+    <a class="sidebar-item" href="settings.html" title="Settings">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+    </a>
+  </aside>
+
+  <div class="main-content">
+    <div class="topbar">
+      <span class="topbar-title">Servers</span>
+      <div class="topbar-tabs">
+        <div class="topbar-tab active" data-tab="monitor">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
+          <span>Monitoring</span>
+        </div>
+        <div class="topbar-tab" data-tab="processes">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+          <span>Processes</span>
+        </div>
+        <div class="topbar-tab" data-tab="services">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><circle cx="12" cy="12" r="3"/><path d="M12 1v6M12 17v6M4.22 4.22l4.24 4.24M15.54 15.54l4.24 4.24M1 12h6M17 12h6M4.22 19.78l4.24-4.24M15.54 8.46l4.24-4.24"/></svg>
+          <span>Services</span>
+        </div>
+        <div class="topbar-tab" data-tab="logs">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg>
+          <span>Logs</span>
+        </div>
+      </div>
+      <div class="topbar-right">
+        <div class="topbar-page-actions">
+          <button class="btn-icon" title="Refresh">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
+          </button>
+          <button class="btn-icon" title="Terminal" onclick="window.location='terminal.html'">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 17l6-6-6-6"/><path d="M12 19h8"/></svg>
+          </button>
+          <button class="btn btn-primary btn-sm">+ Add Server</button>
+        </div>
+        <div class="topbar-actions">
+          <button class="topbar-btn" title="Notifications">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+            <span class="notif-badge">3</span>
+          </button>
+          <button class="topbar-btn" title="Search (Ctrl+K)" onclick="toggleCmdPalette()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+          </button>
+          <div class="win-controls">
+            <button class="win-btn close" title="Close"></button>
+            <button class="win-btn minimize" title="Minimize"></button>
+            <button class="win-btn maximize" title="Maximize"></button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="server-workspace">
+      <!-- Server List Sidebar -->
+      <div class="server-sidebar">
+        <div class="server-sidebar-header">
+          <span>All Servers</span>
+          <span class="badge badge-success">5 online</span>
+        </div>
+        <div class="server-group">
+          <div class="server-group-title">Production</div>
+          <div class="server-item active">
+            <span class="status-dot online"></span>
+            <span class="server-name">prod-web-01</span>
+            <span class="env-tag" style="background: var(--danger-soft); color: var(--danger);">PROD</span>
+          </div>
+          <div class="server-item">
+            <span class="status-dot online"></span>
+            <span class="server-name">prod-web-02</span>
+            <span class="env-tag" style="background: var(--danger-soft); color: var(--danger);">PROD</span>
+          </div>
+          <div class="server-item">
+            <span class="status-dot online"></span>
+            <span class="server-name">prod-db-master</span>
+            <span class="env-tag" style="background: var(--danger-soft); color: var(--danger);">PROD</span>
+          </div>
+        </div>
+        <div class="server-group">
+          <div class="server-group-title">Staging</div>
+          <div class="server-item">
+            <span class="status-dot online"></span>
+            <span class="server-name">staging-api</span>
+            <span class="env-tag" style="background: var(--warn-soft); color: var(--warn);">STG</span>
+          </div>
+          <div class="server-item">
+            <span class="status-dot warning"></span>
+            <span class="server-name">staging-worker</span>
+            <span class="env-tag" style="background: var(--warn-soft); color: var(--warn);">STG</span>
+          </div>
+        </div>
+        <div class="server-group">
+          <div class="server-group-title">Development</div>
+          <div class="server-item">
+            <span class="status-dot online"></span>
+            <span class="server-name">dev-local</span>
+            <span class="env-tag" style="background: var(--success-soft); color: var(--success);">DEV</span>
+          </div>
+          <div class="server-item">
+            <span class="status-dot offline"></span>
+            <span class="server-name">dev-build</span>
+            <span class="env-tag" style="background: var(--success-soft); color: var(--success);">DEV</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Main Content -->
+      <div class="server-main">
+        <!-- Tab: Monitoring -->
+        <div class="tab-panel active" id="tab-monitor">
+          <div class="server-content">
+            <!-- Resource Metrics -->
+            <div class="monitor-grid">
+              <div class="monitor-card">
+                <div class="monitor-label">
+                  <span>CPU Usage</span>
+                  <span class="badge badge-success">Normal</span>
+                </div>
+                <div class="monitor-value text-accent">23.4%</div>
+                <div class="monitor-bar">
+                  <div class="monitor-bar-fill" style="width: 23.4%; background: var(--accent);"></div>
+                </div>
+                <div class="monitor-detail">4 cores · Intel Xeon E5-2680 · 2.40GHz</div>
+              </div>
+              <div class="monitor-card">
+                <div class="monitor-label">
+                  <span>Memory</span>
+                  <span class="badge badge-warn">78%</span>
+                </div>
+                <div class="monitor-value text-warn">6.2 GB</div>
+                <div class="monitor-bar">
+                  <div class="monitor-bar-fill" style="width: 78%; background: var(--warn);"></div>
+                </div>
+                <div class="monitor-detail">8 GB total · 1.8 GB available</div>
+              </div>
+              <div class="monitor-card">
+                <div class="monitor-label">
+                  <span>Disk</span>
+                  <span class="badge badge-success">54%</span>
+                </div>
+                <div class="monitor-value">54 GB</div>
+                <div class="monitor-bar">
+                  <div class="monitor-bar-fill" style="width: 54%; background: var(--success);"></div>
+                </div>
+                <div class="monitor-detail">100 GB total · 46 GB available</div>
+              </div>
+              <div class="monitor-card">
+                <div class="monitor-label">
+                  <span>Network</span>
+                  <span class="badge badge-accent">Active</span>
+                </div>
+                <div class="monitor-value text-success">↑ 2.4 <span style="font-size: 14px; font-weight: 400;">MB/s</span></div>
+                <div class="monitor-bar">
+                  <div class="monitor-bar-fill" style="width: 24%; background: var(--success);"></div>
+                </div>
+                <div class="monitor-detail">↓ 1.1 MB/s · eth0 · 847 connections</div>
+              </div>
+            </div>
+
+            <!-- CPU Chart -->
+            <div class="chart-area">
+              <div class="chart-header">
+                <h3>CPU Usage — Last 24h</h3>
+                <div class="chart-tabs">
+                  <span class="chart-tab">1h</span>
+                  <span class="chart-tab">6h</span>
+                  <span class="chart-tab active">24h</span>
+                  <span class="chart-tab">7d</span>
+                </div>
+              </div>
+              <div class="chart-body" id="cpuChart"></div>
+            </div>
+
+            <!-- Server Info -->
+            <div class="info-grid">
+              <div class="info-card">
+                <h4>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><circle cx="6" cy="6" r="1" fill="currentColor"/><circle cx="6" cy="18" r="1" fill="currentColor"/></svg>
+                  System Info
+                </h4>
+                <div class="info-row"><span class="label">Hostname</span><span class="value">prod-web-01</span></div>
+                <div class="info-row"><span class="label">OS</span><span class="value">Ubuntu 22.04.3 LTS</span></div>
+                <div class="info-row"><span class="label">Kernel</span><span class="value">5.15.0-91-generic</span></div>
+                <div class="info-row"><span class="label">Uptime</span><span class="value">72h 14m</span></div>
+                <div class="info-row"><span class="label">Load Average</span><span class="value">1.23, 0.98, 0.87</span></div>
+              </div>
+              <div class="info-card">
+                <h4>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+                  Network
+                </h4>
+                <div class="info-row"><span class="label">IP Address</span><span class="value">10.0.1.21</span></div>
+                <div class="info-row"><span class="label">Public IP</span><span class="value">203.0.113.42</span></div>
+                <div class="info-row"><span class="label">Interface</span><span class="value">eth0</span></div>
+                <div class="info-row"><span class="label">Bandwidth</span><span class="value">1 Gbps</span></div>
+                <div class="info-row"><span class="label">Firewall</span><span class="value">ufw active</span></div>
+              </div>
+              <div class="info-card">
+                <h4>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="6" height="5" rx="1"/><rect x="10" y="7" width="6" height="5" rx="1"/><rect x="18" y="7" width="4" height="5" rx="1"/><rect x="6" y="2" width="6" height="5" rx="1"/></svg>
+                  Docker
+                </h4>
+                <div class="info-row"><span class="label">Containers</span><span class="value">4 running / 2 stopped</span></div>
+                <div class="info-row"><span class="label">Images</span><span class="value">12</span></div>
+                <div class="info-row"><span class="label">Volumes</span><span class="value">8</span></div>
+                <div class="info-row"><span class="label">Networks</span><span class="value">3</span></div>
+                <div class="info-row"><span class="label">Docker Version</span><span class="value">24.0.7</span></div>
+              </div>
+              <div class="info-card">
+                <h4>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                  Security
+                </h4>
+                <div class="info-row"><span class="label">SSH Key Auth</span><span class="value text-success">Enabled</span></div>
+                <div class="info-row"><span class="label">Root Login</span><span class="value text-warn">Permitted</span></div>
+                <div class="info-row"><span class="label">Fail2ban</span><span class="value text-success">Active</span></div>
+                <div class="info-row"><span class="label">Last Login</span><span class="value">2026-05-26 09:14</span></div>
+                <div class="info-row"><span class="label">Open Ports</span><span class="value">22, 80, 443, 8080</span></div>
+              </div>
+            </div>
+
+            <!-- Multi-server Overview -->
+            <h3 style="font-size: 13px; font-weight: 600; margin-bottom: var(--sp-3);">All Servers Overview</h3>
+            <div class="overview-grid">
+              <div class="overview-card">
+                <div class="ov-header">
+                  <span class="status-dot online"></span>
+                  <div>
+                    <div class="ov-name">prod-web-01</div>
+                    <div class="ov-ip">10.0.1.21 · Ubuntu 22.04</div>
+                  </div>
+                </div>
+                <div class="ov-metrics">
+                  <div class="ov-metric">CPU<span class="ov-val">23%</span></div>
+                  <div class="ov-metric">MEM<span class="ov-val">78%</span></div>
+                  <div class="ov-metric">DISK<span class="ov-val">54%</span></div>
+                  <div class="ov-metric">NET<span class="ov-val">2.4M</span></div>
+                </div>
+              </div>
+              <div class="overview-card">
+                <div class="ov-header">
+                  <span class="status-dot online"></span>
+                  <div>
+                    <div class="ov-name">prod-web-02</div>
+                    <div class="ov-ip">10.0.1.22 · Ubuntu 22.04</div>
+                  </div>
+                </div>
+                <div class="ov-metrics">
+                  <div class="ov-metric">CPU<span class="ov-val">45%</span></div>
+                  <div class="ov-metric">MEM<span class="ov-val">62%</span></div>
+                  <div class="ov-metric">DISK<span class="ov-val">41%</span></div>
+                  <div class="ov-metric">NET<span class="ov-val">1.8M</span></div>
+                </div>
+              </div>
+              <div class="overview-card">
+                <div class="ov-header">
+                  <span class="status-dot online"></span>
+                  <div>
+                    <div class="ov-name">prod-db-master</div>
+                    <div class="ov-ip">10.0.1.30 · Ubuntu 22.04</div>
+                  </div>
+                </div>
+                <div class="ov-metrics">
+                  <div class="ov-metric">CPU<span class="ov-val">67%</span></div>
+                  <div class="ov-metric">MEM<span class="ov-val">89%</span></div>
+                  <div class="ov-metric">DISK<span class="ov-val">72%</span></div>
+                  <div class="ov-metric">NET<span class="ov-val">3.1M</span></div>
+                </div>
+              </div>
+              <div class="overview-card">
+                <div class="ov-header">
+                  <span class="status-dot online"></span>
+                  <div>
+                    <div class="ov-name">staging-api</div>
+                    <div class="ov-ip">10.0.2.10 · Ubuntu 22.04</div>
+                  </div>
+                </div>
+                <div class="ov-metrics">
+                  <div class="ov-metric">CPU<span class="ov-val">12%</span></div>
+                  <div class="ov-metric">MEM<span class="ov-val">34%</span></div>
+                  <div class="ov-metric">DISK<span class="ov-val">28%</span></div>
+                  <div class="ov-metric">NET<span class="ov-val">0.4M</span></div>
+                </div>
+              </div>
+              <div class="overview-card">
+                <div class="ov-header">
+                  <span class="status-dot warning"></span>
+                  <div>
+                    <div class="ov-name">staging-worker</div>
+                    <div class="ov-ip">10.0.2.11 · Ubuntu 22.04</div>
+                  </div>
+                </div>
+                <div class="ov-metrics">
+                  <div class="ov-metric">CPU<span class="ov-val text-warn">92%</span></div>
+                  <div class="ov-metric">MEM<span class="ov-val text-warn">95%</span></div>
+                  <div class="ov-metric">DISK<span class="ov-val">61%</span></div>
+                  <div class="ov-metric">NET<span class="ov-val">0.1M</span></div>
+                </div>
+              </div>
+              <div class="overview-card">
+                <div class="ov-header">
+                  <span class="status-dot offline"></span>
+                  <div>
+                    <div class="ov-name">dev-build</div>
+                    <div class="ov-ip">10.0.3.20 · Ubuntu 22.04</div>
+                  </div>
+                </div>
+                <div class="ov-metrics">
+                  <div class="ov-metric">CPU<span class="ov-val text-muted">—</span></div>
+                  <div class="ov-metric">MEM<span class="ov-val text-muted">—</span></div>
+                  <div class="ov-metric">DISK<span class="ov-val text-muted">—</span></div>
+                  <div class="ov-metric">NET<span class="ov-val text-muted">—</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab: Processes -->
+        <div class="tab-panel" id="tab-processes">
+          <div class="server-content">
+            <div class="process-section">
+              <div class="process-header">
+                <h3>Running Processes</h3>
+                <span class="text-muted text-sm">187 total</span>
+                <input class="process-search" placeholder="Search processes..." type="text">
+                <button class="btn btn-danger btn-sm">Kill Process</button>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>PID</th>
+                      <th>Name</th>
+                      <th>User</th>
+                      <th>CPU %</th>
+                      <th>MEM %</th>
+                      <th>RSS</th>
+                      <th>Status</th>
+                      <th>Started</th>
+                      <th>Command</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td>1</td>
+                      <td style="font-weight: 500;">systemd</td>
+                      <td>root</td>
+                      <td>0.0</td>
+                      <td>0.3</td>
+                      <td>12 MB</td>
+                      <td><span class="badge badge-success">S</span></td>
+                      <td>May 23</td>
+                      <td class="text-muted truncate" style="max-width: 200px;">/sbin/init</td>
+                    </tr>
+                    <tr>
+                      <td>1247</td>
+                      <td style="font-weight: 500;">dockerd</td>
+                      <td>root</td>
+                      <td class="text-warn">8.2</td>
+                      <td>2.1</td>
+                      <td>168 MB</td>
+                      <td><span class="badge badge-success">S</span></td>
+                      <td>May 23</td>
+                      <td class="text-muted truncate" style="max-width: 200px;">/usr/bin/dockerd -H fd://</td>
+                    </tr>
+                    <tr>
+                      <td>1893</td>
+                      <td style="font-weight: 500;">node</td>
+                      <td>app</td>
+                      <td>3.4</td>
+                      <td class="text-warn">12.8</td>
+                      <td>1024 MB</td>
+                      <td><span class="badge badge-success">S</span></td>
+                      <td>May 23</td>
+                      <td class="text-muted truncate" style="max-width: 200px;">node dist/server.js</td>
+                    </tr>
+                    <tr>
+                      <td>2104</td>
+                      <td style="font-weight: 500;">nginx</td>
+                      <td>www-data</td>
+                      <td>0.1</td>
+                      <td>0.4</td>
+                      <td>32 MB</td>
+                      <td><span class="badge badge-success">S</span></td>
+                      <td>May 23</td>
+                      <td class="text-muted truncate" style="max-width: 200px;">nginx: master process</td>
+                    </tr>
+                    <tr>
+                      <td>2205</td>
+                      <td style="font-weight: 500;">postgres</td>
+                      <td>postgres</td>
+                      <td>2.1</td>
+                      <td>6.7</td>
+                      <td>536 MB</td>
+                      <td><span class="badge badge-success">S</span></td>
+                      <td>May 23</td>
+                      <td class="text-muted truncate" style="max-width: 200px;">postgres: wal receiver</td>
+                    </tr>
+                    <tr>
+                      <td>3012</td>
+                      <td style="font-weight: 500;">redis-server</td>
+                      <td>redis</td>
+                      <td>0.3</td>
+                      <td>1.2</td>
+                      <td>96 MB</td>
+                      <td><span class="badge badge-success">S</span></td>
+                      <td>May 23</td>
+                      <td class="text-muted truncate" style="max-width: 200px;">redis-server *:6379</td>
+                    </tr>
+                    <tr>
+                      <td>4521</td>
+                      <td style="font-weight: 500;">sshd</td>
+                      <td>root</td>
+                      <td>0.0</td>
+                      <td>0.1</td>
+                      <td>8 MB</td>
+                      <td><span class="badge badge-success">S</span></td>
+                      <td>May 23</td>
+                      <td class="text-muted truncate" style="max-width: 200px;">sshd: /usr/sbin/sshd</td>
+                    </tr>
+                    <tr>
+                      <td>5678</td>
+                      <td style="font-weight: 500;">python3</td>
+                      <td>app</td>
+                      <td class="text-danger">45.2</td>
+                      <td class="text-warn">8.4</td>
+                      <td>672 MB</td>
+                      <td><span class="badge badge-warn">R</span></td>
+                      <td>09:12</td>
+                      <td class="text-muted truncate" style="max-width: 200px;">python3 ml_training.py --batch 256</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab: Services -->
+        <div class="tab-panel" id="tab-services">
+          <div class="server-content">
+            <div class="service-list">
+              <div style="padding: var(--sp-3) var(--sp-4); border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: var(--sp-3);">
+                <h3 style="font-size: 13px; font-weight: 600;">systemd Services</h3>
+                <span class="text-muted text-sm">prod-web-01</span>
+                <input class="process-search" placeholder="Search services..." type="text" style="margin-left: auto;">
+              </div>
+              <div class="service-item">
+                <span class="svc-name">nginx.service</span>
+                <span class="svc-status badge-success">active</span>
+                <span class="svc-desc">A high performance web server and reverse proxy</span>
+                <div class="svc-actions">
+                  <button class="btn btn-ghost btn-sm">Restart</button>
+                  <button class="btn btn-ghost btn-sm">Stop</button>
+                  <button class="btn btn-ghost btn-sm">Logs</button>
+                </div>
+              </div>
+              <div class="service-item">
+                <span class="svc-name">docker.service</span>
+                <span class="svc-status badge-success">active</span>
+                <span class="svc-desc">Docker Application Container Engine</span>
+                <div class="svc-actions">
+                  <button class="btn btn-ghost btn-sm">Restart</button>
+                  <button class="btn btn-ghost btn-sm">Stop</button>
+                  <button class="btn btn-ghost btn-sm">Logs</button>
+                </div>
+              </div>
+              <div class="service-item">
+                <span class="svc-name">postgresql.service</span>
+                <span class="svc-status badge-success">active</span>
+                <span class="svc-desc">PostgreSQL RDBMS</span>
+                <div class="svc-actions">
+                  <button class="btn btn-ghost btn-sm">Restart</button>
+                  <button class="btn btn-ghost btn-sm">Stop</button>
+                  <button class="btn btn-ghost btn-sm">Logs</button>
+                </div>
+              </div>
+              <div class="service-item">
+                <span class="svc-name">redis-server.service</span>
+                <span class="svc-status badge-success">active</span>
+                <span class="svc-desc">Advanced key-value store</span>
+                <div class="svc-actions">
+                  <button class="btn btn-ghost btn-sm">Restart</button>
+                  <button class="btn btn-ghost btn-sm">Stop</button>
+                  <button class="btn btn-ghost btn-sm">Logs</button>
+                </div>
+              </div>
+              <div class="service-item">
+                <span class="svc-name">sshd.service</span>
+                <span class="svc-status badge-success">active</span>
+                <span class="svc-desc">OpenSSH server daemon</span>
+                <div class="svc-actions">
+                  <button class="btn btn-ghost btn-sm">Restart</button>
+                  <button class="btn btn-ghost btn-sm">Stop</button>
+                  <button class="btn btn-ghost btn-sm">Logs</button>
+                </div>
+              </div>
+              <div class="service-item">
+                <span class="svc-name">fail2ban.service</span>
+                <span class="svc-status badge-success">active</span>
+                <span class="svc-desc">Ban hosts that cause multiple authentication errors</span>
+                <div class="svc-actions">
+                  <button class="btn btn-ghost btn-sm">Restart</button>
+                  <button class="btn btn-ghost btn-sm">Stop</button>
+                  <button class="btn btn-ghost btn-sm">Logs</button>
+                </div>
+              </div>
+              <div class="service-item">
+                <span class="svc-name">cron.service</span>
+                <span class="svc-status badge-success">active</span>
+                <span class="svc-desc">Regular background program processing daemon</span>
+                <div class="svc-actions">
+                  <button class="btn btn-ghost btn-sm">Restart</button>
+                  <button class="btn btn-ghost btn-sm">Stop</button>
+                  <button class="btn btn-ghost btn-sm">Logs</button>
+                </div>
+              </div>
+              <div class="service-item">
+                <span class="svc-name">ufw.service</span>
+                <span class="svc-status badge-success">active</span>
+                <span class="svc-desc">Uncomplicated Firewall</span>
+                <div class="svc-actions">
+                  <button class="btn btn-ghost btn-sm">Restart</button>
+                  <button class="btn btn-ghost btn-sm">Stop</button>
+                  <button class="btn btn-ghost btn-sm">Logs</button>
+                </div>
+              </div>
+              <div class="service-item">
+                <span class="svc-name">ml-worker.service</span>
+                <span class="svc-status badge-danger">failed</span>
+                <span class="svc-desc">ML training worker — crashed at 09:12</span>
+                <div class="svc-actions">
+                  <button class="btn btn-primary btn-sm">Restart</button>
+                  <button class="btn btn-ghost btn-sm">Logs</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab: Logs -->
+        <div class="tab-panel" id="tab-logs">
+          <div class="server-content">
+            <div style="display: flex; align-items: center; gap: var(--sp-3); margin-bottom: var(--sp-3);">
+              <h3 style="font-size: 13px; font-weight: 600;">System Logs</h3>
+              <select class="input" style="font-size: 11px;">
+                <option>syslog</option>
+                <option>auth.log</option>
+                <option>kern.log</option>
+                <option>nginx/error.log</option>
+                <option>docker/daemon.log</option>
+              </select>
+              <select class="input" style="font-size: 11px;">
+                <option>All Levels</option>
+                <option>Error</option>
+                <option>Warning</option>
+                <option>Info</option>
+              </select>
+              <button class="btn btn-ghost btn-sm" style="margin-left: auto;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
+                Refresh
+              </button>
+              <button class="btn btn-ghost btn-sm">Tail -f</button>
+            </div>
+            <div class="terminal-area" style="border: 1px solid var(--border); border-radius: var(--r-md); min-height: 400px;">
+              <div class="terminal-line"><span class="terminal-muted">May 26 09:14:02 prod-web-01 sshd[4521]: </span><span class="terminal-output">Accepted publickey for root from 192.168.1.100 port 52341 ssh2</span></div>
+              <div class="terminal-line"><span class="terminal-muted">May 26 09:13:45 prod-web-01 nginx[2104]: </span><span class="terminal-output">200 GET /api/users 12ms</span></div>
+              <div class="terminal-line"><span class="terminal-muted">May 26 09:13:46 prod-web-01 nginx[2104]: </span><span class="terminal-output">200 GET /api/users 8ms</span></div>
+              <div class="terminal-line"><span class="terminal-muted">May 26 09:12:01 prod-web-01 nginx[2104]: </span><span class="terminal-warn">upstream connection timeout</span></div>
+              <div class="terminal-line"><span class="terminal-muted">May 26 09:12:01 prod-web-01 nginx[2104]: </span><span class="terminal-warn">upstream connection timeout</span></div>
+              <div class="terminal-line"><span class="terminal-muted">May 26 09:11:33 prod-web-01 kernel: </span><span class="terminal-error">[UFW BLOCK] IN=eth0 SRC=45.33.32.104 DST=10.0.1.21 PROTO=TCP DPT=443</span></div>
+              <div class="terminal-line"><span class="terminal-muted">May 26 09:10:15 prod-web-01 systemd[1]: </span><span class="terminal-output">Started ml-worker.service</span></div>
+              <div class="terminal-line"><span class="terminal-muted">May 26 09:09:42 prod-web-01 dockerd[1247]: </span><span class="terminal-output">Container app-backend started</span></div>
+              <div class="terminal-line"><span class="terminal-muted">May 26 09:08:01 prod-web-01 CRON[5102]: </span><span class="terminal-output">(root) CMD (/usr/local/bin/backup.sh)</span></div>
+              <div class="terminal-line"><span class="terminal-muted">May 26 09:05:18 prod-web-01 fail2ban[3201]: </span><span class="terminal-warn">Ban 45.33.32.104 (sshd)</span></div>
+              <div class="terminal-line"><span class="terminal-muted">May 26 09:01:00 prod-web-01 systemd[1]: </span><span class="terminal-output">Starting Daily apt activities...</span></div>
+              <div class="terminal-line"><span class="terminal-muted">May 26 08:55:33 prod-web-01 postgres[2205]: </span><span class="terminal-output">checkpoint complete: wrote 128 buffers</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="statusbar">
+      <span class="statusbar-item">
+        <span class="statusbar-dot green"></span>
+        SSH Connected
+      </span>
+      <span class="statusbar-item">prod-web-01</span>
+      <span class="statusbar-item text-muted">Ubuntu 22.04</span>
+      <span class="statusbar-spacer"></span>
+      <span class="statusbar-item text-muted">Ctrl+K: Command Palette</span>
+      <span class="statusbar-item">UTF-8</span>
+    </div>
+  </div>
+</div>
+
+<script>
+  // Command palette toggle
+  function toggleCmdPalette() {
+    const el = document.getElementById('cmdPalette');
+    el.classList.toggle('show');
+    if (el.classList.contains('show')) {
+      document.getElementById('cmdInput').focus();
+    }
+  }
+
+  document.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+      e.preventDefault();
+      toggleCmdPalette();
+    }
+    if (e.key === 'Escape') {
+      document.getElementById('cmdPalette').classList.remove('show');
+    }
+  });
+
+  document.getElementById('cmdPalette').addEventListener('click', (e) => {
+    if (e.target === e.currentTarget) {
+      e.target.classList.remove('show');
+    }
+  });
+
+  // Tab switching
+  document.querySelectorAll('.topbar-tab[data-tab]').forEach(tab => {
+    tab.addEventListener('click', function() {
+      const target = this.dataset.tab;
+      document.querySelectorAll('.topbar-tab[data-tab]').forEach(t => t.classList.remove('active'));
+      this.classList.add('active');
+      document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+      document.getElementById('tab-' + target).classList.add('active');
+    });
+  });
+
+  // Server list switching
+  document.querySelectorAll('.server-item').forEach(item => {
+    item.addEventListener('click', function() {
+      document.querySelectorAll('.server-item').forEach(i => i.classList.remove('active'));
+      this.classList.add('active');
+    });
+  });
+
+  // Generate CPU chart bars
+  const cpuChart = document.getElementById('cpuChart');
+  const values = [12,15,18,22,25,28,35,42,38,32,28,25,30,35,40,45,42,38,34,28,22,18,15,20,25,30,35,28,22,18,15,20,25,32,38,42,45,40,35,28,22,18,23,28,32,38,42,35];
+  values.forEach(v => {
+    const bar = document.createElement('div');
+    bar.className = 'chart-bar';
+    bar.style.height = (v / 50 * 100) + '%';
+    if (v > 40) bar.style.background = 'var(--warn)';
+    if (v > 45) bar.style.background = 'var(--danger)';
+    cpuChart.appendChild(bar);
+  });
+</script>
+
+<!-- Command Palette -->
+<div class="cmd-palette-overlay" id="cmdPalette">
+  <div class="cmd-palette">
+    <input class="cmd-palette-input" placeholder="Search connections, commands..." id="cmdInput">
+    <div class="cmd-palette-list">
+      <div class="cmd-palette-item selected">
+        <div class="item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 17l6-6-6-6"/><path d="M12 19h8"/></svg></div>
+        <span class="item-label">Terminal</span>
+        <span class="item-hint">Local</span>
+      </div>
+      <div class="cmd-palette-item">
+        <div class="item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg></div>
+        <span class="item-label">prod-web-01</span>
+        <span class="item-hint">SSH</span>
+      </div>
+      <div class="cmd-palette-item">
+        <div class="item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5"/></svg></div>
+        <span class="item-label">prod-db-master</span>
+        <span class="item-hint">PostgreSQL</span>
+      </div>
+      <div class="cmd-palette-item">
+        <div class="item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="6" height="5" rx="1"/><rect x="10" y="7" width="6" height="5" rx="1"/></svg></div>
+        <span class="item-label">nginx-proxy</span>
+        <span class="item-hint">Container</span>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

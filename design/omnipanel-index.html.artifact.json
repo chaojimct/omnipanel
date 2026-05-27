@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "kind": "html",
+  "title": "OmniPanel — 入口页面",
+  "entry": "omnipanel-index.html",
+  "renderer": "html",
+  "status": "complete",
+  "exports": [
+    "html",
+    "pdf",
+    "zip"
+  ],
+  "createdAt": "2026-05-26T06:51:20.554Z",
+  "updatedAt": "2026-05-26T06:51:20.563Z",
+  "sourceSkillId": "agent-browser",
+  "designSystemId": "opencode-ai",
+  "metadata": {
+    "identifier": "omnipanel-index",
+    "artifactType": "text/html",
+    "inferred": false
+  }
+}

@@ -1,0 +1,55 @@
+:root {
+  /* Surface */
+  --bg: #201d1d;
+  --bg-deeper: #1a1717;
+  --surface: #302c2c;
+  --surface-hover: #3a3636;
+  --surface-active: #444040;
+
+  /* Foreground */
+  --fg: #fdfcfc;
+  --fg-2: #c8c6c4;
+  --muted: #9a9898;
+  --meta: #6e6e73;
+
+  /* Border */
+  --border: #464343;
+  --border-soft: #302c2c;
+  --border-focus: #007aff;
+
+  /* Accent */
+  --accent: #007aff;
+  --accent-hover: #0056b3;
+  --accent-active: #004085;
+  --accent-soft: rgba(0, 122, 255, 0.12);
+
+  /* Semantic */
+  --success: #30d158;
+  --success-soft: rgba(48, 209, 88, 0.12);
+  --warn: #ff9f0a;
+  --warn-soft: rgba(255, 159, 10, 0.12);
+  --danger: #ff3b30;
+  --danger-soft: rgba(255, 59, 48, 0.12);
+
+  /* Typography */
+  --font: "Berkeley Mono", "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+
+  /* Spacing */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+  --sp-8: 32px;
+  --sp-12: 48px;
+
+  /* Radius */
+  --r-sm: 4px;
+  --r-md: 6px;
+  --r-lg: 8px;
+
+  /* Sidebar */
+  --sidebar-w: 56px;
+  --sidebar-expanded: 220px;
+}

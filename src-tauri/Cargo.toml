@@ -1,0 +1,25 @@
+[package]
+name = "omnipanel-app"
+version.workspace = true
+edition.workspace = true
+
+[lib]
+name = "omnipanel_lib"
+crate-type = ["lib", "cdylib", "staticlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-shell = "2"
+tauri-plugin-dialog = "2"
+tauri-plugin-fs = "2"
+omnipanel-core = { path = "../crates/omnipanel-core" }
+omnipanel-renderer = { path = "../crates/omnipanel-renderer" }
+tokio.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+anyhow.workspace = true

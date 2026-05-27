@@ -1,0 +1,481 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OmniPanel — Knowledge Base</title>
+<link rel="stylesheet" href="css/omnipanel.css">
+<style>
+  .kb-workspace {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .kb-sidebar {
+    width: 200px;
+    background: var(--bg-deeper);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    overflow-y: auto;
+  }
+  .kb-nav-item {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    padding: var(--sp-2) var(--sp-4);
+    font-size: 12px;
+    color: var(--muted);
+    cursor: pointer;
+    transition: background 0.12s, color 0.12s;
+  }
+  .kb-nav-item:hover { background: var(--surface); color: var(--fg); }
+  .kb-nav-item.active { background: var(--surface); color: var(--fg); }
+  .kb-nav-item svg { width: 14px; height: 14px; }
+  .kb-section-title {
+    padding: var(--sp-3) var(--sp-4) var(--sp-1);
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--meta);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .kb-main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    overflow: hidden;
+  }
+  .kb-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: var(--sp-4);
+  }
+
+  /* Snippet cards */
+  .snippet-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+    padding: var(--sp-4);
+    margin-bottom: var(--sp-3);
+    cursor: pointer;
+    transition: border-color 0.12s;
+  }
+  .snippet-card:hover { border-color: var(--accent); }
+  .snippet-header {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    margin-bottom: var(--sp-2);
+  }
+  .snippet-header h3 { font-size: 13px; font-weight: 600; flex: 1; }
+  .snippet-desc { font-size: 11px; color: var(--muted); margin-bottom: var(--sp-3); }
+  .snippet-code {
+    background: var(--bg-deeper);
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    padding: var(--sp-3);
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--fg-2);
+    overflow-x: auto;
+    margin-bottom: var(--sp-2);
+  }
+  .snippet-code .cmd { color: var(--fg); }
+  .snippet-code .comment { color: var(--meta); }
+  .snippet-meta {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    font-size: 10px;
+    color: var(--meta);
+  }
+
+  /* Case cards */
+  .case-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+    padding: var(--sp-4);
+    margin-bottom: var(--sp-3);
+    cursor: pointer;
+    transition: border-color 0.12s;
+  }
+  .case-card:hover { border-color: var(--accent); }
+  .case-header {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    margin-bottom: var(--sp-3);
+  }
+  .case-header h3 { font-size: 13px; font-weight: 600; flex: 1; }
+  .case-section { margin-bottom: var(--sp-3); }
+  .case-section h4 {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: var(--sp-1);
+  }
+  .case-section p { font-size: 12px; color: var(--fg-2); line-height: 1.6; }
+  .case-tags { display: flex; flex-wrap: wrap; gap: var(--sp-1); }
+  .case-tag {
+    padding: 2px 8px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    font-size: 10px;
+    color: var(--meta);
+  }
+
+  .kb-panel { display: none; }
+  .kb-panel.active { display: block; }
+</style>
+</head>
+<body>
+<div class="app" id="app">
+  <aside class="sidebar">
+    <a class="sidebar-logo" href="index.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></a>
+    <a class="sidebar-item" href="terminal.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 17l6-6-6-6"/><path d="M12 19h8"/></svg></a>
+    <a class="sidebar-item" href="ssh.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg></a>
+    <a class="sidebar-item" href="database.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4.03 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5"/></svg></a>
+    <a class="sidebar-item" href="docker.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="7" width="6" height="5" rx="1"/><rect x="10" y="7" width="6" height="5" rx="1"/><rect x="18" y="7" width="4" height="5" rx="1"/><rect x="6" y="2" width="6" height="5" rx="1"/><path d="M2 17h20c0 2.76-4.48 5-10 5S2 19.76 2 17z"/></svg></a>
+    <a class="sidebar-item" href="server.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><circle cx="6" cy="6" r="1" fill="currentColor"/><circle cx="6" cy="18" r="1" fill="currentColor"/></svg></a>
+    <div class="sidebar-divider"></div>
+    <a class="sidebar-item" href="protocol.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></a>
+    <a class="sidebar-item" href="workflow.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v18M3 12h18"/><circle cx="12" cy="12" r="3"/></svg></a>
+    <a class="sidebar-item active" href="knowledge.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg></a>
+    <a class="sidebar-item" href="tasks.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg></a>
+    <div class="sidebar-spacer"></div>
+    <a class="sidebar-item" href="settings.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg></a>
+  </aside>
+
+  <div class="main-content">
+    <div class="topbar">
+      <span class="topbar-title">Knowledge Base</span>
+      <div class="topbar-right">
+        <div class="topbar-page-actions">
+          <input class="input input-search" placeholder="Search knowledge..." style="width: 200px;">
+          <button class="btn btn-primary btn-sm">+ New Entry</button>
+        </div>
+        <div class="topbar-actions">
+          <button class="topbar-btn" title="Notifications">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+            <span class="notif-badge">3</span>
+          </button>
+          <button class="topbar-btn" title="Search (Ctrl+K)" onclick="toggleCmdPalette()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+          </button>
+          <div class="win-controls">
+            <button class="win-btn close" title="Close"></button>
+            <button class="win-btn minimize" title="Minimize"></button>
+            <button class="win-btn maximize" title="Maximize"></button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="kb-workspace">
+      <div class="kb-sidebar">
+        <div class="kb-section-title">Categories</div>
+        <div class="kb-nav-item active" data-kb="snippets">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 17l6-6-6-6"/><path d="M12 19h8"/></svg>
+          Command Snippets
+        </div>
+        <div class="kb-nav-item" data-kb="cases">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg>
+          Incident Cases
+        </div>
+        <div class="kb-nav-item" data-kb="ai">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a4 4 0 014 4v1a4 4 0 01-8 0V6a4 4 0 014-4z"/><path d="M12 17v4M8 21h8"/></svg>
+          AI Summaries
+        </div>
+        <div class="kb-section-title" style="margin-top: var(--sp-3);">Tags</div>
+        <div class="kb-nav-item"><span class="tag" style="width: 100%; justify-content: center;">nginx</span></div>
+        <div class="kb-nav-item"><span class="tag" style="width: 100%; justify-content: center;">docker</span></div>
+        <div class="kb-nav-item"><span class="tag" style="width: 100%; justify-content: center;">postgresql</span></div>
+        <div class="kb-nav-item"><span class="tag" style="width: 100%; justify-content: center;">ssh</span></div>
+        <div class="kb-nav-item"><span class="tag" style="width: 100%; justify-content: center;">security</span></div>
+      </div>
+
+      <div class="kb-main">
+        <div class="kb-content">
+          <!-- Command Snippets -->
+          <div class="kb-panel active" id="panel-snippets">
+            <div style="margin-bottom: var(--sp-4);">
+              <h2 style="font-size: 16px; font-weight: 700; margin-bottom: 4px;">Command Snippets</h2>
+              <p class="text-muted" style="font-size: 12px;">常用命令、SQL、Docker 操作和说明</p>
+            </div>
+
+            <div class="snippet-card">
+              <div class="snippet-header">
+                <h3>Find Large Files</h3>
+                <span class="tag">linux</span>
+                <span class="tag">disk</span>
+              </div>
+              <div class="snippet-desc">快速查找磁盘上大于指定大小的文件，用于磁盘清理</div>
+              <div class="snippet-code">
+<span class="comment"># Find files larger than 100MB in /var</span>
+<span class="cmd">find /var -type f -size +100M -exec ls -lh {} \; 2>/dev/null | sort -k5 -h</span>
+
+<span class="comment"># Find files larger than 1GB in home directory</span>
+<span class="cmd">find ~ -type f -size +1G -printf '%s %p\n' | sort -rn | head -20</span>
+              </div>
+              <div class="snippet-meta">
+                <span class="badge badge-success">Read-only</span>
+                <span>Used 12 times</span>
+                <span>Last: 2 days ago</span>
+              </div>
+            </div>
+
+            <div class="snippet-card">
+              <div class="snippet-header">
+                <h3>Docker Container Stats</h3>
+                <span class="tag">docker</span>
+                <span class="tag">monitoring</span>
+              </div>
+              <div class="snippet-desc">查看所有运行中容器的资源使用情况</div>
+              <div class="snippet-code">
+<span class="comment"># All containers resource usage</span>
+<span class="cmd">docker stats --no-stream --format "table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.NetIO}}\t{{.BlockIO}}"</span>
+
+<span class="comment"># Specific container with custom format</span>
+<span class="cmd">docker stats nginx-proxy --no-stream --format "CPU: {{.CPUPerc}} | MEM: {{.MemUsage}}"</span>
+              </div>
+              <div class="snippet-meta">
+                <span class="badge badge-success">Read-only</span>
+                <span>Used 28 times</span>
+                <span>Last: 1 hour ago</span>
+              </div>
+            </div>
+
+            <div class="snippet-card">
+              <div class="snippet-header">
+                <h3>PostgreSQL Slow Query Analysis</h3>
+                <span class="tag">postgresql</span>
+                <span class="tag">performance</span>
+              </div>
+              <div class="snippet-desc">分析 PostgreSQL 慢查询，找出需要优化的 SQL</div>
+              <div class="snippet-code">
+<span class="comment">-- Enable pg_stat_statements extension first</span>
+<span class="cmd">SELECT query, calls, mean_exec_time, total_exec_time, rows</span>
+<span class="cmd">FROM pg_stat_statements</span>
+<span class="cmd">ORDER BY mean_exec_time DESC LIMIT 20;</span>
+
+<span class="comment">-- Check current running queries</span>
+<span class="cmd">SELECT pid, now() - pg_stat_activity.query_start AS duration, query, state</span>
+<span class="cmd">FROM pg_stat_activity WHERE state != 'idle' ORDER BY duration DESC;</span>
+              </div>
+              <div class="snippet-meta">
+                <span class="badge badge-success">Read-only</span>
+                <span>Used 15 times</span>
+                <span>Last: 3 days ago</span>
+              </div>
+            </div>
+
+            <div class="snippet-card">
+              <div class="snippet-header">
+                <h3>Nginx Config Test & Reload</h3>
+                <span class="tag">nginx</span>
+                <span class="tag">deploy</span>
+              </div>
+              <div class="snippet-desc">安全地测试和重载 Nginx 配置</div>
+              <div class="snippet-code">
+<span class="comment"># Test config syntax</span>
+<span class="cmd">nginx -t && echo "Config OK" || echo "Config ERROR"</span>
+
+<span class="comment"># Graceful reload (no downtime)</span>
+<span class="cmd">nginx -s reload</span>
+
+<span class="comment"># Check which sites are enabled</span>
+<span class="cmd">ls -la /etc/nginx/sites-enabled/</span>
+              </div>
+              <div class="snippet-meta">
+                <span class="badge badge-warn">Medium Risk</span>
+                <span>Used 8 times</span>
+                <span>Last: 1 week ago</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Incident Cases -->
+          <div class="kb-panel" id="panel-cases">
+            <div style="margin-bottom: var(--sp-4);">
+              <h2 style="font-size: 16px; font-weight: 700; margin-bottom: 4px;">Incident Cases</h2>
+              <p class="text-muted" style="font-size: 12px;">故障案例：现象、原因、处理、预防</p>
+            </div>
+
+            <div class="case-card">
+              <div class="case-header">
+                <h3>Nginx CPU Spike Due to Rate Limit Flood</h3>
+                <span class="badge badge-danger">Production</span>
+                <span class="text-muted text-sm">2026-05-26</span>
+              </div>
+              <div class="case-section">
+                <h4>Symptom</h4>
+                <p>nginx-proxy 容器 CPU 使用率从正常的 5% 突然飙升到 85%，上游连接超时日志大量出现，API 响应时间从 12ms 增长到 2000ms+。</p>
+              </div>
+              <div class="case-section">
+                <h4>Root Cause</h4>
+                <p>45.33.32.0/24 子网在 5 分钟内发送 2,847 次请求，触发 rate-limiting。TLS 握手开销导致 CPU 飙升，上游连接排队导致超时。</p>
+              </div>
+              <div class="case-section">
+                <h4>Resolution</h4>
+                <p>在 nginx.conf 中添加 <code>deny 45.33.32.0/24;</code> 封禁该子网，重启 nginx-proxy 容器。CPU 在 30 秒内恢复正常。</p>
+              </div>
+              <div class="case-section">
+                <h4>Prevention</h4>
+                <p>配置 fail2ban 自动封禁高频请求 IP，在 Cloudflare 层添加 WAF 规则过滤异常流量。</p>
+              </div>
+              <div class="case-tags">
+                <span class="case-tag">nginx</span>
+                <span class="case-tag">security</span>
+                <span class="case-tag">rate-limit</span>
+                <span class="case-tag">production</span>
+              </div>
+            </div>
+
+            <div class="case-card">
+              <div class="case-header">
+                <h3>Disk Space Exhaustion on Database Server</h3>
+                <span class="badge badge-warn">Staging</span>
+                <span class="text-muted text-sm">2026-05-20</span>
+              </div>
+              <div class="case-section">
+                <h4>Symptom</h4>
+                <p>staging-worker 磁盘使用率达到 98%，PostgreSQL WAL 日志堆积导致写入失败，应用报错 "could not write to file"。</p>
+              </div>
+              <div class="case-section">
+                <h4>Root Cause</h4>
+                <p>pg_repack 大表操作产生了大量 WAL 日志，归档进程未能及时清理。同时 Docker 日志文件未配置轮转，占用了 15GB。</p>
+              </div>
+              <div class="case-section">
+                <h4>Resolution</h4>
+                <p>手动清理 Docker 日志、配置 logrotate、执行 pg_archivecleanup 清理 WAL，磁盘降至 62%。</p>
+              </div>
+              <div class="case-tags">
+                <span class="case-tag">postgresql</span>
+                <span class="case-tag">disk</span>
+                <span class="case-tag">docker</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- AI Summaries -->
+          <div class="kb-panel" id="panel-ai">
+            <div style="margin-bottom: var(--sp-4);">
+              <h2 style="font-size: 16px; font-weight: 700; margin-bottom: 4px;">AI Summaries</h2>
+              <p class="text-muted" style="font-size: 12px;">AI 对终端输出、日志分析、SQL 查询结果的总结</p>
+            </div>
+            <div class="snippet-card">
+              <div class="snippet-header"><h3>prod-web-01 Log Analysis</h3><span class="badge badge-accent">AI Generated</span></div>
+              <div class="snippet-desc">AI 分析 nginx 错误日志后的摘要</div>
+              <div class="snippet-code">
+<span class="comment">Summary: Past 24h nginx error analysis</span>
+- 847 upstream timeout warnings (98% from 45.33.32.x)
+- 12 connection refused errors (redis-cache restart at 03:00)
+- 3 SSL handshake failures (expired intermediate cert)
+- Rate limit triggered 45 times for 3 unique IPs
+<span class="comment">Recommendation: Block 45.33.32.0/24 at firewall level</span>
+              </div>
+              <div class="snippet-meta"><span>Generated 2h ago</span><span>From: terminal.html AI panel</span></div>
+            </div>
+            <div class="snippet-card">
+              <div class="snippet-header"><h3>Database Schema Explanation</h3><span class="badge badge-accent">AI Generated</span></div>
+              <div class="snippet-desc">AI 解释 orders 表结构设计</div>
+              <div class="snippet-code">
+<span class="comment">The orders table uses a denormalized design with:</span>
+- id: UUID primary key (distributed-friendly)
+- user_id: FK to users (indexed)
+- status: enum (pending, paid, shipped, completed, cancelled)
+- items: JSONB array (flexible schema for order items)
+- total_amount: DECIMAL(10,2) (precise currency)
+- created_at/updated_at: timestamps with timezone
+<span class="comment">Missing indexes: consider adding (status, created_at) for dashboard queries</span>
+              </div>
+              <div class="snippet-meta"><span>Generated 1d ago</span><span>From: database.html</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="statusbar">
+      <span class="statusbar-item text-muted">Knowledge Base</span>
+      <span class="statusbar-spacer"></span>
+      <span class="statusbar-item text-muted">Ctrl+K: Command Palette</span>
+    </div>
+  </div>
+</div>
+
+<script>
+  // Command palette toggle
+  function toggleCmdPalette() {
+    const el = document.getElementById('cmdPalette');
+    el.classList.toggle('show');
+    if (el.classList.contains('show')) {
+      document.getElementById('cmdInput').focus();
+    }
+  }
+
+  document.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+      e.preventDefault();
+      toggleCmdPalette();
+    }
+    if (e.key === 'Escape') {
+      document.getElementById('cmdPalette').classList.remove('show');
+    }
+  });
+
+  document.getElementById('cmdPalette').addEventListener('click', (e) => {
+    if (e.target === e.currentTarget) {
+      e.target.classList.remove('show');
+    }
+  });
+
+  document.querySelectorAll('.kb-nav-item[data-kb]').forEach(item => {
+    item.addEventListener('click', function() {
+      const kb = this.dataset.kb;
+      document.querySelectorAll('.kb-nav-item').forEach(i => i.classList.remove('active'));
+      this.classList.add('active');
+      document.querySelectorAll('.kb-panel').forEach(p => p.classList.remove('active'));
+      document.getElementById('panel-' + kb).classList.add('active');
+    });
+  });
+</script>
+
+<!-- Command Palette -->
+<div class="cmd-palette-overlay" id="cmdPalette">
+  <div class="cmd-palette">
+    <input class="cmd-palette-input" placeholder="Search connections, commands..." id="cmdInput">
+    <div class="cmd-palette-list">
+      <div class="cmd-palette-item selected">
+        <div class="item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 17l6-6-6-6"/><path d="M12 19h8"/></svg></div>
+        <span class="item-label">Terminal</span>
+        <span class="item-hint">Local</span>
+      </div>
+      <div class="cmd-palette-item">
+        <div class="item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg></div>
+        <span class="item-label">prod-web-01</span>
+        <span class="item-hint">SSH</span>
+      </div>
+      <div class="cmd-palette-item">
+        <div class="item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5"/></svg></div>
+        <span class="item-label">prod-db-master</span>
+        <span class="item-hint">PostgreSQL</span>
+      </div>
+      <div class="cmd-palette-item">
+        <div class="item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="6" height="5" rx="1"/><rect x="10" y="7" width="6" height="5" rx="1"/></svg></div>
+        <span class="item-label">nginx-proxy</span>
+        <span class="item-hint">Container</span>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

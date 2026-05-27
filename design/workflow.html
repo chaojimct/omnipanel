@@ -1,0 +1,732 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OmniPanel — Workflows</title>
+<link rel="stylesheet" href="css/omnipanel.css">
+<style>
+  .wf-workspace {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .wf-sidebar {
+    width: 200px;
+    background: var(--bg-deeper);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    overflow-y: auto;
+  }
+  .wf-nav-item {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    padding: var(--sp-2) var(--sp-4);
+    font-size: 12px;
+    color: var(--muted);
+    cursor: pointer;
+    transition: background 0.12s, color 0.12s;
+  }
+  .wf-nav-item:hover { background: var(--surface); color: var(--fg); }
+  .wf-nav-item.active { background: var(--surface); color: var(--fg); }
+  .wf-nav-item svg { width: 14px; height: 14px; }
+  .wf-section-title {
+    padding: var(--sp-3) var(--sp-4) var(--sp-1);
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--meta);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .wf-main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    overflow: hidden;
+  }
+  .wf-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: var(--sp-4);
+  }
+
+  /* Script cards */
+  .script-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--sp-3);
+    margin-bottom: var(--sp-4);
+  }
+  .script-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+    padding: var(--sp-4);
+    cursor: pointer;
+    transition: border-color 0.12s;
+  }
+  .script-card:hover { border-color: var(--accent); }
+  .script-card .sc-header {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    margin-bottom: var(--sp-2);
+  }
+  .script-card .sc-icon {
+    width: 28px; height: 28px;
+    display: grid; place-items: center;
+    border-radius: var(--r-sm);
+    flex-shrink: 0;
+  }
+  .script-card .sc-icon svg { width: 14px; height: 14px; }
+  .script-card .sc-name { font-size: 13px; font-weight: 600; }
+  .script-card .sc-desc { font-size: 11px; color: var(--muted); margin-bottom: var(--sp-3); line-height: 1.5; }
+  .script-card .sc-meta {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    font-size: 10px;
+    color: var(--meta);
+  }
+  .script-card .sc-type {
+    padding: 1px 6px;
+    border-radius: 999px;
+    font-weight: 600;
+  }
+  .script-card .sc-risk {
+    padding: 1px 6px;
+    border-radius: 999px;
+    font-weight: 600;
+  }
+
+  /* Workflow steps */
+  .wf-flow {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+    padding: var(--sp-4);
+    margin-bottom: var(--sp-4);
+  }
+  .wf-flow-header {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-3);
+    margin-bottom: var(--sp-4);
+  }
+  .wf-flow-header h3 { font-size: 14px; font-weight: 600; }
+  .wf-step {
+    display: flex;
+    gap: var(--sp-3);
+    padding: var(--sp-3) 0;
+    border-bottom: 1px solid var(--border-soft);
+  }
+  .wf-step:last-child { border-bottom: none; }
+  .wf-step-num {
+    width: 28px; height: 28px;
+    display: grid; place-items: center;
+    background: var(--accent-soft);
+    color: var(--accent);
+    border-radius: 50%;
+    font-size: 11px;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+  .wf-step-body { flex: 1; }
+  .wf-step-body h4 { font-size: 12px; font-weight: 600; margin-bottom: 2px; }
+  .wf-step-body p { font-size: 11px; color: var(--muted); }
+  .wf-step-actions { display: flex; gap: var(--sp-1); align-items: flex-start; }
+  .wf-connector {
+    width: 1px;
+    height: 16px;
+    background: var(--border);
+    margin-left: 13px;
+  }
+
+  /* Execution log */
+  .exec-log {
+    background: var(--bg-deeper);
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    padding: var(--sp-3);
+    font-size: 11px;
+    line-height: 1.6;
+    max-height: 200px;
+    overflow-y: auto;
+  }
+  .exec-log .log-line { margin-bottom: 2px; }
+  .exec-log .log-time { color: var(--meta); margin-right: var(--sp-2); }
+  .exec-log .log-ok { color: var(--success); }
+  .exec-log .log-err { color: var(--danger); }
+  .exec-log .log-warn { color: var(--warn); }
+
+  .wf-panel { display: none; }
+  .wf-panel.active { display: block; }
+
+  @media (max-width: 800px) {
+    .wf-sidebar { display: none; }
+    .script-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="app" id="app">
+  <aside class="sidebar">
+    <a class="sidebar-logo" href="index.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></a>
+    <a class="sidebar-item" href="terminal.html" title="Terminal">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 17l6-6-6-6"/><path d="M12 19h8"/></svg>
+    </a>
+    <a class="sidebar-item" href="ssh.html" title="SSH">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+    </a>
+    <a class="sidebar-item" href="database.html" title="Database">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4.03 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5"/></svg>
+    </a>
+    <a class="sidebar-item" href="docker.html" title="Docker">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="7" width="6" height="5" rx="1"/><rect x="10" y="7" width="6" height="5" rx="1"/><rect x="18" y="7" width="4" height="5" rx="1"/><rect x="6" y="2" width="6" height="5" rx="1"/><path d="M2 17h20c0 2.76-4.48 5-10 5S2 19.76 2 17z"/></svg>
+    </a>
+    <a class="sidebar-item" href="server.html" title="Servers">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><circle cx="6" cy="6" r="1" fill="currentColor"/><circle cx="6" cy="18" r="1" fill="currentColor"/></svg>
+    </a>
+    <div class="sidebar-divider"></div>
+    <a class="sidebar-item" href="protocol.html" title="Protocol Lab">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+    </a>
+    <a class="sidebar-item active" href="workflow.html" title="Workflows">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v18M3 12h18"/><circle cx="12" cy="12" r="3"/></svg>
+    </a>
+    <a class="sidebar-item" href="knowledge.html" title="Knowledge">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>
+    </a>
+    <a class="sidebar-item" href="tasks.html" title="Tasks">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+    </a>
+    <div class="sidebar-spacer"></div>
+    <a class="sidebar-item" href="settings.html" title="Settings">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+    </a>
+  </aside>
+
+  <div class="main-content">
+    <div class="topbar">
+      <span class="topbar-title">Workflows</span>
+      <div class="topbar-right">
+        <div class="topbar-page-actions">
+          <button class="btn btn-primary btn-sm">+ New Script</button>
+          <button class="btn btn-secondary btn-sm">+ New Workflow</button>
+        </div>
+        <div class="topbar-actions">
+          <button class="topbar-btn" title="Notifications">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+            <span class="notif-badge">3</span>
+          </button>
+          <button class="topbar-btn" title="Search (Ctrl+K)" onclick="toggleCmdPalette()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+          </button>
+          <div class="win-controls">
+            <button class="win-btn close" title="Close"></button>
+            <button class="win-btn minimize" title="Minimize"></button>
+            <button class="win-btn maximize" title="Maximize"></button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="wf-workspace">
+      <div class="wf-sidebar">
+        <div class="wf-section-title">Scripts</div>
+        <div class="wf-nav-item active" data-wf="scripts">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 17l6-6-6-6"/><path d="M12 19h8"/></svg>
+          Quick Scripts
+        </div>
+        <div class="wf-nav-item" data-wf="templates">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg>
+          Command Templates
+        </div>
+        <div class="wf-section-title" style="margin-top: var(--sp-3);">Workflows</div>
+        <div class="wf-nav-item" data-wf="deploy">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+          Deploy Flows
+        </div>
+        <div class="wf-nav-item" data-wf="patrol">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+          Patrol Templates
+        </div>
+        <div class="wf-nav-item" data-wf="data">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5"/></svg>
+          Data Workflows
+        </div>
+        <div class="wf-section-title" style="margin-top: var(--sp-3);">History</div>
+        <div class="wf-nav-item" data-wf="history">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
+          Execution Log
+        </div>
+      </div>
+
+      <div class="wf-main">
+        <div class="wf-content">
+          <!-- Scripts Panel -->
+          <div class="wf-panel active" id="panel-scripts">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--sp-4);">
+              <div>
+                <h2 style="font-size: 16px; font-weight: 700; margin-bottom: 4px;">Quick Scripts</h2>
+                <p class="text-muted" style="font-size: 12px;">高频操作封装为一键脚本，支持参数化和批量执行</p>
+              </div>
+              <input class="input input-search" placeholder="Search scripts..." style="width: 200px;">
+            </div>
+
+            <div class="script-grid">
+              <div class="script-card">
+                <div class="sc-header">
+                  <div class="sc-icon" style="background: var(--success-soft); color: var(--success);">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+                  </div>
+                  <div>
+                    <div class="sc-name">Deploy to Production</div>
+                  </div>
+                </div>
+                <div class="sc-desc">拉取最新代码、构建镜像、更新 Compose、检查健康状态并输出部署摘要。</div>
+                <div class="sc-meta">
+                  <span class="sc-type badge-accent">Shell</span>
+                  <span class="sc-risk badge-danger">High Risk</span>
+                  <span>prod-web-01, prod-web-02</span>
+                </div>
+              </div>
+
+              <div class="script-card">
+                <div class="sc-header">
+                  <div class="sc-icon" style="background: var(--accent-soft); color: var(--accent);">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5"/></svg>
+                  </div>
+                  <div>
+                    <div class="sc-name">DB Backup & Verify</div>
+                  </div>
+                </div>
+                <div class="sc-desc">备份生产数据库、校验完整性、上传至远程存储并发送通知。</div>
+                <div class="sc-meta">
+                  <span class="sc-type badge-warn">SQL</span>
+                  <span class="sc-risk badge-warn">Medium</span>
+                  <span>prod-db-master</span>
+                </div>
+              </div>
+
+              <div class="script-card">
+                <div class="sc-header">
+                  <div class="sc-icon" style="background: var(--warn-soft); color: var(--warn);">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="6" height="5" rx="1"/><rect x="10" y="7" width="6" height="5" rx="1"/></svg>
+                  </div>
+                  <div>
+                    <div class="sc-name">Docker Cleanup</div>
+                  </div>
+                </div>
+                <div class="sc-desc">清理悬空镜像、停止的容器、未使用的卷和网络，释放磁盘空间。</div>
+                <div class="sc-meta">
+                  <span class="sc-type badge-accent">Docker</span>
+                  <span class="sc-risk badge-success">Low</span>
+                  <span>All Servers</span>
+                </div>
+              </div>
+
+              <div class="script-card">
+                <div class="sc-header">
+                  <div class="sc-icon" style="background: var(--danger-soft); color: var(--danger);">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+                  </div>
+                  <div>
+                    <div class="sc-name">Server Health Check</div>
+                  </div>
+                </div>
+                <div class="sc-desc">批量检查 CPU、内存、磁盘、服务状态、证书有效期和安全更新。</div>
+                <div class="sc-meta">
+                  <span class="sc-type badge-accent">Shell</span>
+                  <span class="sc-risk badge-success">Read-only</span>
+                  <span>All Servers</span>
+                </div>
+              </div>
+
+              <div class="script-card">
+                <div class="sc-header">
+                  <div class="sc-icon" style="background: var(--accent-soft); color: var(--accent);">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg>
+                  </div>
+                  <div>
+                    <div class="sc-name">Log Rotation</div>
+                  </div>
+                </div>
+                <div class="sc-desc">压缩归档超过 7 天的日志文件，清理 30 天前的归档，报告释放空间。</div>
+                <div class="sc-meta">
+                  <span class="sc-type badge-accent">Shell</span>
+                  <span class="sc-risk badge-success">Low</span>
+                  <span>prod-web-01</span>
+                </div>
+              </div>
+
+              <div class="script-card">
+                <div class="sc-header">
+                  <div class="sc-icon" style="background: var(--success-soft); color: var(--success);">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                  </div>
+                  <div>
+                    <div class="sc-name">SSL Cert Renew</div>
+                  </div>
+                </div>
+                <div class="sc-desc">检查证书到期时间、自动续期 Let's Encrypt 证书并重载 Nginx。</div>
+                <div class="sc-meta">
+                  <span class="sc-type badge-accent">Shell</span>
+                  <span class="sc-risk badge-warn">Medium</span>
+                  <span>prod-web-01, prod-web-02</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Deploy Flows Panel -->
+          <div class="wf-panel" id="panel-deploy">
+            <div style="margin-bottom: var(--sp-4);">
+              <h2 style="font-size: 16px; font-weight: 700; margin-bottom: 4px;">Deploy Flows</h2>
+              <p class="text-muted" style="font-size: 12px;">将拉代码、构建、部署、检查串成可复用的流程</p>
+            </div>
+
+            <div class="wf-flow">
+              <div class="wf-flow-header">
+                <h3>Production Deploy</h3>
+                <span class="badge badge-danger">High Risk</span>
+                <span class="text-muted text-sm">Last run: 2h ago · 3m 42s</span>
+                <button class="btn btn-primary btn-sm" style="margin-left: auto;">Run</button>
+              </div>
+              <div class="wf-step">
+                <div class="wf-step-num">1</div>
+                <div class="wf-step-body">
+                  <h4>Git Pull</h4>
+                  <p>拉取 main 分支最新代码到生产服务器</p>
+                </div>
+                <div class="wf-step-actions">
+                  <span class="badge badge-success">Passed</span>
+                </div>
+              </div>
+              <div class="wf-connector"></div>
+              <div class="wf-step">
+                <div class="wf-step-num">2</div>
+                <div class="wf-step-body">
+                  <h4>Build Docker Image</h4>
+                  <p>使用 Dockerfile 构建应用镜像，标签为 git commit SHA</p>
+                </div>
+                <div class="wf-step-actions">
+                  <span class="badge badge-success">Passed</span>
+                </div>
+              </div>
+              <div class="wf-connector"></div>
+              <div class="wf-step">
+                <div class="wf-step-num">3</div>
+                <div class="wf-step-body">
+                  <h4>Run Tests</h4>
+                  <p>执行单元测试和集成测试，失败则中止部署</p>
+                </div>
+                <div class="wf-step-actions">
+                  <span class="badge badge-success">Passed</span>
+                </div>
+              </div>
+              <div class="wf-connector"></div>
+              <div class="wf-step">
+                <div class="wf-step-num">4</div>
+                <div class="wf-step-body">
+                  <h4>Docker Compose Up</h4>
+                  <p>更新 Compose 服务，滚动重启应用容器</p>
+                </div>
+                <div class="wf-step-actions">
+                  <span class="badge badge-success">Passed</span>
+                </div>
+              </div>
+              <div class="wf-connector"></div>
+              <div class="wf-step">
+                <div class="wf-step-num">5</div>
+                <div class="wf-step-body">
+                  <h4>Health Check</h4>
+                  <p>等待 30s 后检查 /health 端点，确认服务正常</p>
+                </div>
+                <div class="wf-step-actions">
+                  <span class="badge badge-success">Passed</span>
+                </div>
+              </div>
+              <div class="wf-connector"></div>
+              <div class="wf-step">
+                <div class="wf-step-num">6</div>
+                <div class="wf-step-body">
+                  <h4>Notify</h4>
+                  <p>发送部署结果到 Slack / 飞书通知</p>
+                </div>
+                <div class="wf-step-actions">
+                  <span class="badge badge-success">Passed</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="wf-flow">
+              <div class="wf-flow-header">
+                <h3>Staging Deploy</h3>
+                <span class="badge badge-warn">Medium</span>
+                <span class="text-muted text-sm">Last run: 1d ago · 2m 18s</span>
+                <button class="btn btn-primary btn-sm" style="margin-left: auto;">Run</button>
+              </div>
+              <div class="wf-step">
+                <div class="wf-step-num">1</div>
+                <div class="wf-step-body">
+                  <h4>Git Pull (develop)</h4>
+                  <p>拉取 develop 分支代码</p>
+                </div>
+              </div>
+              <div class="wf-connector"></div>
+              <div class="wf-step">
+                <div class="wf-step-num">2</div>
+                <div class="wf-step-body">
+                  <h4>Build & Push</h4>
+                  <p>构建镜像并推送到 staging registry</p>
+                </div>
+              </div>
+              <div class="wf-connector"></div>
+              <div class="wf-step">
+                <div class="wf-step-num">3</div>
+                <div class="wf-step-body">
+                  <h4>Deploy to Staging</h4>
+                  <p>更新 staging 环境容器</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Execution History Panel -->
+          <div class="wf-panel" id="panel-history">
+            <div style="margin-bottom: var(--sp-4);">
+              <h2 style="font-size: 16px; font-weight: 700; margin-bottom: 4px;">Execution History</h2>
+              <p class="text-muted" style="font-size: 12px;">所有脚本和工作流的执行记录</p>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Type</th>
+                    <th>Target</th>
+                    <th>Status</th>
+                    <th>Duration</th>
+                    <th>Triggered By</th>
+                    <th>Time</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td style="font-weight: 500;">Production Deploy</td>
+                    <td><span class="badge badge-accent">Workflow</span></td>
+                    <td>prod-web-01, prod-web-02</td>
+                    <td><span class="badge badge-success">Success</span></td>
+                    <td>3m 42s</td>
+                    <td>chaoj</td>
+                    <td class="text-muted">2h ago</td>
+                  </tr>
+                  <tr>
+                    <td style="font-weight: 500;">DB Backup & Verify</td>
+                    <td><span class="badge badge-warn">SQL</span></td>
+                    <td>prod-db-master</td>
+                    <td><span class="badge badge-success">Success</span></td>
+                    <td>1m 15s</td>
+                    <td>Scheduled</td>
+                    <td class="text-muted">6h ago</td>
+                  </tr>
+                  <tr>
+                    <td style="font-weight: 500;">Docker Cleanup</td>
+                    <td><span class="badge badge-accent">Docker</span></td>
+                    <td>All Servers</td>
+                    <td><span class="badge badge-success">Success</span></td>
+                    <td>28s</td>
+                    <td>chaoj</td>
+                    <td class="text-muted">1d ago</td>
+                  </tr>
+                  <tr>
+                    <td style="font-weight: 500;">Server Health Check</td>
+                    <td><span class="badge badge-accent">Shell</span></td>
+                    <td>All Servers</td>
+                    <td><span class="badge badge-warn">Warning</span></td>
+                    <td>45s</td>
+                    <td>Scheduled</td>
+                    <td class="text-muted">1d ago</td>
+                  </tr>
+                  <tr>
+                    <td style="font-weight: 500;">Staging Deploy</td>
+                    <td><span class="badge badge-accent">Workflow</span></td>
+                    <td>staging-api</td>
+                    <td><span class="badge badge-success">Success</span></td>
+                    <td>2m 18s</td>
+                    <td>CI/CD</td>
+                    <td class="text-muted">1d ago</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Empty panels for other sections -->
+          <div class="wf-panel" id="panel-templates">
+            <div style="margin-bottom: var(--sp-4);">
+              <h2 style="font-size: 16px; font-weight: 700; margin-bottom: 4px;">Command Templates</h2>
+              <p class="text-muted" style="font-size: 12px;">带变量的命令模板，支持参数化执行</p>
+            </div>
+            <div class="script-grid">
+              <div class="script-card">
+                <div class="sc-header">
+                  <div class="sc-icon" style="background: var(--success-soft); color: var(--success);"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 17l6-6-6-6"/><path d="M12 19h8"/></svg></div>
+                  <div class="sc-name">Tail Service Logs</div>
+                </div>
+                <div class="sc-desc"><code>tail -f /var/log/{{service}}/error.log | grep "{{keyword}}"</code></div>
+                <div class="sc-meta"><span class="sc-type badge-accent">Shell</span><span class="sc-risk badge-success">Read-only</span></div>
+              </div>
+              <div class="script-card">
+                <div class="sc-header">
+                  <div class="sc-icon" style="background: var(--accent-soft); color: var(--accent);"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5"/></svg></div>
+                  <div class="sc-name">Query User by Email</div>
+                </div>
+                <div class="sc-desc"><code>SELECT * FROM users WHERE email = '{{email}}' LIMIT 10;</code></div>
+                <div class="sc-meta"><span class="sc-type badge-warn">SQL</span><span class="sc-risk badge-success">Read-only</span></div>
+              </div>
+              <div class="script-card">
+                <div class="sc-header">
+                  <div class="sc-icon" style="background: var(--warn-soft); color: var(--warn);"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="6" height="5" rx="1"/><rect x="10" y="7" width="6" height="5" rx="1"/></svg></div>
+                  <div class="sc-name">Restart Container</div>
+                </div>
+                <div class="sc-desc"><code>docker restart {{container_name}}</code></div>
+                <div class="sc-meta"><span class="sc-type badge-accent">Docker</span><span class="sc-risk badge-warn">Medium</span></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="wf-panel" id="panel-patrol">
+            <div style="margin-bottom: var(--sp-4);">
+              <h2 style="font-size: 16px; font-weight: 700; margin-bottom: 4px;">Patrol Templates</h2>
+              <p class="text-muted" style="font-size: 12px;">定期巡检模板，自动检查服务器健康状态</p>
+            </div>
+            <div class="wf-flow">
+              <div class="wf-flow-header">
+                <h3>Daily Server Patrol</h3>
+                <span class="badge badge-success">Read-only</span>
+                <span class="text-muted text-sm">Schedule: Daily 08:00</span>
+                <button class="btn btn-primary btn-sm" style="margin-left: auto;">Run Now</button>
+              </div>
+              <div class="wf-step"><div class="wf-step-num">1</div><div class="wf-step-body"><h4>CPU & Memory Check</h4><p>检查 CPU 和内存使用率，超过 90% 告警</p></div></div>
+              <div class="wf-connector"></div>
+              <div class="wf-step"><div class="wf-step-num">2</div><div class="wf-step-body"><h4>Disk Space Check</h4><p>检查磁盘使用率，超过 85% 告警</p></div></div>
+              <div class="wf-connector"></div>
+              <div class="wf-step"><div class="wf-step-num">3</div><div class="wf-step-body"><h4>Service Status</h4><p>检查 nginx、docker、postgresql 等关键服务状态</p></div></div>
+              <div class="wf-connector"></div>
+              <div class="wf-step"><div class="wf-step-num">4</div><div class="wf-step-body"><h4>SSL Certificate</h4><p>检查证书到期时间，30 天内到期告警</p></div></div>
+              <div class="wf-connector"></div>
+              <div class="wf-step"><div class="wf-step-num">5</div><div class="wf-step-body"><h4>Security Updates</h4><p>检查可用安全更新数量</p></div></div>
+              <div class="wf-connector"></div>
+              <div class="wf-step"><div class="wf-step-num">6</div><div class="wf-step-body"><h4>Generate Report</h4><p>汇总巡检结果，发送到通知渠道</p></div></div>
+            </div>
+          </div>
+
+          <div class="wf-panel" id="panel-data">
+            <div style="margin-bottom: var(--sp-4);">
+              <h2 style="font-size: 16px; font-weight: 700; margin-bottom: 4px;">Data Workflows</h2>
+              <p class="text-muted" style="font-size: 12px;">数据库数据排查、修复、同步和导出工作流</p>
+            </div>
+            <div class="script-grid">
+              <div class="script-card">
+                <div class="sc-header"><div class="sc-icon" style="background: var(--accent-soft); color: var(--accent);"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg></div><div class="sc-name">Data Investigation</div></div>
+                <div class="sc-desc">执行多段查询，自动汇总关键结果，生成 AI 分析摘要</div>
+                <div class="sc-meta"><span class="sc-type badge-warn">SQL</span><span class="sc-risk badge-success">Read-only</span></div>
+              </div>
+              <div class="script-card">
+                <div class="sc-header"><div class="sc-icon" style="background: var(--danger-soft); color: var(--danger);"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg></div><div class="sc-name">Data Repair</div></div>
+                <div class="sc-desc">查询影响范围 → 生成修复 SQL + 回滚 SQL → 确认后执行</div>
+                <div class="sc-meta"><span class="sc-type badge-warn">SQL</span><span class="sc-risk badge-danger">High Risk</span></div>
+              </div>
+              <div class="script-card">
+                <div class="sc-header"><div class="sc-icon" style="background: var(--success-soft); color: var(--success);"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.66 0 3-4.03 3-9s-1.34-9-3-9m0 18c-1.66 0-3-4.03-3-9s1.34-9 3-9"/></svg></div><div class="sc-name">Data Sync</div></div>
+                <div class="sc-desc">从源库读取、校验、转换、写入目标库，输出差异报告</div>
+                <div class="sc-meta"><span class="sc-type badge-warn">SQL</span><span class="sc-risk badge-danger">High Risk</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="statusbar">
+      <span class="statusbar-item text-muted">Workflows & Automation</span>
+      <span class="statusbar-spacer"></span>
+      <span class="statusbar-item text-muted">Ctrl+K: Command Palette</span>
+    </div>
+  </div>
+</div>
+
+<script>
+  // Command palette toggle
+  function toggleCmdPalette() {
+    const el = document.getElementById('cmdPalette');
+    el.classList.toggle('show');
+    if (el.classList.contains('show')) {
+      document.getElementById('cmdInput').focus();
+    }
+  }
+
+  document.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+      e.preventDefault();
+      toggleCmdPalette();
+    }
+    if (e.key === 'Escape') {
+      document.getElementById('cmdPalette').classList.remove('show');
+    }
+  });
+
+  document.getElementById('cmdPalette').addEventListener('click', (e) => {
+    if (e.target === e.currentTarget) {
+      e.target.classList.remove('show');
+    }
+  });
+
+  document.querySelectorAll('.wf-nav-item[data-wf]').forEach(item => {
+    item.addEventListener('click', function() {
+      const wf = this.dataset.wf;
+      document.querySelectorAll('.wf-nav-item').forEach(i => i.classList.remove('active'));
+      this.classList.add('active');
+      document.querySelectorAll('.wf-panel').forEach(p => p.classList.remove('active'));
+      document.getElementById('panel-' + wf).classList.add('active');
+    });
+  });
+</script>
+
+<!-- Command Palette -->
+<div class="cmd-palette-overlay" id="cmdPalette">
+  <div class="cmd-palette">
+    <input class="cmd-palette-input" placeholder="Search connections, commands..." id="cmdInput">
+    <div class="cmd-palette-list">
+      <div class="cmd-palette-item selected">
+        <div class="item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 17l6-6-6-6"/><path d="M12 19h8"/></svg></div>
+        <span class="item-label">Terminal</span>
+        <span class="item-hint">Local</span>
+      </div>
+      <div class="cmd-palette-item">
+        <div class="item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg></div>
+        <span class="item-label">prod-web-01</span>
+        <span class="item-hint">SSH</span>
+      </div>
+      <div class="cmd-palette-item">
+        <div class="item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5"/></svg></div>
+        <span class="item-label">prod-db-master</span>
+        <span class="item-hint">PostgreSQL</span>
+      </div>
+      <div class="cmd-palette-item">
+        <div class="item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="6" height="5" rx="1"/><rect x="10" y="7" width="6" height="5" rx="1"/></svg></div>
+        <span class="item-label">nginx-proxy</span>
+        <span class="item-hint">Container</span>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,556 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OmniPanel — Database</title>
+<link rel="stylesheet" href="css/omnipanel.css">
+<style>
+  .db-layout {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  /* Schema sidebar */
+  .schema-panel {
+    width: 240px;
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+  }
+  .schema-header {
+    padding: var(--sp-3) var(--sp-4);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+  }
+  .schema-header h3 { font-size: 13px; font-weight: 600; flex: 1; }
+  .schema-search { padding: var(--sp-2) var(--sp-3); border-bottom: 1px solid var(--border); }
+  .schema-tree {
+    flex: 1;
+    overflow-y: auto;
+    padding: var(--sp-2);
+  }
+  .schema-db {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--accent);
+    padding: var(--sp-2) var(--sp-2);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+  }
+  .schema-db svg { width: 12px; height: 12px; }
+  .schema-table {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    padding: var(--sp-1) var(--sp-2) var(--sp-1) var(--sp-6);
+    font-size: 12px;
+    color: var(--fg-2);
+    cursor: pointer;
+    border-radius: var(--r-sm);
+    transition: background 0.12s;
+  }
+  .schema-table:hover { background: var(--surface); }
+  .schema-table.active { background: var(--accent-soft); color: var(--fg); }
+  .schema-table svg { width: 12px; height: 12px; color: var(--meta); flex-shrink: 0; }
+  .schema-col {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    padding: var(--sp-1) var(--sp-2) var(--sp-1) calc(var(--sp-6) + var(--sp-6));
+    font-size: 11px;
+    color: var(--meta);
+    cursor: pointer;
+  }
+  .schema-col:hover { color: var(--fg-2); }
+  .schema-col .col-type {
+    margin-left: auto;
+    font-size: 10px;
+    color: var(--meta);
+    padding: 0 4px;
+    background: var(--surface);
+    border-radius: 2px;
+  }
+  .schema-col .col-key {
+    color: var(--warn);
+    font-size: 9px;
+    font-weight: 700;
+  }
+
+  /* Editor area */
+  .db-editor-area {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  /* SQL Editor */
+  .sql-editor-wrap {
+    display: flex;
+    flex-direction: column;
+    border-bottom: 1px solid var(--border);
+    min-height: 200px;
+    flex: 1;
+  }
+  .sql-toolbar {
+    display: flex;
+    align-items: center;
+    padding: var(--sp-2) var(--sp-4);
+    border-bottom: 1px solid var(--border);
+    gap: var(--sp-2);
+    background: var(--bg);
+  }
+  .sql-toolbar .db-select {
+    padding: 3px 8px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    color: var(--fg);
+    font-size: 11px;
+    font-family: var(--font);
+  }
+  .sql-editor {
+    flex: 1;
+    background: var(--bg-deeper);
+    padding: var(--sp-3) var(--sp-4);
+    font-family: var(--font);
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--fg);
+    overflow-y: auto;
+    white-space: pre;
+    outline: none;
+    min-height: 0;
+  }
+  .sql-editor .kw { color: var(--accent); font-weight: 600; }
+  .sql-editor .fn { color: var(--warn); }
+  .sql-editor .str { color: var(--success); }
+  .sql-editor .num { color: #c084fc; }
+  .sql-editor .comment { color: var(--meta); font-style: italic; }
+  .sql-editor .tbl { color: var(--fg); }
+  .sql-editor .op { color: var(--muted); }
+
+  /* Results */
+  .results-area {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .results-header {
+    display: flex;
+    align-items: center;
+    padding: var(--sp-2) var(--sp-4);
+    border-bottom: 1px solid var(--border);
+    gap: var(--sp-3);
+    background: var(--bg);
+    flex-shrink: 0;
+  }
+  .results-header h3 { font-size: 12px; font-weight: 600; }
+  .results-meta {
+    font-size: 11px;
+    color: var(--meta);
+  }
+  .results-tabs {
+    display: flex;
+    gap: 0;
+    margin-left: var(--sp-4);
+  }
+  .results-tab {
+    padding: var(--sp-1) var(--sp-3);
+    font-size: 11px;
+    color: var(--meta);
+    border-bottom: 2px solid transparent;
+    cursor: pointer;
+    transition: color 0.12s, border-color 0.12s;
+  }
+  .results-tab:hover { color: var(--fg); }
+  .results-tab.active { color: var(--fg); border-bottom-color: var(--accent); }
+
+  .results-grid {
+    flex: 1;
+    overflow: auto;
+  }
+  .results-grid table {
+    font-size: 12px;
+  }
+  .results-grid th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+  }
+  .results-grid td.null {
+    color: var(--meta);
+    font-style: italic;
+  }
+
+  /* Execution stats */
+  .exec-stats {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-4);
+    padding: var(--sp-2) var(--sp-4);
+    border-top: 1px solid var(--border);
+    font-size: 11px;
+    color: var(--meta);
+    background: var(--bg-deeper);
+    flex-shrink: 0;
+  }
+  .exec-stats .stat { display: flex; align-items: center; gap: var(--sp-1); }
+  .exec-stats .stat-val { color: var(--fg-2); font-weight: 500; }
+
+  /* Right panel: AI */
+  .db-ai-panel {
+    width: 320px;
+    border-left: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    background: var(--bg);
+  }
+  .db-ai-header {
+    padding: var(--sp-3) var(--sp-4);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+  }
+  .db-ai-header h3 { font-size: 13px; font-weight: 600; }
+  .db-ai-messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: var(--sp-3);
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-3);
+  }
+  .db-ai-msg {
+    font-size: 12px;
+    line-height: 1.6;
+    padding: var(--sp-3);
+    background: var(--surface);
+    border-radius: var(--r-sm);
+  }
+  .db-ai-msg .msg-role {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: var(--sp-1);
+  }
+  .db-ai-msg .msg-role.ai { color: var(--accent); }
+  .db-ai-msg .msg-role.user { color: var(--muted); }
+  .db-ai-input {
+    padding: var(--sp-3);
+    border-top: 1px solid var(--border);
+  }
+  .db-ai-input .input {
+    width: 100%;
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <a class="sidebar-logo" href="index.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></a>
+    <a class="sidebar-item" href="terminal.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 17l6-6-6-6"/><path d="M12 19h8"/></svg></a>
+    <a class="sidebar-item" href="ssh.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg></a>
+    <a class="sidebar-item active" href="database.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4.03 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5"/></svg></a>
+    <a class="sidebar-item" href="docker.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="7" width="6" height="5" rx="1"/><rect x="10" y="7" width="6" height="5" rx="1"/><rect x="18" y="7" width="4" height="5" rx="1"/><rect x="6" y="2" width="6" height="5" rx="1"/><path d="M2 17h20c0 2.76-4.48 5-10 5S2 19.76 2 17z"/></svg></a>
+    <a class="sidebar-item" href="server.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><circle cx="6" cy="6" r="1" fill="currentColor"/><circle cx="6" cy="18" r="1" fill="currentColor"/></svg></a>
+    <div class="sidebar-divider"></div>
+    <a class="sidebar-item" href="protocol.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></a>
+    <a class="sidebar-item" href="workflow.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v18M3 12h18"/><circle cx="12" cy="12" r="3"/></svg></a>
+    <a class="sidebar-item" href="knowledge.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg></a>
+    <a class="sidebar-item" href="tasks.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg></a>
+    <div class="sidebar-spacer"></div>
+    <a class="sidebar-item" href="settings.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg></a>
+  </aside>
+
+  <!-- Main -->
+  <div class="main-content">
+    <div class="topbar">
+      <span class="topbar-title">Database</span>
+      <div class="topbar-tabs">
+        <div class="topbar-tab active">postgres-main</div>
+        <div class="topbar-tab">redis-cache</div>
+        <button class="btn-icon" title="New Connection" style="margin-left: 4px;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+        </button>
+      </div>
+      <div class="topbar-right">
+        <div class="topbar-page-actions">
+          <button class="btn btn-secondary btn-sm">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg>
+            Import
+          </button>
+          <button class="btn btn-secondary btn-sm">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+            Export
+          </button>
+        </div>
+        <div class="topbar-actions">
+          <button class="topbar-btn" title="Notifications">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+            <span class="notif-badge">3</span>
+          </button>
+          <button class="topbar-btn" title="Search (Ctrl+K)" onclick="toggleCmdPalette()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+          </button>
+          <div class="win-controls">
+            <button class="win-btn close" title="Close"></button>
+            <button class="win-btn minimize" title="Minimize"></button>
+            <button class="win-btn maximize" title="Maximize"></button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="db-layout">
+      <!-- Schema Browser -->
+      <div class="schema-panel">
+        <div class="schema-header">
+          <h3>Schema</h3>
+          <button class="btn-icon" title="Refresh">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
+          </button>
+        </div>
+        <div class="schema-search">
+          <input class="input input-search" placeholder="Search tables..." style="width: 100%; font-size: 11px;">
+        </div>
+        <div class="schema-tree">
+          <div class="schema-db">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5"/></svg>
+            app_production
+          </div>
+
+          <div class="schema-table active">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18"/></svg>
+            users
+          </div>
+          <div class="schema-col"><span class="col-key">PK</span> id <span class="col-type">uuid</span></div>
+          <div class="schema-col">email <span class="col-type">varchar</span></div>
+          <div class="schema-col">name <span class="col-type">varchar</span></div>
+          <div class="schema-col">role <span class="col-type">enum</span></div>
+          <div class="schema-col">created_at <span class="col-type">timestamptz</span></div>
+
+          <div class="schema-table">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18"/></svg>
+            orders
+          </div>
+          <div class="schema-col"><span class="col-key">PK</span> id <span class="col-type">uuid</span></div>
+          <div class="schema-col"><span class="col-key">FK</span> user_id <span class="col-type">uuid</span></div>
+          <div class="schema-col">total <span class="col-type">decimal</span></div>
+          <div class="schema-col">status <span class="col-type">enum</span></div>
+          <div class="schema-col">created_at <span class="col-type">timestamptz</span></div>
+
+          <div class="schema-table">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18"/></svg>
+            products
+          </div>
+          <div class="schema-table">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18"/></svg>
+            sessions
+          </div>
+          <div class="schema-table">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18"/></svg>
+            audit_logs
+          </div>
+
+          <div class="schema-db" style="margin-top: var(--sp-3);">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5"/></svg>
+            analytics
+          </div>
+          <div class="schema-table">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18"/></svg>
+            events
+          </div>
+          <div class="schema-table">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18"/></svg>
+            page_views
+          </div>
+        </div>
+      </div>
+
+      <!-- Editor + Results -->
+      <div class="db-editor-area">
+        <!-- SQL Editor -->
+        <div class="sql-editor-wrap">
+          <div class="sql-toolbar">
+            <button class="btn btn-primary btn-sm">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+              Run Query
+            </button>
+            <button class="btn btn-ghost btn-sm">Format</button>
+            <button class="btn btn-ghost btn-sm">Explain</button>
+            <select class="db-select" style="margin-left: auto;">
+              <option>app_production</option>
+              <option>analytics</option>
+            </select>
+          </div>
+          <div class="sql-editor" contenteditable="true" spellcheck="false"><span class="comment">-- Recent orders with user details</span>
+<span class="kw">SELECT</span>
+    u.<span class="tbl">name</span>,
+    u.<span class="tbl">email</span>,
+    o.<span class="tbl">id</span> <span class="kw">AS</span> order_id,
+    o.<span class="tbl">total</span>,
+    o.<span class="tbl">status</span>,
+    o.<span class="tbl">created_at</span>
+<span class="kw">FROM</span> <span class="tbl">orders</span> o
+<span class="kw">JOIN</span> <span class="tbl">users</span> u <span class="kw">ON</span> u.<span class="tbl">id</span> <span class="op">=</span> o.<span class="tbl">user_id</span>
+<span class="kw">WHERE</span> o.<span class="tbl">created_at</span> <span class="op">></span> <span class="fn">NOW</span>() <span class="op">-</span> <span class="kw">INTERVAL</span> <span class="str">'7 days'</span>
+<span class="kw">ORDER BY</span> o.<span class="tbl">created_at</span> <span class="kw">DESC</span>
+<span class="kw">LIMIT</span> <span class="num">50</span>;</div>
+        </div>
+
+        <!-- Results -->
+        <div class="results-area">
+          <div class="results-header">
+            <h3>Results</h3>
+            <span class="results-meta">50 rows &middot; 23ms</span>
+            <div class="results-tabs">
+              <div class="results-tab active">Grid</div>
+              <div class="results-tab">JSON</div>
+              <div class="results-tab">Chart</div>
+            </div>
+          </div>
+          <div class="results-grid">
+            <table>
+              <thead>
+                <tr>
+                  <th>name</th>
+                  <th>email</th>
+                  <th>order_id</th>
+                  <th>total</th>
+                  <th>status</th>
+                  <th>created_at</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr><td>Chen Wei</td><td>chen.wei@example.com</td><td class="text-muted">a1b2c3d4</td><td>¥ 2,480.00</td><td><span class="badge badge-success">completed</span></td><td class="text-muted">2026-05-26 08:42</td></tr>
+                <tr><td>Li Xiaoming</td><td>lxm@example.com</td><td class="text-muted">e5f6g7h8</td><td>¥ 890.00</td><td><span class="badge badge-accent">processing</span></td><td class="text-muted">2026-05-26 07:15</td></tr>
+                <tr><td>Wang Fang</td><td>wang.f@example.com</td><td class="text-muted">i9j0k1l2</td><td>¥ 3,120.50</td><td><span class="badge badge-success">completed</span></td><td class="text-muted">2026-05-25 22:30</td></tr>
+                <tr><td>Zhang Lei</td><td>zhangl@example.com</td><td class="text-muted">m3n4o5p6</td><td>¥ 560.00</td><td><span class="badge badge-warn">pending</span></td><td class="text-muted">2026-05-25 19:08</td></tr>
+                <tr><td>Liu Yan</td><td>liu.yan@example.com</td><td class="text-muted">q7r8s9t0</td><td>¥ 1,750.00</td><td><span class="badge badge-success">completed</span></td><td class="text-muted">2026-05-25 16:44</td></tr>
+                <tr><td>Zhao Min</td><td>zhaom@example.com</td><td class="text-muted">u1v2w3x4</td><td>¥ 420.00</td><td><span class="badge badge-danger">cancelled</span></td><td class="text-muted">2026-05-25 14:22</td></tr>
+                <tr><td>Sun Jie</td><td>sun.jie@example.com</td><td class="text-muted">y5z6a7b8</td><td>¥ 6,800.00</td><td><span class="badge badge-success">completed</span></td><td class="text-muted">2026-05-25 11:05</td></tr>
+                <tr><td>Huang Tao</td><td>huangt@example.com</td><td class="text-muted">c9d0e1f2</td><td>¥ 340.00</td><td><span class="badge badge-accent">processing</span></td><td class="text-muted">2026-05-24 23:18</td></tr>
+                <tr><td>Zhou Lin</td><td>zhou.l@example.com</td><td class="text-muted">g3h4i5j6</td><td>¥ 1,200.00</td><td><span class="badge badge-success">completed</span></td><td class="text-muted">2026-05-24 20:51</td></tr>
+                <tr><td>Wu Jing</td><td>wuj@example.com</td><td class="text-muted">k7l8m9n0</td><td>¥ 950.00</td><td><span class="badge badge-warn">pending</span></td><td class="text-muted">2026-05-24 18:33</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="exec-stats">
+            <span class="stat">Rows: <span class="stat-val">50</span></span>
+            <span class="stat">Time: <span class="stat-val">23ms</span></span>
+            <span class="stat">Plan: <span class="stat-val">Nested Loop Join</span></span>
+            <span class="stat">Cost: <span class="stat-val">124.56</span></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- AI Panel -->
+      <div class="db-ai-panel">
+        <div class="db-ai-header">
+          <svg viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.8" width="16" height="16"><path d="M12 2a4 4 0 014 4v1a4 4 0 01-8 0V6a4 4 0 014-4z"/><path d="M18 14h.01M6 14h.01"/><path d="M12 17v4M8 21h8"/></svg>
+          <h3>AI Assistant</h3>
+          <span class="badge badge-accent" style="margin-left: auto;">NL2SQL</span>
+        </div>
+        <div class="db-ai-messages">
+          <div class="db-ai-msg">
+            <div class="msg-role ai">AI</div>
+            <div>Connected to <code>app_production</code>. I can see 5 tables in the current schema. Try asking me to generate queries in natural language.</div>
+          </div>
+          <div class="db-ai-msg">
+            <div class="msg-role user">User</div>
+            <div>Show me the top 5 users by total order amount this month</div>
+          </div>
+          <div class="db-ai-msg">
+            <div class="msg-role ai">AI</div>
+            <div>Generated SQL:<br><br><code style="display: block; padding: 8px; background: var(--bg-deeper); border-radius: 4px; font-size: 12px; line-height: 1.5;">SELECT u.name, u.email,<br>&nbsp;&nbsp;SUM(o.total) AS total_amount<br>FROM orders o<br>JOIN users u ON u.id = o.user_id<br>WHERE o.created_at >= date_trunc('month', NOW())<br>GROUP BY u.id, u.name, u.email<br>ORDER BY total_amount DESC<br>LIMIT 5;</code><br><br><span class="text-accent" style="cursor: pointer;">Run Query</span> &middot; <span style="cursor: pointer;">Copy</span></div>
+          </div>
+        </div>
+        <div class="db-ai-input">
+          <input class="input" placeholder="Ask in natural language..." style="width: 100%;">
+        </div>
+      </div>
+    </div>
+
+    <div class="statusbar">
+      <span class="statusbar-item"><span class="statusbar-dot green"></span> postgres-main connected</span>
+      <span class="statusbar-item">app_production</span>
+      <span class="statusbar-item">PostgreSQL 16.2</span>
+      <span class="statusbar-spacer"></span>
+      <span class="statusbar-item text-muted">Ctrl+K: Command Palette</span>
+      <span class="statusbar-item">UTF-8</span>
+    </div>
+  </div>
+</div>
+
+<!-- Command Palette -->
+<div class="cmd-palette-overlay" id="cmdPalette">
+  <div class="cmd-palette">
+    <input class="cmd-palette-input" placeholder="Search connections, commands..." id="cmdInput">
+    <div class="cmd-palette-list">
+      <div class="cmd-palette-item selected">
+        <div class="item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 17l6-6-6-6"/><path d="M12 19h8"/></svg></div>
+        <span class="item-label">Terminal</span>
+        <span class="item-hint">Local</span>
+      </div>
+      <div class="cmd-palette-item">
+        <div class="item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg></div>
+        <span class="item-label">prod-web-01</span>
+        <span class="item-hint">SSH</span>
+      </div>
+      <div class="cmd-palette-item">
+        <div class="item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5"/></svg></div>
+        <span class="item-label">prod-db-master</span>
+        <span class="item-hint">PostgreSQL</span>
+      </div>
+      <div class="cmd-palette-item">
+        <div class="item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="6" height="5" rx="1"/><rect x="10" y="7" width="6" height="5" rx="1"/></svg></div>
+        <span class="item-label">nginx-proxy</span>
+        <span class="item-hint">Container</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // Command palette toggle
+  function toggleCmdPalette() {
+    const el = document.getElementById('cmdPalette');
+    el.classList.toggle('show');
+    if (el.classList.contains('show')) {
+      document.getElementById('cmdInput').focus();
+    }
+  }
+
+  document.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+      e.preventDefault();
+      toggleCmdPalette();
+    }
+    if (e.key === 'Escape') {
+      document.getElementById('cmdPalette').classList.remove('show');
+    }
+  });
+
+  document.getElementById('cmdPalette').addEventListener('click', (e) => {
+    if (e.target === e.currentTarget) {
+      e.target.classList.remove('show');
+    }
+  });
+</script>
+</body>
+</html>

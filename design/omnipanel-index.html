@@ -1,0 +1,189 @@
+
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OmniPanel — AI-Native Engineering Workstation</title>
+<link rel="stylesheet" href="css/omnipanel.css">
+<style>
+  body {
+    overflow: auto;
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+  }
+  .landing {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: var(--sp-12) var(--sp-6);
+    gap: var(--sp-12);
+  }
+  .landing-header {
+    text-align: center;
+    max-width: 48ch;
+  }
+  .landing-header .logo-mark {
+    width: 56px; height: 56px;
+    display: grid; place-items: center;
+    background: var(--accent);
+    border-radius: var(--r-md);
+    color: #fff;
+    font-size: 24px;
+    font-weight: 700;
+    margin: 0 auto var(--sp-6);
+  }
+  .landing-header h1 {
+    font-size: 38px;
+    font-weight: 700;
+    line-height: 1.2;
+    letter-spacing: -0.02em;
+    margin-bottom: var(--sp-4);
+  }
+  .landing-header p {
+    font-size: 15px;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+  .screen-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--sp-4);
+    max-width: 720px;
+    width: 100%;
+  }
+  .screen-card {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-4);
+    padding: var(--sp-5) var(--sp-6);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+    text-decoration: none;
+    color: var(--fg);
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .screen-card:hover {
+    border-color: var(--accent);
+    background: var(--surface-hover);
+    text-decoration: none;
+  }
+  .screen-card .card-icon {
+    width: 44px; height: 44px;
+    display: grid; place-items: center;
+    border-radius: var(--r-sm);
+    flex-shrink: 0;
+  }
+  .screen-card .card-icon svg { width: 22px; height: 22px; }
+  .screen-card .card-info h3 { font-size: 15px; font-weight: 600; margin-bottom: 2px; }
+  .screen-card .card-info p { font-size: 12px; color: var(--muted); }
+  .features {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--sp-4);
+    max-width: 720px;
+    width: 100%;
+  }
+  .feature-item {
+    text-align: center;
+    padding: var(--sp-4);
+  }
+  .feature-item .feat-icon {
+    width: 36px; height: 36px;
+    display: grid; place-items: center;
+    margin: 0 auto var(--sp-3);
+    background: var(--surface);
+    border-radius: var(--r-sm);
+    color: var(--accent);
+  }
+  .feature-item .feat-icon svg { width: 18px; height: 18px; }
+  .feature-item h4 { font-size: 13px; font-weight: 600; margin-bottom: 2px; }
+  .feature-item p { font-size: 11px; color: var(--muted); }
+  .landing-footer {
+    text-align: center;
+    padding: var(--sp-6);
+    font-size: 11px;
+    color: var(--meta);
+    border-top: 1px solid var(--border);
+    width: 100%;
+  }
+</style>
+</head>
+<body>
+  <div class="landing">
+    <div class="landing-header">
+      <div class="logo-mark">O</div>
+      <h1>OmniPanel</h1>
+      <p>AI 原生跨平台运维工作站。一个窗口管理服务器、数据库、容器与工作流；一个 AI 贯穿开发运维上下文。</p>
+    </div>
+    <div class="screen-grid">
+      <a class="screen-card" href="terminal.html">
+        <div class="card-icon" style="background: var(--success-soft); color: var(--success);">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 17l6-6-6-6"/><path d="M12 19h8"/></svg>
+        </div>
+        <div class="card-info">
+          <h3>Terminal Workspace</h3>
+          <p>多标签分屏终端 + AI 助手面板</p>
+        </div>
+      </a>
+      <a class="screen-card" href="ssh.html">
+        <div class="card-icon" style="background: var(--accent-soft); color: var(--accent);">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+        </div>
+        <div class="card-info">
+          <h3>SSH Manager</h3>
+          <p>连接管理 + 监控 + SFTP</p>
+        </div>
+      </a>
+      <a class="screen-card" href="database.html">
+        <div class="card-icon" style="background: var(--warn-soft); color: var(--warn);">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4.03 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5"/></svg>
+        </div>
+        <div class="card-info">
+          <h3>Database</h3>
+          <p>SQL 编辑器 + 数据网格 + NL2SQL</p>
+        </div>
+      </a>
+      <a class="screen-card" href="docker.html">
+        <div class="card-icon" style="background: var(--danger-soft); color: var(--danger);">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="7" width="6" height="5" rx="1"/><rect x="10" y="7" width="6" height="5" rx="1"/><rect x="18" y="7" width="4" height="5" rx="1"/><rect x="6" y="2" width="6" height="5" rx="1"/><path d="M2 17h20c0 2.76-4.48 5-10 5S2 19.76 2 17z"/></svg>
+        </div>
+        <div class="card-info">
+          <h3>Docker</h3>
+          <p>容器管理 + 日志 + Compose</p>
+        </div>
+      </a>
+    </div>
+    <div class="features">
+      <div class="feature-item">
+        <div class="feat-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a4 4 0 014 4v1a4 4 0 01-8 0V6a4 4 0 014-4z"/><path d="M12 17v4M8 21h8"/></svg>
+        </div>
+        <h4>AI Context Aware</h4>
+        <p>AI 理解当前终端、连接、容器和日志上下文</p>
+      </div>
+      <div class="feature-item">
+        <div class="feat-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><circle cx="6" cy="6" r="1" fill="currentColor"/><circle cx="6" cy="18" r="1" fill="currentColor"/></svg>
+        </div>
+        <h4>Multi-Server</h4>
+        <p>统一管理多台服务器，批量操作与对比</p>
+      </div>
+      <div class="feature-item">
+        <div class="feat-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        </div>
+        <h4>Local First</h4>
+        <p>凭据本地加密存储，生产环境安全优先</p>
+      </div>
+    </div>
+  </div>
+  <div class="landing-footer">
+    OmniPanel — AI-Native Engineering Workstation · Built with Rust + egui + wgpu
+  </div>
+</body>
+</html>

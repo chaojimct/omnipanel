@@ -1,0 +1,684 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OmniPanel — Settings</title>
+<link rel="stylesheet" href="css/omnipanel.css">
+<style>
+  .settings-workspace {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .settings-nav {
+    width: 200px;
+    background: var(--bg-deeper);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    overflow-y: auto;
+    padding: var(--sp-3) 0;
+  }
+  .settings-nav-item {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    padding: var(--sp-2) var(--sp-4);
+    font-size: 12px;
+    color: var(--muted);
+    cursor: pointer;
+    transition: background 0.12s, color 0.12s;
+  }
+  .settings-nav-item:hover { background: var(--surface); color: var(--fg); }
+  .settings-nav-item.active { background: var(--surface); color: var(--fg); }
+  .settings-nav-item svg { width: 14px; height: 14px; }
+  .settings-main {
+    flex: 1;
+    overflow-y: auto;
+    padding: var(--sp-6);
+    max-width: 720px;
+  }
+  .settings-section {
+    margin-bottom: var(--sp-8);
+  }
+  .settings-section h2 {
+    font-size: 16px;
+    font-weight: 700;
+    margin-bottom: var(--sp-1);
+  }
+  .settings-section .section-desc {
+    font-size: 12px;
+    color: var(--muted);
+    margin-bottom: var(--sp-4);
+  }
+  .setting-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--sp-3) 0;
+    border-bottom: 1px solid var(--border-soft);
+  }
+  .setting-row:last-child { border-bottom: none; }
+  .setting-label { flex: 1; }
+  .setting-label h4 { font-size: 13px; font-weight: 500; margin-bottom: 2px; }
+  .setting-label p { font-size: 11px; color: var(--muted); }
+  .setting-control { flex-shrink: 0; margin-left: var(--sp-4); }
+
+  /* Toggle switch */
+  .toggle {
+    width: 36px; height: 20px;
+    background: var(--border);
+    border-radius: 10px;
+    position: relative;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .toggle.on { background: var(--accent); }
+  .toggle::after {
+    content: '';
+    width: 16px; height: 16px;
+    background: var(--fg);
+    border-radius: 50%;
+    position: absolute;
+    top: 2px; left: 2px;
+    transition: transform 0.15s;
+  }
+  .toggle.on::after { transform: translateX(16px); }
+
+  /* Select */
+  .setting-select {
+    padding: 4px 8px;
+    background: var(--bg-deeper);
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    color: var(--fg);
+    font-size: 12px;
+    min-width: 140px;
+  }
+  .setting-select:focus { border-color: var(--accent); outline: none; }
+
+  /* Keybinding */
+  .keybind {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .keybind kbd {
+    padding: 2px 6px;
+    background: var(--bg-deeper);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    font-size: 11px;
+    font-family: var(--font);
+    color: var(--fg-2);
+  }
+
+  /* AI Provider cards */
+  .provider-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+    padding: var(--sp-3) var(--sp-4);
+    margin-bottom: var(--sp-2);
+    display: flex;
+    align-items: center;
+    gap: var(--sp-3);
+  }
+  .provider-card .provider-icon {
+    width: 32px; height: 32px;
+    display: grid; place-items: center;
+    border-radius: var(--r-sm);
+    flex-shrink: 0;
+    font-size: 14px;
+    font-weight: 700;
+  }
+  .provider-card .provider-info { flex: 1; }
+  .provider-card .provider-name { font-size: 13px; font-weight: 500; }
+  .provider-card .provider-desc { font-size: 11px; color: var(--muted); }
+
+  .settings-panel { display: none; }
+  .settings-panel.active { display: block; }
+</style>
+</head>
+<body>
+<div class="app" id="app">
+  <aside class="sidebar">
+    <a class="sidebar-logo" href="index.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></a>
+    <a class="sidebar-item" href="terminal.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 17l6-6-6-6"/><path d="M12 19h8"/></svg></a>
+    <a class="sidebar-item" href="ssh.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg></a>
+    <a class="sidebar-item" href="database.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4.03 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5"/></svg></a>
+    <a class="sidebar-item" href="docker.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="7" width="6" height="5" rx="1"/><rect x="10" y="7" width="6" height="5" rx="1"/><rect x="18" y="7" width="4" height="5" rx="1"/><rect x="6" y="2" width="6" height="5" rx="1"/><path d="M2 17h20c0 2.76-4.48 5-10 5S2 19.76 2 17z"/></svg></a>
+    <a class="sidebar-item" href="server.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><circle cx="6" cy="6" r="1" fill="currentColor"/><circle cx="6" cy="18" r="1" fill="currentColor"/></svg></a>
+    <div class="sidebar-divider"></div>
+    <a class="sidebar-item" href="protocol.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></a>
+    <a class="sidebar-item" href="workflow.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v18M3 12h18"/><circle cx="12" cy="12" r="3"/></svg></a>
+    <a class="sidebar-item" href="knowledge.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg></a>
+    <a class="sidebar-item" href="tasks.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg></a>
+    <div class="sidebar-spacer"></div>
+    <a class="sidebar-item active" href="settings.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg></a>
+  </aside>
+
+  <div class="main-content">
+    <div class="topbar">
+      <span class="topbar-title">Settings</span>
+      <div class="topbar-right">
+        <div class="topbar-page-actions">
+          <button class="btn btn-secondary btn-sm">Export Config</button>
+          <button class="btn btn-secondary btn-sm">Import Config</button>
+        </div>
+        <div class="topbar-actions">
+          <button class="topbar-btn" title="Notifications">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+            <span class="notif-badge">3</span>
+          </button>
+          <button class="topbar-btn" title="Search (Ctrl+K)" onclick="toggleCmdPalette()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+          </button>
+          <div class="win-controls">
+            <button class="win-btn close" title="Close"></button>
+            <button class="win-btn minimize" title="Minimize"></button>
+            <button class="win-btn maximize" title="Maximize"></button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="settings-workspace">
+      <div class="settings-nav">
+        <div class="settings-nav-item active" data-set="general">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4"/></svg>
+          General
+        </div>
+        <div class="settings-nav-item" data-set="appearance">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+          Appearance
+        </div>
+        <div class="settings-nav-item" data-set="keybindings">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M6 8h.01M10 8h.01M14 8h.01M18 8h.01M8 12h.01M12 12h.01M16 12h.01M8 16h8"/></svg>
+          Keybindings
+        </div>
+        <div class="settings-nav-item" data-set="ai">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a4 4 0 014 4v1a4 4 0 01-8 0V6a4 4 0 014-4z"/><path d="M12 17v4M8 21h8"/></svg>
+          AI Models
+        </div>
+        <div class="settings-nav-item" data-set="security">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          Security
+        </div>
+        <div class="settings-nav-item" data-set="terminal">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 17l6-6-6-6"/><path d="M12 19h8"/></svg>
+          Terminal
+        </div>
+        <div class="settings-nav-item" data-set="data">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
+          Data & Backup
+        </div>
+      </div>
+
+      <div class="settings-main">
+        <!-- General -->
+        <div class="settings-panel active" id="panel-general">
+          <div class="settings-section">
+            <h2>General</h2>
+            <p class="section-desc">Application behavior and startup settings</p>
+            <div class="setting-row">
+              <div class="setting-label">
+                <h4>Language</h4>
+                <p>Interface display language</p>
+              </div>
+              <select class="setting-select"><option>English</option><option selected>中文</option><option>日本語</option></select>
+            </div>
+            <div class="setting-row">
+              <div class="setting-label">
+                <h4>Launch on startup</h4>
+                <p>Start OmniPanel when your computer starts</p>
+              </div>
+              <div class="toggle"></div>
+            </div>
+            <div class="setting-row">
+              <div class="setting-label">
+                <h4>Restore last session</h4>
+                <p>Reopen tabs, layouts and connections from last session</p>
+              </div>
+              <div class="toggle on"></div>
+            </div>
+            <div class="setting-row">
+              <div class="setting-label">
+                <h4>Check for updates</h4>
+                <p>Automatically check for new versions</p>
+              </div>
+              <div class="toggle on"></div>
+            </div>
+            <div class="setting-row">
+              <div class="setting-label">
+                <h4>Telemetry</h4>
+                <p>Send anonymous usage data (no personal data collected)</p>
+              </div>
+              <div class="toggle"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Appearance -->
+        <div class="settings-panel" id="panel-appearance">
+          <div class="settings-section">
+            <h2>Appearance</h2>
+            <p class="section-desc">Theme, font, and density settings</p>
+            <div class="setting-row">
+              <div class="setting-label">
+                <h4>Theme</h4>
+                <p>Application color scheme</p>
+              </div>
+              <select class="setting-select"><option selected>Dark (Default)</option><option>Light</option><option>System</option></select>
+            </div>
+            <div class="setting-row">
+              <div class="setting-label">
+                <h4>Accent Color</h4>
+                <p>Primary accent color for highlights and actions</p>
+              </div>
+              <div style="display: flex; gap: var(--sp-2);">
+                <div style="width: 24px; height: 24px; border-radius: 50%; background: var(--accent); cursor: pointer; border: 2px solid var(--fg);"></div>
+                <div style="width: 24px; height: 24px; border-radius: 50%; background: #30d158; cursor: pointer;"></div>
+                <div style="width: 24px; height: 24px; border-radius: 50%; background: #ff9f0a; cursor: pointer;"></div>
+                <div style="width: 24px; height: 24px; border-radius: 50%; background: #ff3b30; cursor: pointer;"></div>
+                <div style="width: 24px; height: 24px; border-radius: 50%; background: #bf5af2; cursor: pointer;"></div>
+              </div>
+            </div>
+            <div class="setting-row">
+              <div class="setting-label">
+                <h4>UI Density</h4>
+                <p>Controls spacing and element size</p>
+              </div>
+              <select class="setting-select"><option>Compact</option><option selected>Standard</option><option>Comfortable</option></select>
+            </div>
+            <div class="setting-row">
+              <div class="setting-label">
+                <h4>Sidebar position</h4>
+                <p>Left or right side of the window</p>
+              </div>
+              <select class="setting-select"><option selected>Left</option><option>Right</option></select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Keybindings -->
+        <div class="settings-panel" id="panel-keybindings">
+          <div class="settings-section">
+            <h2>Keybindings</h2>
+            <p class="section-desc">Keyboard shortcuts for all major actions</p>
+            <div class="setting-row">
+              <div class="setting-label"><h4>New Terminal Tab</h4></div>
+              <div class="keybind"><kbd>Ctrl</kbd> + <kbd>T</kbd></div>
+            </div>
+            <div class="setting-row">
+              <div class="setting-label"><h4>Close Tab</h4></div>
+              <div class="keybind"><kbd>Ctrl</kbd> + <kbd>W</kbd></div>
+            </div>
+            <div class="setting-row">
+              <div class="setting-label"><h4>Switch Tab</h4></div>
+              <div class="keybind"><kbd>Ctrl</kbd> + <kbd>Tab</kbd></div>
+            </div>
+            <div class="setting-row">
+              <div class="setting-label"><h4>Command Palette</h4></div>
+              <div class="keybind"><kbd>Ctrl</kbd> + <kbd>K</kbd></div>
+            </div>
+            <div class="setting-row">
+              <div class="setting-label"><h4>Toggle AI Panel</h4></div>
+              <div class="keybind"><kbd>Ctrl</kbd> + <kbd>L</kbd></div>
+            </div>
+            <div class="setting-row">
+              <div class="setting-label"><h4>Split Terminal</h4></div>
+              <div class="keybind"><kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>T</kbd></div>
+            </div>
+            <div class="setting-row">
+              <div class="setting-label"><h4>New SSH Connection</h4></div>
+              <div class="keybind"><kbd>Ctrl</kbd> + <kbd>N</kbd></div>
+            </div>
+            <div class="setting-row">
+              <div class="setting-label"><h4>New DB Connection</h4></div>
+              <div class="keybind"><kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>N</kbd></div>
+            </div>
+            <div class="setting-row">
+              <div class="setting-label"><h4>Settings</h4></div>
+              <div class="keybind"><kbd>Ctrl</kbd> + <kbd>,</kbd></div>
+            </div>
+            <div class="setting-row">
+              <div class="setting-label"><h4>Toggle Tab N</h4></div>
+              <div class="keybind"><kbd>Ctrl</kbd> + <kbd>1-9</kbd></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- AI Models -->
+        <div class="settings-panel" id="panel-ai">
+          <div class="settings-section">
+            <h2>AI Models</h2>
+            <p class="section-desc">Configure AI providers and model preferences</p>
+
+            <h3 style="font-size: 13px; font-weight: 600; margin-bottom: var(--sp-3);">Cloud API Providers</h3>
+            <div class="provider-card">
+              <div class="provider-icon" style="background: var(--accent-soft); color: var(--accent);">C</div>
+              <div class="provider-info">
+                <div class="provider-name">Claude API</div>
+                <div class="provider-desc">Anthropic Claude · claude-sonnet-4-6</div>
+              </div>
+              <span class="badge badge-success">Active</span>
+              <button class="btn btn-ghost btn-sm">Configure</button>
+            </div>
+            <div class="provider-card">
+              <div class="provider-icon" style="background: var(--success-soft); color: var(--success);">G</div>
+              <div class="provider-info">
+                <div class="provider-name">OpenAI API</div>
+                <div class="provider-desc">GPT-4o · gpt-4o-2024-08-06</div>
+              </div>
+              <span class="badge badge-muted">Inactive</span>
+              <button class="btn btn-ghost btn-sm">Configure</button>
+            </div>
+            <div class="provider-card">
+              <div class="provider-icon" style="background: var(--warn-soft); color: var(--warn);">D</div>
+              <div class="provider-info">
+                <div class="provider-name">DeepSeek API</div>
+                <div class="provider-desc">DeepSeek Coder · deepseek-coder-v2</div>
+              </div>
+              <span class="badge badge-muted">Inactive</span>
+              <button class="btn btn-ghost btn-sm">Configure</button>
+            </div>
+
+            <h3 style="font-size: 13px; font-weight: 600; margin: var(--sp-4) 0 var(--sp-3);">Local Models</h3>
+            <div class="provider-card">
+              <div class="provider-icon" style="background: var(--surface); color: var(--fg-2);">O</div>
+              <div class="provider-info">
+                <div class="provider-name">Ollama</div>
+                <div class="provider-desc">localhost:11434 · codellama:34b</div>
+              </div>
+              <span class="badge badge-success">Connected</span>
+              <button class="btn btn-ghost btn-sm">Configure</button>
+            </div>
+
+            <h3 style="font-size: 13px; font-weight: 600; margin: var(--sp-4) 0 var(--sp-3);">CLI Agents</h3>
+            <div class="provider-card">
+              <div class="provider-icon" style="background: var(--danger-soft); color: var(--danger);">CC</div>
+              <div class="provider-info">
+                <div class="provider-name">Claude Code</div>
+                <div class="provider-desc">Local CLI · claude-code detected</div>
+              </div>
+              <span class="badge badge-success">Available</span>
+              <button class="btn btn-ghost btn-sm">Configure</button>
+            </div>
+            <div class="provider-card">
+              <div class="provider-icon" style="background: var(--accent-soft); color: var(--accent);">CA</div>
+              <div class="provider-info">
+                <div class="provider-name">Cursor Agent</div>
+                <div class="provider-desc">Local CLI · cursor-agent detected</div>
+              </div>
+              <span class="badge badge-success">Available</span>
+              <button class="btn btn-ghost btn-sm">Configure</button>
+            </div>
+
+            <div class="setting-row" style="margin-top: var(--sp-4);">
+              <div class="setting-label">
+                <h4>Default Provider</h4>
+                <p>Provider used when no specific provider is selected</p>
+              </div>
+              <select class="setting-select"><option selected>Claude API</option><option>Ollama</option><option>OpenAI API</option></select>
+            </div>
+            <div class="setting-row">
+              <div class="setting-label">
+                <h4>Stream responses</h4>
+                <p>Show AI responses as they are generated</p>
+              </div>
+              <div class="toggle on"></div>
+            </div>
+            <div class="setting-row">
+              <div class="setting-label">
+                <h4>Prefer local models for sensitive data</h4>
+                <p>Automatically use local models when connected to production</p>
+              </div>
+              <div class="toggle on"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Security -->
+        <div class="settings-panel" id="panel-security">
+          <div class="settings-section">
+            <h2>Security</h2>
+            <p class="section-desc">Credential storage, AI safety, and operation policies</p>
+            <div class="setting-row">
+              <div class="setting-label">
+                <h4>Credential Storage</h4>
+                <p>Where SSH keys, DB passwords, and API keys are stored</p>
+              </div>
+              <select class="setting-select"><option selected>System Keychain</option><option>Encrypted SQLite</option></select>
+            </div>
+            <div class="setting-row">
+              <div class="setting-label">
+                <h4>Production environment confirmation</h4>
+                <p>Require confirmation before executing commands on prod servers</p>
+              </div>
+              <div class="toggle on"></div>
+            </div>
+            <div class="setting-row">
+              <div class="setting-label">
+                <h4>Dangerous command detection</h4>
+                <p>Warn before executing rm -rf, DROP TABLE, docker rm, etc.</p>
+              </div>
+              <div class="toggle on"></div>
+            </div>
+            <div class="setting-row">
+              <div class="setting-label">
+                <h4>AI operation approval</h4>
+                <p>Require user confirmation before AI executes any write operation</p>
+              </div>
+              <div class="toggle on"></div>
+            </div>
+            <div class="setting-row">
+              <div class="setting-label">
+                <h4>Data sent to AI</h4>
+                <p>What context is included when sending to AI providers</p>
+              </div>
+              <select class="setting-select"><option selected>Minimal (sanitized)</option><option>Full context</option><option>None</option></select>
+            </div>
+            <div class="setting-row">
+              <div class="setting-label">
+                <h4>Audit logging</h4>
+                <p>Record all high-risk operations, AI actions, and data modifications</p>
+              </div>
+              <div class="toggle on"></div>
+            </div>
+            <div class="setting-row">
+              <div class="setting-label">
+                <h4>Sensitive data masking</h4>
+                <p>Automatically mask emails, phones, tokens, and passwords in display</p>
+              </div>
+              <div class="toggle on"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Terminal -->
+        <div class="settings-panel" id="panel-terminal">
+          <div class="settings-section">
+            <h2>Terminal</h2>
+            <p class="section-desc">Terminal emulator settings</p>
+            <div class="setting-row">
+              <div class="setting-label"><h4>Font Family</h4><p>Monospace font for terminal</p></div>
+              <select class="setting-select"><option selected>Berkeley Mono</option><option>JetBrains Mono</option><option>Fira Code</option><option>IBM Plex Mono</option></select>
+            </div>
+            <div class="setting-row">
+              <div class="setting-label"><h4>Font Size</h4></div>
+              <select class="setting-select"><option>12px</option><option selected>13px</option><option>14px</option><option>15px</option><option>16px</option></select>
+            </div>
+            <div class="setting-row">
+              <div class="setting-label"><h4>Line Height</h4></div>
+              <select class="setting-select"><option>1.2</option><option>1.4</option><option selected>1.6</option><option>1.8</option></select>
+            </div>
+            <div class="setting-row">
+              <div class="setting-label"><h4>Cursor Style</h4></div>
+              <select class="setting-select"><option>Block</option><option selected>Bar</option><option>Underline</option></select>
+            </div>
+            <div class="setting-row">
+              <div class="setting-label"><h4>Cursor Blink</h4></div>
+              <div class="toggle on"></div>
+            </div>
+            <div class="setting-row">
+              <div class="setting-label"><h4>Scrollback Lines</h4><p>Number of lines to keep in scroll buffer</p></div>
+              <select class="setting-select"><option>1000</option><option>5000</option><option selected>10000</option><option>50000</option></select>
+            </div>
+            <div class="setting-row">
+              <div class="setting-label"><h4>GPU Acceleration</h4><p>Use wgpu for terminal rendering</p></div>
+              <div class="toggle on"></div>
+            </div>
+            <div class="setting-row">
+              <div class="setting-label"><h4>Copy on select</h4><p>Automatically copy selected text to clipboard</p></div>
+              <div class="toggle"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Data & Backup -->
+        <div class="settings-panel" id="panel-data">
+          <div class="settings-section">
+            <h2>Data & Backup</h2>
+            <p class="section-desc">Local data management, import/export, and cleanup</p>
+            <div class="setting-row">
+              <div class="setting-label">
+                <h4>Export all data</h4>
+                <p>Export connections, settings, history, and workflows to a file</p>
+              </div>
+              <button class="btn btn-secondary btn-sm">Export</button>
+            </div>
+            <div class="setting-row">
+              <div class="setting-label">
+                <h4>Import data</h4>
+                <p>Import from OmniPanel export, Xshell, WindTerm, or OpenSSH config</p>
+              </div>
+              <button class="btn btn-secondary btn-sm">Import</button>
+            </div>
+            <div class="setting-row">
+              <div class="setting-label">
+                <h4>Clear command history</h4>
+                <p>Remove all saved terminal command history</p>
+              </div>
+              <button class="btn btn-danger btn-sm">Clear</button>
+            </div>
+            <div class="setting-row">
+              <div class="setting-label">
+                <h4>Clear AI conversation history</h4>
+                <p>Remove all saved AI chat history</p>
+              </div>
+              <button class="btn btn-danger btn-sm">Clear</button>
+            </div>
+            <div class="setting-row">
+              <div class="setting-label">
+                <h4>Clear SQL history</h4>
+                <p>Remove all saved SQL query history</p>
+              </div>
+              <button class="btn btn-danger btn-sm">Clear</button>
+            </div>
+            <div class="setting-row">
+              <div class="setting-label">
+                <h4>Clear audit log</h4>
+                <p>Remove all audit trail records</p>
+              </div>
+              <button class="btn btn-danger btn-sm">Clear</button>
+            </div>
+            <div class="setting-row">
+              <div class="setting-label">
+                <h4>Reset all settings</h4>
+                <p>Restore all settings to factory defaults</p>
+              </div>
+              <button class="btn btn-danger btn-sm">Reset</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="statusbar">
+      <span class="statusbar-item text-muted">Settings</span>
+      <span class="statusbar-spacer"></span>
+      <span class="statusbar-item text-muted">v0.1.0-alpha</span>
+      <span class="statusbar-item">Rust + egui + wgpu</span>
+    </div>
+  </div>
+</div>
+
+<script>
+  // Command palette toggle
+  function toggleCmdPalette() {
+    const el = document.getElementById('cmdPalette');
+    el.classList.toggle('show');
+    if (el.classList.contains('show')) {
+      document.getElementById('cmdInput').focus();
+    }
+  }
+
+  document.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+      e.preventDefault();
+      toggleCmdPalette();
+    }
+    if (e.key === 'Escape') {
+      document.getElementById('cmdPalette').classList.remove('show');
+    }
+  });
+
+  document.getElementById('cmdPalette').addEventListener('click', (e) => {
+    if (e.target === e.currentTarget) {
+      e.target.classList.remove('show');
+    }
+  });
+
+  // Settings nav switching
+  document.querySelectorAll('.settings-nav-item[data-set]').forEach(item => {
+    item.addEventListener('click', function() {
+      const set = this.dataset.set;
+      document.querySelectorAll('.settings-nav-item').forEach(i => i.classList.remove('active'));
+      this.classList.add('active');
+      document.querySelectorAll('.settings-panel').forEach(p => p.classList.remove('active'));
+      document.getElementById('panel-' + set).classList.add('active');
+    });
+  });
+
+  // Toggle switches
+  document.querySelectorAll('.toggle').forEach(toggle => {
+    toggle.addEventListener('click', function() {
+      this.classList.toggle('on');
+    });
+  });
+</script>
+
+<!-- Command Palette -->
+<div class="cmd-palette-overlay" id="cmdPalette">
+  <div class="cmd-palette">
+    <input class="cmd-palette-input" placeholder="Search connections, commands..." id="cmdInput">
+    <div class="cmd-palette-list">
+      <div class="cmd-palette-item selected">
+        <div class="item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 17l6-6-6-6"/><path d="M12 19h8"/></svg></div>
+        <span class="item-label">Terminal</span>
+        <span class="item-hint">Local</span>
+      </div>
+      <div class="cmd-palette-item">
+        <div class="item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg></div>
+        <span class="item-label">prod-web-01</span>
+        <span class="item-hint">SSH</span>
+      </div>
+      <div class="cmd-palette-item">
+        <div class="item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5"/></svg></div>
+        <span class="item-label">prod-db-master</span>
+        <span class="item-hint">PostgreSQL</span>
+      </div>
+      <div class="cmd-palette-item">
+        <div class="item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="6" height="5" rx="1"/><rect x="10" y="7" width="6" height="5" rx="1"/></svg></div>
+        <span class="item-label">nginx-proxy</span>
+        <span class="item-hint">Container</span>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,709 @@
+
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>OmniPanel — AI 原生跨平台运维工作站</title>
+  <style>
+    /* ─── OpenCode Design System Tokens ──────────────────────────────── */
+    :root {
+      --bg: #201d1d;
+      --surface: #302c2c;
+      --fg: #fdfcfc;
+      --fg-2: #c8c6c4;
+      --muted: #9a9898;
+      --meta: #6e6e73;
+      --border: #464343;
+      --border-soft: #302c2c;
+      --accent: #007aff;
+      --accent-on: #ffffff;
+      --accent-hover: #0056b3;
+      --accent-active: #004085;
+      --success: #30d158;
+      --warn: #ff9f0a;
+      --danger: #ff3b30;
+
+      --font-display: "Berkeley Mono", "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      --font-body: "Berkeley Mono", "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      --font-mono: "Berkeley Mono", "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+
+      --fs-h1: clamp(36px, 5vw, 56px);
+      --fs-h2: clamp(28px, 3.5vw, 42px);
+      --fs-h3: 20px;
+      --fs-lead: 18px;
+      --fs-body: 16px;
+      --fs-meta: 14px;
+
+      --gap-xs: 8px;
+      --gap-sm: 12px;
+      --gap-md: 20px;
+      --gap-lg: 32px;
+      --gap-xl: 56px;
+      --gap-2xl: 96px;
+      --container: 1080px;
+      --gutter: 24px;
+
+      --radius: 4px;
+      --radius-lg: 6px;
+
+      --accent-soft: color-mix(in oklch, var(--accent) 14%, transparent);
+      --fg-soft: color-mix(in oklch, var(--fg) 6%, transparent);
+
+      --terminal-bg: color-mix(in oklch, var(--bg) 85%, black);
+      --terminal-bar-bg: color-mix(in oklch, var(--bg) 90%, black);
+
+      --dot-red: #ff5f57;
+      --dot-yellow: #febc2e;
+      --dot-green: #28c840;
+    }
+
+    /* ─── Reset ────────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; }
+    html { -webkit-text-size-adjust: 100%; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--fg);
+      font-family: var(--font-body);
+      font-size: var(--fs-body);
+      line-height: 1.5;
+      text-rendering: optimizeLegibility;
+      -webkit-font-smoothing: antialiased;
+    }
+    img, svg { display: block; max-width: 100%; }
+    a { color: inherit; text-decoration: none; }
+    button { font: inherit; cursor: pointer; }
+    p { text-wrap: pretty; }
+    h1, h2, h3, h4 { text-wrap: balance; margin: 0; }
+
+    /* ─── Layout ───────────────────────────────────────────────────── */
+    .container {
+      max-width: var(--container);
+      margin-inline: auto;
+      padding-inline: var(--gutter);
+    }
+    .section {
+      padding-block: clamp(48px, 8vw, var(--gap-2xl));
+    }
+    .section + .section { border-top: 1px solid var(--border); }
+    .stack { display: flex; flex-direction: column; }
+    .stack > * + * { margin-top: var(--gap-md); }
+    .row { display: flex; align-items: center; gap: var(--gap-md); }
+    .row-between { display: flex; align-items: center; justify-content: space-between; gap: var(--gap-md); }
+    .grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--gap-lg); }
+    .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--gap-lg); }
+    .grid-5 { display: grid; grid-template-columns: repeat(5, 1fr); gap: var(--gap-md); }
+    .grid-2-1 { display: grid; grid-template-columns: 2fr 1fr; gap: var(--gap-xl); align-items: start; }
+    .grid-1-2 { display: grid; grid-template-columns: 1fr 2fr; gap: var(--gap-xl); align-items: start; }
+    @media (max-width: 920px) {
+      .grid-2, .grid-3, .grid-5, .grid-2-1, .grid-1-2 { grid-template-columns: 1fr; }
+    }
+
+    /* ─── Typography ───────────────────────────────────────────────── */
+    .h1, h1 { font-family: var(--font-display); font-size: var(--fs-h1); line-height: 1.08; letter-spacing: -0.02em; font-weight: 700; }
+    .h2, h2 { font-family: var(--font-display); font-size: var(--fs-h2); line-height: 1.12; letter-spacing: -0.015em; font-weight: 700; }
+    .h3, h3 { font-size: var(--fs-h3); font-weight: 600; line-height: 1.3; letter-spacing: -0.005em; }
+    .lead { font-size: var(--fs-lead); line-height: 1.55; color: var(--muted); max-width: 60ch; margin: 0; }
+    .eyebrow {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin: 0 0 var(--gap-md);
+    }
+    .meta { font-family: var(--font-mono); font-size: var(--fs-meta); color: var(--muted); }
+    .num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+    /* ─── Nav ──────────────────────────────────────────────────────── */
+    .topnav {
+      position: sticky; top: 0; z-index: 10;
+      background: color-mix(in oklch, var(--bg) 92%, transparent);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+    }
+    .topnav-inner { display: flex; align-items: center; justify-content: space-between; padding-block: 14px; }
+    .topnav .logo { font-family: var(--font-display); font-size: 19px; font-weight: 700; letter-spacing: -0.01em; }
+    .topnav nav { display: flex; gap: var(--gap-lg); }
+    .topnav nav a { font-size: 14px; color: var(--muted); transition: color 0.15s; }
+    .topnav nav a:hover { color: var(--fg); }
+
+    /* ─── Buttons ──────────────────────────────────────────────────── */
+    .btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 10px 20px;
+      border-radius: var(--radius);
+      border: 1px solid transparent;
+      font-family: var(--font-body);
+      font-size: 15px;
+      font-weight: 500;
+      letter-spacing: -0.005em;
+      transition: transform 0.05s ease, background 0.15s ease, border-color 0.15s ease;
+    }
+    .btn:active { transform: translateY(1px); }
+    .btn-primary { background: var(--accent); color: var(--accent-on); border-color: var(--accent); }
+    .btn-primary:hover { background: var(--accent-hover); }
+    .btn-secondary { background: transparent; color: var(--fg); border-color: var(--border); }
+    .btn-secondary:hover { border-color: var(--fg); }
+    .btn-ghost { background: transparent; color: var(--fg); border-color: transparent; padding-inline: 8px; }
+    .btn-ghost:hover { color: var(--accent); }
+    .btn-arrow::after { content: '\2192'; transition: transform 0.15s ease; }
+    .btn-arrow:hover::after { transform: translateX(2px); }
+
+    /* ─── Card ─────────────────────────────────────────────────────── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 28px;
+    }
+    .card-flat { background: transparent; border: 0; padding: 0; }
+
+    /* ─── Feature ──────────────────────────────────────────────────── */
+    .feature .feature-mark {
+      width: 40px; height: 40px;
+      display: grid; place-items: center;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--accent);
+      margin-bottom: var(--gap-md);
+    }
+    .feature .feature-mark svg { width: 20px; height: 20px; }
+    .feature h3 { margin-bottom: 6px; }
+    .feature p { margin: 0; color: var(--muted); font-size: 15px; }
+
+    /* ─── Stat ─────────────────────────────────────────────────────── */
+    .stat .stat-num {
+      font-family: var(--font-display);
+      font-size: clamp(48px, 7vw, 80px);
+      line-height: 0.95;
+      letter-spacing: -0.04em;
+      color: var(--accent);
+      font-weight: 700;
+    }
+    .stat .stat-label { color: var(--muted); font-size: 14px; margin-top: 8px; max-width: 24ch; }
+    .stat .stat-unit { font-size: 0.5em; opacity: 0.7; margin-left: 2px; }
+
+    /* ─── Hero ─────────────────────────────────────────────────────── */
+    .hero { padding-block: clamp(80px, 12vw, 160px); }
+    .hero-center { text-align: center; max-width: 36ch; margin-inline: auto; }
+    .hero h1 { margin-bottom: var(--gap-md); }
+    .hero .lead { margin-bottom: var(--gap-lg); margin-inline: auto; }
+    .hero-cta { display: inline-flex; gap: var(--gap-sm); flex-wrap: wrap; }
+    .hero-center .hero-cta { justify-content: center; }
+    .hero-split { display: grid; grid-template-columns: 1fr 1fr; gap: var(--gap-2xl); align-items: center; }
+    @media (max-width: 920px) { .hero-split { grid-template-columns: 1fr; } }
+
+    /* ─── Pill ─────────────────────────────────────────────────────── */
+    .pill {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 4px 10px;
+      background: var(--accent-soft);
+      color: var(--accent);
+      border-radius: 999px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    /* ─── Terminal ─────────────────────────────────────────────────── */
+    .terminal {
+      background: var(--terminal-bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      font-family: var(--font-mono);
+      font-size: 13px;
+      line-height: 1.6;
+    }
+    .terminal-bar {
+      display: flex; align-items: center; gap: 8px;
+      padding: 10px 16px;
+      background: var(--terminal-bar-bg);
+      border-bottom: 1px solid var(--border);
+    }
+    .terminal-dot {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      background: var(--border);
+    }
+    .terminal-dot.red { background: var(--dot-red); }
+    .terminal-dot.yellow { background: var(--dot-yellow); }
+    .terminal-dot.green { background: var(--dot-green); }
+    .terminal-title {
+      flex: 1;
+      text-align: center;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .terminal-body {
+      padding: 16px;
+      color: var(--fg-2);
+      min-height: 200px;
+    }
+    .terminal-body .prompt { color: var(--success); }
+    .terminal-body .cmd { color: var(--fg); }
+    .terminal-body .output { color: var(--muted); }
+    .terminal-body .accent { color: var(--accent); }
+    .terminal-body .warn { color: var(--warn); }
+    .terminal-body .error { color: var(--danger); }
+
+    /* ─── Module grid ──────────────────────────────────────────────── */
+    .module-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 24px;
+      transition: border-color 0.15s ease;
+    }
+    .module-card:hover { border-color: var(--accent); }
+    .module-icon {
+      width: 44px; height: 44px;
+      display: grid; place-items: center;
+      background: var(--accent-soft);
+      border-radius: var(--radius);
+      color: var(--accent);
+      margin-bottom: 16px;
+    }
+    .module-icon svg { width: 22px; height: 22px; }
+    .module-card h3 { font-size: 17px; margin-bottom: 8px; }
+    .module-card p { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.5; }
+    .module-card .tag-list { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 6px; }
+    .module-card .tag {
+      padding: 2px 8px;
+      background: transparent;
+      color: var(--meta);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+    }
+
+    /* ─── Architecture ─────────────────────────────────────────────── */
+    .arch-layer {
+      display: flex; align-items: center; gap: 16px;
+      padding: 16px 20px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      margin-bottom: 8px;
+    }
+    .arch-layer .layer-name {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--accent);
+      min-width: 100px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+    .arch-layer .layer-items {
+      display: flex; flex-wrap: wrap; gap: 8px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .arch-layer .layer-items span {
+      padding: 2px 8px;
+      background: color-mix(in oklch, var(--fg) 4%, transparent);
+      border-radius: var(--radius);
+    }
+
+    /* ─── Workflow ─────────────────────────────────────────────────── */
+    .workflow-step {
+      display: flex; gap: 16px;
+      padding: 20px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .workflow-step:last-child { border-bottom: 0; }
+    .workflow-num {
+      font-family: var(--font-mono);
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--accent);
+      min-width: 28px;
+    }
+    .workflow-step h4 { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
+    .workflow-step p { margin: 0; color: var(--muted); font-size: 14px; }
+
+    /* ─── Footer ───────────────────────────────────────────────────── */
+    .pagefoot { padding-block: var(--gap-xl); color: var(--muted); font-size: 13px; border-top: 1px solid var(--border); }
+    .pagefoot .row-between { flex-wrap: wrap; gap: var(--gap-md); }
+    .pagefoot a { color: var(--muted); transition: color 0.15s; }
+    .pagefoot a:hover { color: var(--fg); }
+
+    /* ─── Responsive ───────────────────────────────────────────────── */
+    @media (max-width: 640px) {
+      .topnav nav { display: none; }
+      .terminal-body { font-size: 12px; }
+      .grid-5 { grid-template-columns: repeat(2, 1fr); }
+    }
+  </style>
+</head>
+<body>
+  <!-- Navigation -->
+  <header class="topnav" data-od-id="topnav">
+    <div class="container topnav-inner">
+      <span class="logo">OmniPanel</span>
+      <nav>
+        <a href="#modules">核心模块</a>
+        <a href="#workflow">工作流</a>
+        <a href="#architecture">技术架构</a>
+        <a href="https://github.com" target="_blank">GitHub</a>
+      </nav>
+      <button class="btn btn-primary">Download</button>
+    </div>
+  </header>
+
+  <main id="content">
+    <!-- Hero Section -->
+    <section class="section hero" data-od-id="hero">
+      <div class="container hero-center">
+        <p class="eyebrow">AI-Native Engineering Workstation</p>
+        <h1>一个窗口，管理服务器、数据库、容器与工作流</h1>
+        <p class="lead">一个 AI，贯穿开发运维上下文。OmniPanel 是你的个人工程操作系统 —— 终端、SSH、数据库、Docker、监控和 AI 在同一个工作台中无缝协作。</p>
+        <div class="hero-cta">
+          <button class="btn btn-primary">Download for macOS</button>
+          <button class="btn btn-secondary">View on GitHub</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Terminal Demo -->
+    <section class="section" data-od-id="terminal-demo">
+      <div class="container">
+        <div class="terminal">
+          <div class="terminal-bar">
+            <div class="terminal-dot red"></div>
+            <div class="terminal-dot yellow"></div>
+            <div class="terminal-dot green"></div>
+            <div class="terminal-title">OmniPanel — omnipanel.local</div>
+          </div>
+          <div class="terminal-body">
+            <div><span class="prompt">root@prod-web-01:~$</span> <span class="cmd"> docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"</span></div>
+            <div class="output" style="margin-top: 8px;">
+              NAMES&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;STATUS&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;PORTS<br>
+              nginx-proxy&nbsp;&nbsp;&nbsp;&nbsp;Up 3 days&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;0.0.0.0:443->443/tcp<br>
+              app-backend&nbsp;&nbsp;&nbsp;Up 3 days&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;0.0.0.0:8080->8080/tcp<br>
+              redis-cache&nbsp;&nbsp;&nbsp;&nbsp;Up 3 days&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;6379/tcp<br>
+              postgres-main&nbsp;Up 3 days&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;5432/tcp
+            </div>
+            <div style="margin-top: 12px;"><span class="prompt">root@prod-web-01:~$</span> <span class="cmd"> omnipanel ai "为什么 nginx-proxy 的 CPU 使用率突然升高？"</span></div>
+            <div style="margin-top: 8px;"><span class="accent">[AI]</span> <span class="output">正在分析容器日志和系统指标...</span></div>
+            <div><span class="accent">[AI]</span> <span class="output">发现异常：过去 5 分钟内收到 <span class="warn">2,847</span> 次来自 45.33.32.x 的请求，触发了 rate-limiting。</span></div>
+            <div><span class="accent">[AI]</span> <span class="output">建议：在 nginx.conf 中添加 <span class="cmd">deny 45.33.32.0/24;</span> 并重启容器。</span></div>
+            <div style="margin-top: 12px;"><span class="prompt">root@prod-web-01:~$</span> <span class="cmd"> _</span></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Core Modules -->
+    <section class="section" data-od-id="modules" id="modules">
+      <div class="container stack" style="gap: 48px;">
+        <div style="max-width: 40ch;">
+          <p class="eyebrow">Core Modules</p>
+          <h2>六大模块，覆盖日常开发运维完整闭环</h2>
+        </div>
+        <div class="grid-3">
+          <div class="module-card">
+            <div class="module-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 17l6-6-6-6M12 19h8"/></svg>
+            </div>
+            <h3>Terminal</h3>
+            <p>GPU 加速渲染，多标签分屏，Blocks 输出分组，命令历史搜索，危险命令二次确认。</p>
+            <div class="tag-list">
+              <span class="tag">wgpu</span>
+              <span class="tag">alacritty</span>
+              <span class="tag">< 5ms</span>
+            </div>
+          </div>
+          <div class="module-card">
+            <div class="module-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+            </div>
+            <h3>SSH / SFTP</h3>
+            <p>连接管理器，可视化文件传输，端口转发，跳板机，批量命令执行，主机画像。</p>
+            <div class="tag-list">
+              <span class="tag">ssh2-rs</span>
+              <span class="tag">SFTP</span>
+              <span class="tag">ProxyJump</span>
+            </div>
+          </div>
+          <div class="module-card">
+            <div class="module-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+            </div>
+            <h3>Database</h3>
+            <p>SQL 编辑器，百万行数据网格，表结构浏览，NL2SQL 自然语言查询，数据同步与导出。</p>
+            <div class="tag-list">
+              <span class="tag">MySQL</span>
+              <span class="tag">PostgreSQL</span>
+              <span class="tag">Redis</span>
+            </div>
+          </div>
+          <div class="module-card">
+            <div class="module-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><path d="M3.27 6.96L12 12.01l8.73-5.05M12 22.08V12"/></svg>
+            </div>
+            <h3>Docker</h3>
+            <p>容器生命周期管理，实时日志流，一键进入容器 Shell，Compose 编排与服务拓扑。</p>
+            <div class="tag-list">
+              <span class="tag">bollard</span>
+              <span class="tag">Compose</span>
+              <span class="tag">日志流</span>
+            </div>
+          </div>
+          <div class="module-card">
+            <div class="module-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 2a10 10 0 110 20 10 10 0 010-20z"/><path d="M12 6v6l4 2"/></svg>
+            </div>
+            <h3>Server</h3>
+            <p>实时系统监控，远程文件管理，进程管理，服务管理，宝塔/1Panel 面板集成。</p>
+            <div class="tag-list">
+              <span class="tag">systemd</span>
+              <span class="tag">crontab</span>
+              <span class="tag">面板API</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- AI Integration -->
+    <section class="section" data-od-id="ai-section">
+      <div class="container hero-split">
+        <div>
+          <p class="eyebrow">AI Native</p>
+          <h2 style="margin-bottom: 16px;">AI 不是聊天窗口，<br>是你的随行工程专家</h2>
+          <p class="lead" style="margin-bottom: 24px;">OmniPanel 的 AI 能读取当前终端输出、数据库结构、容器状态和日志片段，给出可执行的建议 —— 不只是一段文本。</p>
+          <div style="display: flex; flex-direction: column; gap: 16px;">
+            <div style="display: flex; gap: 12px; align-items: flex-start;">
+              <span style="color: var(--accent); font-family: var(--font-mono); font-size: 14px; min-width: 24px;">01</span>
+              <div>
+                <h4 style="font-size: 15px; margin-bottom: 4px;">上下文感知</h4>
+                <p style="margin: 0; color: var(--muted); font-size: 14px;">自动读取当前终端、SSH 主机、数据库连接、容器状态和日志片段</p>
+              </div>
+            </div>
+            <div style="display: flex; gap: 12px; align-items: flex-start;">
+              <span style="color: var(--accent); font-family: var(--font-mono); font-size: 14px; min-width: 24px;">02</span>
+              <div>
+                <h4 style="font-size: 15px; margin-bottom: 4px;">操作链编排</h4>
+                <p style="margin: 0; color: var(--muted); font-size: 14px;">AI 拆解任务为多步操作链，用户确认后逐步执行，全程可审计</p>
+              </div>
+            </div>
+            <div style="display: flex; gap: 12px; align-items: flex-start;">
+              <span style="color: var(--accent); font-family: var(--font-mono); font-size: 14px; min-width: 24px;">03</span>
+              <div>
+                <h4 style="font-size: 15px; margin-bottom: 4px;">安全边界</h4>
+                <p style="margin: 0; color: var(--muted); font-size: 14px;">AI 只建议不越权，危险操作需二次确认，生产环境保护内置设计</p>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="terminal" style="min-width: 0;">
+          <div class="terminal-bar">
+            <div class="terminal-dot red"></div>
+            <div class="terminal-dot yellow"></div>
+            <div class="terminal-dot green"></div>
+            <div class="terminal-title">AI Assistant</div>
+          </div>
+          <div class="terminal-body" style="font-size: 13px;">
+            <div><span class="accent">User:</span> <span class="cmd">分析 postgres-main 的慢查询</span></div>
+            <div style="margin-top: 12px;"><span class="accent">AI:</span> <span class="output">正在获取最近 1 小时的慢查询日志...</span></div>
+            <div><span class="accent">AI:</span> <span class="output">发现 <span class="warn">3</span> 条超过 2s 的查询：</span></div>
+            <div style="margin-left: 16px; margin-top: 8px;">
+              <span class="output">1. SELECT * FROM orders WHERE...</span><br>
+              <span class="output">&nbsp;&nbsp; 耗时: <span class="warn">4.2s</span> · 缺少 user_id 索引</span><br>
+              <span class="output">2. SELECT count(*) FROM logs...</span><br>
+              <span class="output">&nbsp;&nbsp; 耗时: <span class="warn">3.8s</span> · 全表扫描</span>
+            </div>
+            <div style="margin-top: 12px;"><span class="accent">AI:</span> <span class="output">建议执行：</span></div>
+            <div style="margin-left: 16px; margin-top: 4px;">
+              <span class="cmd">CREATE INDEX CONCURRENTLY</span><br>
+              <span class="cmd">idx_orders_user_id ON orders(user_id);</span>
+            </div>
+            <div style="margin-top: 12px;"><span class="accent">AI:</span> <span class="output">[已复制到操作草稿箱] 确认后执行？</span></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Workflow -->
+    <section class="section" data-od-id="workflow" id="workflow">
+      <div class="container grid-2-1">
+        <div>
+          <p class="eyebrow">Unified Workspace</p>
+          <h2 style="margin-bottom: 16px;">从工具集合到工作流系统</h2>
+          <p class="lead" style="margin-bottom: 32px;">OmniPanel 不只是同时提供终端、SSH、DB、Docker，而是让它们围绕同一个任务上下文协作。一次故障排查，从监控到日志到终端到 AI，全程不切换窗口。</p>
+          <div>
+            <div class="workflow-step">
+              <span class="workflow-num">01</span>
+              <div>
+                <h4>监控告警触发</h4>
+                <p>CPU 使用率突增至 92%，自动关联到 prod-web-01 主机</p>
+              </div>
+            </div>
+            <div class="workflow-step">
+              <span class="workflow-num">02</span>
+              <div>
+                <h4>日志实时追踪</h4>
+                <p>一键从主机画像跳转到容器日志面板，定位异常请求</p>
+              </div>
+            </div>
+            <div class="workflow-step">
+              <span class="workflow-num">03</span>
+              <div>
+                <h4>数据库查询</h4>
+                <p>发现用户表异常，直接打开 SQL 编辑器查询数据</p>
+              </div>
+            </div>
+            <div class="workflow-step">
+              <span class="workflow-num">04</span>
+              <div>
+                <h4>AI 辅助修复</h4>
+                <p>终端报错一键发送 AI，附带完整上下文，生成修复命令</p>
+              </div>
+            </div>
+            <div class="workflow-step">
+              <span class="workflow-num">05</span>
+              <div>
+                <h4>复盘沉淀</h4>
+                <p>整个排障过程自动整理为故障复盘草稿，可沉淀为团队知识</p>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div>
+          <div class="card" style="position: sticky; top: 80px;">
+            <p class="eyebrow" style="margin-bottom: 16px;">Quick Stats</p>
+            <div style="display: flex; flex-direction: column; gap: 24px;">
+              <div>
+                <div style="font-family: var(--font-display); font-size: 36px; font-weight: 700; color: var(--accent);">500+</div>
+                <p style="margin: 4px 0 0; color: var(--muted); font-size: 13px;">MB/s 终端吞吐量</p>
+              </div>
+              <div>
+                <div style="font-family: var(--font-display); font-size: 36px; font-weight: 700; color: var(--accent);">< 5ms</div>
+                <p style="margin: 4px 0 0; color: var(--muted); font-size: 13px;">输入延迟</p>
+              </div>
+              <div>
+                <div style="font-family: var(--font-display); font-size: 36px; font-weight: 700; color: var(--accent);">98%</div>
+                <p style="margin: 4px 0 0; color: var(--muted); font-size: 13px;">VT 仿真兼容率</p>
+              </div>
+              <div>
+                <div style="font-family: var(--font-display); font-size: 36px; font-weight: 700; color: var(--accent);">10+</div>
+                <p style="margin: 4px 0 0; color: var(--muted); font-size: 13px;">支持的数据库类型</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Architecture -->
+    <section class="section" data-od-id="architecture" id="architecture">
+      <div class="container stack" style="gap: 40px;">
+        <div style="max-width: 44ch;">
+          <p class="eyebrow">Architecture</p>
+          <h2>Rust 核心引擎，GPU 加速渲染</h2>
+          <p class="lead" style="margin-top: 12px;">单二进制、零运行时依赖、内存安全。基于 alacritty_terminal 的生产级 VT 解析引擎，wgpu 跨平台 GPU 抽象层。</p>
+        </div>
+        <div>
+          <div class="arch-layer">
+            <span class="layer-name">UI 层</span>
+            <div class="layer-items">
+              <span>egui</span>
+              <span>即时模式 GUI</span>
+              <span>跨平台</span>
+            </div>
+          </div>
+          <div class="arch-layer">
+            <span class="layer-name">模块层</span>
+            <div class="layer-items">
+              <span>Terminal</span>
+              <span>SSH</span>
+              <span>Database</span>
+              <span>Docker</span>
+              <span>Server</span>
+              <span>AI</span>
+            </div>
+          </div>
+          <div class="arch-layer">
+            <span class="layer-name">引擎层</span>
+            <div class="layer-items">
+              <span>alacritty_terminal</span>
+              <span>ssh2-rs</span>
+              <span>sqlx</span>
+              <span>bollard</span>
+              <span>reqwest</span>
+            </div>
+          </div>
+          <div class="arch-layer">
+            <span class="layer-name">渲染层</span>
+            <div class="layer-items">
+              <span>wgpu</span>
+              <span>Vulkan</span>
+              <span>Metal</span>
+              <span>DX12</span>
+            </div>
+          </div>
+          <div class="arch-layer">
+            <span class="layer-name">系统层</span>
+            <div class="layer-items">
+              <span>Windows (ConPTY)</span>
+              <span>macOS (POSIX)</span>
+              <span>Linux (PTY)</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Use Cases -->
+    <section class="section" data-od-id="use-cases">
+      <div class="container stack" style="gap: 48px;">
+        <div style="max-width: 40ch;">
+          <p class="eyebrow">Use Cases</p>
+          <h2>为真正的工程场景设计</h2>
+        </div>
+        <div class="grid-3">
+          <div class="card" style="padding: 24px;">
+            <h3 style="font-size: 16px; margin-bottom: 12px;">新项目部署</h3>
+            <p style="margin: 0; color: var(--muted); font-size: 14px; line-height: 1.5;">连接服务器、上传配置、启动容器、检查日志 —— 从 SSH 到 SFTP 到 Docker Compose 到日志面板在同一工作区完成。</p>
+          </div>
+          <div class="card" style="padding: 24px;">
+            <h3 style="font-size: 16px; margin-bottom: 12px;">线上故障排查</h3>
+            <p style="margin: 0; color: var(--muted); font-size: 14px; line-height: 1.5;">AI 汇总当前主机、容器、日志和错误输出，生成排查路径。从监控告警到修复完成，全程不切换窗口。</p>
+          </div>
+          <div class="card" style="padding: 24px;">
+            <h3 style="font-size: 16px; margin-bottom: 12px;">多服务器维护</h3>
+            <p style="margin: 0; color: var(--muted); font-size: 14px; line-height: 1.5;">选中服务器分组后统一执行命令，结果按机器聚合和对比。批量文件分发、命令模板、执行结果对比。</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- CTA -->
+    <section class="section" data-od-id="cta-strip" style="text-align: center;">
+      <div class="container" style="max-width: 600px;">
+        <p class="eyebrow">Get Started</p>
+        <h2>让每一位 coder 的电脑上，都安装 OmniPanel</h2>
+        <p class="lead" style="margin: 16px auto 32px;">开源、免费、跨平台。支持 macOS、Windows、Linux。</p>
+        <div style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;">
+          <button class="btn btn-primary">Download for macOS</button>
+          <button class="btn btn-secondary">Download for Windows</button>
+          <button class="btn btn-ghost btn-arrow">View on GitHub</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="pagefoot" data-od-id="footer">
+    <div class="container row-between">
+      <span>OmniPanel 2026</span>
+      <span class="meta">All in One, 小而全而优而美</span>
+    </div>
+  </footer>
+</body>
+</html>
