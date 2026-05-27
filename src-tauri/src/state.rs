@@ -1,50 +1,39 @@
 use std::collections::HashMap;
 use std::process::Child;
 use std::sync::Arc;
+
+use tauri::AppHandle;
 use tokio::sync::Mutex;
 use std::io::Write;
 
-#[allow(dead_code)]
-pub struct TerminalSession {
-    pub id: String,
-    pub stdin: Arc<Mutex<ChildStdin>>,
-    pub child: Arc<Mutex<Child>>,
-}
-
-use std::process::ChildStdin;
-
-impl TerminalSession {
-    pub fn new(id: String, mut child: Child) -> Option<Self> {
-        let stdin = child.stdin.take()?;
-        Some(Self {
-            id,
-            stdin: Arc::new(Mutex::new(stdin)),
-            child: Arc::new(Mutex::new(child)),
-        })
-    }
-
-    pub async fn write(&self, data: &[u8]) -> Result<(), String> {
-        let mut stdin = self.stdin.lock().await;
-        stdin.write_all(data).map_err(|e| format!("write failed: {e}"))
-    }
-
-    #[allow(dead_code)]
-    pub fn is_alive(&self) -> bool {
-        self.child.try_lock().ok()
-            .and_then(|mut c| c.try_wait().ok())
-            .map(|s| s.is_none())
-            .unwrap_or(false)
-    }
-}
+use crate::protocol::mqtt::MqttSession;
+use crate::protocol::serial::SerialSession;
+use crate::protocol::ws::WsSession;
+use crate::terminal::TerminalSession;
+use omnipanel_ai::provider::AiProviderRegistry;
 
 pub struct AppState {
     pub terminals: Arc<Mutex<HashMap<String, TerminalSession>>>,
+    pub serial_sessions: Arc<Mutex<HashMap<String, SerialSession>>>,
+    pub ws_sessions: Arc<Mutex<HashMap<String, WsSession>>>,
+    pub mqtt_sessions: Arc<Mutex<HashMap<String, MqttSession>>>,
+    pub app_handle: AppHandle,
+    pub ai_registry: Arc<Mutex<AiProviderRegistry>>,
+    pub current_provider: Arc<Mutex<Option<String>>>,
+    pub current_model: Arc<Mutex<Option<String>>>,
 }
 
 impl AppState {
-    pub fn new() -> Self {
+    pub fn new(app_handle: AppHandle) -> Self {
         Self {
             terminals: Arc::new(Mutex::new(HashMap::new())),
+            serial_sessions: Arc::new(Mutex::new(HashMap::new())),
+            ws_sessions: Arc::new(Mutex::new(HashMap::new())),
+            mqtt_sessions: Arc::new(Mutex::new(HashMap::new())),
+            app_handle,
+            ai_registry: Arc::new(Mutex::new(AiProviderRegistry::new())),
+            current_provider: Arc::new(Mutex::new(None)),
+            current_model: Arc::new(Mutex::new(None)),
         }
     }
 }

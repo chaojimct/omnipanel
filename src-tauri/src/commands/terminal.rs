@@ -1,22 +1,26 @@
-use crate::state::AppState;
-use serde::Serialize;
-use std::io::Read;
-use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
+
+use tauri::ipc::Channel;
 use tauri::{AppHandle, Emitter, State};
+
+use crate::state::AppState;
+use crate::terminal::{LocalSession, TerminalSession, detect_shell};
 
 static TERM_COUNTER: AtomicU64 = AtomicU64::new(1);
 
-#[derive(Clone, Serialize)]
-pub struct TerminalOutputPayload {
-    pub id: String,
-    pub data: Vec<u8>,
-}
-
-#[derive(Clone, Serialize)]
-pub struct TerminalExitedPayload {
-    pub id: String,
-    pub code: Option<i32>,
+/// Return the detected shell name and type for the current platform.
+#[tauri::command]
+pub async fn get_shell_type() -> Result<(String, String), String> {
+    let (name, kind) = detect_shell();
+    let kind_str = match kind {
+        crate::terminal::ShellKind::Bash => "bash",
+        crate::terminal::ShellKind::Zsh => "zsh",
+        crate::terminal::ShellKind::PowerShell => "powershell",
+        crate::terminal::ShellKind::PowerShell5 => "powershell5",
+        crate::terminal::ShellKind::Fish => "fish",
+        crate::terminal::ShellKind::Cmd => "cmd",
+    };
+    Ok((name, kind_str.to_string()))
 }
 
 #[tauri::command]
@@ -25,62 +29,54 @@ pub async fn create_terminal(
     state: State<'_, AppState>,
     cols: u16,
     rows: u16,
+    working_dir: Option<String>,
+    on_output: Channel<Vec<u8>>,
 ) -> Result<String, String> {
     let id = format!("term-{}", TERM_COUNTER.fetch_add(1, Ordering::Relaxed));
 
-    let shell = if cfg!(target_os = "windows") {
-        std::env::var("COMSPEC").unwrap_or_else(|_| "cmd.exe".to_string())
-    } else {
-        std::env::var("SHELL").unwrap_or_else(|_| "/bin/bash".to_string())
-    };
+    let mut session = LocalSession::spawn(id.clone(), cols, rows, working_dir.as_deref())
+        .map_err(|e| format!("Failed to create terminal: {e}"))?;
 
-    let mut child = Command::new(&shell)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(|e| format!("failed to spawn shell: {e}"))?;
+    // Take the reader out and spawn an async task to forward output.
+    let reader = session
+        .take_reader()
+        .ok_or_else(|| "Reader already taken".to_string())?;
 
-    let stdout = child.stdout.take().ok_or("no stdout")?;
-    let stderr = child.stderr.take().ok_or("no stderr")?;
+    let session_id = id.clone();
+    let app_handle = state.app_handle.clone();
 
-    let session = crate::state::TerminalSession::new(id.clone(), child)
-        .ok_or("failed to take stdin")?;
-
-    let mut terminals = state.terminals.lock().await;
-    terminals.insert(id.clone(), session);
-
-    let event_id = id.clone();
-    let app_clone = app.clone();
-
-    tokio::spawn(async move {
-        let combined = stdout.chain(stderr);
-        let mut reader = std::io::BufReader::new(combined);
-        let mut buf = [0u8; 4096];
-
+    tokio::task::spawn_blocking(move || {
+        use std::io::Read;
+        let mut reader = reader;
+        let mut buf = [0u8; 8192];
         loop {
             match reader.read(&mut buf) {
-                Ok(0) => {
-                    let _ = app_clone.emit("terminal-exited", TerminalExitedPayload {
-                        id: event_id.clone(),
-                        code: None,
-                    });
-                    break;
-                }
+                Ok(0) => break, // EOF — process exited
                 Ok(n) => {
-                    let data = buf[..n].to_vec();
-                    let _ = app_clone.emit("terminal-output", TerminalOutputPayload {
-                        id: event_id.clone(),
-                        data: data.clone(),
-                    });
+                    if on_output.send(buf[..n].to_vec()).is_err() {
+                        break; // frontend dropped the channel
+                    }
                 }
-                Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
                 Err(_) => break,
             }
         }
+        // Notify frontend that the session exited.
+        let _ = app_handle.emit(
+            "terminal-event",
+            serde_json::json!({
+                "session_id": session_id,
+                "event": "exited"
+            }),
+        );
     });
 
-    tracing::info!("Created terminal {} ({}x{})", id, cols, rows);
+    state
+        .terminals
+        .lock()
+        .await
+        .insert(id.clone(), TerminalSession::Local(session));
+
+    tracing::info!("Created terminal {id} ({cols}x{rows})");
     Ok(id)
 }
 
@@ -90,9 +86,13 @@ pub async fn write_terminal(
     id: String,
     data: Vec<u8>,
 ) -> Result<(), String> {
-    let terminals = state.terminals.lock().await;
-    let session = terminals.get(&id).ok_or_else(|| format!("Terminal {id} not found"))?;
-    session.write(&data).await
+    let mut terminals = state.terminals.lock().await;
+    let session = terminals
+        .get_mut(&id)
+        .ok_or_else(|| format!("Terminal {id} not found"))?;
+    session
+        .write(&data)
+        .map_err(|e| format!("Write failed: {e}"))
 }
 
 #[tauri::command]
@@ -102,17 +102,13 @@ pub async fn resize_terminal(
     cols: u16,
     rows: u16,
 ) -> Result<(), String> {
-    let terminals = state.terminals.lock().await;
-    if !terminals.contains_key(&id) {
-        return Err(format!("Terminal {id} not found"));
-    }
-    // Send terminal resize escape sequence via stdin
-    let resize_seq = format!("\u{1b}[8;{};{}t", rows, cols);
-    if let Some(session) = terminals.get(&id) {
-        session.write(resize_seq.as_bytes()).await?;
-    }
-    tracing::debug!("Resize terminal {} to {}x{}", id, cols, rows);
-    Ok(())
+    let mut terminals = state.terminals.lock().await;
+    let session = terminals
+        .get_mut(&id)
+        .ok_or_else(|| format!("Terminal {id} not found"))?;
+    session
+        .resize(cols, rows)
+        .map_err(|e| format!("Resize failed: {e}"))
 }
 
 #[tauri::command]
@@ -121,11 +117,9 @@ pub async fn close_terminal(
     id: String,
 ) -> Result<(), String> {
     let mut terminals = state.terminals.lock().await;
-    if let Some(session) = terminals.remove(&id) {
-        let mut child = session.child.lock().await;
-        let _ = child.kill();
-        let _ = child.wait();
-        tracing::info!("Closed terminal {}", id);
+    if let Some(mut session) = terminals.remove(&id) {
+        let _ = session.kill();
+        tracing::info!("Closed terminal {id}");
         Ok(())
     } else {
         Err(format!("Terminal {id} not found"))
