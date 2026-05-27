@@ -8,6 +8,80 @@ interface SqlEditorProps {
   onChange: (value: string) => void;
 }
 
+const SQL_KEYWORDS = /\b(SELECT|FROM|WHERE|AND|OR|NOT|IN|IS|NULL|AS|ON|JOIN|LEFT|RIGHT|INNER|OUTER|CROSS|FULL|GROUP|BY|ORDER|ASC|DESC|LIMIT|OFFSET|INSERT|INTO|VALUES|UPDATE|SET|DELETE|CREATE|ALTER|DROP|TABLE|INDEX|VIEW|IF|EXISTS|PRIMARY|KEY|FOREIGN|REFERENCES|UNIQUE|CHECK|DEFAULT|AUTO_INCREMENT|SERIAL|BIGSERIAL|BOOLEAN|INTEGER|INT|BIGINT|FLOAT|DOUBLE|DECIMAL|VARCHAR|TEXT|CHAR|DATE|TIMESTAMP|TIMESTAMPTZ|JSON|JSONB|BLOB|UUID|HAVING|UNION|ALL|DISTINCT|CASE|WHEN|THEN|ELSE|END|BETWEEN|LIKE|ILIKE|ANY|SOME|EXCEPT|INTERSECT|WITH|RECURSIVE|RETURNING|CASCADE|RESTRICT|TRIGGER|FUNCTION|PROCEDURE|BEGIN|COMMIT|ROLLBACK|TRANSACTION|GRANT|REVOKE|TO|USAGE|SCHEMA|DATABASE|EXPLAIN|ANALYZE|VACUUM|REINDEX|CONSTRAINT|TRUNCATE|COPY|FORCE|DO|NOTHING|CONFLICT|OVERLAPS|PARTITION|WINDOW|ROWS|RANGE|PRECEDING|FOLLOWING|UNBOUNDED|CURRENT|ROW|ONLY|FETCH|NEXT|FIRST|LAST|SKIP|LOCKED|SHARE|NOWAIT|NATURAL|USING|TYPE|DOMAIN|ENUM|EXTENSION|SEQUENCE|OWNED|INCREMENT|MINVALUE|MAXVALUE|START|CACHE|CYCLE|TEMP|TEMPORARY|REPLACE|RETURN|CALL|DECLARE|CURSOR|OPEN|CLOSE|LOOP|WHILE|REPEAT|UNTIL|EXIT|CONTINUE|RAISE|EXCEPTION|NOTICE|WARNING|INFO|DEBUG|LOG|PERFORM|EXECUTE|LANGUAGE|VOLATILE|STABLE|IMMUTEABLE|STRICT|SECURITY|DEFINER|INVOKER|COST|ROWS|SUPPORT|PARALLEL|SAFE|UNSAFE|LEAKPROOF|TRANSFORM|AGGREGATE|INITCOND|SFUNC|STYPE|FINALFUNC|COMBINEFUNC|SERIALFUNC|DESERIALFUNC|MSFUNC|MINVFUNC|MFINALFUNC|MSTYPE|SORTOP)\b/gi;
+
+function highlightSQL(sql: string): string {
+  const escaped = sql
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+
+  let result = "";
+  let i = 0;
+  while (i < escaped.length) {
+    // single-line comment
+    if (escaped[i] === "-" && escaped[i + 1] === "-") {
+      const end = escaped.indexOf("\n", i);
+      const comment = end === -1 ? escaped.slice(i) : escaped.slice(i, end);
+      result += `<span class="comment">${comment}</span>`;
+      i += comment.length;
+      continue;
+    }
+    // block comment
+    if (escaped[i] === "/" && escaped[i + 1] === "*") {
+      const end = escaped.indexOf("*/", i + 2);
+      const comment = end === -1 ? escaped.slice(i) : escaped.slice(i, end + 2);
+      result += `<span class="comment">${comment}</span>`;
+      i += comment.length;
+      continue;
+    }
+    // string
+    if (escaped[i] === "'" || escaped[i] === '"') {
+      const quote = escaped[i];
+      let j = i + 1;
+      while (j < escaped.length) {
+        if (escaped[j] === "\\") { j += 2; continue; }
+        if (escaped[j] === quote) { j++; break; }
+        j++;
+      }
+      result += `<span class="str">${escaped.slice(i, j)}</span>`;
+      i = j;
+      continue;
+    }
+    // number
+    if (/\d/.test(escaped[i]) && (i === 0 || !/\w/.test(escaped[i - 1]))) {
+      let j = i;
+      while (j < escaped.length && /[\d.]/.test(escaped[j])) j++;
+      result += `<span class="num">${escaped.slice(i, j)}</span>`;
+      i = j;
+      continue;
+    }
+    // word
+    if (/[a-zA-Z_]/.test(escaped[i])) {
+      let j = i;
+      while (j < escaped.length && /\w/.test(escaped[j])) j++;
+      const word = escaped.slice(i, j);
+      if (SQL_KEYWORDS.test(word)) {
+        result += `<span class="kw">${word}</span>`;
+        SQL_KEYWORDS.lastIndex = 0;
+      } else {
+        result += word;
+      }
+      i = j;
+      continue;
+    }
+    // operators
+    if (/[=<>!+\-*/%|&~^]/.test(escaped[i])) {
+      result += `<span class="op">${escaped[i]}</span>`;
+      i++;
+      continue;
+    }
+    result += escaped[i];
+    i++;
+  }
+  return result;
+}
+
 function measureCursor(textarea: HTMLTextAreaElement): { top: number; left: number } {
   const pos = textarea.selectionStart;
   const text = textarea.value;
@@ -183,8 +257,25 @@ export function SqlEditor({ value, onChange }: SqlEditorProps) {
     }
   }
 
+  const preRef = useRef<HTMLPreElement>(null);
+
+  function handleScroll() {
+    if (preRef.current && textareaRef.current) {
+      preRef.current.scrollTop = textareaRef.current.scrollTop;
+      preRef.current.scrollLeft = textareaRef.current.scrollLeft;
+    }
+  }
+
+  const highlighted = highlightSQL(value);
+
   return (
     <div className="sql-editor-container">
+      <pre
+        ref={preRef}
+        className="sql-editor sql-backdrop"
+        aria-hidden="true"
+        dangerouslySetInnerHTML={{ __html: highlighted + "\n" }}
+      />
       <textarea
         ref={textareaRef}
         className="sql-textarea"
@@ -193,6 +284,7 @@ export function SqlEditor({ value, onChange }: SqlEditorProps) {
         onKeyDown={handleKeyDown}
         onSelect={handleSelect}
         onClick={handleSelect}
+        onScroll={handleScroll}
         spellCheck={false}
         autoCapitalize="off"
         autoCorrect="off"

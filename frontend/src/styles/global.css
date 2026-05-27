@@ -482,8 +482,9 @@
   .sql-editor .op { color: var(--muted); }
 
   .sql-editor-container { position: relative; flex: 1; display: flex; min-height: 0; }
-  .sql-textarea { flex: 1; background: var(--bg-deeper); padding: var(--sp-3) var(--sp-4); font-family: var(--font); font-size: 13px; line-height: 1.6; color: var(--fg); border: none; outline: none; resize: none; white-space: pre; overflow-wrap: normal; overflow-y: auto; tab-size: 4; min-height: 0; }
-  .sql-textarea::selection { background: var(--accent-soft); }
+  .sql-backdrop { position: absolute; inset: 0; margin: 0; pointer-events: none; overflow-y: auto; background: transparent; }
+  .sql-textarea { flex: 1; position: relative; z-index: 1; background: transparent; padding: var(--sp-3) var(--sp-4); font-family: var(--font); font-size: 13px; line-height: 1.6; color: transparent; caret-color: var(--fg); border: none; outline: none; resize: none; white-space: pre; overflow-wrap: normal; overflow-y: auto; tab-size: 4; min-height: 0; }
+  .sql-textarea::selection { background: var(--accent-soft); color: transparent; }
   .sql-completion-popup { position: absolute; z-index: 100; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-md); box-shadow: 0 4px 16px rgba(0,0,0,0.25); min-width: 220px; max-width: 360px; max-height: 240px; overflow-y: auto; font-family: var(--font); font-size: 12px; }
   .completion-item { display: flex; align-items: center; gap: var(--sp-2); padding: var(--sp-1) var(--sp-3); cursor: pointer; transition: background 0.08s; }
   .completion-item:hover { background: var(--accent-soft); }
