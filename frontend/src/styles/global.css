@@ -45,6 +45,16 @@
   button { font-family: var(--font); cursor: pointer; border: none; background: none; color: var(--fg); }
   input, select, textarea { font-family: var(--font); }
   :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* Window resize edges */
+  body { position: relative; }
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 9999;
+  }
 }
 
 /* Scrollbar */
@@ -156,7 +166,7 @@
   .topbar-tab .close { width: 14px; height: 14px; display: grid; place-items: center; border-radius: 2px; opacity: 0; transition: opacity 0.12s; }
   .topbar-tab:hover .close { opacity: 0.6; }
   .topbar-tab .close:hover { opacity: 1; background: var(--surface); }
-  .topbar-spacer { flex: 1; min-width: 0; }
+  .topbar-spacer { flex: 1; min-width: 0; height: 100%; }
   .topbar-right { margin-left: auto; display: flex; align-items: center; gap: var(--sp-2); flex-shrink: 0; }
   .topbar-actions { display: flex; align-items: center; gap: var(--sp-2); flex-shrink: 0; }
   .topbar-page-actions { display: flex; align-items: center; gap: var(--sp-2); flex-shrink: 0; }
@@ -808,7 +818,7 @@
   /* ══════════════════════════════════════════════════════════════════════
      Settings (settings.html)
      ══════════════════════════════════════════════════════════════════════ */
-  .settings-workspace { display: flex; flex: 1; min-height: 0; overflow: hidden; }
+  .settings-workspace { display: flex; flex: 1; min-height: 0; overflow: hidden; height: 100%; }
   .settings-nav { width: 200px; background: var(--bg-deeper); border-right: 1px solid var(--border); display: flex; flex-direction: column; flex-shrink: 0; overflow-y: auto; padding: var(--sp-3) 0; }
   .settings-nav-item { display: flex; align-items: center; gap: var(--sp-2); padding: var(--sp-2) var(--sp-4); font-size: 12px; color: var(--muted); cursor: pointer; transition: background 0.12s, color 0.12s; }
   .settings-nav-item:hover { background: var(--surface); color: var(--fg); }

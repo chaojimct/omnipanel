@@ -4,6 +4,7 @@ import { Topbar } from "./components/shell/Topbar";
 import { StatusBar } from "./components/shell/StatusBar";
 import { CommandPalette } from "./components/shell/CommandPalette";
 import { NotificationDrawer } from "./components/shell/NotificationDrawer";
+import { WindowResize } from "./components/shell/WindowResize";
 import { Dashboard } from "./components/panels/Dashboard";
 import { TerminalPanel } from "./components/panels/TerminalPanel";
 import { SshManager } from "./components/panels/SshManager";
@@ -46,6 +47,7 @@ function AppShell() {
       </div>
       <CommandPalette />
       <NotificationDrawer />
+      <WindowResize />
     </div>
   );
 }

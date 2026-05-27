@@ -34,8 +34,16 @@ export function Topbar({ title, tabs, children, onTabClose }: TopbarProps) {
     window.dispatchEvent(new CustomEvent("toggle-notif-drawer"));
   };
 
+  const handleDoubleClick = (e: React.MouseEvent) => {
+    const target = e.target as HTMLElement;
+    if (target.closest(".win-controls") || target.closest(".topbar-btn") || target.closest(".topbar-actions")) {
+      return;
+    }
+    getCurrentWindow().toggleMaximize();
+  };
+
   return (
-    <div className="topbar">
+    <div className="topbar" onDoubleClick={handleDoubleClick}>
       <span className="topbar-title" data-tauri-drag-region>{title}</span>
 
       {/* Tabs (e.g. terminal) */}
