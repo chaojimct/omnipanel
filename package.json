@@ -1,0 +1,6 @@
+{
+  "dependencies": {
+    "@xterm/xterm": "^5.5.0",
+    "react-xtermjs": "^1.0.12"
+  }
+}

@@ -184,14 +184,11 @@ export const enUS: TranslationDict = {
     blocked: "Pending",
   },
   terminal: {
-    sidebar: { title: "Terminal Resources" },
-    context: {
-      title: "Terminal Context",
-      resource: "Resource",
-      localSession: "Local PTY session",
-      dangerConfirm: "Generate Danger Confirmation",
+    sidebar: { title: "Terminal Resources", collapse: "Collapse sidebar", expand: "Expand sidebar" },
+    command: {
+      placeholder: "Type command... (Enter to send, Shift+Enter for newline)",
+      send: "Send",
     },
-    feed: { title: "Terminal Action Feed" },
     actions: {
       command: "Terminal Command",
       dangerDemo: "Dangerous Command Demo",

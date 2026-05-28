@@ -42,3 +42,6 @@ tokio-tungstenite = { version = "0.26", features = ["rustls-tls-webpki-roots"] }
 futures-util = "0.3"
 hex = "0.4"
 url = "2"
+
+# Terminal
+portable-pty = "0.8"

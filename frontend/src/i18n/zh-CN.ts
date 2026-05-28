@@ -182,14 +182,11 @@ export const zhCN = {
     blocked: "待确认",
   },
   terminal: {
-    sidebar: { title: "终端资源" },
-    context: {
-      title: "终端上下文",
-      resource: "资源",
-      localSession: "本地 PTY 会话",
-      dangerConfirm: "生成危险确认",
+    sidebar: { title: "终端资源", collapse: "收起侧栏", expand: "展开侧栏" },
+    command: {
+      placeholder: "输入命令… (Enter 发送, Shift+Enter 换行)",
+      send: "发送",
     },
-    feed: { title: "终端操作流" },
     actions: {
       command: "终端命令",
       dangerDemo: "危险命令演示",
