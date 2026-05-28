@@ -7,29 +7,22 @@ function global:OmniPanel-Escape {
     "$([char]27)]$Osc$([char]7)"
 }
 
-function global:OmniPanel-PreCommand {
-    # Command is about to execute — emit output start
-    # At this point the command text is still on the current line
-    OmniPanel-Escape "133;C"
-}
-
-function global:OmniPanel-PostCommand {
-    param(
-        [int]$LastExitCode = $global:LASTEXITCODE
-    )
-    # Command finished — emit exit code
-    OmniPanel-Escape "133;D;$LastExitCode"
-}
-
 # Register event handlers for command lifecycle (PowerShell 7+)
+# Note: Register-EngineEvent -Action runs in a separate scope,
+# so we inline the escape calls instead of referencing functions.
 if ($PSVersionTable.PSVersion.Major -ge 7) {
-    $null = Register-EngineEvent -SourceIdentifier PowerShell.PreCommand -Action {
-        global:OmniPanel-PreCommand
-    } -ErrorAction SilentlyContinue
+    try {
+        $null = Register-EngineEvent -SourceIdentifier PowerShell.PreCommand -Action {
+            "$([char]27)]133;C$([char]7)"
+        } -ErrorAction Stop
 
-    $null = Register-EngineEvent -SourceIdentifier PowerShell.PostCommand -Action {
-        global:OmniPanel-PostCommand
-    } -ErrorAction SilentlyContinue
+        $null = Register-EngineEvent -SourceIdentifier PowerShell.PostCommand -Action {
+            "$([char]27)]133;D;$global:LASTEXITCODE$([char]7)"
+        } -ErrorAction Stop
+    } catch {
+        # PreCommand/PostCommand events not available (no PSReadLine or older build)
+        # The prompt-based fallback below will handle it
+    }
 }
 
 # Save original prompt and replace

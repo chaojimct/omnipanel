@@ -3,6 +3,7 @@ import type { Terminal } from "@xterm/xterm";
 
 export interface TerminalTab {
   id: string;
+  backendSessionId: string | null; // backend-generated session ID (e.g. "term-1")
   title: string;
   type: "local" | "remote";
   terminal: Terminal | null;
@@ -18,11 +19,12 @@ interface TerminalState {
   activeTabId: string | null;
   layout: PaneLayout | null;
 
-  addTab: (tab: Omit<TerminalTab, "terminal" | "status">) => void;
+  addTab: (tab: Omit<TerminalTab, "terminal" | "status" | "backendSessionId">) => void;
   removeTab: (id: string) => void;
   setActiveTab: (id: string) => void;
   setTerminal: (id: string, terminal: Terminal) => void;
   setStatus: (id: string, status: TerminalTab["status"]) => void;
+  setBackendSessionId: (id: string, backendSessionId: string) => void;
   splitPane: (tabId: string, direction: "horizontal" | "vertical", newTabId: string) => void;
 }
 
@@ -70,7 +72,7 @@ export const useTerminalStore = create<TerminalState>((set) => ({
 
   addTab: (tab) =>
     set((state) => {
-      const newTab = { ...tab, terminal: null, status: "connecting" as const };
+      const newTab = { ...tab, terminal: null, status: "connecting" as const, backendSessionId: null };
       const newLeaf: PaneLayout = { type: "leaf", tabId: tab.id };
       if (!state.layout) {
         return { tabs: [...state.tabs, newTab], layout: newLeaf };
@@ -113,8 +115,21 @@ export const useTerminalStore = create<TerminalState>((set) => ({
       ),
     })),
 
+  setBackendSessionId: (id, backendSessionId) =>
+    set((state) => ({
+      tabs: state.tabs.map((t) =>
+        t.id === id ? { ...t, backendSessionId } : t
+      ),
+    })),
+
   splitPane: (tabId, direction, newTabId) =>
     set((state) => ({
       layout: state.layout ? splitInLayout(state.layout, tabId, direction, newTabId) : null,
     })),
 }));
+
+/** Get the backend session ID for a given tab ID. Returns the tab ID itself as fallback. */
+export function getBackendSessionId(tabId: string): string {
+  const tab = useTerminalStore.getState().tabs.find((t) => t.id === tabId);
+  return tab?.backendSessionId ?? tabId;
+}

@@ -59,6 +59,8 @@ export function useTerminal(
     let destroyed = false;
     let contextmenuHandler: ((e: MouseEvent) => void) | null = null;
     let resizeTimer: ReturnType<typeof setTimeout> | null = null;
+    let backendSid: string | null = null;
+    let pendingInput: string[] = [];
 
     // Shell integration state
     let pendingBlock: {
@@ -73,7 +75,6 @@ export function useTerminal(
       const addBlock = useBlocksStore.getState().addBlock;
       const updateBlock = useBlocksStore.getState().updateBlock;
 
-      // Read text from a specific buffer line, stripping ANSI codes
       function readLine(y: number): string {
         const line = t.buffer.active.getLine(y);
         if (!line) return "";
@@ -84,34 +85,26 @@ export function useTerminal(
         return text.replace(/\x1b\[[0-9;]*m/g, "").trim();
       }
 
-      // OSC 133 — Shell integration protocol
       disposables.push(
         t.parser.registerOscHandler(133, (data: string) => {
           const parts = data.split(";");
           const code = parts[0];
-
           switch (code) {
             case "A": {
-              // Prompt start — mark where the command block begins
               const y = t.buffer.active.cursorY + t.buffer.active.baseY;
               pendingBlock = { startLine: y, command: "", cwd: currentCwd };
               break;
             }
-            case "B": {
-              // Prompt end — prompt is displayed, user can type
+            case "B":
               break;
-            }
             case "C": {
-              // Output start — user pressed Enter, command is on the current line
               const y = t.buffer.active.cursorY + t.buffer.active.baseY;
               const commandText = readLine(y);
-
               if (!pendingBlock) {
                 pendingBlock = { startLine: y, command: commandText, cwd: currentCwd };
               } else {
                 pendingBlock.command = commandText;
               }
-
               const marker = t.markers.add(y);
               const blockId = createBlockId();
               addBlock(sessionId, {
@@ -131,11 +124,9 @@ export function useTerminal(
               break;
             }
             case "D": {
-              // Command end
               const exitCode = parseInt(parts[1] || "0", 10);
               if (pendingBlock?.blockId) {
-                const endLine =
-                  t.buffer.active.cursorY + t.buffer.active.baseY;
+                const endLine = t.buffer.active.cursorY + t.buffer.active.baseY;
                 updateBlock(pendingBlock.blockId, {
                   exitCode,
                   endLine,
@@ -150,7 +141,6 @@ export function useTerminal(
         })
       );
 
-      // OSC 1337 — iTerm2 extensions (current directory)
       disposables.push(
         t.parser.registerOscHandler(1337, (data: string) => {
           if (data.startsWith("CurrentDir=")) {
@@ -163,155 +153,179 @@ export function useTerminal(
 
     function initTerminal() {
       if (destroyed || term) return;
-      term = new Terminal({
-        cursorBlink: true,
-        fontSize: 13,
-        fontFamily:
-          '"Berkeley Mono", "IBM Plex Mono", ui-monospace, "Cascadia Code", "Fira Code", Menlo, Consolas, monospace',
-        theme: TERMINAL_THEME,
-        allowProposedApi: true,
-        scrollback: 10000,
-      });
-
-      fitAddon = new FitAddon();
-      term.loadAddon(fitAddon);
-      term.loadAddon(new WebLinksAddon());
-
-      const searchAddon = new SearchAddon();
-      term.loadAddon(searchAddon);
-      searchAddonRef.current = searchAddon;
 
       try {
-        webglAddon = new WebglAddon();
-        term.loadAddon(webglAddon);
-      } catch {
-        // WebGL not available, fall back to canvas renderer
-      }
-
-      // Open in container
-      term.open(container!);
-      fitAddon.fit();
-
-      // Setup shell integration (OSC 133 + 1337 handlers)
-      setupShellIntegration(term);
-
-      // Wire up Tauri Channel for output streaming
-      const onOutput = new Channel<Uint8Array>();
-      onOutput.onmessage = (data: Uint8Array) => {
-        if (destroyed) return;
-        term!.write(data);
-      };
-
-      // Create terminal session on the backend
-      invoke<string>("create_terminal", {
-        cols: term.cols,
-        rows: term.rows,
-        onOutput,
-      })
-        .then(() => {
-          if (destroyed) return;
-          setStatus(sessionId, "connected");
-        })
-        .catch((err) => {
-          if (destroyed) return;
-          term!.writeln(`\x1b[31mFailed to create terminal: ${err}\x1b[0m`);
-          setStatus(sessionId, "disconnected");
+        term = new Terminal({
+          cursorBlink: true,
+          fontSize: 13,
+          fontFamily:
+            '"Berkeley Mono", "IBM Plex Mono", ui-monospace, "Cascadia Code", "Fira Code", Menlo, Consolas, monospace',
+          theme: TERMINAL_THEME,
+          allowProposedApi: true,
+          scrollback: 10000,
         });
 
-      // Wire terminal input -> backend
-      disposables.push(
-        term.onData((data) => {
-          if (destroyed) return;
-          invoke("write_terminal", {
-            id: sessionId,
-            data: Array.from(new TextEncoder().encode(data)),
-          });
-        })
-      );
+        fitAddon = new FitAddon();
+        term.loadAddon(fitAddon);
+        term.loadAddon(new WebLinksAddon());
 
-      // Handle resize with debounce to avoid IPC flood
-      resizeObserver = new ResizeObserver(() => {
-        fitAddon!.fit();
-        if (resizeTimer) clearTimeout(resizeTimer);
-        resizeTimer = setTimeout(() => {
-          if (destroyed) return;
-          invoke("resize_terminal", {
-            id: sessionId,
-            cols: term!.cols,
-            rows: term!.rows,
-          });
-        }, 100);
-      });
-      resizeObserver.observe(container!);
+        const searchAddon = new SearchAddon();
+        term.loadAddon(searchAddon);
+        searchAddonRef.current = searchAddon;
 
-      // Listen for control events (process exit, etc.)
-      unlistenPromise = listen<{ session_id: string; event: string }>(
-        "terminal-event",
-        (ev) => {
-          if (destroyed) return;
-          if (ev.payload.session_id === sessionId) {
-            if (ev.payload.event === "exited") {
-              setStatus(sessionId, "disconnected");
-              term!.writeln("\r\n\x1b[33m[Process exited]\x1b[0m");
-            }
-          }
+        try {
+          webglAddon = new WebglAddon();
+          term.loadAddon(webglAddon);
+        } catch {
+          // WebGL not available, fall back to canvas renderer
         }
-      );
 
-      // Store references
-      termRef.current = term;
-      setTerminal(sessionId, term);
+        term.open(container!);
+        fitAddon.fit();
 
-      // Intercept Enter key for command detection
-      if (onCommand) {
-        term.attachCustomKeyEventHandler((e: KeyboardEvent) => {
-          if (e.key === "Enter" && !e.ctrlKey && !e.altKey && !e.metaKey && e.type === "keydown") {
-            const buf = term!.buffer.active;
-            const y = buf.cursorY + buf.baseY;
-            const line = buf.getLine(y);
-            if (line) {
-              let text = "";
-              for (let i = 0; i < line.length; i++) {
-                text += line.getCell(i)?.getChars() || "";
-              }
-              text = text.replace(/\x1b\[[0-9;]*m/g, "").trim();
-              if (text.length > 0) {
-                onCommand(text);
+        setupShellIntegration(term);
+
+        // Wire up Tauri Channel for output streaming
+        // Pass callback directly in constructor — more reliable than setting .onmessage
+        const onOutput = new Channel((data: unknown) => {
+          if (destroyed) return;
+          try {
+            const bytes = data instanceof Uint8Array ? data : new Uint8Array(data as number[]);
+            term!.write(bytes);
+          } catch (e) {
+            console.error(`[Terminal ${sessionId}] onOutput error:`, e, "data:", data);
+          }
+        });
+
+        // Create terminal session on the backend
+        invoke<string>("create_terminal", {
+          cols: term.cols,
+          rows: term.rows,
+          onOutput,
+        })
+          .then((sid) => {
+            if (destroyed) return;
+            backendSid = sid;
+            useTerminalStore.getState().setBackendSessionId(sessionId, sid);
+            setStatus(sessionId, "connected");
+            // Flush any buffered input
+            for (const data of pendingInput) {
+              invoke("write_terminal", {
+                id: sid,
+                data: Array.from(new TextEncoder().encode(data)),
+              });
+            }
+            pendingInput = [];
+          })
+          .catch((err) => {
+            if (destroyed) return;
+            console.error(`[Terminal ${sessionId}] create_terminal failed:`, err);
+            term!.writeln(`\r\n\x1b[31mFailed to create terminal: ${err}\x1b[0m`);
+            setStatus(sessionId, "disconnected");
+            pendingInput = [];
+          });
+
+        // Wire terminal input -> backend
+        disposables.push(
+          term.onData((data) => {
+            if (destroyed) return;
+            if (!backendSid) {
+              pendingInput.push(data);
+              return;
+            }
+            invoke("write_terminal", {
+              id: backendSid,
+              data: Array.from(new TextEncoder().encode(data)),
+            }).catch((err) => {
+              console.error(`[Terminal ${sessionId}] write_terminal failed:`, err);
+            });
+          })
+        );
+
+        // Handle resize with debounce
+        resizeObserver = new ResizeObserver(() => {
+          if (!fitAddon || !term) return;
+          fitAddon.fit();
+          if (resizeTimer) clearTimeout(resizeTimer);
+          resizeTimer = setTimeout(() => {
+            if (destroyed || !backendSid) return;
+            invoke("resize_terminal", {
+              id: backendSid,
+              cols: term!.cols,
+              rows: term!.rows,
+            }).catch(() => {});
+          }, 100);
+        });
+        resizeObserver.observe(container!);
+
+        // Listen for process exit
+        unlistenPromise = listen<{ session_id: string; event: string }>(
+          "terminal-event",
+          (ev) => {
+            if (destroyed) return;
+            if (ev.payload.session_id === backendSid) {
+              if (ev.payload.event === "exited") {
+                setStatus(sessionId, "disconnected");
+                term!.writeln("\r\n\x1b[33m[Process exited]\x1b[0m");
               }
             }
           }
-          return true; // Let xterm process the key normally
-        });
-      }
+        );
 
-      // Right-click on terminal blocks — store handler for cleanup
-      if (onBlockRightClick) {
-        contextmenuHandler = (e: MouseEvent) => {
-          if (!term || destroyed) return;
-          const rect = container!.getBoundingClientRect();
-          const cellHeight = rect.height / term.rows;
-          const clickedRow = Math.floor(e.offsetY / cellHeight);
-          const absoluteLine = clickedRow + term.buffer.active.viewportY;
+        termRef.current = term;
+        setTerminal(sessionId, term);
 
-          const blocks = useBlocksStore.getState().getBlocks(sessionId);
-          const clickedBlock = blocks.find(
-            (b) => b.startLine <= absoluteLine && (b.endLine === -1 || b.endLine >= absoluteLine)
-          );
+        // Intercept Enter key for command detection
+        if (onCommand) {
+          term.attachCustomKeyEventHandler((e: KeyboardEvent) => {
+            if (e.key === "Enter" && !e.ctrlKey && !e.altKey && !e.metaKey && e.type === "keydown") {
+              const buf = term!.buffer.active;
+              const y = buf.cursorY + buf.baseY;
+              const line = buf.getLine(y);
+              if (line) {
+                let text = "";
+                for (let i = 0; i < line.length; i++) {
+                  text += line.getCell(i)?.getChars() || "";
+                }
+                text = text.replace(/\x1b\[[0-9;]*m/g, "").trim();
+                if (text.length > 0) {
+                  onCommand(text);
+                }
+              }
+            }
+            return true;
+          });
+        }
 
-          if (clickedBlock) {
-            e.preventDefault();
-            onBlockRightClick(clickedBlock, { x: e.clientX, y: e.clientY });
-          }
-        };
-        container!.addEventListener("contextmenu", contextmenuHandler);
-      }
+        // Right-click on terminal blocks
+        if (onBlockRightClick) {
+          contextmenuHandler = (e: MouseEvent) => {
+            if (!term || destroyed) return;
+            const rect = container!.getBoundingClientRect();
+            const cellHeight = rect.height / term.rows;
+            const clickedRow = Math.floor(e.offsetY / cellHeight);
+            const absoluteLine = clickedRow + term.buffer.active.viewportY;
 
-      // Focus after open
-      term.focus();
+            const blocks = useBlocksStore.getState().getBlocks(sessionId);
+            const clickedBlock = blocks.find(
+              (b) => b.startLine <= absoluteLine && (b.endLine === -1 || b.endLine >= absoluteLine)
+            );
 
-      // Notify parent that terminal is ready
-      if (onTerminalReady && searchAddon) {
-        onTerminalReady(term, searchAddon);
+            if (clickedBlock) {
+              e.preventDefault();
+              onBlockRightClick(clickedBlock, { x: e.clientX, y: e.clientY });
+            }
+          };
+          container!.addEventListener("contextmenu", contextmenuHandler);
+        }
+
+        term.focus();
+
+        if (onTerminalReady && searchAddon) {
+          onTerminalReady(term, searchAddon);
+        }
+      } catch (err) {
+        console.error(`[Terminal ${sessionId}] initTerminal failed:`, err);
       }
     }
 
@@ -349,7 +363,10 @@ export function useTerminal(
         container.removeEventListener("contextmenu", contextmenuHandler);
       }
       if (term) {
-        invoke("close_terminal", { id: sessionId }).catch(() => {});
+        const sid = useTerminalStore.getState().tabs.find((t) => t.id === sessionId)?.backendSessionId;
+        if (sid) {
+          invoke("close_terminal", { id: sid }).catch(() => {});
+        }
         term.dispose();
       }
       termRef.current = null;

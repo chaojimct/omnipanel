@@ -57,11 +57,13 @@ impl LocalSession {
             ShellKind::PowerShell | ShellKind::PowerShell5 => {
                 let script_path = write_temp_script("ps1", POWERSHELL_INTEGRATION)
                     .unwrap_or_else(|_| "NUL".to_string());
+                // Use -Command with dot-source so functions persist in the session.
+                // -File runs in a child scope and functions vanish after execution.
                 cmd.arg("-NoExit");
                 cmd.arg("-ExecutionPolicy");
                 cmd.arg("Bypass");
-                cmd.arg("-File");
-                cmd.arg(&script_path);
+                cmd.arg("-Command");
+                cmd.arg(format!(". '{}'", script_path));
             }
             ShellKind::Fish => {
                 let script_path = write_temp_script("fish", FISH_INTEGRATION)
