@@ -15,7 +15,7 @@ interface PaneRendererProps {
 }
 
 function getLayoutKey(layout: PaneLayout): string {
-  if (layout.type === "leaf") return layout.tabId;
+  if (layout.type === "leaf") return layout.paneId;
   return layout.children.map(getLayoutKey).join("|");
 }
 
@@ -30,10 +30,10 @@ export function PaneRenderer({
   if (layout.type === "leaf") {
     return (
       <TerminalTabContent
-        sessionId={layout.tabId}
-        active={layout.tabId === activeTabId}
+        sessionId={layout.paneId}
+        active={layout.paneId === activeTabId}
         suspended={suspended}
-        onTerminalReady={(term, sa) => onTerminalReady(layout.tabId, term, sa)}
+        onTerminalReady={(term, sa) => onTerminalReady(layout.paneId, term, sa)}
         onCommand={onCommand}
         onBlockRightClick={onBlockRightClick}
       />

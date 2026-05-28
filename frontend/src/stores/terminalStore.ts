@@ -1,135 +1,147 @@
 import { create } from "zustand";
 import type { Terminal } from "@xterm/xterm";
 
-export interface TerminalTab {
+export interface TerminalPane {
   id: string;
-  backendSessionId: string | null; // backend-generated session ID (e.g. "term-1")
+  backendSessionId: string | null;
   title: string;
   type: "local" | "remote";
+  resourceId: string;
+  shellLabel: string;
+  cwd: string;
+  purpose: string;
+  commandPack: string[];
   terminal: Terminal | null;
   status: "connecting" | "connected" | "disconnected";
 }
 
 export type PaneLayout =
-  | { type: "leaf"; tabId: string }
-  | { type: "split"; direction: "horizontal" | "vertical"; children: PaneLayout[] };
+  | { type: "leaf"; paneId: string }
+  | { type: "split"; direction: "horizontal" | "vertical"; children: PaneLayout[]; sizes?: number[] };
+
+export interface TerminalTab {
+  id: string;
+  title: string;
+  panes: TerminalPane[];
+  activePaneId: string;
+  layout: PaneLayout;
+}
+
+interface CreateTabOptions {
+  title?: string;
+}
 
 interface TerminalState {
   tabs: TerminalTab[];
   activeTabId: string | null;
-  layout: PaneLayout | null;
 
-  addTab: (tab: Omit<TerminalTab, "terminal" | "status" | "backendSessionId">) => void;
-  removeTab: (id: string) => void;
-  setActiveTab: (id: string) => void;
-  setTerminal: (id: string, terminal: Terminal) => void;
-  setStatus: (id: string, status: TerminalTab["status"]) => void;
-  setBackendSessionId: (id: string, backendSessionId: string) => void;
-  splitPane: (tabId: string, direction: "horizontal" | "vertical", newTabId: string) => void;
+  addTab: (pane: Omit<TerminalPane, "terminal" | "status" | "backendSessionId">, options?: CreateTabOptions) => void;
+  removeTab: (tabId: string) => void;
+  setActiveTab: (tabId: string) => void;
+  setActivePane: (tabId: string, paneId: string) => void;
+  replaceTabLayout: (tabId: string, panes: TerminalPane[], layout: PaneLayout, activePaneId: string) => void;
+  updateTabLayout: (tabId: string, layout: PaneLayout) => void;
+  setTerminal: (paneId: string, terminal: Terminal) => void;
+  setStatus: (paneId: string, status: TerminalPane["status"]) => void;
+  setBackendSessionId: (paneId: string, backendSessionId: string) => void;
 }
 
-function splitInLayout(
-  layout: PaneLayout,
-  targetTabId: string,
-  direction: "horizontal" | "vertical",
-  newTabId: string
-): PaneLayout {
-  if (layout.type === "leaf" && layout.tabId === targetTabId) {
-    return {
-      type: "split",
-      direction,
-      children: [
-        { type: "leaf", tabId: targetTabId },
-        { type: "leaf", tabId: newTabId },
-      ],
-    };
-  }
-  if (layout.type === "split") {
-    return {
-      ...layout,
-      children: layout.children.map((c) => splitInLayout(c, targetTabId, direction, newTabId)),
-    };
-  }
-  return layout;
-}
-
-function removeFromLayout(layout: PaneLayout, tabId: string): PaneLayout | null {
-  if (layout.type === "leaf") {
-    return layout.tabId === tabId ? null : layout;
-  }
-  const remaining = layout.children
-    .map((c) => removeFromLayout(c, tabId))
-    .filter(Boolean) as PaneLayout[];
-  if (remaining.length === 0) return null;
-  if (remaining.length === 1) return remaining[0];
-  return { ...layout, children: remaining };
+function updatePaneInTabs(
+  tabs: TerminalTab[],
+  paneId: string,
+  updater: (pane: TerminalPane) => TerminalPane
+): TerminalTab[] {
+  return tabs.map((tab) => ({
+    ...tab,
+    panes: tab.panes.map((pane) => (pane.id === paneId ? updater(pane) : pane)),
+  }));
 }
 
 export const useTerminalStore = create<TerminalState>((set) => ({
   tabs: [],
   activeTabId: null,
-  layout: null,
 
-  addTab: (tab) =>
+  addTab: (pane, options) =>
     set((state) => {
-      const newTab = { ...tab, terminal: null, status: "connecting" as const, backendSessionId: null };
-      const newLeaf: PaneLayout = { type: "leaf", tabId: tab.id };
-      if (!state.layout) {
-        return { tabs: [...state.tabs, newTab], layout: newLeaf };
-      }
-      // Wrap existing layout + new leaf in a horizontal split
-      const newLayout: PaneLayout = {
-        type: "split",
-        direction: "horizontal",
-        children: [state.layout, newLeaf],
+      const rootPane: TerminalPane = {
+        ...pane,
+        terminal: null,
+        status: "connecting",
+        backendSessionId: null,
       };
-      return { tabs: [...state.tabs, newTab], layout: newLayout };
+      const newTab: TerminalTab = {
+        id: pane.id,
+        title: options?.title ?? pane.title,
+        panes: [rootPane],
+        activePaneId: rootPane.id,
+        layout: { type: "leaf", paneId: rootPane.id },
+      };
+      return {
+        tabs: [...state.tabs, newTab],
+        activeTabId: state.activeTabId ?? newTab.id,
+      };
     }),
 
-  removeTab: (id) =>
+  removeTab: (tabId) =>
     set((state) => {
-      const remaining = state.tabs.filter((t) => t.id !== id);
-      const newActive =
-        state.activeTabId === id
+      const remaining = state.tabs.filter((tab) => tab.id !== tabId);
+      const nextActiveTabId =
+        state.activeTabId === tabId
           ? remaining.length > 0
-            ? remaining[remaining.length - 1].id
+            ? remaining[Math.max(remaining.length - 1, 0)].id
             : null
           : state.activeTabId;
-      const newLayout = state.layout ? removeFromLayout(state.layout, id) : null;
-      return { tabs: remaining, activeTabId: newActive, layout: newLayout };
+      return { tabs: remaining, activeTabId: nextActiveTabId };
     }),
 
-  setActiveTab: (id) => set({ activeTabId: id }),
+  setActiveTab: (tabId) => set({ activeTabId: tabId }),
 
-  setTerminal: (id, terminal) =>
+  setActivePane: (tabId, paneId) =>
     set((state) => ({
-      tabs: state.tabs.map((t) =>
-        t.id === id ? { ...t, terminal } : t
+      tabs: state.tabs.map((tab) => (tab.id === tabId ? { ...tab, activePaneId: paneId } : tab)),
+    })),
+
+  replaceTabLayout: (tabId, panes, layout, activePaneId) =>
+    set((state) => ({
+      tabs: state.tabs.map((tab) =>
+        tab.id === tabId
+          ? {
+              ...tab,
+              panes,
+              layout,
+              activePaneId,
+            }
+          : tab
       ),
     })),
 
-  setStatus: (id, status) =>
+  updateTabLayout: (tabId, layout) =>
     set((state) => ({
-      tabs: state.tabs.map((t) =>
-        t.id === id ? { ...t, status } : t
-      ),
+      tabs: state.tabs.map((tab) => (tab.id === tabId ? { ...tab, layout } : tab)),
     })),
 
-  setBackendSessionId: (id, backendSessionId) =>
+  setTerminal: (paneId, terminal) =>
     set((state) => ({
-      tabs: state.tabs.map((t) =>
-        t.id === id ? { ...t, backendSessionId } : t
-      ),
+      tabs: updatePaneInTabs(state.tabs, paneId, (pane) => ({ ...pane, terminal })),
     })),
 
-  splitPane: (tabId, direction, newTabId) =>
+  setStatus: (paneId, status) =>
     set((state) => ({
-      layout: state.layout ? splitInLayout(state.layout, tabId, direction, newTabId) : null,
+      tabs: updatePaneInTabs(state.tabs, paneId, (pane) => ({ ...pane, status })),
+    })),
+
+  setBackendSessionId: (paneId, backendSessionId) =>
+    set((state) => ({
+      tabs: updatePaneInTabs(state.tabs, paneId, (pane) => ({ ...pane, backendSessionId })),
     })),
 }));
 
-/** Get the backend session ID for a given tab ID. Returns the tab ID itself as fallback. */
-export function getBackendSessionId(tabId: string): string {
-  const tab = useTerminalStore.getState().tabs.find((t) => t.id === tabId);
-  return tab?.backendSessionId ?? tabId;
+export function getBackendSessionId(paneId: string): string {
+  for (const tab of useTerminalStore.getState().tabs) {
+    const pane = tab.panes.find((item) => item.id === paneId);
+    if (pane) {
+      return pane.backendSessionId ?? pane.id;
+    }
+  }
+  return paneId;
 }

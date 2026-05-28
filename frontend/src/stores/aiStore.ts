@@ -40,6 +40,7 @@ interface AiStore {
   currentProvider: string;
   currentModel: string;
   isGenerating: boolean;
+  draftPrompt: string;
 
   toggleDrawer: () => void;
   openDrawer: () => void;
@@ -64,6 +65,8 @@ interface AiStore {
   ) => void;
   setCurrentProvider: (provider: string, model: string) => void;
   setIsGenerating: (v: boolean) => void;
+  setDraftPrompt: (prompt: string) => void;
+  clearDraftPrompt: () => void;
   setContext: (conversationId: string, context: { type: string; label: string }[]) => void;
   addContext: (conversationId: string, chip: { type: string; label: string }) => void;
   removeContext: (conversationId: string, type: string) => void;
@@ -84,6 +87,7 @@ export const useAiStore = create<AiStore>()(
       currentProvider: "openai",
       currentModel: "gpt-4o",
       isGenerating: false,
+      draftPrompt: "",
 
       toggleDrawer: () =>
         set((state) => ({ drawerOpen: !state.drawerOpen })),
@@ -198,6 +202,10 @@ export const useAiStore = create<AiStore>()(
         set({ currentProvider: provider, currentModel: model }),
 
       setIsGenerating: (v) => set({ isGenerating: v }),
+
+      setDraftPrompt: (prompt) => set({ draftPrompt: prompt }),
+
+      clearDraftPrompt: () => set({ draftPrompt: "" }),
 
       setContext: (conversationId, context) =>
         set((state) => ({

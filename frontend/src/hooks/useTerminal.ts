@@ -381,7 +381,11 @@ export function useTerminal(
       unlistenPromise?.then((unlisten) => unlisten()).catch(() => {});
       webglAddon?.dispose();
       if (term) {
-        const sid = useTerminalStore.getState().tabs.find((t) => t.id === sessionId)?.backendSessionId;
+        const pane = useTerminalStore
+          .getState()
+          .tabs.flatMap((tab) => tab.panes)
+          .find((item) => item.id === sessionId);
+        const sid = pane?.backendSessionId;
         if (sid) {
           invoke("close_terminal", { id: sid }).catch(() => {});
         }
