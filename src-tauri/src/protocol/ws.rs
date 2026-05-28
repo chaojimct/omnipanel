@@ -164,6 +164,7 @@ impl WsSession {
 }
 
 /// Shared state for all WebSocket sessions.
+#[allow(dead_code)]
 pub type WsSessions = Arc<Mutex<HashMap<String, WsSession>>>;
 
 fn chrono_now() -> String {

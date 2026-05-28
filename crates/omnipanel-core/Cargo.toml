@@ -5,8 +5,7 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
-alacritty_terminal.workspace = true
-portable-pty.workspace = true
+
 tokio.workspace = true
 serde.workspace = true
 serde_json.workspace = true

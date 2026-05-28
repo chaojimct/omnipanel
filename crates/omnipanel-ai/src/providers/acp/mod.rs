@@ -24,6 +24,7 @@ use crate::types::{ChatMessage, ChatRequest, ChatResponse, ModelInfo, Role, Usag
 /// The ACP agent runs as a long-lived subprocess communicating via
 /// JSON-RPC 2.0 over stdio. Session updates are translated into
 /// IR StreamEvents using the same pattern as cli-agent-gateway.
+#[allow(dead_code)]
 pub struct AcpProvider {
     agent_name: String,
     provider_name: String,
@@ -115,7 +116,7 @@ impl AcpProvider {
         }
 
         // Install notification handler for session/update
-        let (tx, _rx) = tokio::sync::mpsc::channel::<StreamEvent>(256);
+        let (_tx, _rx) = tokio::sync::mpsc::channel::<StreamEvent>(256);
         // Note: In production, this tx would be wired to the active stream
         // For now we set up the handler structure
 

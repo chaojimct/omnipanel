@@ -52,6 +52,7 @@ struct AnthropicMessage {
 }
 
 #[derive(Deserialize)]
+#[allow(dead_code)]
 struct AnthropicResponse {
     content: Vec<ContentBlock>,
     usage: AnthropicUsage,
@@ -59,6 +60,7 @@ struct AnthropicResponse {
 }
 
 #[derive(Deserialize)]
+#[allow(dead_code)]
 struct ContentBlock {
     #[serde(rename = "type")]
     block_type: String,
@@ -77,6 +79,7 @@ struct AnthropicUsage {
 // SSE streaming types
 
 #[derive(Deserialize)]
+#[allow(dead_code)]
 struct StreamEvent2 {
     #[serde(rename = "type")]
     event_type: String,

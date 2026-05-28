@@ -2,7 +2,6 @@ import { useEffect, useRef } from "react";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
-import { createTerminal, getTerminal } from "../../services/terminalService";
 
 interface TerminalXtermProps {
   onTitleChange?: (title: string) => void;
@@ -13,7 +12,6 @@ export function TerminalXterm({ onTitleChange, className = "" }: TerminalXtermPr
   const containerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
-  const sessionIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -60,57 +58,21 @@ export function TerminalXterm({ onTitleChange, className = "" }: TerminalXtermPr
     term.open(container);
     fitAddon.fit();
 
-    const doResize = () => {
+    const resizeObserver = new ResizeObserver(() => {
       fitAddon.fit();
-      if (sessionIdRef.current) {
-        const { cols, rows } = term;
-        const session = getTerminal(sessionIdRef.current);
-        session?.resize(cols, rows);
-      }
-    };
-
-    const resizeObserver = new ResizeObserver(() => doResize());
+    });
     resizeObserver.observe(container);
 
     if (onTitleChange) {
       term.onTitleChange((title) => onTitleChange(title));
     }
 
-    let cancelled = false;
-
-    createTerminal(
-      (data) => {
-        if (!cancelled) term.write(data);
-      },
-      () => {
-        if (!cancelled) {
-          term.write("\r\n\u001b[31m[Process exited]\u001b[0m\r\n");
-        }
-      },
-      term.cols,
-      term.rows,
-    ).then((session) => {
-      if (cancelled) {
-        session.close();
-        return;
-      }
-      sessionIdRef.current = session.id;
-
-      term.onData((input) => {
-        session.write(new TextEncoder().encode(input));
-      });
-    });
+    term.write("Local terminal sessions are not available in this build.\r\n");
 
     return () => {
-      cancelled = true;
       resizeObserver.disconnect();
       term.dispose();
-      if (sessionIdRef.current) {
-        const session = getTerminal(sessionIdRef.current);
-        session?.close();
-      }
     };
-    // onTitleChange is stable from props; include to satisfy lint
   }, [onTitleChange]);
 
   return (

@@ -140,4 +140,5 @@ pub fn scan_ports() -> Result<Vec<PortInfo>, String> {
 }
 
 /// Shared state for all serial port sessions.
+#[allow(dead_code)]
 pub type SerialSessions = Arc<Mutex<HashMap<String, SerialSession>>>;

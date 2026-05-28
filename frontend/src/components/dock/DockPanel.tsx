@@ -1,5 +1,5 @@
 import { Panel } from "react-resizable-panels";
-import type { PanelProps } from "react-resizable-panels";
+import type { PanelProps, PanelImperativeHandle } from "react-resizable-panels";
 
 interface DockPanelProps {
   children: React.ReactNode;
@@ -7,6 +7,9 @@ interface DockPanelProps {
   minSize?: PanelProps["minSize"];
   maxSize?: PanelProps["maxSize"];
   collapsible?: boolean;
+  collapsedSize?: PanelProps["collapsedSize"];
+  onResize?: PanelProps["onResize"];
+  panelRef?: React.Ref<PanelImperativeHandle | null>;
   className?: string;
 }
 
@@ -16,14 +19,20 @@ export function DockPanel({
   minSize,
   maxSize,
   collapsible,
+  collapsedSize,
+  onResize,
+  panelRef,
   className,
 }: DockPanelProps) {
   return (
     <Panel
+      panelRef={panelRef}
       defaultSize={defaultSize}
       minSize={minSize}
       maxSize={maxSize}
       collapsible={collapsible}
+      collapsedSize={collapsedSize}
+      onResize={onResize}
       className={`dock-panel${className ? ` ${className}` : ""}`}
     >
       {children}
