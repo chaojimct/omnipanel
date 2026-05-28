@@ -47,6 +47,11 @@ pub fn run() {
             commands::protocol::mqtt_unsubscribe,
             commands::protocol::mqtt_publish,
             commands::protocol::mqtt_disconnect,
+            // Terminal
+            commands::terminal::create_terminal,
+            commands::terminal::write_terminal,
+            commands::terminal::resize_terminal,
+            commands::terminal::close_terminal,
             // Database
             commands::database::db_list_connections,
             commands::database::db_save_connection,

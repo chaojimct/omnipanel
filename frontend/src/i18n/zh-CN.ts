@@ -123,6 +123,22 @@ export const zhCN = {
       title: "Schema",
       search: "搜索表…",
       refresh: "刷新",
+      createConnection: "创建连接",
+    },
+    dialog: {
+      title: "创建数据库连接",
+      engine: "数据库引擎",
+      name: "连接名称",
+      namePlaceholder: "我的数据库连接",
+      host: "主机地址",
+      port: "端口",
+      database: "数据库",
+      username: "用户名",
+      password: "密码",
+      ssl: "启用 SSL",
+      cancel: "取消",
+      test: "测试连接",
+      save: "保存",
     },
     toolbar: {
       hint: "SQL 编辑器会把写操作和生产库操作送入统一风险确认流。",
@@ -166,14 +182,11 @@ export const zhCN = {
     blocked: "待确认",
   },
   terminal: {
-    sidebar: { title: "终端资源" },
-    context: {
-      title: "终端上下文",
-      resource: "资源",
-      localSession: "本地 PTY 会话",
-      dangerConfirm: "生成危险确认",
+    sidebar: { title: "终端资源", collapse: "收起侧栏", expand: "展开侧栏" },
+    command: {
+      placeholder: "输入命令… (Enter 发送, Shift+Enter 换行)",
+      send: "发送",
     },
-    feed: { title: "终端操作流" },
     actions: {
       command: "终端命令",
       dangerDemo: "危险命令演示",

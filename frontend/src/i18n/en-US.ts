@@ -125,6 +125,22 @@ export const enUS: TranslationDict = {
       title: "Schema",
       search: "Search tables…",
       refresh: "Refresh",
+      createConnection: "Create Connection",
+    },
+    dialog: {
+      title: "Create Database Connection",
+      engine: "Database Engine",
+      name: "Connection Name",
+      namePlaceholder: "My database connection",
+      host: "Host",
+      port: "Port",
+      database: "Database",
+      username: "Username",
+      password: "Password",
+      ssl: "Enable SSL",
+      cancel: "Cancel",
+      test: "Test Connection",
+      save: "Save",
     },
     toolbar: {
       hint: "Write operations and production DB actions go through unified risk confirmation.",
@@ -168,14 +184,11 @@ export const enUS: TranslationDict = {
     blocked: "Pending",
   },
   terminal: {
-    sidebar: { title: "Terminal Resources" },
-    context: {
-      title: "Terminal Context",
-      resource: "Resource",
-      localSession: "Local PTY session",
-      dangerConfirm: "Generate Danger Confirmation",
+    sidebar: { title: "Terminal Resources", collapse: "Collapse sidebar", expand: "Expand sidebar" },
+    command: {
+      placeholder: "Type command... (Enter to send, Shift+Enter for newline)",
+      send: "Send",
     },
-    feed: { title: "Terminal Action Feed" },
     actions: {
       command: "Terminal Command",
       dangerDemo: "Dangerous Command Demo",
