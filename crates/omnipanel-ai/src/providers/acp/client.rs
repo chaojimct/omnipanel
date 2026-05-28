@@ -139,7 +139,7 @@ impl AcpClient {
                         let handler = req_handler.lock().await;
                         if let Some(ref h) = *handler {
                             if let Some(result) = h(id, &notif.method, notif.params.as_ref().unwrap_or(&serde_json::Value::Null)) {
-                                let response = JsonRpcResponse {
+                                let _response = JsonRpcResponse {
                                     jsonrpc: "2.0".to_string(),
                                     id,
                                     result: Some(result),

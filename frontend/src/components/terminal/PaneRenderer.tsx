@@ -1,5 +1,5 @@
 import { useRef, useCallback, useState, useEffect } from "react";
-import { useTerminalStore, type PaneLayout } from "../../stores/terminalStore";
+import type { PaneLayout } from "../../stores/terminalStore";
 import { TerminalTabContent } from "./TerminalTabContent";
 import type { TerminalBlock } from "../../stores/blocksStore";
 import type { SearchAddon } from "@xterm/addon-search";
@@ -9,8 +9,8 @@ interface PaneRendererProps {
   layout: PaneLayout;
   activeTabId: string | null;
   onTerminalReady: (tabId: string, terminal: Terminal, searchAddon: SearchAddon) => void;
-  onCommand: (command: string) => void;
-  onBlockRightClick: (block: TerminalBlock, position: { x: number; y: number }) => void;
+  onCommand?: (command: string) => void;
+  onBlockRightClick?: (block: TerminalBlock, position: { x: number; y: number }) => void;
 }
 
 function getLayoutKey(layout: PaneLayout): string {
@@ -31,8 +31,8 @@ export function PaneRenderer({
         sessionId={layout.tabId}
         active={layout.tabId === activeTabId}
         onTerminalReady={(term, sa) => onTerminalReady(layout.tabId, term, sa)}
-        onCommand={layout.tabId === activeTabId ? onCommand : undefined}
-        onBlockRightClick={layout.tabId === activeTabId ? onBlockRightClick : undefined}
+        onCommand={onCommand}
+        onBlockRightClick={onBlockRightClick}
       />
     );
   }

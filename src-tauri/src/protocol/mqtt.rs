@@ -165,6 +165,7 @@ impl MqttSession {
 }
 
 /// Shared state for all MQTT sessions.
+#[allow(dead_code)]
 pub type MqttSessions = Arc<Mutex<HashMap<String, MqttSession>>>;
 
 fn chrono_now() -> String {

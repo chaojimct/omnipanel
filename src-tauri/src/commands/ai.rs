@@ -1,4 +1,3 @@
-use futures::StreamExt;
 use serde::{Deserialize, Serialize};
 use tauri::{ipc::Channel, State};
 
@@ -17,7 +16,7 @@ pub struct ProviderInfo {
 #[tauri::command]
 pub async fn ai_send_message(
     state: State<'_, AppState>,
-    conversation_id: String,
+    _conversation_id: String,
     content: String,
     on_event: Channel<StreamEvent>,
 ) -> Result<(), String> {

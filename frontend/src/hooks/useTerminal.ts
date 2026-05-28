@@ -1,45 +1,43 @@
-import { useEffect, useRef } from "react";
-import { Terminal } from "@xterm/xterm";
+import { useEffect, useRef, type RefObject } from "react";
+import { Channel, invoke } from "@tauri-apps/api/core";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { Terminal, type IDisposable, type ITheme } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { SearchAddon } from "@xterm/addon-search";
-import { invoke, Channel } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
 import { useTerminalStore } from "../stores/terminalStore";
-import { useBlocksStore, createBlockId } from "../stores/blocksStore";
+import { createBlockId, useBlocksStore, type TerminalBlock } from "../stores/blocksStore";
 
-const TERMINAL_THEME = {
+const TERMINAL_THEME: ITheme = {
   background: "#1a1717",
-  foreground: "#fdfcfc",
-  cursor: "#007aff",
-  cursorAccent: "#1a1717",
-  selectionBackground: "rgba(0, 122, 255, 0.3)",
-  selectionForeground: "#fdfcfc",
-  black: "#201d1d",
-  red: "#ff3b30",
-  green: "#30d158",
-  yellow: "#ff9f0a",
-  blue: "#007aff",
-  magenta: "#c084fc",
-  cyan: "#64d2ff",
-  white: "#fdfcfc",
-  brightBlack: "#636366",
-  brightRed: "#ff6961",
-  brightGreen: "#5ee085",
-  brightYellow: "#ffb340",
-  brightBlue: "#4da3ff",
-  brightMagenta: "#d4a0ff",
-  brightCyan: "#8ee0ff",
-  brightWhite: "#ffffff",
+  foreground: "#f4f1ed",
+  cursor: "#f4f1ed",
+  selectionBackground: "#5b504a",
+  black: "#1a1717",
+  red: "#ff6b6b",
+  green: "#51cf66",
+  yellow: "#ffd43b",
+  blue: "#74c0fc",
+  magenta: "#da77f2",
+  cyan: "#66d9e8",
+  white: "#f4f1ed",
+  brightBlack: "#7c6f66",
+  brightRed: "#ff8787",
+  brightGreen: "#69db7c",
+  brightYellow: "#ffe066",
+  brightBlue: "#91a7ff",
+  brightMagenta: "#e599f7",
+  brightCyan: "#99e9f2",
+  brightWhite: "#fff9f0",
 };
 
 export function useTerminal(
   sessionId: string,
-  containerRef: React.RefObject<HTMLDivElement | null>,
+  containerRef: RefObject<HTMLDivElement | null>,
   onTerminalReady?: (terminal: Terminal, searchAddon: SearchAddon) => void,
   onCommand?: (command: string) => void,
-  onBlockRightClick?: (block: import("../stores/blocksStore").TerminalBlock, position: { x: number; y: number }) => void
+  onBlockRightClick?: (block: TerminalBlock, position: { x: number; y: number }) => void,
 ) {
   const termRef = useRef<Terminal | null>(null);
   const searchAddonRef = useRef<SearchAddon | null>(null);
@@ -54,13 +52,13 @@ export function useTerminal(
     let fitAddon: FitAddon | null = null;
     let webglAddon: WebglAddon | null = null;
     let resizeObserver: ResizeObserver | null = null;
-    let disposables: { dispose(): void }[] = [];
-    let unlistenPromise: Promise<() => void> | null = null;
     let destroyed = false;
     let contextmenuHandler: ((e: MouseEvent) => void) | null = null;
     let resizeTimer: ReturnType<typeof setTimeout> | null = null;
     let backendSid: string | null = null;
     let pendingInput: string[] = [];
+    let unlistenPromise: Promise<UnlistenFn> | null = null;
+    const disposables: IDisposable[] = [];
 
     // Shell integration state
     let pendingBlock: {
@@ -105,7 +103,7 @@ export function useTerminal(
               } else {
                 pendingBlock.command = commandText;
               }
-              const marker = t.markers.add(y);
+              const marker = t.registerMarker(0);
               const blockId = createBlockId();
               addBlock(sessionId, {
                 id: blockId,
@@ -329,7 +327,6 @@ export function useTerminal(
       }
     }
 
-    // Use IntersectionObserver to init only when container is visible
     const observer = new IntersectionObserver(
       (entries) => {
         for (const entry of entries) {
@@ -346,22 +343,25 @@ export function useTerminal(
           }
         }
       },
-      { threshold: 0 }
+      { threshold: 0 },
     );
     observer.observe(container);
 
-    // Cleanup
     return () => {
       destroyed = true;
       observer.disconnect();
       resizeObserver?.disconnect();
-      if (resizeTimer) clearTimeout(resizeTimer);
-      for (const d of disposables) d.dispose();
-      unlistenPromise?.then((fn) => fn());
-      webglAddon?.dispose();
+      if (resizeTimer) {
+        clearTimeout(resizeTimer);
+      }
       if (contextmenuHandler) {
         container.removeEventListener("contextmenu", contextmenuHandler);
       }
+      for (const disposable of disposables) {
+        disposable.dispose();
+      }
+      unlistenPromise?.then((unlisten) => unlisten()).catch(() => {});
+      webglAddon?.dispose();
       if (term) {
         const sid = useTerminalStore.getState().tabs.find((t) => t.id === sessionId)?.backendSessionId;
         if (sid) {
@@ -372,7 +372,7 @@ export function useTerminal(
       termRef.current = null;
       searchAddonRef.current = null;
     };
-  }, [sessionId]);
+  }, [containerRef, onBlockRightClick, onCommand, onTerminalReady, sessionId, setStatus, setTerminal]);
 
   return { termRef, searchAddonRef };
 }

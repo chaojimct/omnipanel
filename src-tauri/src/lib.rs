@@ -1,7 +1,6 @@
 mod commands;
 mod protocol;
 mod state;
-mod terminal;
 
 use state::AppState;
 use tauri::Manager;
@@ -20,12 +19,6 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            // Terminal
-            commands::terminal::create_terminal,
-            commands::terminal::write_terminal,
-            commands::terminal::resize_terminal,
-            commands::terminal::close_terminal,
-            commands::terminal::get_shell_type,
             // AI
             commands::ai::ai_send_message,
             commands::ai::ai_list_models,
@@ -54,6 +47,13 @@ pub fn run() {
             commands::protocol::mqtt_unsubscribe,
             commands::protocol::mqtt_publish,
             commands::protocol::mqtt_disconnect,
+            // Database
+            commands::database::db_list_connections,
+            commands::database::db_save_connection,
+            commands::database::db_delete_connection,
+            commands::database::db_test_connection,
+            commands::database::db_list_tables,
+            commands::database::db_preview_table,
             // Updater
             commands::updater::check_update,
             commands::updater::install_update,

@@ -63,12 +63,14 @@ struct OpenAiResponse {
 }
 
 #[derive(Deserialize)]
+#[allow(dead_code)]
 struct OpenAiChoice {
     message: OpenAiMessageResponse,
     finish_reason: Option<String>,
 }
 
 #[derive(Deserialize)]
+#[allow(dead_code)]
 struct OpenAiMessageResponse {
     role: String,
     content: Option<String>,
@@ -93,6 +95,7 @@ struct StreamChoice {
 }
 
 #[derive(Deserialize)]
+#[allow(dead_code)]
 struct StreamDelta {
     role: Option<String>,
     content: Option<String>,

@@ -1,8 +1,8 @@
 import { useRef } from "react";
 import { useTerminal } from "../../hooks/useTerminal";
+import type { TerminalBlock } from "../../stores/blocksStore";
 import type { SearchAddon } from "@xterm/addon-search";
 import type { Terminal } from "@xterm/xterm";
-import type { TerminalBlock } from "../../stores/blocksStore";
 
 interface Props {
   sessionId: string;
@@ -12,7 +12,13 @@ interface Props {
   onBlockRightClick?: (block: TerminalBlock, position: { x: number; y: number }) => void;
 }
 
-export function TerminalTabContent({ sessionId, active, onTerminalReady, onCommand, onBlockRightClick }: Props) {
+export function TerminalTabContent({
+  sessionId,
+  active,
+  onTerminalReady,
+  onCommand,
+  onBlockRightClick,
+}: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   useTerminal(sessionId, containerRef, onTerminalReady, onCommand, onBlockRightClick);
 

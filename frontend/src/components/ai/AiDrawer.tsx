@@ -126,7 +126,7 @@ function MessageBubble({ msg }: { msg: AiMessage }) {
                     }
                     return <pre {...props}>{children}</pre>;
                   },
-                  code({ inline, className, children, ...props }) {
+                  code({ className, children, ...props }) {
                     return (
                       <code className={className} {...props}>
                         {children}
@@ -443,7 +443,7 @@ function AiPanelBody() {
     messagesEndRef,
     textareaRef,
     activeConversation,
-    activeConversationId,
+    activeConversationId: _activeConversationId,
     isGenerating,
     handleSend,
     handleKeyDown,
