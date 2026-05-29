@@ -4,7 +4,9 @@ import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { useTopbarStore, type TopbarTabDef } from "../../stores/topbarStore";
 import { getResourceById, type EnvironmentTag, type ResourceType } from "../../lib/resourceRegistry";
 import { useI18n } from "../../i18n";
+import { createPortal } from "react-dom";
 import type { ReactNode, MouseEvent } from "react";
+import { useEffect, useRef, useState } from "react";
 
 interface TopbarProps {
   title: string;
@@ -95,6 +97,43 @@ export function Topbar({ title, children }: TopbarProps) {
   };
 
   const aiDrawerOpen = useAiStore((state) => state.drawerOpen);
+  const [addMenuOpen, setAddMenuOpen] = useState(false);
+  const [addMenuPosition, setAddMenuPosition] = useState<{ top: number; left: number; minWidth: number } | null>(null);
+  const addMenuRef = useRef<HTMLDivElement>(null);
+  const addMenuButtonRef = useRef<HTMLButtonElement>(null);
+  const hasAddMenu = (handlers.addMenuItems?.length ?? 0) > 0;
+
+  useEffect(() => {
+    if (!addMenuOpen) return;
+
+    const syncMenuPosition = () => {
+      const rect = addMenuButtonRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      setAddMenuPosition({
+        top: rect.bottom + 6,
+        left: rect.left,
+        minWidth: Math.max(rect.width * 6, 240),
+      });
+    };
+
+    const onPointerDown = (event: Event) => {
+      const target = event.target as Node;
+      if (!addMenuRef.current?.contains(target) && !addMenuButtonRef.current?.contains(target)) {
+        setAddMenuOpen(false);
+      }
+    };
+
+    syncMenuPosition();
+    window.addEventListener("resize", syncMenuPosition);
+    window.addEventListener("scroll", syncMenuPosition, true);
+    document.addEventListener("mousedown", onPointerDown);
+
+    return () => {
+      window.removeEventListener("resize", syncMenuPosition);
+      window.removeEventListener("scroll", syncMenuPosition, true);
+      document.removeEventListener("mousedown", onPointerDown);
+    };
+  }, [addMenuOpen]);
 
   const handleDoubleClick = (event: MouseEvent) => {
     const target = event.target as HTMLElement;
@@ -144,12 +183,55 @@ export function Topbar({ title, children }: TopbarProps) {
               )}
             </button>
           ))}
-          {showAddTab && handlers.onAdd && (
-            <button className="btn-icon topbar-tab-add" title={addTitle} onClick={handlers.onAdd}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M12 5v14M5 12h14" />
-              </svg>
-            </button>
+          {showAddTab && (handlers.onAdd || hasAddMenu) && (
+            <div className="topbar-tab-add-wrap">
+              <button
+                ref={addMenuButtonRef}
+                className={`btn-icon topbar-tab-add${addMenuOpen ? " active" : ""}`}
+                title={addTitle}
+                onClick={() => {
+                  if (hasAddMenu) {
+                    setAddMenuOpen((open) => !open);
+                    return;
+                  }
+                  handlers.onAdd?.();
+                }}
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M12 5v14M5 12h14" />
+                </svg>
+              </button>
+              {addMenuOpen && hasAddMenu && addMenuPosition && createPortal(
+                <div
+                  className="topbar-add-menu"
+                  ref={addMenuRef}
+                  style={{
+                    position: "fixed",
+                    top: addMenuPosition.top,
+                    left: addMenuPosition.left,
+                    minWidth: addMenuPosition.minWidth,
+                  }}
+                >
+                  {handlers.addMenuItems!.map((item) => (
+                    <div key={item.id}>
+                      {item.dividerBefore && <div className="topbar-add-menu-divider" />}
+                      <button
+                        type="button"
+                        className="topbar-add-menu-item"
+                        onClick={() => {
+                          handlers.onAddMenuSelect?.(item.id);
+                          setAddMenuOpen(false);
+                        }}
+                      >
+                        <span className="topbar-add-menu-label">{item.label}</span>
+                        {item.subtitle && <span className="topbar-add-menu-sub">{item.subtitle}</span>}
+                      </button>
+                    </div>
+                  ))}
+                </div>,
+                document.body
+              )}
+            </div>
           )}
         </div>
       )}

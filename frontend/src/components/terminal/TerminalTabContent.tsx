@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useRef, type RefObject } from "react";
 import { useTerminal, type TerminalInputMode } from "../../hooks/useTerminal";
 import type { TerminalBlock } from "../../stores/blocksStore";
 import type { SearchAddon } from "@xterm/addon-search";
@@ -9,7 +9,7 @@ interface Props {
   active: boolean;
   suspended?: boolean;
   inputMode?: TerminalInputMode;
-  sendRef?: React.RefObject<((cmd: string) => void) | null>;
+  sendRef?: RefObject<((cmd: string) => void) | null>;
   onTerminalReady?: (terminal: Terminal, searchAddon: SearchAddon) => void;
   onCommand?: (command: string) => void;
   onBlockRightClick?: (block: TerminalBlock, position: { x: number; y: number }) => void;
@@ -26,6 +26,7 @@ export function TerminalTabContent({
   onBlockRightClick,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
+
   useTerminal(
     sessionId,
     containerRef,
@@ -33,7 +34,7 @@ export function TerminalTabContent({
     onCommand,
     onBlockRightClick,
     suspended || !active,
-    { inputMode, sendRef, active },
+    { inputMode, sendRef, active }
   );
 
   if (!active) return null;

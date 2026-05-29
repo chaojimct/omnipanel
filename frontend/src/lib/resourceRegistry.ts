@@ -139,6 +139,17 @@ export const workspaceResources: WorkspaceResource[] = [
   },
   {
     id: "staging-api",
+    type: "ssh",
+    name: "staging-api",
+    subtitle: "ubuntu@10.0.2.15:22",
+    modulePath: "/ssh",
+    environment: "staging",
+    status: "online",
+    tags: ["SSH", "SFTP"],
+    metrics: { CPU: "67%", 磁盘: "92%" },
+  },
+  {
+    id: "staging-api-server",
     type: "server",
     name: "staging-api",
     subtitle: "Ubuntu 22.04 · API 与 worker",
@@ -163,6 +174,10 @@ export const workspaceResources: WorkspaceResource[] = [
 export function getResourceById(id: string | null | undefined) {
   if (!id) return null;
   return workspaceResources.find((resource) => resource.id === id) ?? null;
+}
+
+export function getSshHosts() {
+  return workspaceResources.filter((resource) => resource.type === "ssh");
 }
 
 export function getResourcesByPath(pathname: string) {

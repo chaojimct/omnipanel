@@ -7,6 +7,7 @@ import { WebglAddon } from "@xterm/addon-webgl";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { SearchAddon } from "@xterm/addon-search";
 import { useTerminalStore } from "../stores/terminalStore";
+import { getResourceById } from "../lib/resourceRegistry";
 import { createBlockId, useBlocksStore, type TerminalBlock } from "../stores/blocksStore";
 
 const TERMINAL_THEME: ITheme = {
@@ -53,26 +54,30 @@ function decodeOutput(data: unknown): Uint8Array | null {
   return null;
 }
 
-/** Prevent concurrent create_terminal calls for the same tab (StrictMode / re-render races). */
+/** Prevent concurrent create_terminal calls for the same pane (StrictMode / re-render races). */
 const pendingBackendSessions = new Map<string, Promise<string>>();
 
-async function acquireBackendSession(sessionId: string, cols: number, rows: number): Promise<string> {
-  const existingSid = useTerminalStore
+function findPaneById(sessionId: string) {
+  return useTerminalStore
     .getState()
-    .tabs.find((t) => t.id === sessionId)?.backendSessionId;
+    .tabs.flatMap((tab) => tab.panes)
+    .find((pane) => pane.id === sessionId);
+}
+
+async function acquireBackendSession(sessionId: string, cols: number, rows: number): Promise<string> {
+  const existingSid = findPaneById(sessionId)?.backendSessionId;
   if (existingSid) return existingSid;
 
   let pending = pendingBackendSessions.get(sessionId);
   if (!pending) {
     pending = invoke<string>("create_terminal", { cols, rows })
       .then((sid) => {
-        const store = useTerminalStore.getState();
-        const tab = store.tabs.find((t) => t.id === sessionId);
-        if (tab?.backendSessionId) {
+        const pane = findPaneById(sessionId);
+        if (pane?.backendSessionId) {
           invoke("close_terminal", { id: sid }).catch(() => {});
-          return tab.backendSessionId;
+          return pane.backendSessionId;
         }
-        store.setBackendSessionId(sessionId, sid);
+        useTerminalStore.getState().setBackendSessionId(sessionId, sid);
         return sid;
       })
       .finally(() => {
@@ -166,6 +171,16 @@ export function useTerminal(
 
     function sendCommand(cmd: string) {
       writeToBackend(`${cmd}\r`);
+    }
+
+    function writeSessionBanner() {
+      const pane = useTerminalStore
+        .getState()
+        .tabs.flatMap((tab) => tab.panes)
+        .find((item) => item.id === sessionId);
+      if (pane?.type !== "remote" || !term) return;
+      const host = getResourceById(pane.resourceId);
+      term.writeln(`\r\n\x1b[33m[SSH] ${host?.name ?? pane.resourceId} · ${host?.subtitle ?? ""}\x1b[0m\r\n`);
     }
 
     sendCommandRef.current = sendCommand;
@@ -286,13 +301,12 @@ export function useTerminal(
     }
 
     async function ensureBackendSession(cols: number, rows: number) {
-      const existingSid = useTerminalStore
-        .getState()
-        .tabs.find((t) => t.id === sessionId)?.backendSessionId;
+      const existingSid = findPaneById(sessionId)?.backendSessionId;
 
       if (existingSid) {
         backendSid = existingSid;
         useTerminalStore.getState().setStatus(sessionId, "connected");
+        writeSessionBanner();
         flushPendingInput();
         return;
       }
@@ -303,6 +317,7 @@ export function useTerminal(
         if (destroyed) return;
         backendSid = sid;
         useTerminalStore.getState().setStatus(sessionId, "connected");
+        writeSessionBanner();
         flushPendingInput();
       } catch (err) {
         if (destroyed) return;

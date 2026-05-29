@@ -11,15 +11,27 @@ interface ResourceRailProps {
   title: string;
   resources: WorkspaceResource[];
   emptyText?: string;
+  /** 自定义资源选择行为；未提供则跳转到资源所属模块 */
+  onResourceSelect?: (resource: WorkspaceResource) => void;
 }
 
-export function ResourceRail({ title, resources, emptyText }: ResourceRailProps) {
+export function ResourceRail({ title, resources, emptyText, onResourceSelect }: ResourceRailProps) {
   const { t } = useI18n();
   const navigate = useNavigate();
   const activeResourceId = useWorkspaceStore((s) => s.activeResourceId);
   const selectResource = useWorkspaceStore((s) => s.selectResource);
   const setActivePath = useWorkspaceStore((s) => s.setActivePath);
   const resolvedEmpty = emptyText ?? t("common.noResources");
+
+  const handleSelect = (resource: WorkspaceResource) => {
+    if (onResourceSelect) {
+      onResourceSelect(resource);
+      return;
+    }
+    selectResource(resource.id);
+    setActivePath(resource.modulePath);
+    navigate(resource.modulePath);
+  };
 
   return (
     <div className="resource-rail">
@@ -36,11 +48,7 @@ export function ResourceRail({ title, resources, emptyText }: ResourceRailProps)
               key={resource.id}
               type="button"
               className={`resource-item${activeResourceId === resource.id ? " active" : ""}`}
-              onClick={() => {
-                selectResource(resource.id);
-                setActivePath(resource.modulePath);
-                navigate(resource.modulePath);
-              }}
+              onClick={() => handleSelect(resource)}
             >
               <span className={`resource-status status-${resource.status}`} />
               <span className="resource-body">

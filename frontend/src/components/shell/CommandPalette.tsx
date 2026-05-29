@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAiStore } from "../../stores/aiStore";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { useActionStore } from "../../stores/actionStore";
+import { openLocalTerminalSession } from "../../lib/terminalSession";
 import { useI18n } from "../../i18n";
 
 interface CommandItem {
@@ -26,8 +27,8 @@ const COMMAND_DEFS: CommandItem[] = [
   { id: "knowledge", labelKey: "shell.commandPalette.commands.knowledge", path: "/knowledge", categoryKey: "shell.commandPalette.categories.nav" },
   { id: "tasks", labelKey: "shell.commandPalette.commands.tasks", path: "/tasks", categoryKey: "shell.commandPalette.categories.nav" },
   { id: "settings", labelKey: "shell.commandPalette.commands.settings", shortcut: "⌘,", path: "/settings", categoryKey: "shell.commandPalette.categories.nav" },
-  { id: "new-terminal", labelKey: "shell.commandPalette.commands.newTerminal", shortcut: "⌘T", categoryKey: "shell.commandPalette.categories.action" },
-  { id: "new-ssh", labelKey: "shell.commandPalette.commands.newSsh", categoryKey: "shell.commandPalette.categories.action" },
+  { id: "new-terminal", labelKey: "shell.commandPalette.commands.newTerminal", shortcut: "⌘T", action: () => openLocalTerminalSession(), categoryKey: "shell.commandPalette.categories.action" },
+  { id: "new-ssh", labelKey: "shell.commandPalette.commands.newSsh", path: "/ssh", categoryKey: "shell.commandPalette.categories.action" },
   { id: "new-query", labelKey: "shell.commandPalette.commands.newQuery", categoryKey: "shell.commandPalette.categories.action" },
   { id: "risk-check", labelKey: "shell.commandPalette.commands.riskCheck", path: "/tasks", categoryKey: "shell.commandPalette.categories.security" },
   { id: "open-ai", labelKey: "shell.commandPalette.commands.openAi", shortcut: "⌘L", action: () => useAiStore.getState().openDrawer(), categoryKey: "shell.commandPalette.categories.ai" },

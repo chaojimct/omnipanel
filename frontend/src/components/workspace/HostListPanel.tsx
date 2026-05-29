@@ -17,9 +17,10 @@ const HOST_ICON = (
 
 interface HostListPanelProps {
   resources: WorkspaceResource[];
+  onConnect?: (hostId: string) => void;
 }
 
-export function HostListPanel({ resources }: HostListPanelProps) {
+export function HostListPanel({ resources, onConnect }: HostListPanelProps) {
   const { t } = useI18n();
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
@@ -72,21 +73,36 @@ export function HostListPanel({ resources }: HostListPanelProps) {
             <div key={group.env}>
               <div className="host-group-label">{group.label}</div>
               {group.items.map((host) => (
-                <button
+                <div
                   key={host.id}
-                  type="button"
-                  className={`host-item${activeResourceId === host.id ? " active" : ""}`}
-                  onClick={() => selectHost(host)}
+                  className={`host-item-row${activeResourceId === host.id ? " active" : ""}`}
                 >
-                  <div className="host-icon">{HOST_ICON}</div>
-                  <div className="host-info">
-                    <div className="host-name">{host.name}</div>
-                    <div className="host-addr">{host.subtitle}</div>
-                  </div>
-                  <span
-                    className={`host-status ${host.status === "offline" ? "offline" : "online"}`}
-                  />
-                </button>
+                  <button
+                    type="button"
+                    className="host-item"
+                    onClick={() => selectHost(host)}
+                    onDoubleClick={() => onConnect?.(host.id)}
+                  >
+                    <div className="host-icon">{HOST_ICON}</div>
+                    <div className="host-info">
+                      <div className="host-name">{host.name}</div>
+                      <div className="host-addr">{host.subtitle}</div>
+                    </div>
+                    <span
+                      className={`host-status ${host.status === "offline" ? "offline" : "online"}`}
+                    />
+                  </button>
+                  {onConnect && (
+                    <button
+                      type="button"
+                      className="host-connect-btn"
+                      title={t("ssh.connect")}
+                      onClick={() => onConnect(host.id)}
+                    >
+                      {t("ssh.connect")}
+                    </button>
+                  )}
+                </div>
               ))}
             </div>
           ))

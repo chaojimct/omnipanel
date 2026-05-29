@@ -218,15 +218,55 @@ fn write_zsh_init(integration: &str) -> Result<String> {
 /// Check if a program exists in PATH.
 #[cfg(windows)]
 fn which(name: &str) -> Option<String> {
-    let output = std::process::Command::new("where")
-        .arg(name)
-        .output()
-        .ok()?;
-    if output.status.success() {
-        Some(String::from_utf8_lossy(&output.stdout).trim().to_string())
-    } else {
-        None
+    use std::ffi::OsString;
+    use std::path::{Path, PathBuf};
+
+    fn candidate_paths(dir: &Path, name: &str, pathext: &[OsString]) -> Vec<PathBuf> {
+        let base = dir.join(name);
+        if base.extension().is_some() {
+            return vec![base];
+        }
+
+        let mut candidates = Vec::with_capacity(pathext.len() + 1);
+        candidates.push(base.clone());
+        for ext in pathext {
+            let ext = ext.to_string_lossy();
+            let suffix = ext.strip_prefix('.').unwrap_or(&ext);
+            candidates.push(dir.join(format!("{name}.{suffix}")));
+        }
+        candidates
     }
+
+    let direct = Path::new(name);
+    if direct.components().count() > 1 || direct.is_absolute() {
+        return direct.exists().then(|| direct.to_string_lossy().to_string());
+    }
+
+    let pathext = std::env::var_os("PATHEXT")
+        .map(|value| {
+            value
+                .to_string_lossy()
+                .split(';')
+                .filter(|item| !item.is_empty())
+                .map(OsString::from)
+                .collect::<Vec<_>>()
+        })
+        .filter(|items| !items.is_empty())
+        .unwrap_or_else(|| vec![".COM", ".EXE", ".BAT", ".CMD"].into_iter().map(OsString::from).collect());
+
+    let path_dirs = std::env::var_os("PATH")
+        .map(|value| std::env::split_paths(&value).collect::<Vec<_>>())
+        .unwrap_or_default();
+
+    for dir in path_dirs {
+        for candidate in candidate_paths(&dir, name, &pathext) {
+            if candidate.is_file() {
+                return Some(candidate.to_string_lossy().to_string());
+            }
+        }
+    }
+
+    None
 }
 
 #[cfg(not(windows))]
