@@ -33,13 +33,12 @@ export function PaneRenderer({
   onBlockRightClick,
 }: PaneRendererProps) {
   if (layout.type === "leaf") {
-    const isActive = layout.tabId === activeTabId;
     return (
       <TerminalTabContent
-        sessionId={layout.tabId}
-        active={layout.tabId === activeTabId}
+        sessionId={layout.paneId}
+        active={layout.paneId === activeTabId}
         suspended={suspended}
-        onTerminalReady={(term, sa) => onTerminalReady(layout.tabId, term, sa)}
+        onTerminalReady={(term, sa) => onTerminalReady(layout.paneId, term, sa)}
         onCommand={onCommand}
         onBlockRightClick={onBlockRightClick}
       />
