@@ -155,6 +155,7 @@ function AppShell() {
   const title = getRouteTitle(location.pathname);
   const isTerminal = location.pathname === "/terminal";
   const [otherRoutesMounted, setOtherRoutesMounted] = useState(!isTerminal);
+  const [terminalMounted, setTerminalMounted] = useState(isTerminal);
   const drawerOpen = useAiStore((s) => s.drawerOpen);
   const drawerMode = useAiStore((s) => s.drawerMode);
   const isPinned = drawerOpen && drawerMode === "pinned";
@@ -167,6 +168,12 @@ function AppShell() {
   useEffect(() => {
     if (!isTerminal) {
       setOtherRoutesMounted(true);
+    }
+  }, [isTerminal]);
+
+  useEffect(() => {
+    if (isTerminal) {
+      setTerminalMounted(true);
     }
   }, [isTerminal]);
 
@@ -198,7 +205,7 @@ function AppShell() {
         <div className="content-area">
           <div className="content-routes">
             <div className={`route-panel${isTerminal ? " route-panel--active" : ""}`}>
-              <TerminalPanel />
+              {terminalMounted && <TerminalPanel />}
             </div>
             <div className={`route-panel${!isTerminal ? " route-panel--active" : ""}`}>
               {otherRoutesMounted && (

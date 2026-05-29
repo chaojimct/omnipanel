@@ -1,10 +1,7 @@
 import { useEffect, useCallback, useState, useMemo, useRef } from "react";
 import { useLocation } from "react-router-dom";
-import { Channel, invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
-import { Terminal } from "@xterm/xterm";
-import { FitAddon } from "@xterm/addon-fit";
-import { useTerminalStore } from "../../stores/terminalStore";
+import { useTerminalStore, type PaneLayout } from "../../stores/terminalStore";
+import { PaneRenderer } from "../../components/terminal/PaneRenderer";
 import { DockWorkspace } from "../../components/dock";
 import { ResourceRail } from "../../components/workspace/ResourceRail";
 import { workspaceResources, getResourceById } from "../../lib/resourceRegistry";
@@ -14,119 +11,6 @@ import { useTopbarTabs } from "../../hooks/useTopbarTabs";
 import { useI18n } from "../../i18n";
 
 let tabCounter = 0;
-
-function TerminalView({
-  sessionId,
-  sendRef,
-}: {
-  sessionId: string;
-  sendRef: React.RefObject<((cmd: string) => void) | null>;
-}) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const termRef = useRef<Terminal | null>(null);
-  const backendSidRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-
-    const term = new Terminal({
-      cursorBlink: true,
-      fontSize: 13,
-      fontFamily: '"Cascadia Code", "Fira Code", Menlo, Consolas, monospace',
-      theme: {
-        background: "#1a1717",
-        foreground: "#fdfcfc",
-        cursor: "#fdfcfc",
-        selectionBackground: "#007aff30",
-      },
-      scrollback: 5000,
-    });
-
-    const fitAddon = new FitAddon();
-    term.loadAddon(fitAddon);
-    term.open(container);
-
-    // Disable direct keyboard input
-    term.attachCustomKeyEventHandler(() => false);
-
-    // Fit on resize
-    const observer = new ResizeObserver(() => {
-      try { fitAddon.fit(); } catch { /* ignore */ }
-    });
-    observer.observe(container);
-
-    // Delay fit slightly to ensure container is laid out
-    const fitTimer = setTimeout(() => fitAddon.fit(), 50);
-
-    termRef.current = term;
-
-    // Create backend PTY session
-    const onOutput = new Channel((data: unknown) => {
-      try {
-        const bytes = data instanceof Uint8Array ? data : new Uint8Array(data as number[]);
-        term.write(bytes);
-      } catch (e) {
-        console.error("[Terminal] onOutput error:", e);
-      }
-    });
-
-    invoke<string>("create_terminal", {
-      cols: term.cols,
-      rows: term.rows,
-      onOutput,
-    })
-      .then((sid) => {
-        backendSidRef.current = sid;
-        useTerminalStore.getState().setBackendSessionId(sessionId, sid);
-      })
-      .catch((err) => {
-        console.error("[Terminal] create_terminal failed:", err);
-        term.writeln(`\r\n\x1b[31mFailed to create terminal: ${err}\x1b[0m`);
-      });
-
-    // Listen for process exit
-    const unlisten = listen<{ session_id: string; event: string }>(
-      "terminal-event",
-      (ev) => {
-        if (ev.payload.session_id === backendSidRef.current) {
-          if (ev.payload.event === "exited") {
-            term.writeln("\r\n\x1b[33m[Process exited]\x1b[0m");
-          }
-        }
-      }
-    );
-
-    // Expose sendCommand via ref
-    sendRef.current = async (cmd: string) => {
-      term.write(`\r\n\x1b[36m${cmd}\x1b[0m\r\n`);
-      if (backendSidRef.current) {
-        try {
-          await invoke("write_terminal", {
-            id: backendSidRef.current,
-            data: Array.from(new TextEncoder().encode(cmd + "\n")),
-          });
-        } catch (e) {
-          term.writeln(`\x1b[31mFailed to send: ${e}\x1b[0m`);
-        }
-      }
-    };
-
-    return () => {
-      clearTimeout(fitTimer);
-      observer.disconnect();
-      unlisten.then((fn) => fn()).catch(() => {});
-      if (backendSidRef.current) {
-        invoke("close_terminal", { id: backendSidRef.current }).catch(() => {});
-      }
-      sendRef.current = null;
-      term.dispose();
-      termRef.current = null;
-    };
-  }, [sessionId]);
-
-  return <div ref={containerRef} className="term-xterm-wrap" />;
-}
 
 interface ChatMessage {
   role: "system" | "user" | "output";
@@ -226,6 +110,7 @@ export function TerminalPanel() {
   const activeResource = getResourceById(activeResourceId);
   const enqueueAction = useActionStore((s) => s.enqueueAction);
   const sendRef = useRef<((cmd: string) => void) | null>(null);
+  const handleTerminalReady = useCallback(() => {}, []);
 
   const [messages, setMessages] = useState<ChatMessage[]>([
     { role: "system", text: "Terminal session started. Type commands in the input box below." },
@@ -277,7 +162,14 @@ export function TerminalPanel() {
 
   const handleCommand = useCallback(
     (command: string) => {
-      sendRef.current?.(command);
+      if (!sendRef.current) {
+        setMessages((prev) => [
+          ...prev,
+          { role: "system", text: "Terminal is not ready yet. Please wait a moment and try again." },
+        ]);
+        return;
+      }
+      sendRef.current(command);
       setMessages((prev) => [...prev, { role: "user", text: command }]);
       enqueueAction({
         type: "terminal",
@@ -294,6 +186,7 @@ export function TerminalPanel() {
   if (tabs.length === 0) return null;
 
   const activeSessionId = activeTabId ?? tabs[0].id;
+  const activeLayout: PaneLayout = { type: "leaf", tabId: activeSessionId };
   const terminalResources = workspaceResources.filter((r) => r.type === "terminal");
 
   return (
@@ -307,7 +200,16 @@ export function TerminalPanel() {
       }
       main={
         <div className="term-main">
-          <TerminalView sessionId={activeSessionId} sendRef={sendRef} />
+          <div className="term-panes">
+            <PaneRenderer
+              layout={activeLayout}
+              activeTabId={activeSessionId}
+              suspended={!isActiveRoute}
+              inputMode="external"
+              sendRef={sendRef}
+              onTerminalReady={handleTerminalReady}
+            />
+          </div>
           <CommandInput onSend={handleCommand} />
         </div>
       }

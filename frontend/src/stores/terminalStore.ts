@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { invoke } from "@tauri-apps/api/core";
 import type { Terminal } from "@xterm/xterm";
 
 export interface TerminalTab {
@@ -74,20 +75,19 @@ export const useTerminalStore = create<TerminalState>((set) => ({
     set((state) => {
       const newTab = { ...tab, terminal: null, status: "connecting" as const, backendSessionId: null };
       const newLeaf: PaneLayout = { type: "leaf", tabId: tab.id };
-      if (!state.layout) {
-        return { tabs: [...state.tabs, newTab], layout: newLeaf };
-      }
-      // Wrap existing layout + new leaf in a horizontal split
-      const newLayout: PaneLayout = {
-        type: "split",
-        direction: "horizontal",
-        children: [state.layout, newLeaf],
+      return {
+        tabs: [...state.tabs, newTab],
+        // Topbar tabs switch views — do not split panes unless splitPane() is used.
+        layout: newLeaf,
       };
-      return { tabs: [...state.tabs, newTab], layout: newLayout };
     }),
 
   removeTab: (id) =>
     set((state) => {
+      const tab = state.tabs.find((t) => t.id === id);
+      if (tab?.backendSessionId) {
+        invoke("close_terminal", { id: tab.backendSessionId }).catch(() => {});
+      }
       const remaining = state.tabs.filter((t) => t.id !== id);
       const newActive =
         state.activeTabId === id
@@ -102,25 +102,37 @@ export const useTerminalStore = create<TerminalState>((set) => ({
   setActiveTab: (id) => set({ activeTabId: id }),
 
   setTerminal: (id, terminal) =>
-    set((state) => ({
-      tabs: state.tabs.map((t) =>
-        t.id === id ? { ...t, terminal } : t
-      ),
-    })),
+    set((state) => {
+      const tab = state.tabs.find((t) => t.id === id);
+      if (!tab || tab.terminal === terminal) return state;
+      return {
+        tabs: state.tabs.map((t) =>
+          t.id === id ? { ...t, terminal } : t
+        ),
+      };
+    }),
 
   setStatus: (id, status) =>
-    set((state) => ({
-      tabs: state.tabs.map((t) =>
-        t.id === id ? { ...t, status } : t
-      ),
-    })),
+    set((state) => {
+      const tab = state.tabs.find((t) => t.id === id);
+      if (!tab || tab.status === status) return state;
+      return {
+        tabs: state.tabs.map((t) =>
+          t.id === id ? { ...t, status } : t
+        ),
+      };
+    }),
 
   setBackendSessionId: (id, backendSessionId) =>
-    set((state) => ({
-      tabs: state.tabs.map((t) =>
-        t.id === id ? { ...t, backendSessionId } : t
-      ),
-    })),
+    set((state) => {
+      const tab = state.tabs.find((t) => t.id === id);
+      if (!tab || tab.backendSessionId === backendSessionId) return state;
+      return {
+        tabs: state.tabs.map((t) =>
+          t.id === id ? { ...t, backendSessionId } : t
+        ),
+      };
+    }),
 
   splitPane: (tabId, direction, newTabId) =>
     set((state) => ({
