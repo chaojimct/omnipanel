@@ -1,6 +1,13 @@
 import { create } from "zustand";
 import type { Terminal } from "@xterm/xterm";
 
+let tabCounter = 0;
+
+export function createTerminalTabId() {
+  tabCounter += 1;
+  return `tab-${tabCounter}`;
+}
+
 export interface TerminalPane {
   id: string;
   backendSessionId: string | null;
@@ -44,6 +51,9 @@ interface TerminalState {
   setTerminal: (paneId: string, terminal: Terminal) => void;
   setStatus: (paneId: string, status: TerminalPane["status"]) => void;
   setBackendSessionId: (paneId: string, backendSessionId: string) => void;
+  findTabByResourceId: (resourceId: string, type?: TerminalPane["type"]) => TerminalTab | undefined;
+  openOrFocusSshTab: (hostId: string, title: string) => string;
+  openOrFocusLocalTab: (title?: string) => string;
 }
 
 function updatePaneInTabs(
@@ -57,18 +67,24 @@ function updatePaneInTabs(
   }));
 }
 
-export const useTerminalStore = create<TerminalState>((set) => ({
+function createPane(
+  pane: Omit<TerminalPane, "terminal" | "status" | "backendSessionId">
+): TerminalPane {
+  return {
+    ...pane,
+    terminal: null,
+    status: "connecting",
+    backendSessionId: null,
+  };
+}
+
+export const useTerminalStore = create<TerminalState>((set, get) => ({
   tabs: [],
   activeTabId: null,
 
   addTab: (pane, options) =>
     set((state) => {
-      const rootPane: TerminalPane = {
-        ...pane,
-        terminal: null,
-        status: "connecting",
-        backendSessionId: null,
-      };
+      const rootPane = createPane(pane);
       const newTab: TerminalTab = {
         id: pane.id,
         title: options?.title ?? pane.title,
@@ -134,6 +150,61 @@ export const useTerminalStore = create<TerminalState>((set) => ({
     set((state) => ({
       tabs: updatePaneInTabs(state.tabs, paneId, (pane) => ({ ...pane, backendSessionId })),
     })),
+
+  findTabByResourceId: (resourceId, type) =>
+    get().tabs.find((tab) =>
+      tab.panes.some((pane) => pane.resourceId === resourceId && (type ? pane.type === type : true))
+    ),
+
+  openOrFocusSshTab: (hostId, title) => {
+    const existing = get().findTabByResourceId(hostId, "remote");
+    if (existing) {
+      set({ activeTabId: existing.id });
+      return existing.id;
+    }
+
+    const id = createTerminalTabId();
+    get().addTab(
+      {
+        id,
+        title,
+        type: "remote",
+        resourceId: hostId,
+        shellLabel: "SSH",
+        cwd: "~/",
+        purpose: "SSH Workbench",
+        commandPack: [],
+      },
+      { title }
+    );
+    set({ activeTabId: id });
+    return id;
+  },
+
+  openOrFocusLocalTab: (title = "local") => {
+    const existing = get().findTabByResourceId("local-terminal", "local");
+    if (existing) {
+      set({ activeTabId: existing.id });
+      return existing.id;
+    }
+
+    const id = createTerminalTabId();
+    get().addTab(
+      {
+        id,
+        title,
+        type: "local",
+        resourceId: "local-terminal",
+        shellLabel: "PowerShell",
+        cwd: "~/workspace",
+        purpose: "Local Workspace",
+        commandPack: [],
+      },
+      { title }
+    );
+    set({ activeTabId: id });
+    return id;
+  },
 }));
 
 export function getBackendSessionId(paneId: string): string {

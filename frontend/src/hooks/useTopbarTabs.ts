@@ -17,6 +17,7 @@ export function useTopbarTabs(
   const clearTabs = useTopbarStore((s) => s.clearTabs);
 
   const { mode, showAddTab, addTabTitle, enabled = true } = options;
+  const addMenuItems = handlers.addMenuItems;
 
   useEffect(() => {
     if (!enabled) {
@@ -29,9 +30,11 @@ export function useTopbarTabs(
         onSelect: (id) => handlerRef.current.onSelect?.(id),
         onClose: (id) => handlerRef.current.onClose?.(id),
         onAdd: () => handlerRef.current.onAdd?.(),
+        addMenuItems: handlerRef.current.addMenuItems,
+        onAddMenuSelect: (id) => handlerRef.current.onAddMenuSelect?.(id),
       },
       { mode, showAddTab, addTabTitle }
     );
     return () => clearTabs();
-  }, [tabs, mode, showAddTab, addTabTitle, enabled, setTabs, clearTabs]);
+  }, [tabs, addMenuItems, mode, showAddTab, addTabTitle, enabled, setTabs, clearTabs]);
 }

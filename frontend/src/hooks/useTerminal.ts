@@ -7,6 +7,7 @@ import { WebglAddon } from "@xterm/addon-webgl";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { SearchAddon } from "@xterm/addon-search";
 import { useTerminalStore } from "../stores/terminalStore";
+import { getResourceById } from "../lib/resourceRegistry";
 import { createBlockId, useBlocksStore, type TerminalBlock } from "../stores/blocksStore";
 
 const TERMINAL_THEME: ITheme = {
@@ -219,6 +220,16 @@ export function useTerminal(
             backendSid = sid;
             useTerminalStore.getState().setBackendSessionId(sessionId, sid);
             setStatus(sessionId, "connected");
+            const pane = useTerminalStore
+              .getState()
+              .tabs.flatMap((tab) => tab.panes)
+              .find((item) => item.id === sessionId);
+            if (pane?.type === "remote") {
+              const host = getResourceById(pane.resourceId);
+              term!.writeln(
+                `\r\n\x1b[33m[SSH] ${host?.name ?? pane.resourceId} · ${host?.subtitle ?? ""}\x1b[0m\r\n`
+              );
+            }
             // Flush any buffered input
             for (const data of pendingInput) {
               invoke("write_terminal", {

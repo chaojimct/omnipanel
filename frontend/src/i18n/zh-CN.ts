@@ -182,10 +182,24 @@ export const zhCN = {
     blocked: "待确认",
   },
   terminal: {
+    localTab: "local",
     sidebar: { title: "终端资源", collapse: "收起侧栏", expand: "展开侧栏" },
     command: {
       placeholder: "输入命令… (Enter 发送, Shift+Enter 换行)",
       send: "发送",
+    },
+    newSession: {
+      local: "新建本地 Shell",
+      localDesc: "打开新的本地 PTY 标签",
+      manageHosts: "管理主机…",
+      manageHostsDesc: "跳转到主机模块添加连接",
+    },
+    context: {
+      title: "终端上下文",
+      resource: "资源",
+      localSession: "本地 PTY 会话",
+      sshSession: "SSH 远程会话",
+      dangerConfirm: "生成危险确认",
     },
     actions: {
       command: "终端命令",

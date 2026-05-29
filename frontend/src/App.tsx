@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
+import { BrowserRouter, Routes, Route, useLocation, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { Sidebar } from "./components/shell/Sidebar";
 import { Topbar } from "./components/shell/Topbar";
@@ -24,6 +24,7 @@ import { useWorkspaceStore } from "./stores/workspaceStore";
 import { useActionStore, getPendingRiskAction } from "./stores/actionStore";
 import { useTopbarStore } from "./stores/topbarStore";
 import { getResourceById } from "./lib/resourceRegistry";
+import { openSshTerminalSession } from "./lib/terminalSession";
 import type { DangerCheckResult } from "./lib/commandGuard";
 import { getRouteTitle, useI18n } from "./i18n";
 
@@ -51,7 +52,15 @@ function TopbarPageActions() {
 
   if (path === "/ssh") {
     return (
-      <button className="btn btn-primary btn-sm">
+      <button
+        type="button"
+        className="btn btn-primary btn-sm"
+        onClick={() => {
+          if (activeResource?.type === "ssh") {
+            openSshTerminalSession(activeResource.id);
+          }
+        }}
+      >
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
           <path d="M12 5v14M5 12h14" />
         </svg>
@@ -121,6 +130,7 @@ const TOPBAR_TAB_ROUTES = ["/terminal", "/ssh", "/database", "/docker", "/server
 
 function AppShell() {
   const location = useLocation();
+  const navigate = useNavigate();
   const title = getRouteTitle(location.pathname);
   const isTerminal = location.pathname === "/terminal";
   const [otherRoutesMounted, setOtherRoutesMounted] = useState(!isTerminal);
@@ -148,6 +158,15 @@ function AppShell() {
       useTopbarStore.getState().clearTabs();
     }
   }, [location.pathname]);
+
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const path = (event as CustomEvent<{ path: string }>).detail?.path;
+      if (path) navigate(path);
+    };
+    window.addEventListener("omnipanel-navigate", handler);
+    return () => window.removeEventListener("omnipanel-navigate", handler);
+  }, [navigate]);
 
   const riskResult: DangerCheckResult | null = pendingRiskAction
     ? pendingRiskAction.riskCheck ?? {

@@ -286,6 +286,40 @@
   .topbar-tab:hover .close { opacity: 0.6; }
   .topbar-tab .close:hover { opacity: 1; background: var(--surface); }
   .topbar-tab-add { margin-left: 4px; flex-shrink: 0; }
+  .topbar-tab-add-wrap { position: relative; margin-left: 4px; flex-shrink: 0; }
+  .topbar-add-menu {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    min-width: 240px;
+    max-height: 320px;
+    overflow-y: auto;
+    padding: var(--sp-1);
+    background: var(--bg-deeper);
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+    box-shadow: 0 8px 24px rgb(0 0 0 / 0.28);
+    z-index: 40;
+  }
+  .topbar-add-menu-item {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    width: 100%;
+    padding: var(--sp-2) var(--sp-3);
+    border: none;
+    border-radius: var(--r-sm);
+    background: transparent;
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+    font: inherit;
+  }
+  .topbar-add-menu-item:hover { background: var(--surface); }
+  .topbar-add-menu-label { font-size: 12px; font-weight: 500; color: var(--fg); }
+  .topbar-add-menu-sub { font-size: 11px; color: var(--meta); }
+  .topbar-add-menu-divider { height: 1px; margin: var(--sp-1) 0; background: var(--border); }
   .topbar-tabs--segment .topbar-tab,
   .topbar-tabs--connection .topbar-tab { cursor: pointer; }
   .topbar-tabs--segment .topbar-tab svg { flex-shrink: 0; opacity: 0.7; }
@@ -695,6 +729,12 @@
   .host-list-header h3 { font-size: 13px; font-weight: 600; flex: 1; }
   .host-list-search { padding: var(--sp-2) var(--sp-3); border-bottom: 1px solid var(--border); }
   .host-list { flex: 1; overflow-y: auto; padding: var(--sp-2); }
+  .host-item-row { display: flex; align-items: stretch; gap: var(--sp-1); border-radius: var(--r-sm); }
+  .host-item-row.active { background: var(--accent-soft); }
+  .host-item-row .host-item { flex: 1; min-width: 0; }
+  .host-item-row.active .host-item { background: transparent; }
+  .host-connect-btn { flex-shrink: 0; align-self: center; margin-right: var(--sp-2); padding: 2px 8px; font-size: 11px; border-radius: var(--r-sm); border: 1px solid var(--border); background: var(--surface); color: var(--fg-2); cursor: pointer; }
+  .host-connect-btn:hover { border-color: var(--accent); color: var(--accent); }
   .host-group-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--meta); padding: var(--sp-3) var(--sp-2) var(--sp-1); }
   .host-item { display: flex; align-items: center; gap: var(--sp-3); padding: var(--sp-2) var(--sp-3); border-radius: var(--r-sm); cursor: pointer; transition: background 0.12s; width: 100%; min-width: 0; text-align: left; border: none; background: transparent; font: inherit; color: inherit; }
   .host-item:hover { background: var(--surface); }

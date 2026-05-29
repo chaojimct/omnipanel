@@ -4,8 +4,9 @@ import { Channel, invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
-import { useTerminalStore, type PaneLayout, type TerminalPane, type TerminalTab } from "../../stores/terminalStore";
-import { getResourceById, type WorkspaceResource } from "../../lib/resourceRegistry";
+import { createTerminalTabId, useTerminalStore, type PaneLayout, type TerminalPane, type TerminalTab } from "../../stores/terminalStore";
+import { getResourceById, getSshHosts, type WorkspaceResource } from "../../lib/resourceRegistry";
+import { openSshTerminalSession } from "../../lib/terminalSession";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { useActionStore } from "../../stores/actionStore";
 import { useAiStore } from "../../stores/aiStore";
@@ -15,6 +16,14 @@ import { useI18n } from "../../i18n";
 let tabCounter = 0;
 
 const isTauriRuntime = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+
+function tabLabel(tab: TerminalTab) {
+  const pane = tab.panes.find((item) => item.id === tab.activePaneId) ?? tab.panes[0];
+  if (pane?.type === "remote") {
+    return getResourceById(pane.resourceId)?.name ?? tab.title;
+  }
+  return tab.title;
+}
 
 type SessionBlueprint = {
   summary: string;
@@ -921,6 +930,7 @@ export function TerminalPanel() {
   const paneSendersRef = useRef<Record<string, (cmd: string) => void>>({});
   const [draggingPaneId, setDraggingPaneId] = useState<string | null>(null);
   const [dropTargetPaneId, setDropTargetPaneId] = useState<string | null>(null);
+  const sshHosts = useMemo(() => getSshHosts(), []);
 
   useEffect(() => {
     if (tabs.length > 0) return;
@@ -957,6 +967,13 @@ export function TerminalPanel() {
   );
 
   useEffect(() => {
+    if (!isActiveRoute || !activePane?.resourceId) return;
+    if (activePane.resourceId !== workspaceActiveResourceId) {
+      selectResource(activePane.resourceId);
+    }
+  }, [activePane?.resourceId, isActiveRoute, selectResource, workspaceActiveResourceId]);
+
+  useEffect(() => {
     setDraggingPaneId(null);
     setDropTargetPaneId(null);
   }, [activeWorkspaceTab?.id]);
@@ -964,8 +981,8 @@ export function TerminalPanel() {
   const isPinnedAi = aiDrawerOpen && aiDrawerMode === "pinned";
   const shellName = activePane?.shellLabel ?? (isTauriRuntime ? "bash" : "PowerShell");
 
-  const handleAddTab = useCallback(() => {
-    const id = `tab-${tabCounter++}`;
+  const handleAddLocalTab = useCallback(() => {
+    const id = createTerminalTabId();
     addTab(
       {
         id,
@@ -990,13 +1007,50 @@ export function TerminalPanel() {
     [tabs.length, removeTab]
   );
 
+  const addMenuItems = useMemo(
+    () => [
+      {
+        id: "local",
+        label: t("terminal.newSession.local"),
+        subtitle: t("terminal.newSession.localDesc"),
+      },
+      ...sshHosts.map((host) => ({
+        id: host.id,
+        label: host.name,
+        subtitle: host.subtitle,
+      })),
+      {
+        id: "manage-hosts",
+        label: t("terminal.newSession.manageHosts"),
+        subtitle: t("terminal.newSession.manageHostsDesc"),
+        dividerBefore: true,
+      },
+    ],
+    [sshHosts, t]
+  );
+
+  const handleAddMenuSelect = useCallback(
+    (id: string) => {
+      if (id === "local") {
+        handleAddLocalTab();
+        return;
+      }
+      if (id === "manage-hosts") {
+        navigate("/ssh");
+        return;
+      }
+      openSshTerminalSession(id);
+    },
+    [handleAddLocalTab, navigate]
+  );
+
   const topbarTabs = useMemo(
     () =>
       tabs.map((tab) => {
         const pane = tab.panes.find((item) => item.id === tab.activePaneId) ?? tab.panes[0];
         return {
           id: tab.id,
-          label: tab.title,
+          label: tabLabel(tab),
           active: tab.id === activeTabId,
           closable: tabs.length > 1,
           status: pane?.status === "disconnected" ? ("offline" as const) : pane?.status ?? ("offline" as const),
@@ -1010,7 +1064,8 @@ export function TerminalPanel() {
     {
       onSelect: setActiveTab,
       onClose: handleCloseTab,
-      onAdd: handleAddTab,
+      addMenuItems,
+      onAddMenuSelect: handleAddMenuSelect,
     },
     { mode: "session", showAddTab: true, enabled: isActiveRoute }
   );

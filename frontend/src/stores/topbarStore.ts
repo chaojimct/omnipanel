@@ -21,6 +21,16 @@ export interface TopbarHandlers {
   onSelect?: (id: string) => void;
   onClose?: (id: string) => void;
   onAdd?: () => void;
+  /** 终端等模块：「+」展开新建菜单而非直接新建 */
+  addMenuItems?: TopbarAddMenuItem[];
+  onAddMenuSelect?: (id: string) => void;
+}
+
+export interface TopbarAddMenuItem {
+  id: string;
+  label: string;
+  subtitle?: string;
+  dividerBefore?: boolean;
 }
 
 export interface TopbarTabOptions {

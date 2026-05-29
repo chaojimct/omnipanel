@@ -184,10 +184,24 @@ export const enUS: TranslationDict = {
     blocked: "Pending",
   },
   terminal: {
+    localTab: "local",
     sidebar: { title: "Terminal Resources", collapse: "Collapse sidebar", expand: "Expand sidebar" },
     command: {
       placeholder: "Type command... (Enter to send, Shift+Enter for newline)",
       send: "Send",
+    },
+    newSession: {
+      local: "New Local Shell",
+      localDesc: "Open another local PTY tab",
+      manageHosts: "Manage Hosts…",
+      manageHostsDesc: "Go to Host module to add connections",
+    },
+    context: {
+      title: "Terminal Context",
+      resource: "Resource",
+      localSession: "Local PTY session",
+      sshSession: "SSH remote session",
+      dangerConfirm: "Generate Danger Confirmation",
     },
     actions: {
       command: "Terminal Command",

@@ -5,6 +5,7 @@ import { useTopbarStore, type TopbarTabDef } from "../../stores/topbarStore";
 import { getResourceById, type EnvironmentTag, type ResourceType } from "../../lib/resourceRegistry";
 import { useI18n } from "../../i18n";
 import type { ReactNode, MouseEvent } from "react";
+import { useEffect, useRef, useState } from "react";
 
 interface TopbarProps {
   title: string;
@@ -95,6 +96,20 @@ export function Topbar({ title, children }: TopbarProps) {
   };
 
   const aiDrawerOpen = useAiStore((state) => state.drawerOpen);
+  const [addMenuOpen, setAddMenuOpen] = useState(false);
+  const addMenuRef = useRef<HTMLDivElement>(null);
+  const hasAddMenu = (handlers.addMenuItems?.length ?? 0) > 0;
+
+  useEffect(() => {
+    if (!addMenuOpen) return;
+    const onPointerDown = (event: Event) => {
+      if (!addMenuRef.current?.contains(event.target as Node)) {
+        setAddMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onPointerDown);
+    return () => document.removeEventListener("mousedown", onPointerDown);
+  }, [addMenuOpen]);
 
   const handleDoubleClick = (event: MouseEvent) => {
     const target = event.target as HTMLElement;
@@ -144,12 +159,44 @@ export function Topbar({ title, children }: TopbarProps) {
               )}
             </button>
           ))}
-          {showAddTab && handlers.onAdd && (
-            <button className="btn-icon topbar-tab-add" title={addTitle} onClick={handlers.onAdd}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M12 5v14M5 12h14" />
-              </svg>
-            </button>
+          {showAddTab && (handlers.onAdd || hasAddMenu) && (
+            <div className="topbar-tab-add-wrap" ref={addMenuRef}>
+              <button
+                className={`btn-icon topbar-tab-add${addMenuOpen ? " active" : ""}`}
+                title={addTitle}
+                onClick={() => {
+                  if (hasAddMenu) {
+                    setAddMenuOpen((open) => !open);
+                    return;
+                  }
+                  handlers.onAdd?.();
+                }}
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M12 5v14M5 12h14" />
+                </svg>
+              </button>
+              {addMenuOpen && hasAddMenu && (
+                <div className="topbar-add-menu">
+                  {handlers.addMenuItems!.map((item) => (
+                    <div key={item.id}>
+                      {item.dividerBefore && <div className="topbar-add-menu-divider" />}
+                      <button
+                        type="button"
+                        className="topbar-add-menu-item"
+                        onClick={() => {
+                          handlers.onAddMenuSelect?.(item.id);
+                          setAddMenuOpen(false);
+                        }}
+                      >
+                        <span className="topbar-add-menu-label">{item.label}</span>
+                        {item.subtitle && <span className="topbar-add-menu-sub">{item.subtitle}</span>}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           )}
         </div>
       )}
