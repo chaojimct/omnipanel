@@ -32,43 +32,12 @@ function TopbarPageActions() {
   const location = useLocation();
   const path = location.pathname;
   const openAi = () => useAiStore.getState().openDrawer();
-  const enqueueAction = useActionStore((s) => s.enqueueAction);
-  const activeResourceId = useWorkspaceStore((s) => s.activeResourceId);
+  const enqueueAction = useActionStore((state) => state.enqueueAction);
+  const activeResourceId = useWorkspaceStore((state) => state.activeResourceId);
   const activeResource = getResourceById(activeResourceId);
 
   if (path === "/terminal") {
-    return (
-      <>
-        <button className="btn-icon" title="Split Horizontal">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-            <rect x="3" y="3" width="18" height="18" rx="2" />
-            <path d="M3 12h18" />
-          </svg>
-        </button>
-        <button className="btn-icon" title="Split Vertical">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-            <rect x="3" y="3" width="18" height="18" rx="2" />
-            <path d="M12 3v18" />
-          </svg>
-        </button>
-        <button
-          className="btn-icon"
-          title="Search (Ctrl+Shift+F)"
-          onClick={() => window.dispatchEvent(new CustomEvent("toggle-terminal-search"))}
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-            <circle cx="11" cy="11" r="8" />
-            <path d="m21 21-4.3-4.3" />
-          </svg>
-        </button>
-        <button className="btn-icon" title={t("shell.topbar.aiAssistant")} onClick={openAi}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-            <path d="M12 2a4 4 0 014 4v1a4 4 0 01-8 0V6a4 4 0 014-4z" />
-            <path d="M12 17v4M8 21h8" />
-          </svg>
-        </button>
-      </>
-    );
+    return null;
   }
 
   if (path === "/database") {
@@ -156,13 +125,13 @@ function AppShell() {
   const isTerminal = location.pathname === "/terminal";
   const [otherRoutesMounted, setOtherRoutesMounted] = useState(!isTerminal);
   const [terminalMounted, setTerminalMounted] = useState(isTerminal);
-  const drawerOpen = useAiStore((s) => s.drawerOpen);
-  const drawerMode = useAiStore((s) => s.drawerMode);
+  const drawerOpen = useAiStore((state) => state.drawerOpen);
+  const drawerMode = useAiStore((state) => state.drawerMode);
   const isPinned = drawerOpen && drawerMode === "pinned";
-  const setActivePath = useWorkspaceStore((s) => s.setActivePath);
-  const confirmAction = useActionStore((s) => s.confirmAction);
-  const cancelAction = useActionStore((s) => s.cancelAction);
-  const pendingRiskActionId = useActionStore((s) => s.pendingRiskActionId);
+  const setActivePath = useWorkspaceStore((state) => state.setActivePath);
+  const confirmAction = useActionStore((state) => state.confirmAction);
+  const cancelAction = useActionStore((state) => state.cancelAction);
+  const pendingRiskActionId = useActionStore((state) => state.pendingRiskActionId);
   const pendingRiskAction = getPendingRiskAction();
 
   useEffect(() => {
@@ -211,6 +180,7 @@ function AppShell() {
               {otherRoutesMounted && (
                 <Routes>
                   <Route path="/" element={<Dashboard />} />
+                  <Route path="/terminal" element={null} />
                   <Route path="/ssh" element={<SshManager />} />
                   <Route path="/database" element={<DatabasePanel />} />
                   <Route path="/docker" element={<DockerPanel />} />

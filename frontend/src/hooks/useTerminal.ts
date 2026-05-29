@@ -476,6 +476,14 @@ export function useTerminal(
       unlistenEvent?.();
       webglAddon?.dispose();
       if (term) {
+        const pane = useTerminalStore
+          .getState()
+          .tabs.flatMap((tab) => tab.panes)
+          .find((item) => item.id === sessionId);
+        const sid = pane?.backendSessionId;
+        if (sid) {
+          invoke("close_terminal", { id: sid }).catch(() => {});
+        }
         term.dispose();
       }
       termRef.current = null;

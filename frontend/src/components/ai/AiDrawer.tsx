@@ -78,8 +78,9 @@ function MessageBubble({ msg }: { msg: AiMessage }) {
   const handleRunInTerminal = useCallback(
     (command: string) => {
       const tab = tabs.find((t) => t.id === activeTabId);
-      if (tab?.terminal) {
-        tab.terminal.write(command + "\r");
+      const activePane = tab?.panes.find((pane) => pane.id === tab.activePaneId) ?? tab?.panes[0];
+      if (activePane?.terminal) {
+        activePane.terminal.write(command + "\r");
       }
     },
     [tabs, activeTabId]
@@ -162,7 +163,7 @@ function MessageBubble({ msg }: { msg: AiMessage }) {
 
 // ─── Conversation Switcher ───
 
-function ConversationSwitcher() {
+function ConversationSwitcher({ compact = false }: { compact?: boolean }) {
   const { t } = useI18n();
   const conversations = useAiStore((s) => s.conversations);
   const activeId = useAiStore((s) => s.activeConversationId);
@@ -175,17 +176,17 @@ function ConversationSwitcher() {
   const active = conversations.find((c) => c.id === activeId);
 
   return (
-    <div className="relative">
-      <div className="flex items-center gap-1 px-3 py-1.5 border-b border-border">
+    <div className={`ai-conversation-switcher${compact ? " compact" : ""}`}>
+      <div className="ai-conversation-switcher-bar">
         <button
-          className="flex-1 flex items-center gap-2 text-xs text-fg-2 hover:text-fg transition-colors truncate"
+          className="ai-conversation-trigger"
           onClick={() => setShowList(!showList)}
         >
           <span className="truncate">{active?.title || t("ai.noConversation")}</span>
           <span className="text-muted">{showList ? "▾" : "▸"}</span>
         </button>
         <button
-          className="w-6 h-6 flex items-center justify-center rounded text-muted hover:text-fg hover:bg-surface-hover transition-colors"
+          className="ai-conversation-add"
           title={t("ai.newConversation")}
           onClick={() => createConversation()}
         >
@@ -196,18 +197,14 @@ function ConversationSwitcher() {
       </div>
 
       {showList && (
-        <div className="absolute top-full left-0 right-0 z-50 bg-bg-deeper border border-border rounded-b-md shadow-lg max-h-48 overflow-y-auto">
+        <div className="ai-conversation-list">
           {conversations.length === 0 ? (
             <div className="px-3 py-2 text-xs text-muted">{t("ai.noConversation")}</div>
           ) : (
             conversations.map((c) => (
               <div
                 key={c.id}
-                className={`flex items-center gap-2 px-3 py-1.5 text-xs cursor-pointer transition-colors ${
-                  c.id === activeId
-                    ? "bg-accent/10 text-accent"
-                    : "text-fg-2 hover:bg-surface-hover"
-                }`}
+                className={`ai-conversation-row ${c.id === activeId ? "active" : ""}`}
                 onClick={() => {
                   setActive(c.id);
                   setShowList(false);
@@ -249,6 +246,8 @@ function useAiChat() {
   const setIsGenerating = useAiStore((s) => s.setIsGenerating);
   const addContext = useAiStore((s) => s.addContext);
   const removeContext = useAiStore((s) => s.removeContext);
+  const draftPrompt = useAiStore((s) => s.draftPrompt);
+  const clearDraftPrompt = useAiStore((s) => s.clearDraftPrompt);
 
   const [input, setInput] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -269,6 +268,13 @@ function useAiChat() {
         Math.min(textareaRef.current.scrollHeight, 100) + "px";
     }
   }, [input]);
+
+  useEffect(() => {
+    if (!draftPrompt) return;
+    setInput(draftPrompt);
+    clearDraftPrompt();
+    requestAnimationFrame(() => textareaRef.current?.focus());
+  }, [clearDraftPrompt, draftPrompt]);
 
   const handleSend = useCallback(async () => {
     const trimmed = input.trim();
@@ -395,26 +401,25 @@ function useAiChat() {
 
 // ─── Shared: Panel header + content ───
 
-function AiPanelHeader({ onPinToggle, onClose, isPinned }: {
+function AiPanelHeader({ onPinToggle, onClose, isPinned, compact = false }: {
   onPinToggle: () => void;
   onClose: () => void;
   isPinned: boolean;
+  compact?: boolean;
 }) {
   const { t } = useI18n();
   const currentModel = useAiStore((s) => s.currentModel);
 
   return (
     <div
-      className="flex items-center gap-2 px-3 h-10 border-b border-border shrink-0 select-none"
+      className={`ai-shell-header${compact ? " compact" : ""}`}
       onDoubleClick={onPinToggle}
     >
       <IconRobot size={16} className="text-accent shrink-0" />
-      <span className="text-sm font-medium text-fg flex-1">{t("ai.title")}</span>
-      <span className="text-[10px] text-muted bg-surface px-1.5 py-0.5 rounded">
-        {currentModel}
-      </span>
+      <span className="ai-shell-title">{t("ai.title")}</span>
+      <span className="ai-shell-model">{currentModel}</span>
       <button
-        className="w-6 h-6 flex items-center justify-center rounded text-muted hover:text-fg hover:bg-surface-hover transition-colors"
+        className="ai-shell-icon-btn"
         title={isPinned ? "取消固定" : "固定到右侧"}
         onClick={onPinToggle}
       >
@@ -430,7 +435,7 @@ function AiPanelHeader({ onPinToggle, onClose, isPinned }: {
         </svg>
       </button>
       <button
-        className="w-6 h-6 flex items-center justify-center rounded text-muted hover:text-fg hover:bg-surface-hover transition-colors"
+        className="ai-shell-icon-btn"
         title="关闭 (Ctrl+L)"
         onClick={onClose}
       >
@@ -442,7 +447,7 @@ function AiPanelHeader({ onPinToggle, onClose, isPinned }: {
   );
 }
 
-function AiPanelBody() {
+function AiPanelBody({ compact = false }: { compact?: boolean }) {
   const { t } = useI18n();
   const {
     input,
@@ -466,9 +471,9 @@ function AiPanelBody() {
 
   return (
     <>
-      <ConversationSwitcher />
+      <ConversationSwitcher compact={compact} />
 
-      <div className="ai-context-strip">
+      <div className={`ai-context-strip${compact ? " compact" : ""}`}>
         <div className="ai-context-row">
           <span className="ai-context-label">{t("ai.currentContext")}</span>
           <span className={`env-badge env-${environment}`}>
@@ -477,13 +482,13 @@ function AiPanelBody() {
         </div>
         <div className="ai-context-main">
           <span>{activeResource ? activeResource.name : workspace.name}</span>
-          {activeResource && (
+          {!compact && activeResource && (
             <span className="text-meta">
               {t(`resourceType.${activeResource.type}`)} · {activeResource.subtitle}
             </span>
           )}
         </div>
-        {recentActions.length > 0 && (
+        {!compact && recentActions.length > 0 && (
           <div className="ai-action-preview">
             {recentActions.map((action) => (
               <span key={action.id} className={`action-chip action-${action.status}`}>
@@ -494,8 +499,7 @@ function AiPanelBody() {
         )}
       </div>
 
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-3 py-3 space-y-3 min-h-0">
+      <div className={`ai-message-list${compact ? " compact" : ""}`}>
         {!activeConversation || activeConversation.messages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center">
             <IconRobot size={32} className="text-muted mb-3" />
@@ -513,7 +517,7 @@ function AiPanelBody() {
       </div>
 
       {/* Context Chips */}
-      <div className="flex flex-wrap gap-1 px-3 py-1.5 border-t border-border">
+      <div className={`ai-context-chip-bar${compact ? " compact" : ""}`}>
         {(activeConversation?.context || []).map((ctx) => (
           <span
             key={ctx.type}
@@ -541,9 +545,8 @@ function AiPanelBody() {
         </button>
       </div>
 
-      {/* Input */}
-      <div className="px-3 pb-3 pt-1 shrink-0">
-        <div className="flex items-end gap-2 bg-surface border border-border rounded-lg px-3 py-2 focus-within:border-accent/50 transition-colors">
+      <div className={`ai-input-shell${compact ? " compact" : ""}`}>
+        <div className="ai-input-shell-inner">
           <textarea
             ref={textareaRef}
             value={input}
@@ -551,19 +554,19 @@ function AiPanelBody() {
             onKeyDown={handleKeyDown}
             placeholder="询问当前资源、命令、SQL 或排障流程..."
             rows={1}
-            className="flex-1 bg-transparent text-sm text-fg placeholder:text-muted outline-none resize-none min-h-[20px] max-h-[100px]"
+            className={`ai-input-textarea${compact ? " compact" : ""}`}
           />
           <button
             onClick={handleSend}
             disabled={!input.trim() || isGenerating}
-            className="w-7 h-7 flex items-center justify-center rounded-md bg-accent text-white disabled:opacity-40 disabled:cursor-not-allowed hover:bg-accent/80 transition-colors shrink-0"
+            className="ai-input-send"
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M22 2L11 13M22 2l-7 20-4-9-9-4z" />
             </svg>
           </button>
         </div>
-        <div className="flex items-center justify-between mt-1">
+        <div className="ai-input-hint-row">
           <span className="text-[10px] text-meta">Shift+Enter 换行</span>
           <span className="text-[10px] text-meta">Ctrl+L 切换</span>
         </div>
@@ -634,10 +637,11 @@ export function AiDrawer() {
       >
         <AiPanelHeader
           isPinned={false}
+          compact={false}
           onPinToggle={() => setDrawerMode("pinned")}
           onClose={closeDrawer}
         />
-        <AiPanelBody />
+        <AiPanelBody compact={false} />
       </div>
     </>
   );
@@ -649,13 +653,14 @@ export function AiPinnedPanel() {
   const setDrawerMode = useAiStore((s) => s.setDrawerMode);
 
   return (
-    <div className="ai-pinned-panel">
+    <div className="ai-pinned-panel ai-pinned-panel--compact">
       <AiPanelHeader
         isPinned={true}
+        compact={true}
         onPinToggle={() => setDrawerMode("drawer")}
         onClose={() => useAiStore.getState().closeDrawer()}
       />
-      <AiPanelBody />
+      <AiPanelBody compact={true} />
     </div>
   );
 }
