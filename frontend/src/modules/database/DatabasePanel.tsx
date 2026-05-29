@@ -1,13 +1,19 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { DockWorkspace, DockLayout, DockPanel, DockHandle } from "../../components/dock";
-import { SchemaBrowser, type BackendConnection } from "./SchemaBrowser";
+import { SchemaBrowser } from "./SchemaBrowser";
 import { ConnectionDialog } from "./ConnectionDialog";
-import { commands, type DbConnectionConfig } from "../../ipc/bindings";
 import { useActionStore } from "../../stores/actionStore";
+import { useDbGroupStore } from "../../stores/dbGroupStore";
 import { useTopbarTabs } from "../../hooks/useTopbarTabs";
 import { useI18n } from "../../i18n";
+import { quickInput } from "../../lib/quickInput";
 import { SqlEditor } from "./SqlEditor";
+import {
+  connectionMatchesGroup,
+  listConnections,
+  type DbConnectionConfig,
+} from "./api";
 
 const DEFAULT_SQL = `SELECT 1;`;
 
@@ -28,84 +34,109 @@ export function DatabasePanel() {
   const { t } = useI18n();
   const [sql, setSql] = useState(DEFAULT_SQL);
   const enqueueAction = useActionStore((s) => s.enqueueAction);
+  const groups = useDbGroupStore((s) => s.groups);
+  const activeGroupId = useDbGroupStore((s) => s.activeGroupId);
+  const setActiveGroupId = useDbGroupStore((s) => s.setActiveGroupId);
+  const addGroup = useDbGroupStore((s) => s.addGroup);
+  const getGroupName = useDbGroupStore((s) => s.getGroupName);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [schemaRefreshToken, setSchemaRefreshToken] = useState(0);
 
   const [connections, setConnections] = useState<DbConnectionConfig[]>([]);
   const [activeConnId, setActiveConnId] = useState<string | null>(null);
-  const [tables, setTables] = useState<string[]>([]);
   const [result, setResult] = useState<QueryResult | null>(null);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [elapsed, setElapsed] = useState<number | null>(null);
 
+  const activeGroupName = useMemo(
+    () => getGroupName(activeGroupId),
+    [activeGroupId, getGroupName, groups]
+  );
+
+  const groupConnections = useMemo(
+    () => connections.filter((conn) => connectionMatchesGroup(conn, activeGroupName)),
+    [connections, activeGroupName]
+  );
+
   const activeConn = useMemo(
-    () => connections.find((c) => c.id === activeConnId) ?? null,
-    [connections, activeConnId],
+    () => groupConnections.find((c) => c.id === activeConnId) ?? groupConnections[0] ?? null,
+    [groupConnections, activeConnId]
   );
 
   const refreshConnections = useCallback(async () => {
     try {
-      const res = await commands.dbListConnections();
-      if (res.status === "ok") {
-        setConnections(res.data);
-        setActiveConnId((prev) => prev ?? res.data[0]?.id ?? null);
-      }
+      const list = await listConnections();
+      setConnections(list);
+      setActiveConnId((prev) => {
+        if (prev && list.some((item) => item.id === prev)) {
+          return prev;
+        }
+        const inGroup = list.find((item) => connectionMatchesGroup(item, activeGroupName));
+        return inGroup?.id ?? list[0]?.id ?? null;
+      });
     } catch {
       // 非 Tauri 环境（纯前端 dev）忽略。
     }
-  }, []);
+  }, [activeGroupName]);
 
   useEffect(() => {
     void refreshConnections();
-  }, [refreshConnections]);
+  }, [refreshConnections, schemaRefreshToken]);
 
-  // 切换连接时拉取表列表。
   useEffect(() => {
-    if (!activeConn) {
-      setTables([]);
-      return;
-    }
-    let cancelled = false;
-    void (async () => {
-      try {
-        const res = await commands.dbListTables(activeConn);
-        if (!cancelled) setTables(res.status === "ok" ? res.data : []);
-      } catch {
-        if (!cancelled) setTables([]);
+    setActiveConnId((prev) => {
+      if (prev && groupConnections.some((item) => item.id === prev)) {
+        return prev;
       }
-    })();
-    return () => {
-      cancelled = true;
-    };
+      return groupConnections[0]?.id ?? null;
+    });
+  }, [activeGroupId, groupConnections]);
+
+  const schema = useMemo(() => {
+    if (!activeConn?.database.trim()) {
+      return [];
+    }
+    return [{ name: activeConn.database, columns: [] }];
   }, [activeConn]);
 
-  const backendConnections: BackendConnection[] = useMemo(
-    () =>
-      connections.map((c) => ({
-        id: c.id,
-        name: c.name,
-        engine: c.db_type,
-        tables: c.id === activeConnId ? tables : [],
-      })),
-    [connections, activeConnId, tables],
-  );
-
-  const schema = useMemo(() => tables.map((name) => ({ name, columns: [] })), [tables]);
+  const handleCreateGroup = useCallback(async () => {
+    const name = await quickInput({
+      title: t("database.groups.createTitle"),
+      subtitle: t("database.groups.nameLabel"),
+      placeholder: t("database.groups.namePlaceholder"),
+      validate: (value) => {
+        if (!value.trim()) {
+          return t("database.groups.nameRequired");
+        }
+        if (groups.some((group) => group.name === value.trim())) {
+          return t("database.groups.duplicate");
+        }
+        return null;
+      },
+    });
+    if (name) {
+      addGroup(name);
+    }
+  }, [addGroup, groups, t]);
 
   const topbarTabs = useMemo(
     () =>
-      connections.map((c) => ({
-        id: c.id,
-        label: c.name,
-        active: c.id === activeConnId,
+      groups.map((group) => ({
+        id: group.id,
+        label: group.name,
+        active: group.id === activeGroupId,
       })),
-    [connections, activeConnId],
+    [groups, activeGroupId]
   );
 
   useTopbarTabs(
     topbarTabs,
-    { onSelect: (id) => setActiveConnId(id) },
-    { mode: "connection", showAddTab: true, addTabTitle: t("shell.topbar.newConnection") },
+    {
+      onSelect: (id) => setActiveGroupId(id),
+      onAdd: () => void handleCreateGroup(),
+    },
+    { mode: "connection", showAddTab: true, addTabTitle: t("database.groups.new") }
   );
 
   const runQuery = useCallback(async () => {
@@ -136,129 +167,122 @@ export function DatabasePanel() {
     }
   }, [activeConn, enqueueAction, sql, t]);
 
-  const handleSaveConnection = useCallback(
-    async (data: { engine: string; name: string; host: string; port: string; database: string; username: string; password: string }) => {
-      try {
-        await commands.dbSaveConnection({
-          id: "",
-          name: data.name,
-          db_type: data.engine,
-          host: data.host,
-          port: Number(data.port) || 0,
-          user: data.username,
-          password: data.password,
-          database: data.database,
-          group: "",
-          status: "",
-        });
-        await refreshConnections();
-      } catch {
-        // 忽略保存失败（非 Tauri 环境）。
-      }
-    },
-    [refreshConnections],
-  );
-
   const rowCount = result?.rows.length ?? 0;
 
   return (
     <>
-    <DockWorkspace
-      leftPreset="schema"
-      left={
-        <SchemaBrowser
-          onCreateConnection={() => setDialogOpen(true)}
-          connections={backendConnections}
-          activeConnId={activeConnId}
-          onSelectConnection={setActiveConnId}
-          onRefresh={refreshConnections}
-        />
-      }
-      main={
-        <DockLayout direction="vertical">
-          <DockPanel defaultSize={55} minSize={30}>
-            <div className="db-editor-area">
-              <div className="sql-toolbar">
-                <span className="db-select" style={{ display: "flex", alignItems: "center" }}>
-                  {activeConn ? `${activeConn.name} · ${activeConn.database || activeConn.db_type}` : t("database.results.noConnection")}
-                </span>
-                <button
-                  className="btn btn-primary btn-sm"
-                  style={{ marginLeft: "auto" }}
-                  onClick={runQuery}
-                  disabled={running || !activeConn}
-                >
-                  {running ? t("database.running") : t("database.runSql")}
-                </button>
+      <DockWorkspace
+        leftPreset="schema"
+        left={
+          <SchemaBrowser
+            onCreateConnection={() => setDialogOpen(true)}
+            refreshToken={schemaRefreshToken}
+            groupFilter={activeGroupName}
+          />
+        }
+        main={
+          <DockLayout direction="vertical">
+            <DockPanel defaultSize={55} minSize={30}>
+              <div className="db-editor-area">
+                <div className="sql-toolbar">
+                  <select
+                    className="db-select"
+                    value={activeConn?.id ?? ""}
+                    onChange={(event) => setActiveConnId(event.target.value || null)}
+                    disabled={groupConnections.length === 0}
+                  >
+                    {groupConnections.length === 0 ? (
+                      <option value="">{t("database.results.noConnection")}</option>
+                    ) : (
+                      groupConnections.map((conn) => (
+                        <option key={conn.id} value={conn.id}>
+                          {conn.name} · {conn.database || conn.db_type}
+                        </option>
+                      ))
+                    )}
+                  </select>
+                  <button
+                    className="btn btn-primary btn-sm"
+                    style={{ marginLeft: "auto" }}
+                    onClick={runQuery}
+                    disabled={running || !activeConn}
+                  >
+                    {running ? t("database.running") : t("database.runSql")}
+                  </button>
+                </div>
+                <SqlEditor value={sql} onChange={setSql} onRun={runQuery} schema={schema} />
               </div>
-              <SqlEditor value={sql} onChange={setSql} onRun={runQuery} schema={schema} />
-            </div>
-          </DockPanel>
-          <DockHandle direction="vertical" />
-          <DockPanel defaultSize={45} minSize={20}>
-            <div className="results-area">
-              <div className="results-header">
-                <h3>{t("database.results.preview")}</h3>
-                <span className="results-meta">
-                  {t("database.results.meta", {
-                    rows: rowCount,
-                    ms: elapsed ?? 0,
-                    mode: t("common.readonly"),
-                  })}
-                </span>
-              </div>
-              {error ? (
-                <div className="empty-state compact text-danger" style={{ padding: "var(--sp-4)", whiteSpace: "pre-wrap" }}>
-                  {error}
+            </DockPanel>
+            <DockHandle direction="vertical" />
+            <DockPanel defaultSize={45} minSize={20}>
+              <div className="results-area">
+                <div className="results-header">
+                  <h3>{t("database.results.preview")}</h3>
+                  <span className="results-meta">
+                    {t("database.results.meta", {
+                      rows: rowCount,
+                      ms: elapsed ?? 0,
+                      mode: t("common.readonly"),
+                    })}
+                  </span>
                 </div>
-              ) : result === null ? (
-                <div className="empty-state compact" style={{ padding: "var(--sp-4)" }}>
-                  {t("database.results.runHint")}
-                </div>
-              ) : result.columns.length === 0 ? (
-                <div className="empty-state compact" style={{ padding: "var(--sp-4)" }}>
-                  {t("database.results.affected", { rows: result.rowsAffected })}
-                </div>
-              ) : (
-                <div className="results-grid">
-                  <table>
-                    <thead>
-                      <tr>
-                        {result.columns.map((col) => (
-                          <th key={col}>{col}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {result.rows.map((row, ri) => (
-                        <tr key={ri}>
-                          {row.map((cell, ci) => (
-                            <td key={ci}>{cellToText(cell)}</td>
+                {error ? (
+                  <div
+                    className="empty-state compact text-danger"
+                    style={{ padding: "var(--sp-4)", whiteSpace: "pre-wrap" }}
+                  >
+                    {error}
+                  </div>
+                ) : result === null ? (
+                  <div className="empty-state compact" style={{ padding: "var(--sp-4)" }}>
+                    {t("database.results.runHint")}
+                  </div>
+                ) : result.columns.length === 0 ? (
+                  <div className="empty-state compact" style={{ padding: "var(--sp-4)" }}>
+                    {t("database.results.affected", { rows: result.rowsAffected })}
+                  </div>
+                ) : (
+                  <div className="results-grid">
+                    <table>
+                      <thead>
+                        <tr>
+                          {result.columns.map((col) => (
+                            <th key={col}>{col}</th>
                           ))}
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {result.rows.map((row, ri) => (
+                          <tr key={ri}>
+                            {row.map((cell, ci) => (
+                              <td key={ci}>{cellToText(cell)}</td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+                <div className="exec-stats">
+                  <span className="stat">
+                    {t("database.results.title")}: <span className="stat-val">{rowCount}</span>
+                  </span>
+                  <span className="stat">
+                    Latency: <span className="stat-val">{elapsed ?? 0}ms</span>
+                  </span>
                 </div>
-              )}
-              <div className="exec-stats">
-                <span className="stat">
-                  {t("database.results.title")}: <span className="stat-val">{rowCount}</span>
-                </span>
-                <span className="stat">
-                  Latency: <span className="stat-val">{elapsed ?? 0}ms</span>
-                </span>
               </div>
-            </div>
-          </DockPanel>
-        </DockLayout>
-      }
-    />
-    <ConnectionDialog
-      open={dialogOpen}
-      onClose={() => setDialogOpen(false)}
-      onSave={handleSaveConnection}
-    />
+            </DockPanel>
+          </DockLayout>
+        }
+      />
+      <ConnectionDialog
+        open={dialogOpen}
+        onClose={() => setDialogOpen(false)}
+        onSaved={() => setSchemaRefreshToken((token) => token + 1)}
+        defaultGroup={activeGroupName}
+        groups={groups}
+      />
     </>
   );
 }

@@ -2,6 +2,8 @@ use std::collections::HashMap;
 
 use omnipanel_db::{DbParams, QueryResult};
 use serde::{Deserialize, Serialize};
+use sqlx::mysql::{MySqlConnectOptions, MySqlPoolOptions};
+use sqlx::Row;
 use tauri::State;
 
 use crate::state::AppState;
@@ -37,6 +39,14 @@ fn to_params(c: &DbConnectionConfig) -> DbParams {
         password: c.password.clone(),
         database: c.database.clone(),
     }
+}
+
+fn with_schema(c: &DbConnectionConfig, schema: Option<String>) -> DbParams {
+    let mut params = to_params(c);
+    if let Some(s) = schema.filter(|name| !name.trim().is_empty()) {
+        params.database = s;
+    }
+    params
 }
 
 #[tauri::command]
@@ -86,8 +96,50 @@ pub async fn db_test_connection(connection: DbConnectionConfig) -> Result<String
 
 #[tauri::command]
 #[specta::specta]
-pub async fn db_list_tables(connection: DbConnectionConfig) -> Result<Vec<String>, String> {
-    let driver = omnipanel_db::connect(&to_params(&connection))
+pub async fn db_list_databases(connection: DbConnectionConfig) -> Result<Vec<String>, String> {
+    match connection.db_type.to_lowercase().as_str() {
+        "mysql" | "mariadb" => {
+            let mut opts = MySqlConnectOptions::new()
+                .host(&connection.host)
+                .port(connection.port)
+                .username(&connection.user)
+                .password(&connection.password);
+            if !connection.database.trim().is_empty() {
+                opts = opts.database(connection.database.trim());
+            }
+            let pool = MySqlPoolOptions::new()
+                .max_connections(1)
+                .connect_with(opts)
+                .await
+                .map_err(|e| format!("Connection failed: {e}"))?;
+            let rows = sqlx::query(
+                "SELECT SCHEMA_NAME FROM information_schema.SCHEMATA \
+                 WHERE SCHEMA_NAME NOT IN ('information_schema', 'performance_schema', 'mysql', 'sys') \
+                 ORDER BY SCHEMA_NAME",
+            )
+            .fetch_all(&pool)
+            .await
+            .map_err(|e| format!("Query failed: {e}"))?;
+            let databases: Vec<String> = rows.iter().map(|r| r.get::<String, _>(0)).collect();
+            pool.close().await;
+            Ok(databases)
+        }
+        _ if !connection.database.trim().is_empty() => Ok(vec![connection.database.clone()]),
+        _ => Ok(vec![]),
+    }
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn db_list_tables(
+    connection: DbConnectionConfig,
+    schema: Option<String>,
+) -> Result<Vec<String>, String> {
+    let params = with_schema(&connection, schema);
+    if params.database.trim().is_empty() {
+        return Err("未指定数据库".to_string());
+    }
+    let driver = omnipanel_db::connect(&params)
         .await
         .map_err(|e| e.to_string())?;
     driver.list_tables().await.map_err(|e| e.to_string())
