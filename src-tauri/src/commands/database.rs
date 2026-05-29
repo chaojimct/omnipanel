@@ -72,12 +72,32 @@ pub async fn db_test_connection(connection: DbConnectionConfig) -> Result<String
 }
 
 #[tauri::command]
-pub async fn db_list_tables(connection: DbConnectionConfig) -> Result<Vec<String>, String> {
+pub async fn db_list_databases(connection: DbConnectionConfig) -> Result<Vec<String>, String> {
+    let pool = connect(&connection).await?;
+    let rows = sqlx::query(
+        "SELECT SCHEMA_NAME FROM information_schema.SCHEMATA \
+         WHERE SCHEMA_NAME NOT IN ('information_schema', 'performance_schema', 'mysql', 'sys') \
+         ORDER BY SCHEMA_NAME",
+    )
+    .fetch_all(&pool)
+    .await
+    .map_err(|e| format!("Query failed: {e}"))?;
+    let databases: Vec<String> = rows.iter().map(|r| r.get::<String, _>(0)).collect();
+    pool.close().await;
+    Ok(databases)
+}
+
+#[tauri::command]
+pub async fn db_list_tables(
+    connection: DbConnectionConfig,
+    schema: Option<String>,
+) -> Result<Vec<String>, String> {
+    let schema = resolve_schema(&connection, schema)?;
     let pool = connect(&connection).await?;
     let rows = sqlx::query(
         "SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA = ? ORDER BY TABLE_NAME",
     )
-    .bind(&connection.database)
+    .bind(&schema)
     .fetch_all(&pool)
     .await
     .map_err(|e| format!("Query failed: {e}"))?;
@@ -131,17 +151,33 @@ pub async fn db_preview_table(
 }
 
 async fn connect(conn: &DbConnectionConfig) -> Result<sqlx::MySqlPool, String> {
-    let opts = MySqlConnectOptions::new()
+    let mut opts = MySqlConnectOptions::new()
         .host(&conn.host)
         .port(conn.port)
         .username(&conn.user)
-        .password(&conn.password)
-        .database(&conn.database);
+        .password(&conn.password);
+    if !conn.database.trim().is_empty() {
+        opts = opts.database(conn.database.trim());
+    }
     MySqlPoolOptions::new()
         .max_connections(1)
         .connect_with(opts)
         .await
         .map_err(|e| format!("Connection failed: {e}"))
+}
+
+fn resolve_schema(conn: &DbConnectionConfig, schema: Option<String>) -> Result<String, String> {
+    schema
+        .filter(|s| !s.trim().is_empty())
+        .or_else(|| {
+            let db = conn.database.trim();
+            if db.is_empty() {
+                None
+            } else {
+                Some(db.to_string())
+            }
+        })
+        .ok_or_else(|| "未指定数据库".to_string())
 }
 
 fn extract_value(row: &sqlx::mysql::MySqlRow, index: usize) -> serde_json::Value {

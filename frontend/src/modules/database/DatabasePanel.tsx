@@ -1,12 +1,12 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { DockWorkspace, DockLayout, DockPanel, DockHandle } from "../../components/dock";
 import { SchemaBrowser } from "./SchemaBrowser";
 import { ConnectionDialog } from "./ConnectionDialog";
-import { workspaceResources, getResourceById } from "../../lib/resourceRegistry";
-import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { useActionStore } from "../../stores/actionStore";
+import { useDbGroupStore } from "../../stores/dbGroupStore";
 import { useTopbarTabs } from "../../hooks/useTopbarTabs";
 import { useI18n } from "../../i18n";
+import { quickInput } from "../../lib/quickInput";
 import { SqlEditor } from "./SqlEditor";
 
 const DEFAULT_SQL = `SELECT id, email, status, created_at
@@ -76,30 +76,58 @@ const resultRows = [
 export function DatabasePanel() {
   const { t } = useI18n();
   const [sql, setSql] = useState(DEFAULT_SQL);
-  const activeResourceId = useWorkspaceStore((s) => s.activeResourceId);
-  const selectResource = useWorkspaceStore((s) => s.selectResource);
-  const activeResource = getResourceById(activeResourceId);
   const enqueueAction = useActionStore((s) => s.enqueueAction);
+  const groups = useDbGroupStore((s) => s.groups);
+  const activeGroupId = useDbGroupStore((s) => s.activeGroupId);
+  const setActiveGroupId = useDbGroupStore((s) => s.setActiveGroupId);
+  const addGroup = useDbGroupStore((s) => s.addGroup);
+  const getGroupName = useDbGroupStore((s) => s.getGroupName);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [schemaRefreshToken, setSchemaRefreshToken] = useState(0);
 
-  const dbResources = useMemo(
-    () => workspaceResources.filter((resource) => resource.type === "database"),
-    []
+  const handleCreateGroup = useCallback(async () => {
+    const name = await quickInput({
+      title: t("database.groups.createTitle"),
+      subtitle: t("database.groups.nameLabel"),
+      placeholder: t("database.groups.namePlaceholder"),
+      validate: (value) => {
+        if (!value.trim()) {
+          return t("database.groups.nameRequired");
+        }
+        if (groups.some((group) => group.name === value.trim())) {
+          return t("database.groups.duplicate");
+        }
+        return null;
+      },
+    });
+    if (name) {
+      addGroup(name);
+    }
+  }, [addGroup, groups, t]);
+
+  const activeGroupName = useMemo(
+    () => getGroupName(activeGroupId),
+    [activeGroupId, getGroupName, groups]
   );
 
   const topbarTabs = useMemo(
     () =>
-      dbResources.map((resource) => ({
-        id: resource.id,
-        label: resource.name,
-        active: resource.id === (activeResourceId ?? dbResources[0]?.id),
+      groups.map((group) => ({
+        id: group.id,
+        label: group.name,
+        active: group.id === activeGroupId,
       })),
-    [dbResources, activeResourceId]
+    [groups, activeGroupId]
   );
 
-  useTopbarTabs(topbarTabs, {
-    onSelect: (id) => selectResource(id),
-  }, { mode: "connection", showAddTab: true, addTabTitle: t("shell.topbar.newConnection") });
+  useTopbarTabs(
+    topbarTabs,
+    {
+      onSelect: (id) => setActiveGroupId(id),
+      onAdd: () => void handleCreateGroup(),
+    },
+    { mode: "connection", showAddTab: true, addTabTitle: t("database.groups.new") }
+  );
 
   const runQuery = () => {
     enqueueAction({
@@ -107,7 +135,7 @@ export function DatabasePanel() {
       title: t("database.actions.runQuery"),
       description: t("database.actions.runQueryDesc"),
       command: sql,
-      resourceId: activeResource?.id ?? "prod-db-master",
+      resourceId: activeGroupId,
       source: "用户",
     });
   };
@@ -116,7 +144,13 @@ export function DatabasePanel() {
     <>
     <DockWorkspace
       leftPreset="schema"
-      left={<SchemaBrowser onCreateConnection={() => setDialogOpen(true)} />}
+      left={
+        <SchemaBrowser
+          onCreateConnection={() => setDialogOpen(true)}
+          refreshToken={schemaRefreshToken}
+          groupFilter={activeGroupName}
+        />
+      }
       main={
         <DockLayout direction="vertical">
           <DockPanel defaultSize={55} minSize={30}>
@@ -179,6 +213,9 @@ export function DatabasePanel() {
     <ConnectionDialog
       open={dialogOpen}
       onClose={() => setDialogOpen(false)}
+      onSaved={() => setSchemaRefreshToken((token) => token + 1)}
+      defaultGroup={activeGroupName}
+      groups={groups}
     />
     </>
   );

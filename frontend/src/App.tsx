@@ -7,6 +7,7 @@ import { CommandPalette } from "./components/shell/CommandPalette";
 import { NotificationDrawer } from "./components/shell/NotificationDrawer";
 import { AiDrawer, AiPinnedPanel } from "./components/ai/AiDrawer";
 import { DangerConfirmDialog } from "./components/terminal/DangerConfirmDialog";
+import { QuickInputHost } from "./components/ui/QuickInputHost";
 import { WindowResize } from "./components/shell/WindowResize";
 import { Dashboard } from "./modules/workspace/Dashboard";
 import { TerminalPanel } from "./modules/terminal/TerminalPanel";
@@ -221,6 +222,7 @@ function AppShell() {
       <CommandPalette />
       <NotificationDrawer />
       <WindowResize />
+      <QuickInputHost />
       {pendingRiskActionId && pendingRiskAction && riskResult && (
         <DangerConfirmDialog
           command={pendingRiskAction.command ?? pendingRiskAction.description}

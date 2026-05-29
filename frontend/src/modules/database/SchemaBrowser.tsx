@@ -1,138 +1,32 @@
-import { useState, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useI18n } from "../../i18n";
-
-interface Column {
-  name: string;
-  type: string;
-  isPk?: boolean;
-  isFk?: boolean;
-}
+import { type DbConnectionConfig, connectionMatchesGroup, listConnections, listDatabases, listTables } from "./api";
+import {
+  DatabaseFilterDialog,
+  type SchemaFilterState,
+  getVisibleItems,
+  makeTableFilterKey,
+  mergeFilter,
+  SchemaFilterDialog,
+} from "./DatabaseFilterDialog";
 
 interface Table {
   name: string;
-  columns: Column[];
 }
 
-interface Database {
+interface LoadedDatabase {
   name: string;
-  tables: Table[];
+  tables?: Table[];
+  loadingTables?: boolean;
+  loadError?: string;
 }
 
-interface Connection {
-  id: string;
-  name: string;
-  engine: string;
-  databases: Database[];
+interface LoadedConnection {
+  config: DbConnectionConfig;
+  databases?: LoadedDatabase[];
+  loadingDatabases?: boolean;
+  databasesError?: string;
 }
-
-const DEMO_CONNECTIONS: Connection[] = [
-  {
-    id: "prod-db-master",
-    name: "prod-db-master",
-    engine: "PostgreSQL 16",
-    databases: [
-      {
-        name: "app_production",
-        tables: [
-          {
-            name: "users",
-            columns: [
-              { name: "id", type: "uuid", isPk: true },
-              { name: "email", type: "varchar" },
-              { name: "name", type: "varchar" },
-              { name: "role", type: "enum" },
-              { name: "created_at", type: "timestamptz" },
-            ],
-          },
-          {
-            name: "orders",
-            columns: [
-              { name: "id", type: "uuid", isPk: true },
-              { name: "user_id", type: "uuid", isFk: true },
-              { name: "total", type: "decimal" },
-              { name: "status", type: "enum" },
-              { name: "created_at", type: "timestamptz" },
-            ],
-          },
-          {
-            name: "products",
-            columns: [
-              { name: "id", type: "uuid", isPk: true },
-              { name: "name", type: "varchar" },
-              { name: "price", type: "decimal" },
-              { name: "category", type: "varchar" },
-            ],
-          },
-          {
-            name: "sessions",
-            columns: [
-              { name: "id", type: "uuid", isPk: true },
-              { name: "user_id", type: "uuid", isFk: true },
-              { name: "token", type: "varchar" },
-              { name: "expires_at", type: "timestamptz" },
-            ],
-          },
-          {
-            name: "audit_logs",
-            columns: [
-              { name: "id", type: "bigint", isPk: true },
-              { name: "user_id", type: "uuid", isFk: true },
-              { name: "action", type: "varchar" },
-              { name: "table_name", type: "varchar" },
-              { name: "record_id", type: "uuid" },
-              { name: "created_at", type: "timestamptz" },
-            ],
-          },
-        ],
-      },
-      {
-        name: "analytics",
-        tables: [
-          {
-            name: "events",
-            columns: [
-              { name: "id", type: "bigint", isPk: true },
-              { name: "event_type", type: "varchar" },
-              { name: "payload", type: "jsonb" },
-              { name: "created_at", type: "timestamptz" },
-            ],
-          },
-          {
-            name: "page_views",
-            columns: [
-              { name: "id", type: "bigint", isPk: true },
-              { name: "url", type: "text" },
-              { name: "user_id", type: "uuid" },
-              { name: "duration_ms", type: "integer" },
-              { name: "created_at", type: "timestamptz" },
-            ],
-          },
-        ],
-      },
-    ],
-  },
-  {
-    id: "staging-db",
-    name: "staging-db",
-    engine: "MySQL 8.0",
-    databases: [
-      {
-        name: "staging_app",
-        tables: [
-          {
-            name: "users",
-            columns: [
-              { name: "id", type: "int", isPk: true },
-              { name: "email", type: "varchar" },
-              { name: "password_hash", type: "varchar" },
-              { name: "created_at", type: "datetime" },
-            ],
-          },
-        ],
-      },
-    ],
-  },
-];
 
 type TreeNodeType = "connection" | "database" | "table" | "column";
 
@@ -215,16 +109,222 @@ function TreeNode({
   );
 }
 
-interface SchemaBrowserProps {
-  onCreateConnection?: () => void;
+function parseDbNodeId(id: string): { connId: string; dbName: string } | null {
+  if (!id.startsWith("db:")) {
+    return null;
+  }
+  const rest = id.slice(3);
+  const sep = rest.indexOf(":");
+  if (sep < 0) {
+    return null;
+  }
+  return { connId: rest.slice(0, sep), dbName: rest.slice(sep + 1) };
 }
 
-export function SchemaBrowser({ onCreateConnection }: SchemaBrowserProps) {
+interface SchemaBrowserProps {
+  onCreateConnection?: () => void;
+  refreshToken?: number;
+  groupFilter?: string;
+}
+
+export function SchemaBrowser({ onCreateConnection, refreshToken = 0, groupFilter }: SchemaBrowserProps) {
   const { t } = useI18n();
   const [search, setSearch] = useState("");
-  const [expanded, setExpanded] = useState<Set<string>>(new Set(["conn:prod-db-master"]));
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [connections, setConnections] = useState<LoadedConnection[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [databaseFilters, setDatabaseFilters] = useState<Record<string, SchemaFilterState>>({});
+  const [tableFilters, setTableFilters] = useState<Record<string, SchemaFilterState>>({});
+  const [filterDialogConnId, setFilterDialogConnId] = useState<string | null>(null);
+  const [filterDialogTable, setFilterDialogTable] = useState<{ connId: string; dbName: string } | null>(
+    null
+  );
+  const connectionsRef = useRef(connections);
+  const loadingDatabasesRef = useRef(new Set<string>());
+  const loadingTablesRef = useRef(new Set<string>());
+  const pendingDatabaseLoadsRef = useRef(new Map<string, Promise<DbConnectionConfig | null>>());
+
+  connectionsRef.current = connections;
+
+  const syncDatabaseFilter = useCallback((connId: string, names: string[]) => {
+    setDatabaseFilters((prev) => ({
+      ...prev,
+      [connId]: mergeFilter(prev[connId], names),
+    }));
+  }, []);
+
+  const syncTableFilter = useCallback((connId: string, dbName: string, names: string[]) => {
+    const key = makeTableFilterKey(connId, dbName);
+    setTableFilters((prev) => ({
+      ...prev,
+      [key]: mergeFilter(prev[key], names),
+    }));
+  }, []);
+
+  const loadConnections = useCallback(async () => {
+    setLoading(true);
+    setLoadError(null);
+    loadingDatabasesRef.current.clear();
+    loadingTablesRef.current.clear();
+    pendingDatabaseLoadsRef.current.clear();
+    try {
+      const list = await listConnections();
+      const filtered = groupFilter
+        ? list.filter((config) => connectionMatchesGroup(config, groupFilter))
+        : list;
+      setConnections(filtered.map((config) => ({ config })));
+    } catch (error) {
+      setConnections([]);
+      setLoadError(String(error));
+    } finally {
+      setLoading(false);
+    }
+  }, [groupFilter]);
+
+  useEffect(() => {
+    void loadConnections();
+  }, [loadConnections, refreshToken]);
+
+  const ensureDatabasesLoaded = useCallback(async (connId: string): Promise<DbConnectionConfig | null> => {
+    const pending = pendingDatabaseLoadsRef.current.get(connId);
+    if (pending) {
+      return pending;
+    }
+
+    const current = connectionsRef.current.find((item) => item.config.id === connId);
+    if (!current) {
+      return null;
+    }
+    if (current.databases !== undefined) {
+      return current.config;
+    }
+
+    const loadPromise = (async (): Promise<DbConnectionConfig | null> => {
+      loadingDatabasesRef.current.add(connId);
+      const config = current.config;
+
+      const markLoading = (prev: LoadedConnection[]) =>
+        prev.map((item) =>
+          item.config.id === connId ? { ...item, loadingDatabases: true, databasesError: undefined } : item
+        );
+      connectionsRef.current = markLoading(connectionsRef.current);
+      setConnections(connectionsRef.current);
+
+      const applyDatabases = (databases: LoadedDatabase[], databasesError?: string) => {
+        const next = connectionsRef.current.map((item) =>
+          item.config.id === connId
+            ? { ...item, databases, loadingDatabases: false, databasesError }
+            : item
+        );
+        connectionsRef.current = next;
+        setConnections(next);
+        if (databases.length > 0) {
+          syncDatabaseFilter(connId, databases.map((db) => db.name));
+        }
+      };
+
+      const presetDb = config.database.trim();
+      if (presetDb) {
+        applyDatabases([{ name: presetDb }]);
+        loadingDatabasesRef.current.delete(connId);
+        return config;
+      }
+
+      try {
+        const names = await listDatabases(config);
+        applyDatabases(names.map((name) => ({ name })));
+        return config;
+      } catch (error) {
+        applyDatabases([], String(error));
+        return config;
+      } finally {
+        loadingDatabasesRef.current.delete(connId);
+      }
+    })();
+
+    pendingDatabaseLoadsRef.current.set(connId, loadPromise);
+    try {
+      return await loadPromise;
+    } finally {
+      pendingDatabaseLoadsRef.current.delete(connId);
+    }
+  }, [syncDatabaseFilter]);
+
+  const ensureTablesLoaded = useCallback(async (connId: string, dbName: string, config: DbConnectionConfig) => {
+    const cacheKey = `${connId}:${dbName}`;
+    const current = connectionsRef.current.find((item) => item.config.id === connId);
+    const db = current?.databases?.find((item) => item.name === dbName);
+    if (db?.tables !== undefined || db?.loadingTables || loadingTablesRef.current.has(cacheKey)) {
+      return;
+    }
+
+    loadingTablesRef.current.add(cacheKey);
+
+    const markLoading = (prev: LoadedConnection[]) =>
+      prev.map((item) =>
+        item.config.id === connId
+          ? {
+              ...item,
+              databases: item.databases?.map((entry) =>
+                entry.name === dbName ? { ...entry, loadingTables: true, loadError: undefined } : entry
+              ),
+            }
+          : item
+      );
+    connectionsRef.current = markLoading(connectionsRef.current);
+    setConnections(connectionsRef.current);
+
+    try {
+      const tables = await listTables(config, dbName);
+      const next = connectionsRef.current.map((item) =>
+        item.config.id === connId
+          ? {
+              ...item,
+              databases: item.databases?.map((entry) =>
+                entry.name === dbName
+                  ? {
+                      ...entry,
+                      tables: tables.map((name) => ({ name })),
+                      loadingTables: false,
+                    }
+                  : entry
+              ),
+            }
+          : item
+      );
+      connectionsRef.current = next;
+      setConnections(next);
+      if (tables.length > 0) {
+        syncTableFilter(connId, dbName, tables);
+      }
+    } catch (error) {
+      const next = connectionsRef.current.map((item) =>
+        item.config.id === connId
+          ? {
+              ...item,
+              databases: item.databases?.map((entry) =>
+                entry.name === dbName
+                  ? {
+                      ...entry,
+                      tables: [],
+                      loadingTables: false,
+                      loadError: String(error),
+                    }
+                  : entry
+              ),
+            }
+          : item
+      );
+      connectionsRef.current = next;
+      setConnections(next);
+    } finally {
+      loadingTablesRef.current.delete(cacheKey);
+    }
+  }, [syncTableFilter]);
 
   const toggle = (id: string) => {
+    const willExpand = !expanded.has(id);
     setExpanded((prev) => {
       const next = new Set(prev);
       if (next.has(id)) {
@@ -234,34 +334,79 @@ export function SchemaBrowser({ onCreateConnection }: SchemaBrowserProps) {
       }
       return next;
     });
+
+    if (!willExpand) {
+      return;
+    }
+
+    if (id.startsWith("conn:")) {
+      void ensureDatabasesLoaded(id.slice(5));
+      return;
+    }
+
+    const parsed = parseDbNodeId(id);
+    if (parsed) {
+      void (async () => {
+        const config = await ensureDatabasesLoaded(parsed.connId);
+        if (config) {
+          await ensureTablesLoaded(parsed.connId, parsed.dbName, config);
+        }
+      })();
+    }
   };
 
   const filtered = useMemo(() => {
-    if (!search.trim()) return DEMO_CONNECTIONS;
+    if (!search.trim()) {
+      return connections;
+    }
+
     const q = search.toLowerCase();
-    return DEMO_CONNECTIONS.map((conn) => ({
-      ...conn,
-      databases: conn.databases
-        .map((db) => ({
-          ...db,
-          tables: db.tables
-            .filter(
-              (tbl) =>
-                tbl.name.toLowerCase().includes(q) ||
-                tbl.columns.some((col) => col.name.toLowerCase().includes(q))
-            )
-            .map((tbl) => ({
-              ...tbl,
-              columns: tbl.columns.filter(
-                (col) =>
-                  tbl.name.toLowerCase().includes(q) ||
-                  col.name.toLowerCase().includes(q)
-              ),
-            })),
-        }))
-        .filter((db) => db.tables.length > 0),
-    })).filter((conn) => conn.databases.length > 0);
-  }, [search]);
+    return connections
+      .map((conn) => {
+        const nameMatch = conn.config.name.toLowerCase().includes(q);
+        const allDatabases = conn.databases ?? [];
+        const visibleDatabases = getVisibleItems(allDatabases, databaseFilters[conn.config.id]);
+        const databases = visibleDatabases
+          .map((db) => {
+            const dbMatch = nameMatch || db.name.toLowerCase().includes(q);
+            const allTables = db.tables ?? [];
+            const visibleTables = getVisibleItems(
+              allTables,
+              tableFilters[makeTableFilterKey(conn.config.id, db.name)]
+            );
+            const tables = visibleTables.filter(
+              (table) => dbMatch || table.name.toLowerCase().includes(q)
+            );
+            if (dbMatch) {
+              return db;
+            }
+            if (tables.length > 0) {
+              return { ...db, tables };
+            }
+            return null;
+          })
+          .filter((db): db is LoadedDatabase => db !== null);
+
+        if (nameMatch) {
+          return conn;
+        }
+        if (databases.length > 0) {
+          return { ...conn, databases };
+        }
+        return null;
+      })
+      .filter((conn): conn is LoadedConnection => conn !== null);
+  }, [connections, search, databaseFilters, tableFilters]);
+
+  const filterDialogConn = filterDialogConnId
+    ? connections.find((conn) => conn.config.id === filterDialogConnId)
+    : undefined;
+
+  const filterDialogTableDb =
+    filterDialogTable &&
+    connections
+      .find((conn) => conn.config.id === filterDialogTable.connId)
+      ?.databases?.find((db) => db.name === filterDialogTable.dbName);
 
   return (
     <div className="schema-panel">
@@ -276,7 +421,7 @@ export function SchemaBrowser({ onCreateConnection }: SchemaBrowserProps) {
             <path d="M12 5v14M5 12h14" />
           </svg>
         </button>
-        <button className="btn-icon" title={t("database.sidebar.refresh")}>
+        <button className="btn-icon" title={t("database.sidebar.refresh")} onClick={() => void loadConnections()}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
             <path d="M23 4v6h-6M1 20v-6h6" />
             <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" />
@@ -293,25 +438,94 @@ export function SchemaBrowser({ onCreateConnection }: SchemaBrowserProps) {
         />
       </div>
       <div className="schema-tree">
+        {loading && (
+          <div style={{ padding: "12px 16px", fontSize: "12px", color: "var(--text-secondary, #8e8e93)" }}>
+            {t("common.loading")}
+          </div>
+        )}
+        {!loading && loadError && (
+          <div style={{ padding: "12px 16px", fontSize: "12px", color: "var(--color-danger, #ff3b30)" }}>
+            {t("database.sidebar.loadFailed")}: {loadError}
+          </div>
+        )}
+        {!loading && !loadError && filtered.length === 0 && (
+          <div style={{ padding: "12px 16px", fontSize: "12px", color: "var(--text-secondary, #8e8e93)" }}>
+            {t("database.sidebar.empty")}
+          </div>
+        )}
         {filtered.map((conn) => {
-          const connId = `conn:${conn.id}`;
+          const connId = `conn:${conn.config.id}`;
           const connExpanded = expanded.has(connId);
+          const allDatabases = conn.databases ?? [];
+          const filter = databaseFilters[conn.config.id];
+          const visibleDatabases = getVisibleItems(allDatabases, filter);
+          const visibleCount = visibleDatabases.length;
+          const totalCount = allDatabases.length;
+          const isFiltered = totalCount > 0 && visibleCount < totalCount;
+
           return (
-            <div key={conn.id}>
+            <div key={conn.config.id}>
               <TreeNode
                 id={connId}
-                label={conn.name}
+                label={conn.config.name}
                 type="connection"
                 depth={0}
                 expanded={connExpanded}
                 onToggle={() => toggle(connId)}
-                meta={conn.engine}
-                hasChildren={conn.databases.length > 0}
+                meta={
+                  conn.loadingDatabases
+                    ? t("common.loading")
+                    : conn.databases
+                      ? isFiltered
+                        ? `${visibleCount}/${totalCount} DB`
+                        : `${totalCount} DB`
+                      : conn.config.db_type
+                }
+                hasChildren
               />
+              {connExpanded && conn.databasesError && (
+                <div style={{ padding: "4px 24px", fontSize: "11px", color: "var(--color-danger, #ff3b30)" }}>
+                  {conn.databasesError}
+                </div>
+              )}
               {connExpanded &&
-                conn.databases.map((db) => {
-                  const dbId = `db:${conn.id}:${db.name}`;
+                !conn.loadingDatabases &&
+                totalCount === 0 &&
+                !conn.databasesError && (
+                  <div style={{ padding: "4px 24px", fontSize: "11px", color: "var(--text-secondary, #8e8e93)" }}>
+                    {t("database.sidebar.noDatabases")}
+                  </div>
+                )}
+              {connExpanded && !conn.loadingDatabases && totalCount > 0 && (
+                <button
+                  type="button"
+                  className="schema-filter-btn"
+                  onClick={() => setFilterDialogConnId(conn.config.id)}
+                >
+                  {t("database.sidebar.filterDisplay")}
+                  {isFiltered ? ` (${visibleCount}/${totalCount})` : ""}
+                </button>
+              )}
+              {connExpanded &&
+                !conn.loadingDatabases &&
+                visibleCount === 0 &&
+                totalCount > 0 && (
+                  <div style={{ padding: "4px 24px", fontSize: "11px", color: "var(--text-secondary, #8e8e93)" }}>
+                    {t("database.sidebar.filterHidden")}
+                  </div>
+                )}
+              {connExpanded &&
+                !conn.loadingDatabases &&
+                visibleDatabases.map((db) => {
+                  const dbId = `db:${conn.config.id}:${db.name}`;
                   const dbExpanded = expanded.has(dbId);
+                  const allTables = db.tables ?? [];
+                  const tableFilter = tableFilters[makeTableFilterKey(conn.config.id, db.name)];
+                  const visibleTables = getVisibleItems(allTables, tableFilter);
+                  const tableVisibleCount = visibleTables.length;
+                  const tableTotalCount = allTables.length;
+                  const isTableFiltered = tableTotalCount > 0 && tableVisibleCount < tableTotalCount;
+
                   return (
                     <div key={db.name}>
                       <TreeNode
@@ -321,44 +535,83 @@ export function SchemaBrowser({ onCreateConnection }: SchemaBrowserProps) {
                         depth={1}
                         expanded={dbExpanded}
                         onToggle={() => toggle(dbId)}
-                        meta={`${db.tables.length} tables`}
-                        hasChildren={db.tables.length > 0}
+                        meta={
+                          db.loadingTables
+                            ? t("common.loading")
+                            : db.loadError
+                              ? t("database.sidebar.tablesFailed")
+                              : db.tables
+                                ? isTableFiltered
+                                  ? `${tableVisibleCount}/${tableTotalCount} tables`
+                                  : `${tableTotalCount} tables`
+                                : undefined
+                        }
+                        hasChildren
                       />
+                      {dbExpanded && db.loadError && (
+                        <div
+                          style={{
+                            padding: "4px 40px",
+                            fontSize: "11px",
+                            color: "var(--color-danger, #ff3b30)",
+                          }}
+                        >
+                          {db.loadError}
+                        </div>
+                      )}
                       {dbExpanded &&
-                        db.tables.map((tbl) => {
-                          const tblId = `tbl:${conn.id}:${db.name}:${tbl.name}`;
-                          const tblExpanded = expanded.has(tblId);
-                          return (
-                            <div key={tbl.name}>
-                              <TreeNode
-                                id={tblId}
-                                label={tbl.name}
-                                type="table"
-                                depth={2}
-                                expanded={tblExpanded}
-                                onToggle={() => toggle(tblId)}
-                                meta={`${tbl.columns.length} cols`}
-                                hasChildren={tbl.columns.length > 0}
-                              />
-                              {tblExpanded &&
-                                tbl.columns.map((col) => (
-                                  <TreeNode
-                                    key={col.name}
-                                    id={`col:${conn.id}:${db.name}:${tbl.name}:${col.name}`}
-                                    label={col.name}
-                                    type="column"
-                                    depth={3}
-                                    expanded={false}
-                                    onToggle={() => {}}
-                                    meta={col.type}
-                                    isPk={col.isPk}
-                                    isFk={col.isFk}
-                                    hasChildren={false}
-                                  />
-                                ))}
-                            </div>
-                          );
-                        })}
+                        !db.loadingTables &&
+                        tableTotalCount === 0 &&
+                        !db.loadError && (
+                          <div
+                            style={{
+                              padding: "4px 40px",
+                              fontSize: "11px",
+                              color: "var(--text-secondary, #8e8e93)",
+                            }}
+                          >
+                            {t("database.sidebar.noTables")}
+                          </div>
+                        )}
+                      {dbExpanded && !db.loadingTables && tableTotalCount > 0 && (
+                        <button
+                          type="button"
+                          className="schema-filter-btn schema-filter-btn--depth-2"
+                          onClick={() =>
+                            setFilterDialogTable({ connId: conn.config.id, dbName: db.name })
+                          }
+                        >
+                          {t("database.sidebar.filterDisplay")}
+                          {isTableFiltered ? ` (${tableVisibleCount}/${tableTotalCount})` : ""}
+                        </button>
+                      )}
+                      {dbExpanded &&
+                        !db.loadingTables &&
+                        tableVisibleCount === 0 &&
+                        tableTotalCount > 0 && (
+                          <div
+                            style={{
+                              padding: "4px 40px",
+                              fontSize: "11px",
+                              color: "var(--text-secondary, #8e8e93)",
+                            }}
+                          >
+                            {t("database.sidebar.filterHiddenTables")}
+                          </div>
+                        )}
+                      {dbExpanded &&
+                        visibleTables.map((tbl) => (
+                          <TreeNode
+                            key={tbl.name}
+                            id={`tbl:${conn.config.id}:${db.name}:${tbl.name}`}
+                            label={tbl.name}
+                            type="table"
+                            depth={2}
+                            expanded={false}
+                            onToggle={() => {}}
+                            hasChildren={false}
+                          />
+                        ))}
                     </div>
                   );
                 })}
@@ -366,6 +619,44 @@ export function SchemaBrowser({ onCreateConnection }: SchemaBrowserProps) {
           );
         })}
       </div>
+
+      {filterDialogConn && filterDialogConn.databases && (
+        <DatabaseFilterDialog
+          open={filterDialogConnId !== null}
+          connectionName={filterDialogConn.config.name}
+          databases={filterDialogConn.databases.map((db) => db.name)}
+          initial={
+            databaseFilters[filterDialogConn.config.id] ??
+            mergeFilter(undefined, filterDialogConn.databases.map((db) => db.name))
+          }
+          onClose={() => setFilterDialogConnId(null)}
+          onApply={(state) => {
+            setDatabaseFilters((prev) => ({
+              ...prev,
+              [filterDialogConn.config.id]: state,
+            }));
+          }}
+        />
+      )}
+
+      {filterDialogTable && filterDialogTableDb?.tables && (
+        <SchemaFilterDialog
+          open={filterDialogTable !== null}
+          title={t("database.filter.tableTitle", { name: filterDialogTable.dbName })}
+          items={filterDialogTableDb.tables.map((tbl) => tbl.name)}
+          initial={
+            tableFilters[makeTableFilterKey(filterDialogTable.connId, filterDialogTable.dbName)] ??
+            mergeFilter(undefined, filterDialogTableDb.tables.map((tbl) => tbl.name))
+          }
+          onClose={() => setFilterDialogTable(null)}
+          onApply={(state) => {
+            setTableFilters((prev) => ({
+              ...prev,
+              [makeTableFilterKey(filterDialogTable.connId, filterDialogTable.dbName)]: state,
+            }));
+          }}
+        />
+      )}
     </div>
   );
 }

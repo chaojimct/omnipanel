@@ -57,6 +57,7 @@ pub fn run() {
             commands::database::db_save_connection,
             commands::database::db_delete_connection,
             commands::database::db_test_connection,
+            commands::database::db_list_databases,
             commands::database::db_list_tables,
             commands::database::db_preview_table,
             // Updater

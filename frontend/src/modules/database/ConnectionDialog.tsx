@@ -1,18 +1,15 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useI18n } from "../../i18n";
+import type { DbConnectionGroup } from "../../stores/dbGroupStore";
+import {
+  type ConnectionFormData,
+  formToConnection,
+  isSupportedEngine,
+  saveConnection,
+  testConnection,
+} from "./api";
 
-type DbEngine = "postgresql" | "mysql" | "sqlite" | "sqlserver" | "redis" | "mongodb";
-
-interface FormData {
-  engine: DbEngine;
-  name: string;
-  host: string;
-  port: string;
-  database: string;
-  username: string;
-  password: string;
-  ssl: boolean;
-}
+type DbEngine = ConnectionFormData["engine"];
 
 const ENGINE_DEFAULTS: Record<DbEngine, { port: string; icon: string }> = {
   postgresql: { port: "5432", icon: "PG" },
@@ -23,32 +20,60 @@ const ENGINE_DEFAULTS: Record<DbEngine, { port: string; icon: string }> = {
   mongodb: { port: "27017", icon: "MG" },
 };
 
+const EMPTY_FORM: ConnectionFormData = {
+  engine: "mysql",
+  name: "",
+  host: "localhost",
+  port: "3306",
+  database: "",
+  username: "",
+  password: "",
+  ssl: false,
+  group: "默认",
+};
+
 interface ConnectionDialogProps {
   open: boolean;
   onClose: () => void;
-  onSave?: (data: FormData) => void;
+  onSaved?: () => void;
+  defaultGroup?: string;
+  groups?: DbConnectionGroup[];
 }
 
-export function ConnectionDialog({ open, onClose, onSave }: ConnectionDialogProps) {
+export function ConnectionDialog({
+  open,
+  onClose,
+  onSaved,
+  defaultGroup = "默认",
+  groups = [],
+}: ConnectionDialogProps) {
   const { t } = useI18n();
-  const [form, setForm] = useState<FormData>({
-    engine: "postgresql",
-    name: "",
-    host: "localhost",
-    port: "5432",
-    database: "",
-    username: "",
-    password: "",
-    ssl: false,
-  });
+  const [form, setForm] = useState<ConnectionFormData>({ ...EMPTY_FORM, group: defaultGroup });
+  const [status, setStatus] = useState<{ kind: "info" | "success" | "error"; message: string } | null>(
+    null
+  );
+  const [testing, setTesting] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+    setForm({ ...EMPTY_FORM, group: defaultGroup });
+    setStatus(null);
+    setTesting(false);
+    setSaving(false);
+  }, [open, defaultGroup]);
 
   if (!open) return null;
 
-  const update = <K extends keyof FormData>(key: K, value: FormData[K]) => {
+  const update = <K extends keyof ConnectionFormData>(key: K, value: ConnectionFormData[K]) => {
+    setStatus(null);
     setForm((prev) => ({ ...prev, [key]: value }));
   };
 
   const handleEngineChange = (engine: DbEngine) => {
+    setStatus(null);
     setForm((prev) => ({
       ...prev,
       engine,
@@ -56,21 +81,76 @@ export function ConnectionDialog({ open, onClose, onSave }: ConnectionDialogProp
     }));
   };
 
-  const handleSave = () => {
-    onSave?.(form);
-    onClose();
+  const validateForm = (): string | null => {
+    if (!form.name.trim()) {
+      return t("database.dialog.nameRequired");
+    }
+    if (!isSupportedEngine(form.engine)) {
+      return t("database.dialog.unsupportedEngine");
+    }
+    if (!form.host.trim()) {
+      return t("database.dialog.hostRequired");
+    }
+    if (!form.group.trim()) {
+      return t("database.dialog.groupRequired");
+    }
+    return null;
   };
 
-  const handleTest = () => {
-    // TODO: implement connection test
+  const handleSave = async () => {
+    const validationError = validateForm();
+    if (validationError) {
+      setStatus({ kind: "error", message: validationError });
+      return;
+    }
+
+    setSaving(true);
+    setStatus(null);
+    try {
+      await saveConnection(formToConnection(form));
+      onSaved?.();
+      onClose();
+    } catch (error) {
+      setStatus({
+        kind: "error",
+        message: t("database.dialog.saveFailed", { error: String(error) }),
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleTest = async () => {
+    const validationError = validateForm();
+    if (validationError) {
+      setStatus({ kind: "error", message: validationError });
+      return;
+    }
+
+    setTesting(true);
+    setStatus({ kind: "info", message: t("database.dialog.testing") });
+    try {
+      const version = await testConnection(formToConnection(form));
+      setStatus({
+        kind: "success",
+        message: t("database.dialog.testSuccess", { version }),
+      });
+    } catch (error) {
+      setStatus({
+        kind: "error",
+        message: t("database.dialog.testFailed", { error: String(error) }),
+      });
+    } finally {
+      setTesting(false);
+    }
   };
 
   const isFileBased = form.engine === "sqlite";
+  const busy = testing || saving;
 
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-dialog" onClick={(e) => e.stopPropagation()}>
-        {/* Header */}
         <div className="modal-header">
           <h3>{t("database.dialog.title")}</h3>
           <button className="btn-icon" onClick={onClose}>
@@ -80,9 +160,7 @@ export function ConnectionDialog({ open, onClose, onSave }: ConnectionDialogProp
           </button>
         </div>
 
-        {/* Body */}
         <div className="modal-body">
-          {/* Engine selector */}
           <div className="form-field">
             <label className="form-label">{t("database.dialog.engine")}</label>
             <div className="engine-grid">
@@ -99,7 +177,6 @@ export function ConnectionDialog({ open, onClose, onSave }: ConnectionDialogProp
             </div>
           </div>
 
-          {/* Connection name */}
           <div className="form-field">
             <label className="form-label">{t("database.dialog.name")}</label>
             <input
@@ -111,7 +188,22 @@ export function ConnectionDialog({ open, onClose, onSave }: ConnectionDialogProp
             />
           </div>
 
-          {/* Host + Port (not for SQLite) */}
+          <div className="form-field">
+            <label className="form-label">{t("database.dialog.group")}</label>
+            <select
+              className="input"
+              value={form.group}
+              onChange={(e) => update("group", e.target.value)}
+              style={{ width: "100%" }}
+            >
+              {groups.map((group) => (
+                <option key={group.id} value={group.name}>
+                  {group.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
           {!isFileBased && (
             <div className="form-row">
               <div className="form-field" style={{ flex: 2 }}>
@@ -137,19 +229,30 @@ export function ConnectionDialog({ open, onClose, onSave }: ConnectionDialogProp
             </div>
           )}
 
-          {/* Database */}
           <div className="form-field">
-            <label className="form-label">{t("database.dialog.database")}</label>
+            <label className="form-label">
+              {t("database.dialog.database")}
+              {!isFileBased && (
+                <span style={{ marginLeft: 6, fontWeight: 400, opacity: 0.6 }}>
+                  ({t("database.dialog.optional")})
+                </span>
+              )}
+            </label>
             <input
               className="input"
-              placeholder={isFileBased ? "/path/to/file.db" : form.engine === "redis" ? "0" : "my_database"}
+              placeholder={
+                isFileBased
+                  ? "/path/to/file.db"
+                  : form.engine === "redis"
+                    ? "0"
+                    : t("database.dialog.databasePlaceholder")
+              }
               value={form.database}
               onChange={(e) => update("database", e.target.value)}
               style={{ width: "100%" }}
             />
           </div>
 
-          {/* Username + Password (not for SQLite/Redis) */}
           {!isFileBased && form.engine !== "redis" && (
             <div className="form-row">
               <div className="form-field" style={{ flex: 1 }}>
@@ -176,7 +279,6 @@ export function ConnectionDialog({ open, onClose, onSave }: ConnectionDialogProp
             </div>
           )}
 
-          {/* SSL toggle (not for SQLite) */}
           {!isFileBased && (
             <div className="form-field">
               <label className="form-check">
@@ -189,19 +291,35 @@ export function ConnectionDialog({ open, onClose, onSave }: ConnectionDialogProp
               </label>
             </div>
           )}
+
+          {status && (
+            <div
+              className="form-field"
+              style={{
+                color:
+                  status.kind === "success"
+                    ? "var(--color-success, #34c759)"
+                    : status.kind === "error"
+                      ? "var(--color-danger, #ff3b30)"
+                      : "var(--text-secondary, #8e8e93)",
+                fontSize: "12px",
+              }}
+            >
+              {status.message}
+            </div>
+          )}
         </div>
 
-        {/* Footer */}
         <div className="modal-footer">
-          <button className="btn btn-secondary" onClick={onClose}>
+          <button className="btn btn-secondary" onClick={onClose} disabled={busy}>
             {t("database.dialog.cancel")}
           </button>
           <div style={{ flex: 1 }} />
-          <button className="btn btn-ghost" onClick={handleTest}>
-            {t("database.dialog.test")}
+          <button className="btn btn-ghost" onClick={() => void handleTest()} disabled={busy}>
+            {testing ? t("database.dialog.testing") : t("database.dialog.test")}
           </button>
-          <button className="btn btn-primary" onClick={handleSave}>
-            {t("database.dialog.save")}
+          <button className="btn btn-primary" onClick={() => void handleSave()} disabled={busy}>
+            {saving ? t("database.dialog.saving") : t("database.dialog.save")}
           </button>
         </div>
       </div>
