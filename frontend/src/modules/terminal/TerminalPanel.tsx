@@ -335,7 +335,6 @@ function TerminalView({
   }, [onSenderChange, resource, sessionId, setStatus, startup]);
 
   return <div ref={containerRef} className="term-xterm-wrap" />;
->>>>>>> e712eed0d2723de79e001674a7bdcfd07d8670df
 }
 
 function CommandInput({ onSend }: { onSend: (cmd: string) => void }) {
@@ -922,7 +921,6 @@ export function TerminalPanel() {
   const paneSendersRef = useRef<Record<string, (cmd: string) => void>>({});
   const [draggingPaneId, setDraggingPaneId] = useState<string | null>(null);
   const [dropTargetPaneId, setDropTargetPaneId] = useState<string | null>(null);
->>>>>>> e712eed0d2723de79e001674a7bdcfd07d8670df
 
   useEffect(() => {
     if (tabs.length > 0) return;
@@ -1194,7 +1192,6 @@ export function TerminalPanel() {
               onResizeSplit={handleResizeSplit}
             />
           </div>
->>>>>>> e712eed0d2723de79e001674a7bdcfd07d8670df
         </div>
 
         {!isPinnedAi ? (
