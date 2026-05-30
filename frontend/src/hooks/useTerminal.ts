@@ -1,5 +1,6 @@
 import { useEffect, useRef, type RefObject } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { commands, type SshConfig } from "../ipc/bindings";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { Terminal, type IDisposable, type ITheme } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
@@ -8,6 +9,7 @@ import { WebLinksAddon } from "@xterm/addon-web-links";
 import { SearchAddon } from "@xterm/addon-search";
 import { useTerminalStore } from "../stores/terminalStore";
 import { useConnectionStore } from "../stores/connectionStore";
+import { isOpenSshHostId, openSshHostAlias } from "../lib/sshConfigHosts";
 import { createBlockId, useBlocksStore, type TerminalBlock } from "../stores/blocksStore";
 
 const TERMINAL_THEME: ITheme = {
@@ -81,17 +83,28 @@ function isRemotePane(sessionId: string): boolean {
 async function createBackendSession(sessionId: string, cols: number, rows: number): Promise<string> {
   const pane = findPaneById(sessionId);
   if (pane?.type === "remote") {
+    if (isOpenSshHostId(pane.resourceId)) {
+      const alias = openSshHostAlias(pane.resourceId);
+      if (!alias) {
+        throw new Error("无效的 OpenSSH Host 标识");
+      }
+      const res = await commands.sshConnectConfigHost(alias, cols, rows);
+      if (res.status === "ok") return res.data;
+      throw new Error(res.error.message);
+    }
     const conn = useConnectionStore.getState().connections.find((c) => c.id === pane.resourceId);
     if (!conn) {
       throw new Error("未找到对应的 SSH 连接配置，请先在 SSH 管理中添加连接");
     }
-    let config: unknown;
+    let config: SshConfig;
     try {
-      config = JSON.parse(conn.config || "{}");
+      config = JSON.parse(conn.config || "{}") as SshConfig;
     } catch {
       throw new Error("SSH 连接配置解析失败");
     }
-    return invoke<string>("ssh_connect", { config, cols, rows });
+    const res = await commands.sshConnect(config, cols, rows);
+    if (res.status === "ok") return res.data;
+    throw new Error(res.error.message);
   }
   return invoke<string>("create_terminal", { cols, rows });
 }

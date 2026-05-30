@@ -5,6 +5,13 @@
 //! - shell 输出通过 [`SshSink`] 抽象回流，crate 不依赖 Tauri；事件桥接由 `src-tauri` 提供。
 //! - SFTP 在独立 channel 上按需打开。
 
+mod openssh_config;
+
+pub use openssh_config::{
+    SshConfigEntry, default_ssh_config_path, find_ssh_config_entry, load_ssh_config_hosts,
+    load_ssh_config_hosts_from, ssh_config_to_connect_config,
+};
+
 use std::sync::Arc;
 use std::time::Duration;
 

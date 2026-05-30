@@ -4,7 +4,10 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
 use omnipanel_error::{ErrorCode, OmniError};
-use omnipanel_ssh::{SftpEntry, SshConfig, SshEvent, SshSession, SshSink};
+use omnipanel_ssh::{
+    SftpEntry, SshConfig, SshConfigEntry, SshEvent, SshSession, SshSink, find_ssh_config_entry,
+    load_ssh_config_hosts, ssh_config_to_connect_config,
+};
 use tauri::{Emitter, State};
 
 use crate::output_buffer;
@@ -134,4 +137,26 @@ pub async fn sftp_upload(
         .get(&id)
         .ok_or_else(|| OmniError::new(ErrorCode::NotFound, format!("SSH 会话 {id} 不存在")))?;
     session.sftp_upload(&path, &data).await
+}
+
+/// 读取 `~/.ssh/config` 中的 Host 条目（含 Include）。
+#[tauri::command]
+#[specta::specta]
+pub async fn ssh_list_config_hosts() -> Result<Vec<SshConfigEntry>, OmniError> {
+    load_ssh_config_hosts()
+}
+
+/// 按 `~/.ssh/config` 中的 Host 别名建立连接（使用 IdentityFile 等配置）。
+#[tauri::command]
+#[specta::specta]
+pub async fn ssh_connect_config_host(
+    state: State<'_, AppState>,
+    alias: String,
+    cols: u16,
+    rows: u16,
+) -> Result<String, OmniError> {
+    let entry = find_ssh_config_entry(&alias)?
+        .ok_or_else(|| OmniError::new(ErrorCode::NotFound, format!("SSH 配置中未找到 Host `{alias}`")))?;
+    let config = ssh_config_to_connect_config(&entry)?;
+    ssh_connect(state, config, cols, rows).await
 }

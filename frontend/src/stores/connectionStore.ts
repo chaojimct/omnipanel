@@ -1,3 +1,4 @@
+import { useEffect, useMemo, useState } from "react";
 import { create } from "zustand";
 import { commands, type Connection, type ConnectionKind } from "../ipc/bindings";
 import {
@@ -6,6 +7,10 @@ import {
   type ResourceType,
   type WorkspaceResource,
 } from "../lib/resourceRegistry";
+import {
+  mergeSshHostResources,
+  refreshSshConfigHosts,
+} from "../lib/sshConfigHosts";
 
 /**
  * 连接状态层：后端 `omnipanel-store` 持久化的统一连接模型在前端的唯一缓存。
@@ -152,4 +157,42 @@ export function useWorkspaceResources(): WorkspaceResource[] {
 /** 应用启动时拉取一次后端连接。 */
 export function initConnections() {
   void useConnectionStore.getState().refresh();
+  void refreshSshConfigHosts();
+}
+
+/**
+ * SSH 模块主机列表：优先已保存连接，并合并 `~/.ssh/config` 中的 Host。
+ * 无二者时回退 SEED 占位数据。
+ */
+export function useSshHostResources(): WorkspaceResource[] {
+  const connections = useConnectionStore((state) => state.connections);
+  const loaded = useConnectionStore((state) => state.loaded);
+  const [configHosts, setConfigHosts] = useState<WorkspaceResource[]>([]);
+  const [configLoaded, setConfigLoaded] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    void refreshSshConfigHosts().then((hosts) => {
+      if (!cancelled) {
+        setConfigHosts(hosts);
+        setConfigLoaded(true);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return useMemo(() => {
+    const stored = connections
+      .filter((c) => c.kind === "ssh")
+      .map(connectionToResource);
+    if (stored.length > 0 || configHosts.length > 0) {
+      return mergeSshHostResources(stored, configHosts);
+    }
+    if (loaded && configLoaded) {
+      return SEED_RESOURCES.filter((r) => r.type === "ssh");
+    }
+    return [];
+  }, [connections, configHosts, loaded, configLoaded]);
 }

@@ -49,6 +49,10 @@ export const commands = {
 	sftpDownload: (id: string, path: string) => typedError<number[], OmniError_Serialize>(__TAURI_INVOKE("sftp_download", { id, path })),
 	/**  上传内容到远端文件（覆盖）。 */
 	sftpUpload: (id: string, path: string, data: number[]) => typedError<null, OmniError_Serialize>(__TAURI_INVOKE("sftp_upload", { id, path, data })),
+	/**  读取 `~/.ssh/config` 中的 Host 条目（含 Include）。 */
+	sshListConfigHosts: () => typedError<SshConfigEntry[], OmniError_Serialize>(__TAURI_INVOKE("ssh_list_config_hosts")),
+	/**  按 `~/.ssh/config` 中的 Host 别名建立连接（使用 IdentityFile 等配置）。 */
+	sshConnectConfigHost: (alias: string, cols: number, rows: number) => typedError<string, OmniError_Serialize>(__TAURI_INVOKE("ssh_connect_config_host", { alias, cols, rows })),
 	checkUpdate: () => typedError<UpdateInfo, string>(__TAURI_INVOKE("check_update")),
 	installUpdate: () => typedError<null, string>(__TAURI_INVOKE("install_update")),
 };
@@ -165,6 +169,15 @@ export type SshConfig = {
 	port: number,
 	user: string,
 	auth: SshAuth,
+};
+
+/**  `~/.ssh/config` 中的一个 Host 条目（已展开 HostName）。 */
+export type SshConfigEntry = {
+	alias: string,
+	hostName: string,
+	user: string | null,
+	port: number | null,
+	identityFile: string | null,
 };
 
 export type UpdateInfo = {
