@@ -2,6 +2,8 @@
 // 本文件保留类型/标签常量与纯函数 helper；下方 SEED_RESOURCES 仅作后端无数据时的空态占位（fallback），
 // 各功能面板将在对应里程碑（SSH/数据库等）逐步改用 connectionStore 的真实数据。
 
+import { getCachedOpenSshHosts, getOpenSshHostResource } from "./sshConfigHosts";
+
 export type ResourceType =
   | "workspace"
   | "terminal"
@@ -183,10 +185,14 @@ export const workspaceResources = SEED_RESOURCES;
 
 export function getResourceById(id: string | null | undefined) {
   if (!id) return null;
+  const fromConfig = getOpenSshHostResource(id);
+  if (fromConfig) return fromConfig;
   return SEED_RESOURCES.find((resource) => resource.id === id) ?? null;
 }
 
 export function getSshHosts() {
+  const cached = getCachedOpenSshHosts();
+  if (cached.length > 0) return cached;
   return SEED_RESOURCES.filter((resource) => resource.type === "ssh");
 }
 

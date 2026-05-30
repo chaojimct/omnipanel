@@ -36,6 +36,8 @@ fn export_ipc_bindings() {
         commands::ssh::sftp_list,
         commands::ssh::sftp_download,
         commands::ssh::sftp_upload,
+        commands::ssh::ssh_list_config_hosts,
+        commands::ssh::ssh_connect_config_host,
         commands::updater::check_update,
         commands::updater::install_update,
     ]);
@@ -134,6 +136,8 @@ pub fn run() {
             commands::ssh::sftp_list,
             commands::ssh::sftp_download,
             commands::ssh::sftp_upload,
+            commands::ssh::ssh_list_config_hosts,
+            commands::ssh::ssh_connect_config_host,
             // Updater
             commands::updater::check_update,
             commands::updater::install_update,

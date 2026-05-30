@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { HostListPanel } from "../../components/workspace/HostListPanel";
 import { type WorkspaceResource } from "../../lib/resourceRegistry";
-import { useWorkspaceResources } from "../../stores/connectionStore";
+import { useSshHostResources } from "../../stores/connectionStore";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { useActionStore } from "../../stores/actionStore";
 import { useTerminalStore } from "../../stores/terminalStore";
@@ -278,8 +278,7 @@ export function SshManager() {
   const [moduleTab, setModuleTab] = useState<ModuleTab>("hosts");
   const [detailTab, setDetailTab] = useState<DetailTab>("overview");
 
-  const allResources = useWorkspaceResources();
-  const sshResources = useMemo(() => allResources.filter((resource) => resource.type === "ssh"), [allResources]);
+  const sshResources = useSshHostResources();
   const resolvedSsh = getResourceForPath(SSH_PATH);
   const activeResource = resolvedSsh?.type === "ssh" ? resolvedSsh : sshResources[0] ?? null;
   const profile = getProfile(activeResource);
