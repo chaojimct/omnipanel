@@ -178,6 +178,18 @@ export function DockerPanel() {
   useEffect(() => {
     setDrawerContainerName(null);
   }, [activeResource?.id]);
+
+  useEffect(() => {
+    if (!drawerContainerName) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        closeDrawer();
+      }
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [drawerContainerName]);
   const topbarTabs = useMemo(
     () =>
       dockerResources.map((resource) => ({
@@ -394,7 +406,7 @@ export function DockerPanel() {
         </div>
       </div>
 
-      <div className={`drawer-overlay${drawerContainer ? " show" : ""}`} onClick={closeDrawer} />
+      <div className={`drawer-overlay${drawerContainer ? " show" : ""}`} />
       <div className={`drawer${drawerContainer ? " show" : ""}`}>
         {drawerContainer && (
           <>
