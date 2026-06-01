@@ -164,6 +164,7 @@ pub fn run() {
             commands::database::db_introspect_table,
             commands::database::db_list_tables,
             commands::database::db_preview_table,
+            commands::database::db_count_table,
             commands::database::db_execute_query,
             // Connections（统一连接模型）
             commands::connection::conn_list,

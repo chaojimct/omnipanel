@@ -954,12 +954,22 @@
   .sql-toolbar-meta { font-size: 11px; color: var(--meta); white-space: nowrap; }
   .db-workspace-pane--table .results-area { flex: 1; min-height: 0; display: flex; flex-direction: column; }
   .db-workspace-pane--table .db-data-table-wrap { flex: 1; min-height: 0; overflow: auto; }
-  .db-data-table { width: max-content; min-width: 100%; border-collapse: collapse; font-size: 12px; }
+  .db-data-table { border-collapse: collapse; font-size: 12px; }
   .db-data-table th,
-  .db-data-table td { padding: var(--sp-2) var(--sp-3); border-bottom: 1px solid var(--border); text-align: left; white-space: nowrap; }
+  .db-data-table td { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: var(--sp-2) var(--sp-3); border-bottom: 1px solid var(--border); border-right: 1px solid var(--border); text-align: left; }
+  .db-data-table th:last-child,
+  .db-data-table td:last-child { border-right: none; }
   .db-data-table th { position: sticky; top: 0; background: var(--surface); font-weight: 600; color: var(--fg-2); z-index: 1; }
+  .db-data-table-th--auto,
+  .db-data-table td:not(.db-data-table-cell--sized) { max-width: 300px; }
+  .db-col-resize-handle { position: absolute; top: 0; right: -3px; width: 6px; height: 100%; cursor: col-resize; z-index: 2; user-select: none; -webkit-user-select: none; }
+  .db-col-resize-handle:hover,
+  .db-col-resize-handle:active { background: var(--accent); }
+  .db-data-table-th-resizing { user-select: none; }
   .db-data-table tbody tr.db-data-table-row { position: relative; }
-  .db-data-table tbody tr.db-data-table-row:hover { background: var(--surface); }
+  .db-data-table tbody tr.db-data-table-row { background: var(--bg); }
+  .db-data-table tbody tr.db-data-table-row:nth-child(even) { background: var(--surface); }
+  .db-data-table tbody tr.db-data-table-row:hover { background: var(--surface-hover); }
   .db-data-table-row--resize-hint td,
   .db-data-table-row.db-data-table-row--resizing td {
     box-shadow: inset 0 -2px 0 var(--accent);
@@ -971,7 +981,13 @@
     vertical-align: top;
     line-height: 1.45;
   }
-  .db-data-table-wrap--resizing { cursor: row-resize; user-select: none; }
+  .db-data-table-wrap--resizing,
+  .db-data-table-wrap--col-resizing { user-select: none; }
+  .db-data-table-wrap--resizing { cursor: row-resize; }
+  .db-pagination { display: flex; align-items: center; justify-content: space-between; padding: var(--sp-2) var(--sp-4); border-top: 1px solid var(--border); background: var(--bg); flex-shrink: 0; }
+  .db-pagination-info { font-size: 11px; color: var(--meta); }
+  .db-pagination-controls { display: flex; align-items: center; gap: var(--sp-2); }
+  .db-pagination-pages { font-size: 11px; color: var(--fg-2); min-width: 64px; text-align: center; }
   .modal-footer-status { flex: 1; min-width: 0; font-size: 12px; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin: 0 var(--sp-3); }
   .modal-footer-status--success { color: var(--success); }
   .modal-footer-status--error { color: var(--danger); }

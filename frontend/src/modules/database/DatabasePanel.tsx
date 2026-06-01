@@ -12,6 +12,7 @@ import { quickInput } from "../../lib/quickInput";
 import { SqlEditor } from "./SqlEditor";
 import {
   connectionMatchesGroup,
+  countTable,
   introspectSchema,
   listConnections,
   listDatabases,
@@ -43,7 +44,16 @@ type TablePreviewState = {
   loading: boolean;
   error: string | null;
   data: TablePreviewResult | null;
+  totalRows: number;
+  page: number;
+  pageSize: number;
 };
+
+const DEFAULT_PAGE_SIZE = 100;
+
+function createDefaultTablePreviewState(): TablePreviewState {
+  return { loading: false, error: null, data: null, totalRows: 0, page: 0, pageSize: DEFAULT_PAGE_SIZE };
+}
 
 type SqlTabState = {
   sql: string;
@@ -275,29 +285,117 @@ export function DatabasePanel() {
 
   const loadTablePreview = useCallback(
     async (tabId: string, connection: DbConnectionConfig, dbName: string, tableName: string) => {
-      setTablePreviews((prev) => ({
-        ...prev,
-        [tabId]: { loading: true, error: null, data: prev[tabId]?.data ?? null },
+      const connForSchema = { ...connection, database: dbName };
+      const defaultState = createDefaultTablePreviewState();
+      const prev = defaultState;
+
+      // 1) 查询总数
+      setTablePreviews((prevMap) => ({
+        ...prevMap,
+        [tabId]: { ...(prevMap[tabId] ?? defaultState), loading: true, error: null },
       }));
+      let totalRows = 0;
       try {
-        const connForSchema = { ...connection, database: dbName };
-        const data = await previewTable(connForSchema, tableName);
-        setTablePreviews((prev) => ({
-          ...prev,
-          [tabId]: { loading: false, error: null, data },
-        }));
+        totalRows = await countTable(connForSchema, tableName);
       } catch (e) {
-        setTablePreviews((prev) => ({
-          ...prev,
+        setTablePreviews((prevMap) => ({
+          ...prevMap,
           [tabId]: {
+            ...(prevMap[tabId] ?? defaultState),
             loading: false,
             error: typeof e === "string" ? e : String(e),
-            data: null,
+          },
+        }));
+        return;
+      }
+
+      // 2) 查询当前页数据
+      const pageSize = prev.pageSize;
+      try {
+        const data = await previewTable(connForSchema, tableName, pageSize, 0);
+        setTablePreviews((prevMap) => ({
+          ...prevMap,
+          [tabId]: { loading: false, error: null, data, totalRows, page: 0, pageSize },
+        }));
+      } catch (e) {
+        setTablePreviews((prevMap) => ({
+          ...prevMap,
+          [tabId]: {
+            ...(prevMap[tabId] ?? defaultState),
+            loading: false,
+            error: typeof e === "string" ? e : String(e),
           },
         }));
       }
     },
     [],
+  );
+
+  const refreshTablePreview = useCallback(
+    (tabId: string, connId: string, dbName: string, tableName: string) => {
+      const connection = connections.find((c) => c.id === connId);
+      if (!connection) return;
+      const connForSchema = { ...connection, database: dbName };
+
+      setTablePreviews((prev) => {
+        const existing = prev[tabId] ?? createDefaultTablePreviewState();
+        const pageSize = existing.pageSize;
+        const page = existing.page;
+
+        Promise.all([
+          countTable(connForSchema, tableName),
+          previewTable(connForSchema, tableName, pageSize, page * pageSize),
+        ])
+          .then(([totalRows, data]) => {
+            setTablePreviews((p) => {
+              const cur = p[tabId];
+              if (!cur) return p;
+              return { ...p, [tabId]: { ...cur, loading: false, error: null, data, totalRows } };
+            });
+          })
+          .catch((e) => {
+            setTablePreviews((p) => {
+              const cur = p[tabId];
+              if (!cur) return p;
+              return { ...p, [tabId]: { ...cur, loading: false, error: typeof e === "string" ? e : String(e) } };
+            });
+          });
+
+        return { ...prev, [tabId]: { ...existing, loading: true } };
+      });
+    },
+    [connections],
+  );
+
+  const goToPage = useCallback(
+    (tabId: string, connId: string, dbName: string, tableName: string, page: number) => {
+      const connection = connections.find((c) => c.id === connId);
+      if (!connection) return;
+      const connForSchema = { ...connection, database: dbName };
+      setTablePreviews((prev) => {
+        const existing = prev[tabId] ?? createDefaultTablePreviewState();
+        const pageSize = existing.pageSize;
+
+        previewTable(connForSchema, tableName, pageSize, page * pageSize)
+          .then((data) => {
+            setTablePreviews((p) => {
+              const cur = p[tabId];
+              if (!cur) return p;
+              return { ...p, [tabId]: { ...cur, loading: false, data, page } };
+            });
+          })
+          .catch((e) => {
+            setTablePreviews((p) => {
+              const cur = p[tabId];
+              if (!cur) return p;
+              return { ...p, [tabId]: { ...cur, loading: false, error: typeof e === "string" ? e : String(e) } };
+            });
+          });
+
+        return { ...prev, [tabId]: { ...existing, loading: true } };
+      });
+    },
+    [connections],
   );
 
   const handleSelectTable = useCallback(
@@ -620,12 +718,26 @@ export function DatabasePanel() {
   const renderTablePane = (tab: Extract<DatabaseWorkspaceTab, { kind: "table" }>) => {
     const preview = tablePreviews[tab.id];
     const rowTotal = preview?.data?.rows.length ?? 0;
+    const shownTotal = preview?.totalRows ?? 0;
 
     return (
       <div className="db-workspace-pane db-workspace-pane--table">
         <div className="results-area">
           <div className="results-header">
             <h3>{tab.label}</h3>
+            <button
+              type="button"
+              className="btn-icon"
+              style={{ marginLeft: "var(--sp-2)" }}
+              title="Refresh"
+              disabled={preview?.loading}
+              onClick={() => refreshTablePreview(tab.id, tab.connId, tab.dbName, tab.tableName)}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
+                <path d="M23 4v6h-6M1 20v-6h6" />
+                <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" />
+              </svg>
+            </button>
             <span className="results-meta">
               {preview?.loading
                 ? t("common.loading")
@@ -634,6 +746,11 @@ export function DatabasePanel() {
                     ms: 0,
                     mode: t("common.readonly"),
                   })}
+              {shownTotal > 0 && !preview?.loading && (
+                <span style={{ marginLeft: "var(--sp-3)", color: "var(--meta)" }}>
+                  / {shownTotal.toLocaleString()} total
+                </span>
+              )}
             </span>
           </div>
           {preview?.error ? (
@@ -648,7 +765,17 @@ export function DatabasePanel() {
               {t("common.loading")}
             </div>
           ) : preview?.data ? (
-            <TableDataGrid columns={preview.data.columns} rows={preview.data.rows} />
+            <TableDataGrid
+              columns={preview.data.columns}
+              rows={preview.data.rows}
+              totalRows={preview.totalRows}
+              page={preview.page}
+              pageSize={preview.pageSize}
+              loading={preview.loading}
+              onPageChange={(page) =>
+                goToPage(tab.id, tab.connId, tab.dbName, tab.tableName, page)
+              }
+            />
           ) : (
             <div className="empty-state compact" style={{ padding: "var(--sp-4)" }}>
               {t("database.results.runHint")}
