@@ -7,6 +7,8 @@ import {
   type ColumnSizingState,
 } from "@tanstack/react-table";
 
+import { type DbColumnMeta } from "./api";
+
 export type TableDataGridProps = {
   columns: string[];
   rows: Record<string, unknown>[];
@@ -15,6 +17,8 @@ export type TableDataGridProps = {
   pageSize: number;
   loading: boolean;
   onPageChange: (page: number) => void;
+  columnMeta?: DbColumnMeta[];
+  onCellEdit?: (cellInfo: { rowIndex: number; column: string; row: Record<string, unknown> }) => void;
 };
 
 const MIN_ROW_HEIGHT = 28;
@@ -33,7 +37,7 @@ function isNearRowBottom(target: HTMLElement, clientY: number): boolean {
   return clientY >= rect.bottom - ROW_RESIZE_ZONE_PX;
 }
 
-export function TableDataGrid({ columns, rows, totalRows, page, pageSize, loading, onPageChange }: TableDataGridProps) {
+export function TableDataGrid({ columns, rows, totalRows, page, pageSize, loading, onPageChange, columnMeta, onCellEdit }: TableDataGridProps) {
   const [rowHeights, setRowHeights] = useState<Record<number, number>>({});
   const [resizingRow, setResizingRow] = useState<number | null>(null);
   const [resizeHintRow, setResizeHintRow] = useState<number | null>(null);
@@ -43,6 +47,11 @@ export function TableDataGrid({ columns, rows, totalRows, page, pageSize, loadin
     startY: number;
     startHeight: number;
   } | null>(null);
+  const colResizeRef = useRef<{
+    columnId: string;
+    startX: number;
+    startWidth: number;
+  } | null>(null);
 
   useEffect(() => {
     setRowHeights({});
@@ -51,16 +60,31 @@ export function TableDataGrid({ columns, rows, totalRows, page, pageSize, loadin
     dragRef.current = null;
   }, [columns, rows]);
 
+  const columnMetaMap = useMemo(() => {
+    if (!columnMeta) return null;
+    const map: Record<string, DbColumnMeta> = {};
+    for (const m of columnMeta) {
+      map[m.name] = m;
+    }
+    return map;
+  }, [columnMeta]);
+
   const columnDefs = useMemo<ColumnDef<Record<string, unknown>>[]>(
     () =>
-      columns.map((col) => ({
-        id: col,
-        accessorFn: (row) => row[col],
-        header: col,
-        cell: ({ getValue }) => cellToText(getValue()),
-        minSize: COLUMN_MIN_WIDTH,
-      })),
-    [columns],
+      columns.map((col) => {
+        return {
+          id: col,
+          accessorFn: (row) => row[col],
+          header: col,
+          cell: ({ getValue }) => {
+            const value = getValue();
+            return <span>{cellToText(value)}</span>;
+          },
+          minSize: COLUMN_MIN_WIDTH,
+          size: 150,
+        };
+      }),
+    [columns, columnMetaMap],
   );
 
   const table = useReactTable({
@@ -96,23 +120,33 @@ export function TableDataGrid({ columns, rows, totalRows, page, pageSize, loadin
   useEffect(() => {
     const onMouseMove = (event: MouseEvent) => {
       const drag = dragRef.current;
-      if (!drag) {
+      if (drag) {
+        const next = Math.max(
+          MIN_ROW_HEIGHT,
+          drag.startHeight + (event.clientY - drag.startY),
+        );
+        setRowHeights((prev) => {
+          if (prev[drag.rowIndex] === next) {
+            return prev;
+          }
+          return { ...prev, [drag.rowIndex]: next };
+        });
         return;
       }
-      const next = Math.max(
-        MIN_ROW_HEIGHT,
-        drag.startHeight + (event.clientY - drag.startY),
-      );
-      setRowHeights((prev) => {
-        if (prev[drag.rowIndex] === next) {
-          return prev;
-        }
-        return { ...prev, [drag.rowIndex]: next };
-      });
+      const col = colResizeRef.current;
+      if (col) {
+        const diff = event.clientX - col.startX;
+        const newWidth = Math.max(COLUMN_MIN_WIDTH, col.startWidth + diff);
+        setColumnSizing((prev) => {
+          if (prev[col.columnId] === newWidth) return prev;
+          return { ...prev, [col.columnId]: newWidth };
+        });
+      }
     };
 
     const endResize = () => {
       dragRef.current = null;
+      colResizeRef.current = null;
       setResizingRow(null);
     };
 
@@ -136,81 +170,6 @@ export function TableDataGrid({ columns, rows, totalRows, page, pageSize, loadin
     <div
       className={`db-data-table-wrap${resizingRow !== null ? " db-data-table-wrap--resizing" : ""}${table.getState().columnSizingInfo?.isResizingColumn ? " db-data-table-wrap--col-resizing" : ""}`}
     >
-      <table className="db-data-table">
-        <thead>
-              {table.getHeaderGroups().map((headerGroup) => (
-            <tr key={headerGroup.id}>
-              {headerGroup.headers.map((header) => {
-                const isColumnResized = columnSizing[header.column.id] !== undefined;
-                return (
-                <th
-                  key={header.id}
-                  style={isColumnResized ? { width: header.getSize() } : undefined}
-                  className={`${isColumnResized ? "db-data-table-th--sized" : "db-data-table-th--auto"}${table.getState().columnSizingInfo?.isResizingColumn === header.column.id ? " db-data-table-th-resizing" : ""}`}
-                >
-                  {header.isPlaceholder
-                    ? null
-                    : flexRender(header.column.columnDef.header, header.getContext())}
-                  {header.column.getCanResize() && (
-                    <div
-                      className="db-col-resize-handle"
-                      onMouseDown={(e) => {
-                        e.preventDefault();
-                        header.getResizeHandler()(e);
-                      }}
-                      onDoubleClick={() => header.column.resetSize()}
-                      title="Drag to resize"
-                    />
-                  )}
-                </th>
-              ))}
-            </tr>
-          ))}
-        </thead>
-        <tbody>
-          {table.getRowModel().rows.map((row) => {
-            const rowHeight = rowHeights[row.index];
-            const isCustomHeight = rowHeight !== undefined;
-
-            return (
-              <tr
-                key={row.id}
-                data-row-index={row.index}
-                className={`db-data-table-row${isCustomHeight ? " db-data-table-row--custom-h" : ""}${resizingRow === row.index ? " db-data-table-row--resizing" : ""}${resizeHintRow === row.index ? " db-data-table-row--resize-hint" : ""}`}
-                style={isCustomHeight ? { height: rowHeight } : undefined}
-                onMouseDown={(event) => {
-                  if (!isNearRowBottom(event.currentTarget, event.clientY)) {
-                    return;
-                  }
-                  event.preventDefault();
-                  beginRowResize(row.index, event.clientY);
-                }}
-                onMouseMove={(event) => {
-                  if (resizingRow !== null) {
-                    return;
-                  }
-                  const nearBottom = isNearRowBottom(event.currentTarget, event.clientY);
-                  event.currentTarget.style.cursor = nearBottom ? "row-resize" : "";
-                  setResizeHintRow(nearBottom ? row.index : null);
-                }}
-                onMouseLeave={(event) => {
-                  event.currentTarget.style.cursor = "";
-                  setResizeHintRow((prev) => (prev === row.index ? null : prev));
-                }}
-              >
-                {row.getVisibleCells().map((cell) => (
-                  <td
-                    key={cell.id}
-                    className={`db-data-table-cell${isCustomHeight ? " db-data-table-cell--custom-h" : ""}${columnSizing[cell.column.id] !== undefined ? " db-data-table-cell--sized" : ""}`}
-                  >
-                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                  </td>
-                ))}
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
       <div className="db-pagination">
         <div className="db-pagination-info">
           {loading ? (
@@ -250,6 +209,91 @@ export function TableDataGrid({ columns, rows, totalRows, page, pageSize, loadin
           </button>
         </div>
       </div>
+      <table className="db-data-table">
+        <thead>
+                {table.getHeaderGroups().map((headerGroup) => (
+            <tr key={headerGroup.id}>
+              {headerGroup.headers.map((header) => {
+                return (
+                <th
+                  key={header.id}
+                  style={{ width: header.getSize() }}
+                  className={table.getState().columnSizingInfo?.isResizingColumn === header.column.id ? "db-data-table-th-resizing" : ""}
+                >
+                  {header.isPlaceholder
+                    ? null
+                    : flexRender(header.column.columnDef.header, header.getContext())}
+                  {header.column.getCanResize() && (
+                    <div
+                      className="db-col-resize-handle"
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        colResizeRef.current = {
+                          columnId: header.column.id,
+                          startX: e.clientX,
+                          startWidth: header.getSize(),
+                        };
+                      }}
+                      onDoubleClick={() => header.column.resetSize()}
+                      title="Drag to resize"
+                    />
+                  )}
+                </th>
+              );
+            })}
+            </tr>
+          ))}
+        </thead>
+        <tbody>
+          {table.getRowModel().rows.map((row) => {
+            const rowHeight = rowHeights[row.index];
+            const isCustomHeight = rowHeight !== undefined;
+
+            return (
+              <tr
+                key={row.id}
+                data-row-index={row.index}
+                className={`db-data-table-row${isCustomHeight ? " db-data-table-row--custom-h" : ""}${resizingRow === row.index ? " db-data-table-row--resizing" : ""}${resizeHintRow === row.index ? " db-data-table-row--resize-hint" : ""}`}
+                style={isCustomHeight ? { height: rowHeight } : undefined}
+                onMouseDown={(event) => {
+                  if (!isNearRowBottom(event.currentTarget, event.clientY)) {
+                    return;
+                  }
+                  event.preventDefault();
+                  beginRowResize(row.index, event.clientY);
+                }}
+                onMouseMove={(event) => {
+                  if (resizingRow !== null) {
+                    return;
+                  }
+                  const nearBottom = isNearRowBottom(event.currentTarget, event.clientY);
+                  event.currentTarget.style.cursor = nearBottom ? "row-resize" : "";
+                  setResizeHintRow(nearBottom ? row.index : null);
+                }}
+                onMouseLeave={(event) => {
+                  event.currentTarget.style.cursor = "";
+                  setResizeHintRow((prev) => (prev === row.index ? null : prev));
+                }}
+              >
+                {row.getVisibleCells().map((cell) => {
+                  const colMeta = columnMetaMap?.[cell.column.id];
+                  const canEdit = onCellEdit && colMeta && !colMeta.isPk;
+                  return (
+                    <td
+                      key={cell.id}
+                      className={`db-data-table-cell${isCustomHeight ? " db-data-table-cell--custom-h" : ""}${columnSizing[cell.column.id] !== undefined ? " db-data-table-cell--sized" : ""}${canEdit ? " db-cell--editable" : ""}`}
+                      onDoubleClick={canEdit ? () => onCellEdit({ rowIndex: cell.row.index, column: cell.column.id, row: cell.row.original }) : undefined}
+                    >
+                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                    </td>
+                  );
+                })}
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
     </div>
   );
 }
