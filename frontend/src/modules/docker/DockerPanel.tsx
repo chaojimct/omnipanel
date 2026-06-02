@@ -1,499 +1,824 @@
-import { useEffect, useMemo, useState } from "react";
-import { useWorkspaceResources } from "../../stores/connectionStore";
-import { useWorkspaceStore } from "../../stores/workspaceStore";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useActionStore } from "../../stores/actionStore";
+import { useAiStore } from "../../stores/aiStore";
 import { useTopbarTabs } from "../../hooks/useTopbarTabs";
 import { useI18n } from "../../i18n";
-
-type Filter = "all" | "running" | "stopped";
+import {
+  useContainerLogStream,
+  useDockerWorkspace,
+  type ContainerFilter,
+} from "./useDockerWorkspace";
+import { DockerExecTerminal } from "./DockerExecTerminal";
+import type {
+  DockerContainerDetail,
+  DockerContainerSummary,
+} from "../../ipc/bindings";
 
 const DOCKER_PATH = "/docker";
 
-type ContainerItem = {
-  name: string;
-  image: string;
-  status: "running" | "stopped";
-  uptime: string;
-  cpu: string;
-  ports: string[];
-  network: string;
-  hostId: string;
-  hostName: string;
-  containerId: string;
-  createdAt: string;
-  startedAt: string;
-  restartPolicy: string;
-  memory: string;
-  env: Array<{ key: string; value: string }>;
-  logs: Array<{ ts: string; level: "info" | "warn" | "error"; message: string }>;
+type WorkspaceTab = "containers" | "images" | "compose";
+
+interface ConfirmState {
+  title: string;
+  message: string;
+  detail?: string;
+  confirmLabel: string;
+  onConfirm: () => void;
+}
+
+function formatBytes(bytes: number | null | undefined): string {
+  if (!bytes) return "-";
+  if (bytes < 1000) return `${bytes} B`;
+  if (bytes < 1_000_000) return `${(bytes / 1000).toFixed(1)} KB`;
+  if (bytes < 1_000_000_000) return `${(bytes / 1_000_000).toFixed(1)} MB`;
+  return `${(bytes / 1_000_000_000).toFixed(2)} GB`;
+}
+
+function formatTimestamp(seconds: number | null | undefined): string {
+  if (!seconds) return "-";
+  return new Date(seconds * 1000).toLocaleString();
+}
+
+const STATUS_BADGE: Record<string, string> = {
+  online: "badge-success",
+  degraded: "badge-warn",
+  offline: "badge-muted",
 };
 
-const containers: ContainerItem[] = [
-  {
-    name: "nginx-proxy",
-    image: "nginx:1.25-alpine",
-    status: "running",
-    uptime: "3 days",
-    cpu: "34%",
-    ports: ["0.0.0.0:443->443/tcp", "0.0.0.0:80->80/tcp"],
-    network: "bridge",
-    hostId: "docker-prod-web",
-    hostName: "prod-web-01",
-    containerId: "a3f8c2d1e5b9",
-    createdAt: "2026-05-23 14:22:01",
-    startedAt: "2026-05-23 14:22:03",
-    restartPolicy: "unless-stopped",
-    memory: "128 MB",
-    env: [
-      { key: "NGINX_HOST", value: "prod.example.com" },
-      { key: "NGINX_PORT", value: "80" },
-    ],
-    logs: [
-      { ts: "2026-05-26 09:14:02", level: "warn", message: "rate limit triggered for 45.33.32.x" },
-      { ts: "2026-05-26 09:13:46", level: "info", message: "200 GET /api/users 8ms" },
-      { ts: "2026-05-26 09:12:01", level: "warn", message: "upstream connection timeout" },
-    ],
-  },
-  {
-    name: "app-backend",
-    image: "app/api:2.1.0",
-    status: "running",
-    uptime: "3 days",
-    cpu: "12%",
-    ports: ["0.0.0.0:8080->8080/tcp"],
-    network: "bridge",
-    hostId: "docker-prod-web",
-    hostName: "prod-web-01",
-    containerId: "bd91f773aa10",
-    createdAt: "2026-05-23 14:22:01",
-    startedAt: "2026-05-23 14:22:04",
-    restartPolicy: "unless-stopped",
-    memory: "312 MB",
-    env: [
-      { key: "APP_ENV", value: "production" },
-      { key: "PORT", value: "8080" },
-    ],
-    logs: [
-      { ts: "2026-05-26 09:18:02", level: "info", message: "healthcheck passed" },
-      { ts: "2026-05-26 09:16:42", level: "info", message: "200 GET /health 4ms" },
-    ],
-  },
-  {
-    name: "redis-cache",
-    image: "redis:7-alpine",
-    status: "running",
-    uptime: "3 days",
-    cpu: "2%",
-    ports: ["6379/tcp"],
-    network: "bridge",
-    hostId: "docker-prod-web",
-    hostName: "prod-web-01",
-    containerId: "ce31aa99ee21",
-    createdAt: "2026-05-23 14:22:01",
-    startedAt: "2026-05-23 14:22:04",
-    restartPolicy: "unless-stopped",
-    memory: "64 MB",
-    env: [{ key: "REDIS_APPENDONLY", value: "yes" }],
-    logs: [{ ts: "2026-05-26 09:17:11", level: "info", message: "ready to accept connections" }],
-  },
-  {
-    name: "postgres-main",
-    image: "postgres:16-alpine",
-    status: "running",
-    uptime: "3 days",
-    cpu: "8%",
-    ports: ["5432/tcp"],
-    network: "bridge",
-    hostId: "docker-prod-web",
-    hostName: "prod-web-01",
-    containerId: "d6ef11a9b08f",
-    createdAt: "2026-05-23 14:22:01",
-    startedAt: "2026-05-23 14:22:04",
-    restartPolicy: "unless-stopped",
-    memory: "512 MB",
-    env: [{ key: "POSTGRES_DB", value: "app" }],
-    logs: [{ ts: "2026-05-26 09:15:02", level: "info", message: "checkpoint complete" }],
-  },
-  {
-    name: "old-worker",
-    image: "app/worker:1.8.0",
-    status: "stopped",
-    uptime: "2 days ago",
-    cpu: "-",
-    ports: [],
-    network: "-",
-    hostId: "docker-staging-api",
-    hostName: "staging-api",
-    containerId: "e8342dc98c11",
-    createdAt: "2026-05-20 09:01:02",
-    startedAt: "2026-05-24 10:03:04",
-    restartPolicy: "on-failure",
-    memory: "-",
-    env: [{ key: "QUEUE", value: "legacy" }],
-    logs: [{ ts: "2026-05-26 08:42:18", level: "error", message: "Exited with code 137" }],
-  },
-  {
-    name: "temp-debug",
-    image: "ubuntu:22.04",
-    status: "stopped",
-    uptime: "5 hours ago",
-    cpu: "-",
-    ports: [],
-    network: "-",
-    hostId: "docker-local",
-    hostName: "dev-local",
-    containerId: "f0ab72cd33de",
-    createdAt: "2026-05-28 21:22:04",
-    startedAt: "2026-05-28 22:02:04",
-    restartPolicy: "no",
-    memory: "-",
-    env: [{ key: "DEBUG", value: "1" }],
-    logs: [{ ts: "2026-05-29 00:24:11", level: "warn", message: "interactive container stopped" }],
-  },
-];
+const SOURCE_LABEL: Record<string, string> = {
+  "local-engine": "本地 Engine",
+  "remote-engine": "远程 Engine",
+  "ssh-engine": "SSH 宿主机",
+  "panel-adapter": "面板适配",
+};
 
 export function DockerPanel() {
   const { t } = useI18n();
-  const [filter, setFilter] = useState<Filter>("all");
-  const [query, setQuery] = useState("");
-  const allResources = useWorkspaceResources();
-  const getResourceForPath = useWorkspaceStore((s) => s.getResourceForPath);
-  const selectResource = useWorkspaceStore((s) => s.selectResource);
-  const activeResource = getResourceForPath(DOCKER_PATH);
+  const navigate = useNavigate();
   const enqueueAction = useActionStore((s) => s.enqueueAction);
+  const setAiDraft = useAiStore((s) => s.setDraftPrompt);
+  const openAiDrawer = useAiStore((s) => s.openDrawer);
 
-  const dockerResources = useMemo(
-    () => allResources.filter((resource) => resource.type === "docker"),
-    [allResources]
-  );
+  const docker = useDockerWorkspace();
+  const {
+    connections,
+    selectedConnection,
+    selectedConnectionId,
+    selectConnection,
+    probe,
+    overview,
+    containers,
+    images,
+    composeProjects,
+    connectionsLoading,
+    dataLoading,
+    error,
+    refresh,
+    containerAction,
+    inspect,
+    removeImage,
+    pruneImages,
+  } = docker;
 
-  useEffect(() => {
-    if (!useWorkspaceStore.getState().selectedResourceByPath[DOCKER_PATH] && dockerResources[0]) {
-      selectResource(dockerResources[0].id, DOCKER_PATH);
-    }
-  }, [dockerResources, selectResource]);
+  const [tab, setTab] = useState<WorkspaceTab>("containers");
+  const [filter, setFilter] = useState<ContainerFilter>("all");
+  const [query, setQuery] = useState("");
+  const [confirm, setConfirm] = useState<ConfirmState | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+  const [drawerId, setDrawerId] = useState<string | null>(null);
 
-  const [drawerContainerName, setDrawerContainerName] = useState<string | null>(null);
+  const showToast = (msg: string) => {
+    setToast(msg);
+    window.setTimeout(() => setToast(null), 3200);
+  };
 
-  useEffect(() => {
-    setDrawerContainerName(null);
-  }, [activeResource?.id]);
+  // 连接 → topbar 标签页。
   const topbarTabs = useMemo(
     () =>
-      dockerResources.map((resource) => ({
-        id: resource.id,
-        label: resource.name,
-        active: resource.id === (activeResource?.id ?? dockerResources[0]?.id),
+      connections.map((c) => ({
+        id: c.connectionId,
+        label: c.name,
+        active: c.connectionId === selectedConnectionId,
       })),
-    [activeResource?.id, dockerResources]
+    [connections, selectedConnectionId]
   );
 
   useTopbarTabs(
     topbarTabs,
-    { onSelect: (id) => selectResource(id, DOCKER_PATH) },
-    { mode: "connection", showAddTab: true, addTabTitle: t("shell.topbar.addHost") }
+    { onSelect: (id) => selectConnection(id) },
+    { mode: "connection", showAddTab: false }
   );
 
-  const scopedContainers = useMemo(() => {
-    if (!activeResource) return containers;
-    return containers.filter((container) => container.hostId === activeResource.id);
-  }, [activeResource]);
+  // 切换连接时复位本地视图状态。
+  useEffect(() => {
+    setDrawerId(null);
+    setTab("containers");
+    setFilter("all");
+    setQuery("");
+  }, [selectedConnectionId]);
 
   const counts = useMemo(
     () => ({
-      all: scopedContainers.length,
-      running: scopedContainers.filter((container) => container.status === "running").length,
-      stopped: scopedContainers.filter((container) => container.status === "stopped").length,
+      all: containers.length,
+      running: containers.filter((c) => c.running).length,
+      stopped: containers.filter((c) => !c.running).length,
     }),
-    [scopedContainers]
+    [containers]
   );
 
   const filteredContainers = useMemo(() => {
-    return scopedContainers.filter((container) => {
-      const matchesFilter = filter === "all" || container.status === filter;
+    const q = query.toLowerCase();
+    return containers.filter((c) => {
+      const matchesFilter =
+        filter === "all" || (filter === "running" ? c.running : !c.running);
       const matchesQuery =
-        container.name.toLowerCase().includes(query.toLowerCase()) ||
-        container.image.toLowerCase().includes(query.toLowerCase()) ||
-        container.network.toLowerCase().includes(query.toLowerCase());
+        !q ||
+        c.name.toLowerCase().includes(q) ||
+        c.image.toLowerCase().includes(q) ||
+        c.networks.some((n) => n.toLowerCase().includes(q));
       return matchesFilter && matchesQuery;
     });
-  }, [filter, query, scopedContainers]);
+  }, [containers, filter, query]);
 
-  const drawerContainer = scopedContainers.find((container) => container.name === drawerContainerName) ?? null;
+  // 审计记录（记录型动作，进入操作流，不二次执行）。
+  const recordAudit = (title: string, description: string) => {
+    enqueueAction({
+      type: "docker",
+      title,
+      description,
+      resourceId: selectedConnectionId ?? undefined,
+      source: "用户",
+    });
+  };
 
-  const openDrawer = (container: ContainerItem) => setDrawerContainerName(container.name);
-  const closeDrawer = () => setDrawerContainerName(null);
+  const runContainerAction = async (
+    container: DockerContainerSummary,
+    action: string,
+    label: string
+  ) => {
+    const res = await containerAction(container.id, action);
+    if (res.ok) {
+      showToast(`${label} ${container.name} 成功`);
+    } else {
+      showToast(`${label} ${container.name} 失败：${res.message ?? "未知错误"}`);
+    }
+  };
+
+  const confirmContainerRemove = (container: DockerContainerSummary) => {
+    const isProd = selectedConnection?.environment === "prod";
+    setConfirm({
+      title: `删除容器 ${container.name}`,
+      message: `将永久删除容器（含其可写层），此操作不可恢复。`,
+      detail: `${selectedConnection?.name ?? ""} · ${container.image}${isProd ? " · ⚠ 生产环境" : ""}`,
+      confirmLabel: "确认删除",
+      onConfirm: async () => {
+        setConfirm(null);
+        const res = await containerAction(container.id, "remove");
+        if (res.ok) {
+          recordAudit(`删除容器 ${container.name}`, `${selectedConnection?.name ?? ""} · docker rm -f ${container.name}`);
+          showToast(`已删除容器 ${container.name}`);
+          if (drawerId === container.id) setDrawerId(null);
+        } else {
+          showToast(`删除失败：${res.message ?? "未知错误"}`);
+        }
+      },
+    });
+  };
+
+  const confirmImageRemove = (imageId: string, label: string) => {
+    setConfirm({
+      title: `删除镜像 ${label}`,
+      message: "删除后若有容器引用将失败，可使用强制删除。",
+      detail: selectedConnection?.name ?? "",
+      confirmLabel: "确认删除",
+      onConfirm: async () => {
+        setConfirm(null);
+        const res = await removeImage(imageId, true);
+        if (res.ok) {
+          recordAudit(`删除镜像 ${label}`, `${selectedConnection?.name ?? ""} · docker rmi -f ${label}`);
+          showToast(`已删除镜像 ${label}`);
+        } else {
+          showToast(`删除失败：${res.message ?? "未知错误"}`);
+        }
+      },
+    });
+  };
+
+  const confirmPrune = () => {
+    setConfirm({
+      title: "清理悬空镜像",
+      message: "将删除所有未被引用的悬空镜像以释放磁盘空间。",
+      detail: selectedConnection?.name ?? "",
+      confirmLabel: "确认清理",
+      onConfirm: async () => {
+        setConfirm(null);
+        const res = await pruneImages();
+        if (res.ok) {
+          recordAudit("清理 Docker 悬空镜像", `${selectedConnection?.name ?? ""} · docker image prune`);
+          showToast(res.message ?? "清理完成");
+        } else {
+          showToast(`清理失败：${res.message ?? "未知错误"}`);
+        }
+      },
+    });
+  };
+
+  const isOffline = probe?.status === "offline";
 
   return (
     <>
       <div className="docker-layout">
-        <div className="docker-stats">
-          <div className="docker-stat">
-            <div className="stat-icon" style={{ background: "var(--success-soft)", color: "var(--success)" }}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <rect x="2" y="7" width="6" height="5" rx="1" />
-                <rect x="10" y="7" width="6" height="5" rx="1" />
-              </svg>
+        {/* 连接头部 */}
+        {selectedConnection && (
+          <div className="docker-conn-header">
+            <div className="flex items-center gap-2">
+              <span className={`status-dot ${selectedConnection.status === "online" ? "online" : selectedConnection.status === "degraded" ? "warning" : "offline"}`} />
+              <strong>{selectedConnection.name}</strong>
+              <span className={`badge ${STATUS_BADGE[selectedConnection.status] ?? "badge-muted"}`}>
+                {selectedConnection.status === "online" ? "在线" : selectedConnection.status === "degraded" ? "降级" : "离线"}
+              </span>
+              <span className="text-muted text-xs">{SOURCE_LABEL[selectedConnection.source] ?? selectedConnection.source}</span>
+              <span className="text-muted text-xs">{selectedConnection.hostLabel}</span>
+              {selectedConnection.engineVersion && (
+                <span className="text-muted text-xs">Engine {selectedConnection.engineVersion}</span>
+              )}
             </div>
-            <div className="stat-info">
-              <span className="stat-val">{counts.running}</span>
-              <span className="stat-label">Running</span>
-            </div>
-          </div>
-          <div className="docker-stat">
-            <div className="stat-icon" style={{ background: "var(--surface-hover)", color: "var(--muted)" }}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <rect x="2" y="7" width="6" height="5" rx="1" />
-                <rect x="10" y="7" width="6" height="5" rx="1" />
-              </svg>
-            </div>
-            <div className="stat-info">
-              <span className="stat-val">{counts.stopped}</span>
-              <span className="stat-label">Stopped</span>
-            </div>
-          </div>
-          <div className="docker-stat">
-            <div className="stat-icon" style={{ background: "var(--accent-soft)", color: "var(--accent)" }}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <rect x="3" y="3" width="18" height="18" rx="2" />
-              </svg>
-            </div>
-            <div className="stat-info">
-              <span className="stat-val">12</span>
-              <span className="stat-label">Images</span>
-            </div>
-          </div>
-          <div className="docker-stat">
-            <div className="stat-icon" style={{ background: "var(--warn-soft)", color: "var(--warn)" }}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <circle cx="12" cy="12" r="10" />
-                <path d="M12 6v6l4 2" />
-              </svg>
-            </div>
-            <div className="stat-info">
-              <span className="stat-val">3</span>
-              <span className="stat-label">Volumes</span>
-            </div>
-          </div>
-        </div>
-
-        <div className="docker-filters">
-          {(["all", "running", "stopped"] as const).map((key) => (
-            <button key={key} type="button" className={`filter-tab${filter === key ? " active" : ""}`} onClick={() => setFilter(key)}>
-              {t(`docker.filters.${key}`)}
-              <span className="count">{counts[key]}</span>
+            <button className="btn btn-secondary btn-sm" style={{ marginLeft: "auto" }} onClick={refresh} disabled={dataLoading}>
+              {dataLoading ? "刷新中…" : "刷新"}
             </button>
-          ))}
-          <span style={{ marginLeft: "auto" }}>
-            <input
-              className="input input-search"
-              placeholder="Filter containers..."
-              style={{ fontSize: 11, width: 200 }}
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-            />
-          </span>
-        </div>
-
-        <div className="container-list">
-          <div className="list-header">
-            <span>{t("docker.list.container")}</span>
-            <span>{t("docker.list.status")}</span>
-            <span>{t("docker.list.cpu")}</span>
-            <span>{t("docker.list.ports")}</span>
-            <span>Network</span>
-            <span></span>
           </div>
-          {filteredContainers.map((container) => (
-            <div
-              key={container.name}
-              className="container-card"
-              style={container.status === "stopped" ? { opacity: 0.65 } : undefined}
-              onClick={() => openDrawer(container)}
-            >
-              <div className="container-name">
-                <div className="container-icon" style={{ color: container.status === "running" ? "var(--success)" : "var(--muted)" }}>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <rect x="2" y="7" width="6" height="5" rx="1" />
-                    <rect x="10" y="7" width="6" height="5" rx="1" />
-                  </svg>
-                </div>
-                <div>
-                  <div className="container-title">{container.name}</div>
-                  <div className="container-image">{container.image}</div>
-                </div>
-              </div>
-              <div className="container-status">
-                <span className={`status-dot ${container.status === "running" ? "online" : "offline"}`} />
-                <span className={container.status === "running" ? "text-success text-sm" : "text-muted text-sm"}>
-                  {container.status === "running" ? "Running" : "Exited"}
-                </span>
-                <span className="text-muted text-xs">{container.uptime}</span>
-              </div>
-              <div><span className={container.cpu === "34%" ? "text-warn" : undefined}>{container.cpu}</span></div>
-              <div className="text-sm">{container.ports.length > 0 ? container.ports.join("\n") : "-"}</div>
-              <div className="text-sm text-muted">{container.network}</div>
-              <div className="container-actions" onClick={(event) => event.stopPropagation()}>
-                {container.status === "running" ? (
-                  <>
-                    <button
-                      className="btn-icon"
-                      title="Restart"
-                      onClick={() =>
-                        enqueueAction({
-                          type: "docker",
-                          title: `重启 ${container.name}`,
-                          description: `${container.hostName} · docker restart ${container.name}`,
-                          command: `docker restart ${container.name}`,
-                          resourceId: activeResource?.id,
-                          source: "用户",
-                        })
-                      }
-                    >
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
-                        <path d="M23 4v6h-6M1 20v-6h6" />
-                        <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" />
-                      </svg>
+        )}
+
+        {connectionsLoading ? (
+          <div className="docker-empty">正在加载 Docker 连接…</div>
+        ) : connections.length === 0 ? (
+          <div className="docker-empty">暂无 Docker 连接</div>
+        ) : isOffline ? (
+          <div className="docker-empty">
+            <div className="docker-empty-title">Docker 未安装或未启动</div>
+            <div className="text-muted text-sm">{probe?.warningMessage ?? error ?? "无法连接到 Docker Engine"}</div>
+            <button className="btn btn-secondary btn-sm" style={{ marginTop: 12 }} onClick={refresh}>重试</button>
+          </div>
+        ) : (
+          <>
+            {/* 统计 */}
+            <div className="docker-stats">
+              <StatCard color="success" value={overview?.summary.containersRunning ?? counts.running} label={t("docker.stats.running")} />
+              <StatCard color="muted" value={overview?.summary.containersStopped ?? counts.stopped} label={t("docker.stats.stopped")} />
+              <StatCard color="accent" value={overview?.summary.images ?? images.length} label={t("docker.stats.images")} />
+              <StatCard color="warn" value={composeProjects.length} label="Compose" />
+            </div>
+
+            {/* 子页签 */}
+            <div className="docker-subtabs">
+              {(["containers", "images", "compose"] as const).map((key) => (
+                <button key={key} type="button" className={`subtab${tab === key ? " active" : ""}`} onClick={() => setTab(key)}>
+                  {key === "containers" ? "容器" : key === "images" ? "镜像" : "Compose"}
+                </button>
+              ))}
+            </div>
+
+            {tab === "containers" && (
+              <>
+                <div className="docker-filters">
+                  {(["all", "running", "stopped"] as const).map((key) => (
+                    <button key={key} type="button" className={`filter-tab${filter === key ? " active" : ""}`} onClick={() => setFilter(key)}>
+                      {t(`docker.filters.${key}`)}
+                      <span className="count">{counts[key]}</span>
                     </button>
-                    <button
-                      className="btn-icon"
-                      title="Stop"
-                      onClick={() =>
-                        enqueueAction({
-                          type: "docker",
-                          title: `停止 ${container.name}`,
-                          description: `${container.hostName} · docker stop ${container.name}`,
-                          command: `docker stop ${container.name}`,
-                          resourceId: activeResource?.id,
-                          source: "用户",
-                        })
-                      }
-                    >
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
-                        <rect x="6" y="6" width="12" height="12" rx="1" />
-                      </svg>
-                    </button>
-                  </>
+                  ))}
+                  <span style={{ marginLeft: "auto" }}>
+                    <input
+                      className="input input-search"
+                      placeholder="筛选容器…"
+                      style={{ fontSize: 11, width: 200 }}
+                      value={query}
+                      onChange={(e) => setQuery(e.target.value)}
+                    />
+                  </span>
+                </div>
+
+                <div className="container-list">
+                  <div className="list-header list-5">
+                    <span>{t("docker.list.container")}</span>
+                    <span>{t("docker.list.status")}</span>
+                    <span>{t("docker.list.ports")}</span>
+                    <span>网络</span>
+                    <span></span>
+                  </div>
+                  {filteredContainers.length === 0 ? (
+                    <div className="docker-empty" style={{ minHeight: 120 }}>
+                      {dataLoading ? "加载中…" : "没有匹配的容器"}
+                    </div>
+                  ) : (
+                    filteredContainers.map((container) => (
+                      <div
+                        key={container.id}
+                        className="container-card container-card-5"
+                        style={!container.running ? { opacity: 0.65 } : undefined}
+                        onClick={() => setDrawerId(container.id)}
+                      >
+                        <div className="container-name">
+                          <div className="container-icon" style={{ color: container.running ? "var(--success)" : "var(--muted)" }}>
+                            <BoxIcon />
+                          </div>
+                          <div>
+                            <div className="container-title">{container.name}</div>
+                            <div className="container-image">{container.image}</div>
+                          </div>
+                        </div>
+                        <div className="container-status">
+                          <span className={`status-dot ${container.running ? "online" : "offline"}`} />
+                          <span className={container.running ? "text-success text-sm" : "text-muted text-sm"}>
+                            {container.statusText || (container.running ? "Running" : "Exited")}
+                          </span>
+                        </div>
+                        <div className="text-sm" style={{ whiteSpace: "pre-line" }}>
+                          {container.ports.length > 0 ? container.ports.map((p) => portLabel(p)).join("\n") : "-"}
+                        </div>
+                        <div className="text-sm text-muted">{container.networks.join(", ") || "-"}</div>
+                        <div className="container-actions" onClick={(e) => e.stopPropagation()}>
+                          {container.running ? (
+                            <>
+                              <button className="btn-icon" title="重启" onClick={() => runContainerAction(container, "restart", "重启")}>
+                                <RestartIcon />
+                              </button>
+                              <button className="btn-icon" title="停止" onClick={() => runContainerAction(container, "stop", "停止")}>
+                                <StopIcon />
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <button className="btn-icon" title="启动" onClick={() => runContainerAction(container, "start", "启动")}>
+                                <PlayIcon />
+                              </button>
+                              <button className="btn-icon text-danger" title="删除" onClick={() => confirmContainerRemove(container)}>
+                                <TrashIcon />
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </>
+            )}
+
+            {tab === "images" && (
+              <div className="container-list">
+                <div className="docker-filters">
+                  <span className="text-muted text-sm">{images.length} 个镜像</span>
+                  <button className="btn btn-secondary btn-sm" style={{ marginLeft: "auto" }} onClick={confirmPrune}>
+                    清理悬空镜像
+                  </button>
+                </div>
+                <div className="list-header image-row">
+                  <span>仓库</span>
+                  <span>标签</span>
+                  <span>大小</span>
+                  <span>创建时间</span>
+                  <span></span>
+                </div>
+                {images.length === 0 ? (
+                  <div className="docker-empty" style={{ minHeight: 120 }}>{dataLoading ? "加载中…" : "暂无镜像"}</div>
                 ) : (
-                  <>
-                    <button className="btn-icon" title="Start">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
-                        <polygon points="5 3 19 12 5 21 5 3" />
-                      </svg>
-                    </button>
-                    <button className="btn-icon text-danger" title="Remove">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
-                        <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2" />
-                      </svg>
-                    </button>
-                  </>
+                  images.map((img, idx) => (
+                    <div key={`${img.id}-${img.repository}-${img.tag}-${idx}`} className="container-card image-row">
+                      <div className="container-title">
+                        {img.repository}
+                        {img.dangling && <span className="badge badge-warn" style={{ marginLeft: 6 }}>悬空</span>}
+                      </div>
+                      <div className="text-sm text-muted">{img.tag}</div>
+                      <div className="text-sm">{formatBytes(img.sizeBytes)}</div>
+                      <div className="text-sm text-muted">{formatTimestamp(img.createdAt)}</div>
+                      <div className="container-actions">
+                        <button className="btn-icon text-danger" title="删除镜像" onClick={() => confirmImageRemove(img.id, `${img.repository}:${img.tag}`)}>
+                          <TrashIcon />
+                        </button>
+                      </div>
+                    </div>
+                  ))
                 )}
               </div>
-            </div>
-          ))}
-        </div>
+            )}
+
+            {tab === "compose" && (
+              <div className="container-list">
+                {composeProjects.length === 0 ? (
+                  <div className="docker-empty" style={{ minHeight: 120 }}>
+                    {dataLoading ? "加载中…" : "未识别到 Compose 项目"}
+                  </div>
+                ) : (
+                  composeProjects.map((proj) => (
+                    <div key={proj.name} className="compose-card">
+                      <div className="compose-head">
+                        <strong>{proj.name}</strong>
+                        <span className="text-muted text-xs">
+                          {proj.runningContainerCount}/{proj.containerCount} 运行 · {proj.serviceCount} 服务
+                        </span>
+                        {proj.workingDir && <span className="text-muted text-xs">{proj.workingDir}</span>}
+                      </div>
+                      <div className="compose-services">
+                        {proj.services.map((svc) => (
+                          <div key={svc.name} className="compose-service">
+                            <span className={`status-dot ${svc.runningContainerCount > 0 ? "online" : "offline"}`} />
+                            <span className="compose-service-name">{svc.name}</span>
+                            <span className="text-muted text-xs">{svc.image}</span>
+                            <span className="text-muted text-xs" style={{ marginLeft: "auto" }}>
+                              {svc.runningContainerCount}/{svc.containerCount}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+          </>
+        )}
       </div>
 
-      <div className={`drawer-overlay${drawerContainer ? " show" : ""}`} onClick={closeDrawer} />
-      <div className={`drawer${drawerContainer ? " show" : ""}`}>
-        {drawerContainer && (
+      <ContainerDrawer
+        connectionId={selectedConnectionId}
+        containerId={drawerId}
+        canExec={selectedConnection?.source === "local-engine"}
+        hostLabel={selectedConnection?.hostLabel ?? null}
+        sourceLabel={selectedConnection ? SOURCE_LABEL[selectedConnection.source] ?? selectedConnection.source : null}
+        inspect={inspect}
+        onClose={() => setDrawerId(null)}
+        onAction={runContainerAction}
+        onRemove={confirmContainerRemove}
+        onNavigate={navigate}
+        onSendToAi={(detail) => {
+          const s = detail.summary;
+          const ports = s.ports.length
+            ? s.ports.map((p) => `${p.publicPort ?? "-"}->${p.privatePort}/${p.protocol}`).join(", ")
+            : "无";
+          const context = [
+            `请帮我分析以下 Docker 容器的运行情况：`,
+            `- 名称：${s.name}`,
+            `- 镜像：${s.image}`,
+            `- 状态：${s.state}（${s.statusText}）`,
+            detail.exitCode != null ? `- 退出码：${detail.exitCode}` : null,
+            detail.restartPolicy ? `- 重启策略：${detail.restartPolicy}` : null,
+            `- 端口：${ports}`,
+            `- 来源：${selectedConnection ? SOURCE_LABEL[selectedConnection.source] ?? selectedConnection.source : "未知"} · ${selectedConnection?.hostLabel ?? ""}`,
+          ]
+            .filter(Boolean)
+            .join("\n");
+          setAiDraft(context);
+          openAiDrawer();
+          recordAudit(`发送容器上下文给 AI：${s.name}`, `${selectedConnection?.name ?? ""} · ${s.image}`);
+        }}
+      />
+
+      {confirm && (
+        <ConfirmModal confirm={confirm} onCancel={() => setConfirm(null)} />
+      )}
+
+      {toast && <div className="docker-toast">{toast}</div>}
+    </>
+  );
+}
+
+function StatCard({ color, value, label }: { color: string; value: number; label: string }) {
+  const bg = `var(--${color}-soft)`;
+  const fg = `var(--${color})`;
+  return (
+    <div className="docker-stat">
+      <div className="stat-icon" style={{ background: bg, color: fg }}>
+        <BoxIcon />
+      </div>
+      <div className="stat-info">
+        <span className="stat-val">{value}</span>
+        <span className="stat-label">{label}</span>
+      </div>
+    </div>
+  );
+}
+
+function portLabel(p: { ip: string | null; publicPort: number | null; privatePort: number; protocol: string }): string {
+  if (p.publicPort != null) {
+    return `${p.ip ?? "0.0.0.0"}:${p.publicPort}->${p.privatePort}/${p.protocol}`;
+  }
+  return `${p.privatePort}/${p.protocol}`;
+}
+
+interface ContainerDrawerProps {
+  connectionId: string | null;
+  containerId: string | null;
+  canExec: boolean;
+  hostLabel: string | null;
+  sourceLabel: string | null;
+  inspect: (id: string) => Promise<DockerContainerDetail | null>;
+  onClose: () => void;
+  onAction: (c: DockerContainerSummary, action: string, label: string) => void;
+  onRemove: (c: DockerContainerSummary) => void;
+  onNavigate: (path: string) => void;
+  onSendToAi: (detail: DockerContainerDetail) => void;
+}
+
+type DrawerTab = "info" | "logs" | "terminal";
+
+function ContainerDrawer({
+  connectionId,
+  containerId,
+  canExec,
+  hostLabel,
+  sourceLabel,
+  inspect,
+  onClose,
+  onAction,
+  onRemove,
+  onNavigate,
+  onSendToAi,
+}: ContainerDrawerProps) {
+  const [detail, setDetail] = useState<DockerContainerDetail | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [drawerTab, setDrawerTab] = useState<DrawerTab>("info");
+
+  useEffect(() => {
+    if (!containerId) {
+      setDetail(null);
+      return;
+    }
+    setDrawerTab("info");
+    setLoading(true);
+    let cancelled = false;
+    void inspect(containerId).then((d) => {
+      if (!cancelled) {
+        setDetail(d);
+        setLoading(false);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [containerId, inspect]);
+
+  const open = Boolean(containerId);
+
+  return (
+    <>
+      <div className={`drawer-overlay${open ? " show" : ""}`} onClick={onClose} />
+      <div className={`drawer${open ? " show" : ""}`}>
+        {open && (
           <>
             <div className="drawer-header">
               <div className="container-icon" style={{ color: "var(--success)", width: 28, height: 28, display: "grid", placeItems: "center", background: "var(--success-soft)", borderRadius: "var(--r-sm)" }}>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
-                  <rect x="2" y="7" width="6" height="5" rx="1" />
-                  <rect x="10" y="7" width="6" height="5" rx="1" />
-                </svg>
+                <BoxIcon />
               </div>
-              <h2>{drawerContainer.name}</h2>
-              <span className={`badge ${drawerContainer.status === "running" ? "badge-success" : "badge-muted"}`}>
-                {drawerContainer.status === "running" ? "Running" : "Stopped"}
-              </span>
-              <button className="btn-icon" onClick={closeDrawer} title="Close">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
-                  <path d="M18 6L6 18M6 6l12 12" />
-                </svg>
+              <h2>{detail?.summary.name ?? "加载中…"}</h2>
+              {detail && (
+                <span className={`badge ${detail.summary.running ? "badge-success" : "badge-muted"}`}>
+                  {detail.summary.running ? "运行中" : "已停止"}
+                </span>
+              )}
+              <button className="btn-icon" onClick={onClose} title="关闭">
+                <CloseIcon />
               </button>
             </div>
+
+            <div className="drawer-subtabs">
+              <button className={`subtab${drawerTab === "info" ? " active" : ""}`} onClick={() => setDrawerTab("info")}>详情</button>
+              <button className={`subtab${drawerTab === "logs" ? " active" : ""}`} onClick={() => setDrawerTab("logs")}>日志</button>
+              {canExec && detail?.summary.running && (
+                <button className={`subtab${drawerTab === "terminal" ? " active" : ""}`} onClick={() => setDrawerTab("terminal")}>终端</button>
+              )}
+            </div>
+
             <div className="drawer-body">
-              <div className="drawer-section">
-                <h4>Container Info</h4>
-                <dl className="drawer-kv">
-                  <dt>ID</dt><dd className="text-muted">{drawerContainer.containerId}</dd>
-                  <dt>Image</dt><dd>{drawerContainer.image}</dd>
-                  <dt>Host</dt><dd>{drawerContainer.hostName}</dd>
-                  <dt>Created</dt><dd>{drawerContainer.createdAt}</dd>
-                  <dt>Started</dt><dd>{drawerContainer.startedAt}</dd>
-                  <dt>Restart Policy</dt><dd>{drawerContainer.restartPolicy}</dd>
-                </dl>
-              </div>
+              {loading && <div className="text-muted text-sm">加载容器详情…</div>}
 
-              <div className="drawer-section">
-                <h4>Resource Usage</h4>
-                <div className="quick-stats" style={{ gridTemplateColumns: "repeat(2, 1fr)" }}>
-                  <div className="quick-stat">
-                    <div className="stat-label">CPU</div>
-                    <div className="stat-value">{drawerContainer.cpu}</div>
+              {!loading && detail && drawerTab === "info" && (
+                <>
+                  <div className="drawer-section">
+                    <h4>容器信息</h4>
+                    <dl className="drawer-kv">
+                      <dt>ID</dt><dd className="text-muted">{detail.summary.shortId}</dd>
+                      <dt>镜像</dt><dd>{detail.summary.image}</dd>
+                      <dt>状态</dt><dd>{detail.summary.statusText || detail.summary.state}</dd>
+                      {detail.command && (<><dt>命令</dt><dd className="text-muted">{detail.command}</dd></>)}
+                      {detail.restartPolicy && (<><dt>重启策略</dt><dd>{detail.restartPolicy}</dd></>)}
+                      {detail.exitCode != null && (<><dt>退出码</dt><dd>{detail.exitCode}</dd></>)}
+                    </dl>
                   </div>
-                  <div className="quick-stat">
-                    <div className="stat-label">Memory</div>
-                    <div className="stat-value">{drawerContainer.memory}</div>
-                  </div>
-                </div>
-              </div>
 
-              <div className="drawer-section">
-                <h4>Ports</h4>
-                <dl className="drawer-kv">
-                  {drawerContainer.ports.length > 0 ? drawerContainer.ports.map((port, index) => (
-                    <div key={port} style={{ display: "contents" }}>
-                      <dt>{index === 0 ? "Primary" : `Port ${index + 1}`}</dt>
-                      <dd>{port}</dd>
-                    </div>
-                  )) : (
-                    <div style={{ display: "contents" }}>
-                      <dt>Ports</dt>
-                      <dd>-</dd>
+                  <div className="drawer-section">
+                    <h4>端口</h4>
+                    <dl className="drawer-kv">
+                      {detail.summary.ports.length > 0 ? (
+                        detail.summary.ports.map((p, i) => (
+                          <div key={i} style={{ display: "contents" }}>
+                            <dt>{i === 0 ? "映射" : `端口 ${i + 1}`}</dt>
+                            <dd>{portLabel(p)}</dd>
+                          </div>
+                        ))
+                      ) : (
+                        <div style={{ display: "contents" }}><dt>端口</dt><dd>-</dd></div>
+                      )}
+                    </dl>
+                  </div>
+
+                  <div className="drawer-section">
+                    <h4>挂载</h4>
+                    <dl className="drawer-kv">
+                      {detail.mounts.length > 0 ? (
+                        detail.mounts.map((m, i) => (
+                          <div key={i} style={{ display: "contents" }}>
+                            <dt>{m.kind || "mount"}</dt>
+                            <dd className="text-sm">{m.source} → {m.destination}{m.readOnly ? " (ro)" : ""}</dd>
+                          </div>
+                        ))
+                      ) : (
+                        <div style={{ display: "contents" }}><dt>挂载</dt><dd>-</dd></div>
+                      )}
+                    </dl>
+                  </div>
+
+                  <div className="drawer-section">
+                    <h4>网络</h4>
+                    <dl className="drawer-kv">
+                      {detail.networks.length > 0 ? (
+                        detail.networks.map((n, i) => (
+                          <div key={i} style={{ display: "contents" }}>
+                            <dt>{n.name}</dt>
+                            <dd className="text-muted">{n.ipAddress ?? "-"}</dd>
+                          </div>
+                        ))
+                      ) : (
+                        <div style={{ display: "contents" }}><dt>网络</dt><dd>-</dd></div>
+                      )}
+                    </dl>
+                  </div>
+
+                  {detail.env.length > 0 && (
+                    <div className="drawer-section">
+                      <h4>环境变量</h4>
+                      <dl className="drawer-kv">
+                        {detail.env.map((e) => (
+                          <div key={e.key} style={{ display: "contents" }}>
+                            <dt>{e.key}</dt><dd className="text-sm">{e.value}</dd>
+                          </div>
+                        ))}
+                      </dl>
                     </div>
                   )}
-                </dl>
-              </div>
 
-              <div className="drawer-section">
-                <h4>Environment</h4>
-                <dl className="drawer-kv">
-                  {drawerContainer.env.map((entry) => (
-                    <div key={entry.key} style={{ display: "contents" }}>
-                      <dt>{entry.key}</dt>
-                      <dd>{entry.value}</dd>
+                  <div className="drawer-section">
+                    <h4>联动</h4>
+                    <div className="kv">
+                      <span className="k">引擎来源</span>
+                      <span className="v">{sourceLabel ?? "—"}</span>
                     </div>
-                  ))}
-                </dl>
-              </div>
+                    <div className="kv">
+                      <span className="k">宿主机</span>
+                      <span className="v">{hostLabel ?? "—"}</span>
+                    </div>
+                    <div className="flex gap-2" style={{ flexWrap: "wrap", marginTop: "var(--sp-2)" }}>
+                      <button className="btn btn-secondary btn-sm" onClick={() => onNavigate("/ssh")}>打开 SSH</button>
+                      <button className="btn btn-secondary btn-sm" onClick={() => onNavigate("/server")}>查看服务器</button>
+                      <button className="btn btn-secondary btn-sm" onClick={() => onSendToAi(detail)}>发送给 AI 分析</button>
+                    </div>
+                  </div>
+                </>
+              )}
 
-              <div className="drawer-section">
-                <h4>Recent Logs</h4>
-                <div className="log-viewer">
-                  {drawerContainer.logs.map((line) => (
-                    <div key={`${line.ts}-${line.message}`} className="log-line">
-                      <span className="ts">{line.ts}</span>{" "}
-                      <span className={`level-${line.level}`}>[{line.level}]</span>{" "}
-                      {line.message}
-                    </div>
-                  ))}
+              {!loading && detail && drawerTab === "logs" && (
+                <LogsView connectionId={connectionId} containerId={containerId} />
+              )}
+
+              {!loading && detail && drawerTab === "terminal" && connectionId && containerId && (
+                <div className="drawer-section">
+                  <h4>容器终端</h4>
+                  <DockerExecTerminal connectionId={connectionId} containerId={containerId} />
                 </div>
-              </div>
+              )}
 
-              <div className="flex gap-2" style={{ marginTop: "var(--sp-4)" }}>
-                <button className="btn btn-primary">Open Terminal</button>
-                <button className="btn btn-secondary">View Logs</button>
-                <button className="btn btn-secondary">Restart</button>
-                <button className="btn btn-danger" style={{ marginLeft: "auto" }}>Stop</button>
-              </div>
+              {!loading && !detail && (
+                <div className="text-muted text-sm">无法获取容器详情，可能已被删除。</div>
+              )}
+
+              {detail && (
+                <div className="flex gap-2" style={{ marginTop: "var(--sp-4)" }}>
+                  {detail.summary.running ? (
+                    <>
+                      <button className="btn btn-secondary btn-sm" onClick={() => onAction(detail.summary, "restart", "重启")}>重启</button>
+                      <button className="btn btn-secondary btn-sm" onClick={() => onAction(detail.summary, "stop", "停止")}>停止</button>
+                    </>
+                  ) : (
+                    <button className="btn btn-secondary btn-sm" onClick={() => onAction(detail.summary, "start", "启动")}>启动</button>
+                  )}
+                  <button className="btn btn-danger btn-sm" style={{ marginLeft: "auto" }} onClick={() => onRemove(detail.summary)}>删除</button>
+                </div>
+              )}
             </div>
           </>
         )}
       </div>
     </>
+  );
+}
+
+function LogsView({ connectionId, containerId }: { connectionId: string | null; containerId: string | null }) {
+  const [follow, setFollow] = useState(true);
+  const { lines, streaming, error } = useContainerLogStream(connectionId, containerId, true, follow);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (follow && scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [lines, follow]);
+
+  return (
+    <div className="drawer-section">
+      <div className="flex items-center gap-2" style={{ marginBottom: 8 }}>
+        <h4 style={{ margin: 0 }}>日志</h4>
+        <span className="text-muted text-xs">{streaming ? "跟随中…" : "已结束"}</span>
+        <label className="text-xs flex items-center gap-1" style={{ marginLeft: "auto", cursor: "pointer" }}>
+          <input type="checkbox" checked={follow} onChange={(e) => setFollow(e.target.checked)} />
+          自动滚动
+        </label>
+      </div>
+      {error && <div className="text-danger text-sm" style={{ marginBottom: 6 }}>{error}</div>}
+      <div className="log-viewer" ref={scrollRef} style={{ maxHeight: 360, overflow: "auto" }}>
+        {lines.length === 0 ? (
+          <div className="text-muted text-sm">{streaming ? "等待日志输出…" : "暂无日志"}</div>
+        ) : (
+          lines.map((line, i) => (
+            <div key={i} className="log-line">
+              <span className={line.stream === "stderr" ? "level-error" : "level-info"}>{line.message}</span>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ConfirmModal({ confirm, onCancel }: { confirm: ConfirmState; onCancel: () => void }) {
+  return (
+    <>
+      <div className="drawer-overlay show" onClick={onCancel} />
+      <div className="confirm-modal">
+        <h3>{confirm.title}</h3>
+        <p className="text-sm">{confirm.message}</p>
+        {confirm.detail && <p className="text-muted text-xs">{confirm.detail}</p>}
+        <div className="flex gap-2" style={{ marginTop: 16, justifyContent: "flex-end" }}>
+          <button className="btn btn-secondary btn-sm" onClick={onCancel}>取消</button>
+          <button className="btn btn-danger btn-sm" onClick={confirm.onConfirm}>{confirm.confirmLabel}</button>
+        </div>
+      </div>
+    </>
+  );
+}
+
+// --- 图标 ---
+function BoxIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
+      <rect x="2" y="7" width="6" height="5" rx="1" />
+      <rect x="10" y="7" width="6" height="5" rx="1" />
+    </svg>
+  );
+}
+function RestartIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
+      <path d="M23 4v6h-6M1 20v-6h6" />
+      <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" />
+    </svg>
+  );
+}
+function StopIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
+      <rect x="6" y="6" width="12" height="12" rx="1" />
+    </svg>
+  );
+}
+function PlayIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
+      <polygon points="5 3 19 12 5 21 5 3" />
+    </svg>
+  );
+}
+function TrashIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
+      <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2" />
+    </svg>
+  );
+}
+function CloseIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
+      <path d="M18 6L6 18M6 6l12 12" />
+    </svg>
   );
 }

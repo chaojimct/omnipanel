@@ -34,6 +34,12 @@ pub struct AppState {
     pub ssh_sessions: Arc<Mutex<HashMap<String, SshSession>>>,
     /// 终端/SSH 输出 scrollback 缓冲（会话恢复用）。
     pub output_buffers: OutputBuffers,
+    /// Docker SSH-Engine 连接的复用会话池（按 docker 连接 id 索引）。
+    pub docker_ssh_sessions: Arc<Mutex<HashMap<String, Arc<Mutex<SshSession>>>>>,
+    /// 活跃 Docker 日志流的停止句柄（按 streamId 索引）。
+    pub docker_log_streams: Arc<Mutex<HashMap<String, Arc<std::sync::atomic::AtomicBool>>>>,
+    /// 活跃 Docker 容器交互终端会话（按 sessionId 索引）。
+    pub docker_exec_sessions: Arc<Mutex<HashMap<String, omnipanel_docker::DockerExecSession>>>,
 }
 
 impl AppState {
@@ -58,6 +64,9 @@ impl AppState {
             engine: Arc::new(engine),
             ssh_sessions: Arc::new(Mutex::new(HashMap::new())),
             output_buffers: output_buffer::new_buffers(),
+            docker_ssh_sessions: Arc::new(Mutex::new(HashMap::new())),
+            docker_log_streams: Arc::new(Mutex::new(HashMap::new())),
+            docker_exec_sessions: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 }

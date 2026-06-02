@@ -56,6 +56,31 @@ pub struct SftpEntry {
     pub size: u64,
 }
 
+/// 非交互命令执行结果（exec channel，独立于交互 shell）。
+#[derive(Debug, Clone)]
+pub struct ExecOutput {
+    pub stdout: String,
+    pub stderr: String,
+    pub exit_code: i32,
+}
+
+impl ExecOutput {
+    /// 退出码非 0 时返回错误（附带 stderr/stdout 作为原因）。
+    pub fn ok_or_err(self, context: &str) -> OmniResult<Self> {
+        if self.exit_code == 0 {
+            Ok(self)
+        } else {
+            let detail = if self.stderr.trim().is_empty() {
+                self.stdout.clone()
+            } else {
+                self.stderr.clone()
+            };
+            Err(OmniError::new(ErrorCode::Internal, context.to_string())
+                .with_cause(detail.trim().to_string()))
+        }
+    }
+}
+
 /// shell channel 的输出事件。
 #[derive(Debug, Clone)]
 pub enum SshEvent {
@@ -222,6 +247,44 @@ impl SshSession {
         self.shell_tx
             .send(ShellMsg::Resize(cols, rows))
             .map_err(|_| OmniError::new(ErrorCode::Ssh, "SSH 会话已关闭"))
+    }
+
+    /// 在独立 exec channel 上运行一条命令并捕获 stdout/stderr 与退出码。
+    /// 不影响交互 shell channel，可与之并存（Docker SSH adapter 用于调用远端 `docker` CLI）。
+    pub async fn exec_capture(&self, command: &str) -> OmniResult<ExecOutput> {
+        let mut channel = self.session.channel_open_session().await.map_err(|e| {
+            OmniError::new(ErrorCode::Ssh, "打开 SSH exec 通道失败").with_cause(e.to_string())
+        })?;
+        channel.exec(true, command).await.map_err(|e| {
+            OmniError::new(ErrorCode::Ssh, "发起 SSH 命令失败").with_cause(e.to_string())
+        })?;
+
+        let mut stdout: Vec<u8> = Vec::new();
+        let mut stderr: Vec<u8> = Vec::new();
+        let mut exit_code: i32 = 0;
+
+        while let Some(msg) = channel.wait().await {
+            match msg {
+                ChannelMsg::Data { ref data } => stdout.extend_from_slice(data),
+                ChannelMsg::ExtendedData { ref data, ext } => {
+                    // ext == 1 为 stderr，其余并入 stdout。
+                    if ext == 1 {
+                        stderr.extend_from_slice(data);
+                    } else {
+                        stdout.extend_from_slice(data);
+                    }
+                }
+                ChannelMsg::ExitStatus { exit_status } => exit_code = exit_status as i32,
+                ChannelMsg::Eof | ChannelMsg::Close => break,
+                _ => {}
+            }
+        }
+
+        Ok(ExecOutput {
+            stdout: String::from_utf8_lossy(&stdout).into_owned(),
+            stderr: String::from_utf8_lossy(&stderr).into_owned(),
+            exit_code,
+        })
     }
 
     /// 主动断开连接。

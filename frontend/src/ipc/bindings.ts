@@ -32,6 +32,53 @@ export const commands = {
 	/**  测试连接连通性。当前支持 database（MySQL）；其余类型将在对应里程碑接入。 */
 	connTest: (connection: Connection) => typedError<string, OmniError_Serialize>(__TAURI_INVOKE("conn_test", { connection })),
 	/**
+	 *  列出全部 Docker 连接：内建本地 Engine + 已保存的 docker 类型连接。
+	 *  不在此处做连通性探测（避免逐一连接远端阻塞），状态由 `docker_probe_connection` 按需更新。
+	 */
+	dockerListConnections: () => typedError<DockerConnectionInfo[], OmniError_Serialize>(__TAURI_INVOKE("docker_list_connections")),
+	/**  探测连接连通性与能力。 */
+	dockerProbeConnection: (connectionId: string) => typedError<DockerProbe, OmniError_Serialize>(__TAURI_INVOKE("docker_probe_connection", { connectionId })),
+	/**  连接总览统计。 */
+	dockerGetOverview: (connectionId: string) => typedError<DockerOverview, OmniError_Serialize>(__TAURI_INVOKE("docker_get_overview", { connectionId })),
+	/**  容器列表。`filter` 取 all/running/stopped。 */
+	dockerListContainers: (connectionId: string, filter: string | null) => typedError<DockerContainerSummary[], OmniError_Serialize>(__TAURI_INVOKE("docker_list_containers", { connectionId, filter })),
+	/**  容器详情。 */
+	dockerInspectContainer: (connectionId: string, containerId: string) => typedError<DockerContainerDetail, OmniError_Serialize>(__TAURI_INVOKE("docker_inspect_container", { connectionId, containerId })),
+	/**
+	 *  容器生命周期动作：start/stop/restart/kill/pause/unpause/remove。
+	 *  高风险动作（kill/remove）应在前端完成二次确认后再调用。
+	 */
+	dockerContainerAction: (connectionId: string, containerId: string, action: string) => typedError<null, OmniError_Serialize>(__TAURI_INVOKE("docker_container_action", { connectionId, containerId, action })),
+	/**  一次性拉取容器日志（tail 行）。流式跟随用 `docker_stream_container_logs`。 */
+	dockerContainerLogs: (connectionId: string, containerId: string, tail: number) => typedError<DockerLogLine[], OmniError_Serialize>(__TAURI_INVOKE("docker_container_logs", { connectionId, containerId, tail })),
+	/**
+	 *  开始流式跟随容器日志。返回 streamId；日志行通过 `docker-log` 事件回传，
+	 *  结束/出错通过 `docker-log-end` 事件通知。本地 Engine 支持真正 follow；
+	 *  SSH Engine 当前为一次性 tail（follow 后续增强）。
+	 */
+	dockerStreamContainerLogs: (connectionId: string, containerId: string, tail: number, follow: boolean) => typedError<string, OmniError_Serialize>(__TAURI_INVOKE("docker_stream_container_logs", { connectionId, containerId, tail, follow })),
+	/**  停止一个日志流。 */
+	dockerStopLogStream: (streamId: string) => typedError<null, OmniError_Serialize>(__TAURI_INVOKE("docker_stop_log_stream", { streamId })),
+	/**  镜像列表。 */
+	dockerListImages: (connectionId: string) => typedError<DockerImageSummary[], OmniError_Serialize>(__TAURI_INVOKE("docker_list_images", { connectionId })),
+	/**  删除镜像（高风险，前端需确认）。 */
+	dockerRemoveImage: (connectionId: string, imageId: string, force: boolean) => typedError<null, OmniError_Serialize>(__TAURI_INVOKE("docker_remove_image", { connectionId, imageId, force })),
+	/**  清理悬空镜像（高风险，前端需确认）。 */
+	dockerPruneImages: (connectionId: string) => typedError<DockerPruneResult, OmniError_Serialize>(__TAURI_INVOKE("docker_prune_images", { connectionId })),
+	/**
+	 *  创建容器交互终端会话（仅本地 Engine）。返回 sessionId；
+	 *  终端输出复用 `terminal-output` 事件，前端可直接用 xterm 绑定该 sessionId。
+	 */
+	dockerCreateExecSession: (connectionId: string, containerId: string, shell: string | null, cols: number, rows: number) => typedError<string, OmniError_Serialize>(__TAURI_INVOKE("docker_create_exec_session", { connectionId, containerId, shell, cols, rows })),
+	/**  写入容器终端 stdin。 */
+	dockerExecWrite: (sessionId: string, data: number[]) => typedError<null, OmniError_Serialize>(__TAURI_INVOKE("docker_exec_write", { sessionId, data })),
+	/**  调整容器终端尺寸。 */
+	dockerExecResize: (sessionId: string, cols: number, rows: number) => typedError<null, OmniError_Serialize>(__TAURI_INVOKE("docker_exec_resize", { sessionId, cols, rows })),
+	/**  关闭容器终端会话（丢弃 stdin 写端即关闭）。 */
+	dockerExecClose: (sessionId: string) => typedError<null, OmniError_Serialize>(__TAURI_INVOKE("docker_exec_close", { sessionId })),
+	/**  识别 Compose 项目（按容器标签聚合）。 */
+	dockerListComposeProjects: (connectionId: string) => typedError<DockerComposeProject[], OmniError_Serialize>(__TAURI_INVOKE("docker_list_compose_projects", { connectionId })),
+	/**
 	 *  执行一个动作：按 kind 分发到执行引擎，过程通过 `action-progress` 事件流式回流，
 	 *  完成后写入审计日志，返回退出码（0 成功）。
 	 */
@@ -130,6 +177,175 @@ export type DbTableSchema = {
 	name: string,
 	columns: DbColumnMeta[],
 	indexes?: DbIndexMeta[],
+};
+
+/**  连接级能力探测结果。前端据此决定页签/按钮显隐与降级。 */
+export type DockerCapabilities = {
+	canOverview: boolean,
+	canStreamLogs: boolean,
+	canContainerExec: boolean,
+	canInspect: boolean,
+	canManageContainers: boolean,
+	canManageImages: boolean,
+	canCompose: boolean,
+	canPrune: boolean,
+	readOnly: boolean,
+	source: DockerConnectionSource,
+};
+
+/**  Compose 项目（按 `com.docker.compose.project` 标签聚合容器得到）。 */
+export type DockerComposeProject = {
+	name: string,
+	workingDir: string | null,
+	configFiles: string | null,
+	serviceCount: number,
+	containerCount: number,
+	runningContainerCount: number,
+	services: DockerComposeService[],
+};
+
+/**  Compose 服务（按 `com.docker.compose.service` 标签聚合）。 */
+export type DockerComposeService = {
+	name: string,
+	image: string,
+	containerCount: number,
+	runningContainerCount: number,
+};
+
+/**  连接信息（列表与工作区头部展示）。 */
+export type DockerConnectionInfo = {
+	connectionId: string,
+	name: string,
+	source: DockerConnectionSource,
+	status: DockerConnectionStatus,
+	hostLabel: string,
+	environment: string,
+	engineVersion: string | null,
+	apiVersion: string | null,
+	containersRunning: number,
+	containersTotal: number,
+	warningMessage: string | null,
+	/**  与 SSH / Server 模块贯通上下文用：绑定的 SSH 连接 id。 */
+	boundSshConnectionId: string | null,
+};
+
+/**  Docker 连接来源。前端只消费统一资源模型，来源差异由后端 adapter 屏蔽。 */
+export type DockerConnectionSource = 
+/**  本地 Docker Engine / Docker Desktop。 */
+"local-engine" | 
+/**  远程 Docker Engine API（TCP/TLS）。后续增强。 */
+"remote-engine" | 
+/**  通过 SSH 宿主机调用远程 `docker` CLI。 */
+"ssh-engine" | 
+/**  通过 1Panel / 宝塔 / Portainer 等面板 API 适配。后续增强。 */
+"panel-adapter";
+
+/**  连接状态。 */
+export type DockerConnectionStatus = "online" | "degraded" | "offline";
+
+/**  容器详情。 */
+export type DockerContainerDetail = {
+	summary: DockerContainerSummary,
+	command: string | null,
+	restartPolicy: string | null,
+	exitCode: number | null,
+	env: DockerKeyValue[],
+	mounts: DockerMount[],
+	networks: DockerNetworkAttachment[],
+};
+
+/**  容器列表项。 */
+export type DockerContainerSummary = {
+	id: string,
+	shortId: string,
+	name: string,
+	image: string,
+	/**  归一化生命周期：running / exited / paused / restarting / created / dead / unknown。 */
+	state: string,
+	/**  Docker 原始状态文本，例如 "Up 2 hours"。 */
+	statusText: string,
+	running: boolean,
+	ports: DockerPort[],
+	networks: string[],
+	createdAt: number | null,
+};
+
+/**  镜像列表项。 */
+export type DockerImageSummary = {
+	id: string,
+	shortId: string,
+	repository: string,
+	tag: string,
+	sizeBytes: number | null,
+	createdAt: number | null,
+	containers: number | null,
+	dangling: boolean,
+};
+
+/**  键值对（环境变量、标签）。 */
+export type DockerKeyValue = {
+	key: string,
+	value: string,
+};
+
+/**  日志行。 */
+export type DockerLogLine = {
+	/**  stdout / stderr。 */
+	stream: string,
+	message: string,
+};
+
+/**  挂载信息。 */
+export type DockerMount = {
+	kind: string,
+	source: string,
+	destination: string,
+	readOnly: boolean,
+};
+
+/**  网络挂载。 */
+export type DockerNetworkAttachment = {
+	name: string,
+	ipAddress: string | null,
+};
+
+/**  总览页数据。 */
+export type DockerOverview = {
+	capabilities: DockerCapabilities,
+	summary: DockerResourceSummary,
+	engineVersion: string | null,
+	warningMessage: string | null,
+};
+
+/**  端口映射。 */
+export type DockerPort = {
+	privatePort: number,
+	publicPort: number | null,
+	protocol: string,
+	ip: string | null,
+};
+
+/**  探测结果。 */
+export type DockerProbe = {
+	status: DockerConnectionStatus,
+	engineVersion: string | null,
+	apiVersion: string | null,
+	capabilities: DockerCapabilities,
+	warningMessage: string | null,
+};
+
+/**  镜像清理结果。 */
+export type DockerPruneResult = {
+	deleted: string[],
+	freedSpaceBytes: number | null,
+};
+
+/**  资源统计（总览页）。 */
+export type DockerResourceSummary = {
+	containersTotal: number,
+	containersRunning: number,
+	containersStopped: number,
+	images: number,
 };
 
 /**  错误分类码。前端按 `code` 决定提示文案与重试策略。 */
