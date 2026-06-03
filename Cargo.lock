@@ -294,6 +294,46 @@ dependencies = [
 ]
 
 [[package]]
+name = "bollard"
+version = "0.21.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c9d0a013e3d3ee4edd61e779adf117944c08902d375f18630a0c5b8f95659734"
+dependencies = [
+ "base64 0.22.1",
+ "bollard-stubs",
+ "bytes",
+ "futures-core",
+ "futures-util",
+ "hex",
+ "http",
+ "http-body-util",
+ "hyper",
+ "log",
+ "pin-project-lite",
+ "serde",
+ "serde_derive",
+ "serde_json",
+ "serde_urlencoded",
+ "thiserror 2.0.18",
+ "tokio",
+ "tokio-util",
+ "tower-service",
+ "url",
+ "winapi",
+]
+
+[[package]]
+name = "bollard-stubs"
+version = "1.53.1-rc.29.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ce412eb6f7096743011dc3cb5c674caeb24ced61d8c498fe07cf7998a4fea889"
+dependencies = [
+ "serde",
+ "serde_json",
+ "serde_repr",
+]
+
+[[package]]
 name = "brotli"
 version = "8.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3090,6 +3130,7 @@ dependencies = [
  "omnipanel-ai",
  "omnipanel-core",
  "omnipanel-db",
+ "omnipanel-docker",
  "omnipanel-error",
  "omnipanel-exec",
  "omnipanel-ssh",
@@ -3140,6 +3181,22 @@ dependencies = [
  "serde",
  "serde_json",
  "sqlx",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "omnipanel-docker"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "bollard",
+ "futures",
+ "omnipanel-error",
+ "omnipanel-ssh",
+ "serde",
+ "serde_json",
+ "specta",
  "tokio",
  "tracing",
 ]

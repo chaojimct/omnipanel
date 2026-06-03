@@ -7,6 +7,7 @@ members = [
     "crates/omnipanel-exec",
     "crates/omnipanel-ssh",
     "crates/omnipanel-db",
+    "crates/omnipanel-docker",
     "crates/omnipanel-core",
     "crates/omnipanel-ai",
 ]
@@ -58,3 +59,7 @@ portable-pty = "0.8"
 # SSH（用 ring 后端，避免 aws-lc-rs 在 Windows 需要 NASM 构建链）
 russh = { version = "0.54", default-features = false, features = ["flate2", "ring", "rsa"] }
 russh-sftp = "2"
+
+# Docker（bollard 本地 Engine 客户端；default-features=false 避免引入 TLS/OpenSSL 构建链，本地 socket/命名管道连接不需要 TLS）
+bollard = { version = "0.21", default-features = false }
+futures = "0.3"

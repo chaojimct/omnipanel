@@ -74,6 +74,31 @@ pub struct SshProcessInfo {
     pub command: String,
 }
 
+/// 非交互命令执行结果（exec channel，独立于交互 shell）。
+#[derive(Debug, Clone)]
+pub struct ExecOutput {
+    pub stdout: String,
+    pub stderr: String,
+    pub exit_code: i32,
+}
+
+impl ExecOutput {
+    /// 退出码非 0 时返回错误（附带 stderr/stdout 作为原因）。
+    pub fn ok_or_err(self, context: &str) -> OmniResult<Self> {
+        if self.exit_code == 0 {
+            Ok(self)
+        } else {
+            let detail = if self.stderr.trim().is_empty() {
+                self.stdout.clone()
+            } else {
+                self.stderr.clone()
+            };
+            Err(OmniError::new(ErrorCode::Internal, context.to_string())
+                .with_cause(detail.trim().to_string()))
+        }
+    }
+}
+
 /// shell channel 的输出事件。
 #[derive(Debug, Clone)]
 pub enum SshEvent {
@@ -309,42 +334,57 @@ impl SshSession {
             .map_err(|_| OmniError::new(ErrorCode::Ssh, "SSH 会话已关闭"))
     }
 
-    /// Execute a single command on the existing SSH session (separate channel).
-    /// Returns stdout as a UTF-8 string.
-    pub async fn exec_command(&self, command: &str) -> OmniResult<String> {
-        let mut channel = self
-            .session
-            .channel_open_session()
-            .await
-            .map_err(|e| OmniError::ssh("打开命令执行通道失败").with_cause(e.to_string()))?;
+    /// 在独立 exec channel 上运行一条命令并捕获 stdout/stderr 与退出码。
+    /// 不影响交互 shell channel，可与之并存（Docker SSH adapter 用于调用远端 `docker` CLI）。
+    pub async fn exec_capture(&self, command: &str) -> OmniResult<ExecOutput> {
+        let mut channel = self.session.channel_open_session().await.map_err(|e| {
+            OmniError::new(ErrorCode::Ssh, "打开 SSH exec 通道失败").with_cause(e.to_string())
+        })?;
+        channel.exec(true, command).await.map_err(|e| {
+            OmniError::new(ErrorCode::Ssh, "发起 SSH 命令失败").with_cause(e.to_string())
+        })?;
 
-        channel
-            .exec(true, command)
-            .await
-            .map_err(|e| OmniError::ssh("远程命令执行失败").with_cause(e.to_string()))?;
+        let mut stdout: Vec<u8> = Vec::new();
+        let mut stderr: Vec<u8> = Vec::new();
+        let mut exit_code: i32 = 0;
 
-        let mut output = Vec::new();
-        loop {
-            match channel.wait().await {
-                Some(ChannelMsg::Data { ref data }) => {
-                    output.extend_from_slice(data);
-                }
-                Some(ChannelMsg::ExtendedData { ref data, .. }) => {
-                    output.extend_from_slice(data);
-                }
-                Some(ChannelMsg::ExitStatus { exit_status }) => {
-                    if exit_status != 0 {
-                        let stderr = String::from_utf8_lossy(&output);
-                        return Err(OmniError::ssh("远程命令返回非零退出码")
-                            .with_cause(format!("exit={exit_status} stderr={stderr}")));
+        while let Some(msg) = channel.wait().await {
+            match msg {
+                ChannelMsg::Data { ref data } => stdout.extend_from_slice(data),
+                ChannelMsg::ExtendedData { ref data, ext } => {
+                    // ext == 1 为 stderr，其余并入 stdout。
+                    if ext == 1 {
+                        stderr.extend_from_slice(data);
+                    } else {
+                        stdout.extend_from_slice(data);
                     }
                 }
-                Some(ChannelMsg::Eof) | Some(ChannelMsg::Close) | None => break,
+                ChannelMsg::ExitStatus { exit_status } => exit_code = exit_status as i32,
+                ChannelMsg::Eof | ChannelMsg::Close => break,
                 _ => {}
             }
         }
 
-        Ok(String::from_utf8_lossy(&output).trim().to_string())
+        Ok(ExecOutput {
+            stdout: String::from_utf8_lossy(&stdout).into_owned(),
+            stderr: String::from_utf8_lossy(&stderr).into_owned(),
+            exit_code,
+        })
+    }
+
+    /// 在独立 exec channel 上运行命令并返回 stdout 文本。
+    pub async fn exec_command(&self, command: &str) -> OmniResult<String> {
+        let output = self.exec_capture(command).await?;
+        if output.exit_code != 0 {
+            let detail = if output.stderr.trim().is_empty() {
+                output.stdout.trim()
+            } else {
+                output.stderr.trim()
+            };
+            return Err(OmniError::new(ErrorCode::Ssh, "远程命令返回非零退出码")
+                .with_cause(format!("exit={} stderr={detail}", output.exit_code)));
+        }
+        Ok(output.stdout.trim().to_string())
     }
 
     /// 主动断开连接。

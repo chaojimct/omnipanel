@@ -24,6 +24,7 @@ omnipanel-store = { path = "../crates/omnipanel-store" }
 omnipanel-exec = { path = "../crates/omnipanel-exec" }
 omnipanel-ssh = { path = "../crates/omnipanel-ssh" }
 omnipanel-db = { path = "../crates/omnipanel-db" }
+omnipanel-docker = { path = "../crates/omnipanel-docker" }
 tokio.workspace = true
 serde.workspace = true
 serde_json.workspace = true
