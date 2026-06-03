@@ -5,7 +5,7 @@ use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
 use omnipanel_error::{ErrorCode, OmniError};
 use omnipanel_ssh::{
-    SftpEntry, SshConfig, SshConfigEntry, SshEvent, SshSession, SshSink, find_ssh_config_entry,
+    SftpEntry, SshConfig, SshConfigEntry, SshEvent, SshProcessInfo, SshSession, SshSink, find_ssh_config_entry,
     load_ssh_config_hosts, ssh_config_to_connect_config,
 };
 use tauri::{Emitter, State};
@@ -102,8 +102,12 @@ pub async fn sftp_list(
     path: String,
 ) -> Result<Vec<SftpEntry>, OmniError> {
     let sessions = state.ssh_sessions.lock().await;
-    let session = sessions
-        .get(&id)
+    if let Some(session) = sessions.get(&id) {
+        return session.sftp_list(&path).await;
+    }
+    drop(sessions);
+    let pool = state.ssh_pool_sessions.lock().await;
+    let session = pool.get(&id)
         .ok_or_else(|| OmniError::new(ErrorCode::NotFound, format!("SSH 会话 {id} 不存在")))?;
     session.sftp_list(&path).await
 }
@@ -117,8 +121,12 @@ pub async fn sftp_download(
     path: String,
 ) -> Result<Vec<u8>, OmniError> {
     let sessions = state.ssh_sessions.lock().await;
-    let session = sessions
-        .get(&id)
+    if let Some(session) = sessions.get(&id) {
+        return session.sftp_download(&path).await;
+    }
+    drop(sessions);
+    let pool = state.ssh_pool_sessions.lock().await;
+    let session = pool.get(&id)
         .ok_or_else(|| OmniError::new(ErrorCode::NotFound, format!("SSH 会话 {id} 不存在")))?;
     session.sftp_download(&path).await
 }
@@ -133,10 +141,52 @@ pub async fn sftp_upload(
     data: Vec<u8>,
 ) -> Result<(), OmniError> {
     let sessions = state.ssh_sessions.lock().await;
-    let session = sessions
-        .get(&id)
+    if let Some(session) = sessions.get(&id) {
+        return session.sftp_upload(&path, &data).await;
+    }
+    drop(sessions);
+    let pool = state.ssh_pool_sessions.lock().await;
+    let session = pool.get(&id)
         .ok_or_else(|| OmniError::new(ErrorCode::NotFound, format!("SSH 会话 {id} 不存在")))?;
     session.sftp_upload(&path, &data).await
+}
+
+/// 在远程服务器创建目录。
+#[tauri::command]
+#[specta::specta]
+pub async fn sftp_mkdir(
+    state: State<'_, AppState>,
+    id: String,
+    path: String,
+) -> Result<(), OmniError> {
+    let sessions = state.ssh_sessions.lock().await;
+    if let Some(session) = sessions.get(&id) {
+        return session.sftp_mkdir(&path).await;
+    }
+    drop(sessions);
+    let pool = state.ssh_pool_sessions.lock().await;
+    let session = pool.get(&id)
+        .ok_or_else(|| OmniError::new(ErrorCode::NotFound, format!("SSH 会话 {id} 不存在")))?;
+    session.sftp_mkdir(&path).await
+}
+
+/// 删除远程服务器上的文件。
+#[tauri::command]
+#[specta::specta]
+pub async fn sftp_remove(
+    state: State<'_, AppState>,
+    id: String,
+    path: String,
+) -> Result<(), OmniError> {
+    let sessions = state.ssh_sessions.lock().await;
+    if let Some(session) = sessions.get(&id) {
+        return session.sftp_remove(&path).await;
+    }
+    drop(sessions);
+    let pool = state.ssh_pool_sessions.lock().await;
+    let session = pool.get(&id)
+        .ok_or_else(|| OmniError::new(ErrorCode::NotFound, format!("SSH 会话 {id} 不存在")))?;
+    session.sftp_remove(&path).await
 }
 
 /// 读取 `~/.ssh/config` 中的 Host 条目（含 Include）。
@@ -160,3 +210,22 @@ pub async fn ssh_connect_config_host(
     let config = ssh_config_to_connect_config(&entry)?;
     ssh_connect(state, config, cols, rows).await
 }
+
+/// 列出远程进程列表。
+#[tauri::command]
+#[specta::specta]
+pub async fn ssh_process_list(
+    state: State<'_, AppState>,
+    id: String,
+) -> Result<Vec<SshProcessInfo>, OmniError> {
+    let sessions = state.ssh_sessions.lock().await;
+    if let Some(session) = sessions.get(&id) {
+        return session.process_list().await;
+    }
+    drop(sessions);
+    let pool = state.ssh_pool_sessions.lock().await;
+    let session = pool.get(&id)
+        .ok_or_else(|| OmniError::new(ErrorCode::NotFound, format!("SSH 会话 {id} 不存在")))?;
+    session.process_list().await
+}
+ 

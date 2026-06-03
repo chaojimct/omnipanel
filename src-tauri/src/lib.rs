@@ -1,5 +1,6 @@
 mod background;
 mod commands;
+mod log_store;
 mod output_buffer;
 mod protocol;
 mod state;
@@ -58,8 +59,11 @@ fn export_ipc_bindings() {
         commands::ssh::sftp_list,
         commands::ssh::sftp_download,
         commands::ssh::sftp_upload,
+        commands::ssh::sftp_mkdir,
+        commands::ssh::sftp_remove,
         commands::ssh::ssh_list_config_hosts,
         commands::ssh::ssh_connect_config_host,
+        commands::ssh::ssh_process_list,
         commands::updater::check_update,
         commands::updater::install_update,
     ]);
@@ -133,11 +137,13 @@ pub fn run() {
                 storage,
                 db_connections,
             );
-            let ssh_sessions = app_state.ssh_sessions.clone();
+            let pool_storage = app_state.storage.clone();
+            let log_store = app_state.log_store.clone();
+            let pool_sessions = app_state.ssh_pool_sessions.clone();
             app.manage(app_state);
 
-            // Start background scheduler
-            background::BackgroundScheduler::start(ssh_sessions, app.handle().clone());
+            // Start background scheduler (SSH connection pool + stats)
+            background::BackgroundScheduler::start(pool_storage, log_store, pool_sessions, app.handle().clone());
 
             Ok(())
         })
@@ -223,11 +229,17 @@ pub fn run() {
             commands::ssh::sftp_list,
             commands::ssh::sftp_download,
             commands::ssh::sftp_upload,
+            commands::ssh::sftp_mkdir,
+            commands::ssh::sftp_remove,
             commands::ssh::ssh_list_config_hosts,
             commands::ssh::ssh_connect_config_host,
+            commands::ssh::ssh_process_list,
             // Updater
             commands::updater::check_update,
             commands::updater::install_update,
+            // Backend logs
+            commands::log::get_backend_logs,
+            commands::log::clear_backend_logs,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

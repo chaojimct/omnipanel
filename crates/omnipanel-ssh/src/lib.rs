@@ -56,6 +56,24 @@ pub struct SftpEntry {
     pub size: u64,
 }
 
+/// 远程进程信息（ps aux 解析结果）。
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct SshProcessInfo {
+    pub user: String,
+    pub pid: u32,
+    pub cpu: f64,
+    pub mem: f64,
+    #[specta(type = f64)]
+    pub vsz: u64,
+    #[specta(type = f64)]
+    pub rss: u64,
+    pub stat: String,
+    pub start: String,
+    pub time: String,
+    pub command: String,
+}
+
 /// 非交互命令执行结果（exec channel，独立于交互 shell）。
 #[derive(Debug, Clone)]
 pub struct ExecOutput {
@@ -116,9 +134,10 @@ enum ShellMsg {
 }
 
 /// 一个已建立的 SSH 会话：持有 client handle（用于 SFTP）与 shell 输入通道。
+/// 当 `shell_tx` 为 None 时仅支持 `exec_command` / SFTP 操作（连接池模式）。
 pub struct SshSession {
     session: client::Handle<Client>,
-    shell_tx: mpsc::UnboundedSender<ShellMsg>,
+    shell_tx: Option<mpsc::UnboundedSender<ShellMsg>>,
 }
 
 impl SshSession {
@@ -232,12 +251,76 @@ impl SshSession {
             sink(SshEvent::Disconnected);
         });
 
-        Ok(Self { session, shell_tx })
+        Ok(Self {
+            session,
+            shell_tx: Some(shell_tx),
+        })
+    }
+
+    /// 建立连接并认证，但不请求 PTY/shell。
+    /// 适用于连接池、监控等只需 exec_command 的场景。
+    pub async fn connect_no_shell(config: SshConfig) -> OmniResult<Self> {
+        let client_config = Arc::new(client::Config {
+            inactivity_timeout: Some(Duration::from_secs(3600)),
+            ..Default::default()
+        });
+
+        let mut session =
+            client::connect(client_config, (config.host.as_str(), config.port), Client)
+                .await
+                .map_err(|e| {
+                    OmniError::new(ErrorCode::Connection, "SSH 连接失败").with_cause(e.to_string())
+                })?;
+
+        let auth_ok = match &config.auth {
+            SshAuth::Password { password } => session
+                .authenticate_password(&config.user, password)
+                .await
+                .map_err(|e| {
+                    OmniError::new(ErrorCode::Auth, "SSH 密码认证失败").with_cause(e.to_string())
+                })?
+                .success(),
+            SshAuth::PrivateKey { pem, passphrase } => {
+                let key = decode_secret_key(pem, passphrase.as_deref()).map_err(|e| {
+                    OmniError::new(ErrorCode::Auth, "SSH 私钥解析失败").with_cause(e.to_string())
+                })?;
+                let hash = session
+                    .best_supported_rsa_hash()
+                    .await
+                    .map_err(|e| {
+                        OmniError::new(ErrorCode::Ssh, "协商 RSA 哈希失败")
+                            .with_cause(e.to_string())
+                    })?
+                    .flatten();
+                session
+                    .authenticate_publickey(
+                        &config.user,
+                        PrivateKeyWithHashAlg::new(Arc::new(key), hash),
+                    )
+                    .await
+                    .map_err(|e| {
+                        OmniError::new(ErrorCode::Auth, "SSH 公钥认证失败")
+                            .with_cause(e.to_string())
+                    })?
+                    .success()
+            }
+        };
+
+        if !auth_ok {
+            return Err(OmniError::new(ErrorCode::Auth, "SSH 认证被拒绝"));
+        }
+
+        Ok(Self {
+            session,
+            shell_tx: None,
+        })
     }
 
     /// 写入 shell 输入。
     pub fn write(&self, data: &[u8]) -> OmniResult<()> {
         self.shell_tx
+            .as_ref()
+            .ok_or_else(|| OmniError::new(ErrorCode::Ssh, "当前会话不支持 shell 输入（连接池模式）"))?
             .send(ShellMsg::Data(data.to_vec()))
             .map_err(|_| OmniError::new(ErrorCode::Ssh, "SSH 会话已关闭"))
     }
@@ -245,6 +328,8 @@ impl SshSession {
     /// 调整远端 PTY 窗口大小。
     pub fn resize(&self, cols: u16, rows: u16) -> OmniResult<()> {
         self.shell_tx
+            .as_ref()
+            .ok_or_else(|| OmniError::new(ErrorCode::Ssh, "当前会话不支持 shell 输入（连接池模式）"))?
             .send(ShellMsg::Resize(cols, rows))
             .map_err(|_| OmniError::new(ErrorCode::Ssh, "SSH 会话已关闭"))
     }
@@ -326,7 +411,13 @@ impl SshSession {
     pub async fn sftp_list(&self, path: &str) -> OmniResult<Vec<SftpEntry>> {
         let sftp = self.open_sftp().await?;
         let dir = sftp.read_dir(path).await.map_err(|e| {
-            OmniError::new(ErrorCode::Ssh, "读取目录失败").with_cause(e.to_string())
+            let err_str = e.to_string();
+            let msg = if err_str.contains("Permission denied") || err_str.contains("permission denied") {
+                "权限不足，无法读取此目录"
+            } else {
+                "读取目录失败"
+            };
+            OmniError::new(ErrorCode::Ssh, msg).with_cause(err_str)
         })?;
         let mut entries = Vec::new();
         for entry in dir {
@@ -354,6 +445,48 @@ impl SshSession {
         sftp.write(path, data)
             .await
             .map_err(|e| OmniError::new(ErrorCode::Ssh, "上传文件失败").with_cause(e.to_string()))
+    }
+
+    pub async fn sftp_mkdir(&self, path: &str) -> OmniResult<()> {
+        let sftp = self.open_sftp().await?;
+        sftp.create_dir(path)
+            .await
+            .map_err(|e| OmniError::new(ErrorCode::Ssh, "创建目录失败").with_cause(e.to_string()))
+    }
+
+    pub async fn sftp_remove(&self, path: &str) -> OmniResult<()> {
+        let sftp = self.open_sftp().await?;
+        sftp.remove_file(path)
+            .await
+            .map_err(|e| OmniError::new(ErrorCode::Ssh, "删除失败").with_cause(e.to_string()))
+    }
+
+    /// 列出远程进程列表（解析 ps aux 输出）。
+    pub async fn process_list(&self) -> OmniResult<Vec<SshProcessInfo>> {
+        let output = self.exec_command("COLUMNS=2000 ps aux --no-headers 2>/dev/null || COLUMNS=2000 ps aux | tail -n +2").await
+            .map_err(|e| OmniError::new(ErrorCode::Ssh, "获取进程列表失败").with_cause(e.to_string()))?;
+        let mut processes = Vec::new();
+        for line in output.lines() {
+            let line = line.trim();
+            if line.is_empty() { continue; }
+            let fields: Vec<&str> = line.splitn(11, char::is_whitespace).collect();
+            if fields.len() < 11 { continue; }
+            let command = fields[10].to_string();
+            if command.is_empty() { continue; }
+            processes.push(SshProcessInfo {
+                user: fields[0].to_string(),
+                pid: fields[1].parse().unwrap_or(0),
+                cpu: fields[2].parse().unwrap_or(0.0),
+                mem: fields[3].parse().unwrap_or(0.0),
+                vsz: fields[4].parse().unwrap_or(0),
+                rss: fields[5].parse().unwrap_or(0),
+                stat: fields[7].to_string(),
+                start: fields[8].to_string(),
+                time: fields[9].to_string(),
+                command,
+            });
+        }
+        Ok(processes)
     }
 }
 

@@ -100,10 +100,16 @@ export const commands = {
 	sftpDownload: (id: string, path: string) => typedError<number[], OmniError_Serialize>(__TAURI_INVOKE("sftp_download", { id, path })),
 	/**  上传内容到远端文件（覆盖）。 */
 	sftpUpload: (id: string, path: string, data: number[]) => typedError<null, OmniError_Serialize>(__TAURI_INVOKE("sftp_upload", { id, path, data })),
+	/**  在远程服务器创建目录。 */
+	sftpMkdir: (id: string, path: string) => typedError<null, OmniError_Serialize>(__TAURI_INVOKE("sftp_mkdir", { id, path })),
+	/**  删除远程服务器上的文件。 */
+	sftpRemove: (id: string, path: string) => typedError<null, OmniError_Serialize>(__TAURI_INVOKE("sftp_remove", { id, path })),
 	/**  读取 `~/.ssh/config` 中的 Host 条目（含 Include）。 */
 	sshListConfigHosts: () => typedError<SshConfigEntry[], OmniError_Serialize>(__TAURI_INVOKE("ssh_list_config_hosts")),
 	/**  按 `~/.ssh/config` 中的 Host 别名建立连接（使用 IdentityFile 等配置）。 */
 	sshConnectConfigHost: (alias: string, cols: number, rows: number) => typedError<string, OmniError_Serialize>(__TAURI_INVOKE("ssh_connect_config_host", { alias, cols, rows })),
+	/**  列出远程进程列表。 */
+	sshProcessList: (id: string) => typedError<SshProcessInfo[], OmniError_Serialize>(__TAURI_INVOKE("ssh_process_list", { id })),
 	checkUpdate: () => typedError<UpdateInfo, string>(__TAURI_INVOKE("check_update")),
 	installUpdate: () => typedError<null, string>(__TAURI_INVOKE("install_update")),
 };
@@ -437,6 +443,20 @@ export type SshConfigEntry = {
 	user: string | null,
 	port: number | null,
 	identityFile: string | null,
+};
+
+/**  远程进程信息（ps aux 解析结果）。 */
+export type SshProcessInfo = {
+	user: string,
+	pid: number,
+	cpu: number | null,
+	mem: number | null,
+	vsz: number | null,
+	rss: number | null,
+	stat: string,
+	start: string,
+	time: string,
+	command: string,
 };
 
 export type UpdateInfo = {
