@@ -56,6 +56,24 @@ pub struct SftpEntry {
     pub size: u64,
 }
 
+/// 远程进程信息（ps aux 解析结果）。
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct SshProcessInfo {
+    pub user: String,
+    pub pid: u32,
+    pub cpu: f64,
+    pub mem: f64,
+    #[specta(type = f64)]
+    pub vsz: u64,
+    #[specta(type = f64)]
+    pub rss: u64,
+    pub stat: String,
+    pub start: String,
+    pub time: String,
+    pub command: String,
+}
+
 /// shell channel 的输出事件。
 #[derive(Debug, Clone)]
 pub enum SshEvent {
@@ -401,6 +419,34 @@ impl SshSession {
         sftp.remove_file(path)
             .await
             .map_err(|e| OmniError::new(ErrorCode::Ssh, "删除失败").with_cause(e.to_string()))
+    }
+
+    /// 列出远程进程列表（解析 ps aux 输出）。
+    pub async fn process_list(&self) -> OmniResult<Vec<SshProcessInfo>> {
+        let output = self.exec_command("COLUMNS=2000 ps aux --no-headers 2>/dev/null || COLUMNS=2000 ps aux | tail -n +2").await
+            .map_err(|e| OmniError::new(ErrorCode::Ssh, "获取进程列表失败").with_cause(e.to_string()))?;
+        let mut processes = Vec::new();
+        for line in output.lines() {
+            let line = line.trim();
+            if line.is_empty() { continue; }
+            let fields: Vec<&str> = line.splitn(11, char::is_whitespace).collect();
+            if fields.len() < 11 { continue; }
+            let command = fields[10].to_string();
+            if command.is_empty() { continue; }
+            processes.push(SshProcessInfo {
+                user: fields[0].to_string(),
+                pid: fields[1].parse().unwrap_or(0),
+                cpu: fields[2].parse().unwrap_or(0.0),
+                mem: fields[3].parse().unwrap_or(0.0),
+                vsz: fields[4].parse().unwrap_or(0),
+                rss: fields[5].parse().unwrap_or(0),
+                stat: fields[7].to_string(),
+                start: fields[8].to_string(),
+                time: fields[9].to_string(),
+                command,
+            });
+        }
+        Ok(processes)
     }
 }
 

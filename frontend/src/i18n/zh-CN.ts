@@ -621,6 +621,21 @@ export const zhCN = {
     feed: {
       title: "服务器操作流",
     },
+    processList: {
+      title: "进程列表",
+      user: "用户",
+      pid: "PID",
+      cpu: "CPU%",
+      mem: "MEM%",
+      vsz: "VSZ",
+      rss: "RSS",
+      stat: "状态",
+      start: "启动时间",
+      time: "CPU时间",
+      command: "命令",
+      empty: "暂无进程数据",
+      error: "加载进程列表失败",
+    },
     actions: {
       refresh: "刷新服务器状态",
       refreshDesc: "拉取 CPU、内存、磁盘和服务状态",

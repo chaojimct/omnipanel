@@ -1,4 +1,8 @@
 import { useSshStats, formatBytes } from "../../../../stores/sshStatsStore";
+import { commands } from "../../../../ipc/bindings";
+import { useI18n } from "../../../../i18n";
+import { useState, useEffect, useCallback } from "react";
+import type { SshProcessInfo } from "../../../../ipc/bindings";
 import type { SshManagerContext } from "../../hooks/useSshManager";
 
 type Props = Pick<
@@ -87,6 +91,140 @@ function StatCard({ label, icon, percent, value, details, accent }: StatCardProp
   );
 }
 
+type SortKey = keyof SshProcessInfo;
+const PAGE_SIZE = 20;
+
+function ProcessListPanel({ resourceId }: { resourceId: string | null }) {
+  const { t } = useI18n();
+  const [processes, setProcesses] = useState<SshProcessInfo[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [page, setPage] = useState(0);
+  const [sortKey, setSortKey] = useState<SortKey>("cpu");
+  const [sortDir, setSortDir] = useState<-1 | 1>(-1);
+
+  const fetchProcesses = useCallback(async () => {
+    if (!resourceId) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await commands.sshProcessList(resourceId);
+      if (result.status === "ok") {
+        setProcesses(result.data);
+      } else {
+        setError(result.error?.message ?? t("ssh.processList.error"));
+      }
+    } catch {
+      setError(t("ssh.processList.error"));
+    } finally {
+      setLoading(false);
+    }
+  }, [resourceId, t]);
+
+  useEffect(() => {
+    fetchProcesses();
+    const interval = setInterval(fetchProcesses, 10000);
+    return () => clearInterval(interval);
+  }, [fetchProcesses]);
+
+  const sorted = [...processes].sort((a, b) => {
+    const av = a[sortKey];
+    const bv = b[sortKey];
+    if (typeof av === "number" && typeof bv === "number") return sortDir * (av - bv);
+    const avs = av == null ? "" : String(av);
+    const bvs = bv == null ? "" : String(bv);
+    return sortDir * avs.localeCompare(bvs);
+  });
+
+  const totalPages = Math.ceil(sorted.length / PAGE_SIZE);
+  const paged = sorted.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+
+  function handleSort(key: SortKey) {
+    if (key === sortKey) {
+      setSortDir(d => (d === 1 ? -1 : 1));
+    } else {
+      setSortKey(key);
+      setSortDir(key === "cpu" || key === "mem" ? -1 : 1);
+    }
+    setPage(0);
+  }
+
+  function SortIndicator({ col }: { col: SortKey }) {
+    if (col !== sortKey) return <span className="proc-sort-arrow">↕</span>;
+    return <span className="proc-sort-arrow proc-sort-active">{sortDir === -1 ? "↓" : "↑"}</span>;
+  }
+
+  if (!resourceId) return null;
+
+  const columns: { key: SortKey; label: string; align?: string }[] = [
+    { key: "user", label: t("ssh.processList.user") },
+    { key: "pid", label: t("ssh.processList.pid"), align: "right" },
+    { key: "cpu", label: t("ssh.processList.cpu"), align: "right" },
+    { key: "mem", label: t("ssh.processList.mem"), align: "right" },
+    { key: "vsz", label: t("ssh.processList.vsz"), align: "right" },
+    { key: "rss", label: t("ssh.processList.rss"), align: "right" },
+    { key: "stat", label: t("ssh.processList.stat") },
+    { key: "start", label: t("ssh.processList.start") },
+    { key: "time", label: t("ssh.processList.time") },
+    { key: "command", label: t("ssh.processList.command") },
+  ];
+
+  return (
+    <div className="proc-panel">
+      <div className="proc-header">
+        <span className="proc-title">{t("ssh.processList.title")}</span>
+        <button className="proc-refresh" onClick={fetchProcesses} disabled={loading}>
+          {loading ? "⟳" : "↻"}
+        </button>
+      </div>
+      {error && <div className="proc-error">{error}</div>}
+      {paged.length === 0 && !loading && !error && (
+        <div className="proc-empty">{t("ssh.processList.empty")}</div>
+      )}
+      <div className="proc-table-wrap">
+        <table className="proc-table">
+          <thead>
+            <tr>
+              {columns.map(c => (
+                <th
+                  key={c.key}
+                  className={c.align === "right" ? "proc-cell-right" : undefined}
+                  onClick={() => handleSort(c.key)}
+                >
+                  {c.label} <SortIndicator col={c.key} />
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {paged.map(p => (
+              <tr key={p.pid}>
+                <td>{p.user}</td>
+                <td className="proc-cell-right">{p.pid}</td>
+                <td className="proc-cell-right">{p.cpu?.toFixed(1) ?? "—"}</td>
+                <td className="proc-cell-right">{p.mem?.toFixed(1) ?? "—"}</td>
+                <td className="proc-cell-right">{p.vsz != null ? formatBytes(p.vsz) : "—"}</td>
+                <td className="proc-cell-right">{p.rss != null ? formatBytes(p.rss * 1024) : "—"}</td>
+                <td>{p.stat}</td>
+                <td>{p.start}</td>
+                <td>{p.time}</td>
+                <td className="proc-cell-cmd" title={p.command}>{p.command}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {totalPages > 1 && (
+        <div className="proc-pager">
+          <button disabled={page === 0} onClick={() => setPage(p => p - 1)}>‹</button>
+          <span>{page + 1} / {totalPages}</span>
+          <button disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)}>›</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function OverviewDetailTab({
   profile,
   activeResource,
@@ -139,6 +277,7 @@ export function OverviewDetailTab({
           accent="var(--warn)"
         />
       </div>
+      <ProcessListPanel resourceId={activeResource?.id ?? null} />
     </div>
   );
 }

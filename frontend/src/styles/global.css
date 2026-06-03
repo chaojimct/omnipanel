@@ -1583,3 +1583,25 @@
 .context-menu-item--danger { color: var(--danger); }
 .context-menu-item--danger:hover { background: color-mix(in srgb, var(--danger) 10%, transparent); }
 .context-menu-item:disabled { opacity: 0.4; cursor: default; }
+
+/* Process list panel */
+.proc-panel { margin-top: var(--sp-4); background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-md); }
+.proc-header { display: flex; align-items: center; padding: var(--sp-2) var(--sp-3); border-bottom: 1px solid var(--border); gap: var(--sp-2); }
+.proc-title { font-size: 12px; font-weight: 600; color: var(--fg-2); }
+.proc-refresh { margin-left: auto; background: none; border: 1px solid var(--border); border-radius: var(--r-sm); color: var(--meta); cursor: pointer; padding: 2px 6px; font-size: 14px; }
+.proc-refresh:hover { background: var(--surface); color: var(--fg); }
+.proc-refresh:disabled { opacity: 0.5; }
+.proc-error { padding: var(--sp-2) var(--sp-3); color: var(--danger); font-size: 11px; }
+.proc-empty { padding: var(--sp-3); color: var(--meta); font-size: 12px; text-align: center; }
+.proc-table-wrap { overflow-x: auto; }
+.proc-table { width: 100%; border-collapse: collapse; font-size: 11px; font-family: var(--font-mono, monospace); }
+.proc-table th { position: sticky; top: 0; background: var(--bg-deeper); padding: var(--sp-1) var(--sp-2); text-align: left; font-weight: 600; font-size: 10px; color: var(--meta); cursor: pointer; user-select: none; white-space: nowrap; border-bottom: 1px solid var(--border); }
+.proc-table th:hover { color: var(--fg); }
+.proc-table td { padding: 2px var(--sp-2); border-bottom: 1px solid var(--border-soft); white-space: nowrap; max-width: 320px; overflow: hidden; text-overflow: ellipsis; }
+.proc-cell-right { text-align: right; }
+.proc-cell-cmd { max-width: 320px; overflow: hidden; text-overflow: ellipsis; }
+.proc-sort-arrow { font-size: 9px; color: var(--meta); opacity: 0.5; }
+.proc-sort-active { opacity: 1; color: var(--accent); }
+.proc-pager { display: flex; align-items: center; justify-content: center; gap: var(--sp-2); padding: var(--sp-2); border-top: 1px solid var(--border); font-size: 11px; color: var(--meta); }
+.proc-pager button { background: none; border: 1px solid var(--border); border-radius: var(--r-sm); color: var(--fg); cursor: pointer; padding: 2px 8px; font-size: 12px; }
+.proc-pager button:disabled { opacity: 0.3; cursor: default; }

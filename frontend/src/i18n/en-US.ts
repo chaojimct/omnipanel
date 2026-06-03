@@ -625,6 +625,21 @@ export const enUS: TranslationDict = {
     feed: {
       title: "Server Action Feed",
     },
+    processList: {
+      title: "Processes",
+      user: "User",
+      pid: "PID",
+      cpu: "CPU%",
+      mem: "MEM%",
+      vsz: "VSZ",
+      rss: "RSS",
+      stat: "Stat",
+      start: "Start",
+      time: "Time",
+      command: "Command",
+      empty: "No process data",
+      error: "Failed to load process list",
+    },
     actions: {
       refresh: "Refresh Server Status",
       refreshDesc: "Fetch CPU, memory, disk and service status",
