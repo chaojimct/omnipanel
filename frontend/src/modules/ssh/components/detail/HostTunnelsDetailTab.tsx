@@ -1,103 +1,82 @@
-import type { SshManagerContext } from "../../hooks/useSshManager";
+import { useState } from "react";
+import { useI18n } from "../../../../i18n";
 
-type Props = Pick<
-  SshManagerContext,
-  | "profile"
-  | "activeTunnelCount"
-  | "idleTunnelCount"
-  | "triggerTunnelAction"
-  | "openModule"
->;
+type TunnelEntry = {
+  id: string;
+  local: string;
+  remote: string;
+  bind: "ipv4" | "ipv6";
+  command: string;
+};
 
-export function HostTunnelsDetailTab({
-  profile,
-  activeTunnelCount,
-  idleTunnelCount,
-  triggerTunnelAction,
-  openModule,
-}: Props) {
+const SEED_TUNNELS: TunnelEntry[] = [
+  { id: "1", local: "0.0.0.0:5432", remote: "10.0.1.10:5432", bind: "ipv4", command: "ssh -L 0.0.0.0:5432:10.0.1.10:5432 deploy@prod-web-01" },
+  { id: "2", local: "::1:6379", remote: "10.0.1.10:6379", bind: "ipv6", command: "ssh -L [::1]:6379:10.0.1.10:6379 deploy@prod-web-01" },
+  { id: "3", local: "0.0.0.0:8080", remote: "10.0.1.11:80", bind: "ipv4", command: "ssh -L 0.0.0.0:8080:10.0.1.11:80 deploy@staging-01" },
+];
+
+export function HostTunnelsDetailTab() {
+  const { t } = useI18n();
+  const [tunnels, setTunnels] = useState<TunnelEntry[]>(SEED_TUNNELS);
+  const [showCreate, setShowCreate] = useState(false);
+  const [localAddr, setLocalAddr] = useState("");
+  const [localPort, setLocalPort] = useState("");
+  const [remoteAddr, setRemoteAddr] = useState("");
+  const [remotePort, setRemotePort] = useState("");
+
+  const handleDelete = (id: string) => {
+    setTunnels((prev) => prev.filter((t) => t.id !== id));
+  };
+
+  const handleCreate = () => {
+    const lp = localPort || "0";
+    const rp = remotePort || "0";
+    const la = localAddr || "0.0.0.0";
+    const ra = remoteAddr || "10.0.0.1";
+    const id = `tun-${Date.now()}`;
+    const bind: "ipv4" | "ipv6" = la.includes(":") ? "ipv6" : "ipv4";
+    const command = `ssh -L ${la}:${lp}:${ra}:${rp} deploy@host`;
+    setTunnels((prev) => [...prev, { id, local: `${la}:${lp}`, remote: `${ra}:${rp}`, bind, command }]);
+    setShowCreate(false);
+    setLocalAddr("");
+    setLocalPort("");
+    setRemoteAddr("");
+    setRemotePort("");
+  };
+
   return (
-    <div className="ssh-workbench-grid">
-      <div className="panel">
-        <div className="panel-header">
-          <h3>SSH Tunnels</h3>
-          <button
-            className="btn btn-primary btn-sm"
-            onClick={() =>
-              triggerTunnelAction(
-                "创建 SSH Tunnel",
-                "为数据库或内部服务建立新的端口转发",
-                "ssh -L 5432:prod-db-master:5432 deploy@host",
-              )
-            }
-          >
-            + New Tunnel
-          </button>
-        </div>
-        <div className="panel-body action-list">
-          {profile.tunnels.map((tunnel) => (
-            <div
-              key={`${tunnel.local}-${tunnel.remote}`}
-              className="action-row"
-              style={{ alignItems: "flex-start" }}
-            >
-              <span className="action-title">{tunnel.local}</span>
-              <span className="action-meta">
-                {tunnel.remote} · {tunnel.status}
-              </span>
-              <div
-                className="flex gap-2"
-                style={{ marginLeft: "auto", flexShrink: 0 }}
-              >
-                <button
-                  className="btn btn-secondary btn-sm"
-                  onClick={() =>
-                    triggerTunnelAction(
-                      "检查 Tunnel 状态",
-                      `检查 ${tunnel.local} 到 ${tunnel.remote} 的转发状态`,
-                      `lsof -i ${tunnel.local.split(":").at(-1) ?? "5432"}`,
-                    )
-                  }
-                >
-                  Inspect
-                </button>
-                <button
-                  className="btn btn-secondary btn-sm"
-                  onClick={() => openModule("/database", "prod-db-master")}
-                >
-                  DB
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
+    <div className="tunnel-panel">
+      <div className="tunnel-header">
+        <span className="tunnel-label">{t("ssh.tunnels.label")}</span>
+        <button className="btn btn-icon" onClick={() => setShowCreate(!showCreate)} title={t("ssh.tunnels.create")}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+        </button>
       </div>
-      <div className="ssh-side-stack">
-        <div className="panel">
-          <div className="panel-header">
-            <h3>Tunnel 闭环</h3>
-          </div>
-          <div className="panel-body action-list">
-            <div className="action-row">
-              <span className="action-title">数据库只读排查</span>
-              <span className="action-meta">
-                先经 Tunnel 进入目标库，再把 SQL 交给数据库模块审阅。
-              </span>
-            </div>
-            <div className="action-row">
-              <span className="action-title">内部服务调试</span>
-              <span className="action-meta">
-                通过本地转发把未暴露的服务接入统一终端与协议调试模块。
-              </span>
-            </div>
-            <div className="action-row">
-              <span className="action-title">当前概况</span>
-              <span className="action-meta">
-                活动 {activeTunnelCount} 条 · 空闲 {idleTunnelCount} 条。
-              </span>
-            </div>
-          </div>
+      {showCreate && (
+        <div className="tunnel-create">
+          <input className="input input-sm" placeholder="Local address" value={localAddr} onChange={(e) => setLocalAddr(e.target.value)} />
+          <input className="input input-sm" placeholder="Local port" value={localPort} onChange={(e) => setLocalPort(e.target.value)} />
+          <input className="input input-sm" placeholder="Remote address" value={remoteAddr} onChange={(e) => setRemoteAddr(e.target.value)} />
+          <input className="input input-sm" placeholder="Remote port" value={remotePort} onChange={(e) => setRemotePort(e.target.value)} />
+          <button className="btn btn-primary btn-sm" onClick={handleCreate}>{t("ssh.tunnels.create")}</button>
         </div>
+      )}
+      <div className="tunnel-list">
+        {tunnels.length === 0 && <div className="empty-state compact">{t("ssh.tunnels.empty")}</div>}
+        {tunnels.map((tunnel) => (
+          <div key={tunnel.id} className="tunnel-item">
+            <div className="tunnel-item-main">
+              <span className={`tunnel-bind-badge ${tunnel.bind}`}>{tunnel.bind.toUpperCase()}</span>
+              <span className="tunnel-endpoint">{tunnel.local}</span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14"><path d="M5 12h14M12 5l7 7-7 7" /></svg>
+              <span className="tunnel-endpoint">{tunnel.remote}</span>
+            </div>
+            <code className="tunnel-command">{tunnel.command}</code>
+            <button className="tunnel-delete-btn" onClick={() => handleDelete(tunnel.id)} title={t("ssh.tunnels.delete")}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+            </button>
+          </div>
+        ))}
       </div>
     </div>
   );

@@ -1,6 +1,8 @@
 import { DETAIL_TABS } from "../constants";
 import type { SshManagerContext } from "../hooks/useSshManager";
 import { envBadgeClass } from "../utils/badges";
+import { useSshStats } from "../../../stores/sshStatsStore";
+import { useHostOnlineStatus } from "../../../stores/sshConnectionStore";
 import { HostTunnelsDetailTab } from "./detail/HostTunnelsDetailTab";
 import { MonitoringDetailTab } from "./detail/MonitoringDetailTab";
 import { OverviewDetailTab } from "./detail/OverviewDetailTab";
@@ -8,6 +10,27 @@ import { SftpDetailTab } from "./detail/SftpDetailTab";
 import { TerminalDetailTab } from "./detail/TerminalDetailTab";
 
 type Props = SshManagerContext;
+
+function HostOsTag({ resourceId }: { resourceId: string | undefined }) {
+  const stats = useSshStats(resourceId ?? null);
+  if (!stats?.osInfo) return null;
+  return <span className="host-os-tag-detail">{stats.osInfo}</span>;
+}
+
+function HostStatusBadge({ resourceId }: { resourceId: string | undefined }) {
+  const status = useHostOnlineStatus(resourceId ?? null);
+  const text =
+    status === "online" ? "在线"
+      : status === "connecting" ? "连接中"
+      : status === "error" ? "离线"
+      : "未知";
+  const cls =
+    status === "online" ? "badge badge-success"
+      : status === "connecting" ? "badge badge-warn"
+      : status === "error" ? "badge badge-muted"
+      : "badge badge-muted";
+  return <span className={cls}>{text}</span>;
+}
 
 export function HostDetailPanel(ctx: Props) {
   const {
@@ -24,21 +47,15 @@ export function HostDetailPanel(ctx: Props) {
     <div className="ssh-detail">
       <div className="ssh-detail-header">
         <div>
-          <div className="host-title">{hostName}</div>
+          <div className="host-title">
+            {hostName}
+            <HostOsTag resourceId={activeResource?.id} />
+          </div>
           <div className="host-addr-detail">
-            {profile.username}@{hostAddress} · {profile.os} · {profile.connected}
+            {profile.username}@{hostAddress}
           </div>
         </div>
-        <span
-          className={`badge ${activeResource?.status === "offline" ? "badge-muted" : activeResource?.status === "warning" ? "badge-warn" : "badge-success"}`}
-          style={{ marginLeft: "auto" }}
-        >
-          {activeResource?.status === "offline"
-            ? "Offline"
-            : activeResource?.status === "warning"
-              ? "Warning"
-              : "Online"}
-        </span>
+        <HostStatusBadge resourceId={activeResource?.id} />
         <span className={envBadgeClass(activeResource)}>
           {t(`env.${activeResource?.environment ?? "unknown"}`)}
         </span>
@@ -70,9 +87,9 @@ export function HostDetailPanel(ctx: Props) {
             detailTabActive={detailTab === "terminal"}
           />
         </div>
-        {detailTab === "sftp" && <SftpDetailTab {...ctx} />}
-        {detailTab === "tunnels" && <HostTunnelsDetailTab {...ctx} />}
-        {detailTab === "monitoring" && <MonitoringDetailTab {...ctx} />}
+        {detailTab === "sftp" && <SftpDetailTab activeResource={activeResource} />}
+        {detailTab === "tunnels" && <HostTunnelsDetailTab />}
+        {detailTab === "monitoring" && <MonitoringDetailTab activeResource={activeResource} />}
       </div>
     </div>
   );

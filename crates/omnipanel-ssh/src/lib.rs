@@ -353,7 +353,13 @@ impl SshSession {
     pub async fn sftp_list(&self, path: &str) -> OmniResult<Vec<SftpEntry>> {
         let sftp = self.open_sftp().await?;
         let dir = sftp.read_dir(path).await.map_err(|e| {
-            OmniError::new(ErrorCode::Ssh, "读取目录失败").with_cause(e.to_string())
+            let err_str = e.to_string();
+            let msg = if err_str.contains("Permission denied") || err_str.contains("permission denied") {
+                "权限不足，无法读取此目录"
+            } else {
+                "读取目录失败"
+            };
+            OmniError::new(ErrorCode::Ssh, msg).with_cause(err_str)
         })?;
         let mut entries = Vec::new();
         for entry in dir {
@@ -381,6 +387,20 @@ impl SshSession {
         sftp.write(path, data)
             .await
             .map_err(|e| OmniError::new(ErrorCode::Ssh, "上传文件失败").with_cause(e.to_string()))
+    }
+
+    pub async fn sftp_mkdir(&self, path: &str) -> OmniResult<()> {
+        let sftp = self.open_sftp().await?;
+        sftp.create_dir(path)
+            .await
+            .map_err(|e| OmniError::new(ErrorCode::Ssh, "创建目录失败").with_cause(e.to_string()))
+    }
+
+    pub async fn sftp_remove(&self, path: &str) -> OmniResult<()> {
+        let sftp = self.open_sftp().await?;
+        sftp.remove_file(path)
+            .await
+            .map_err(|e| OmniError::new(ErrorCode::Ssh, "删除失败").with_cause(e.to_string()))
     }
 }
 

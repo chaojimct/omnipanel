@@ -31,8 +31,10 @@ pub struct AppState {
     pub storage: Arc<Mutex<Storage>>,
     /// 动作执行引擎（按 kind 分发到各 Executor）。
     pub engine: Arc<ExecutionEngine>,
-    /// 活跃 SSH 会话。
+    /// 活跃 SSH 会话（交互式）。
     pub ssh_sessions: Arc<Mutex<HashMap<String, SshSession>>>,
+    /// 连接池 SSH 会话（SFTP 等，按 resource_id 索引）。
+    pub ssh_pool_sessions: Arc<Mutex<HashMap<String, Arc<SshSession>>>>,
     /// 终端/SSH 输出 scrollback 缓冲（会话恢复用）。
     pub output_buffers: OutputBuffers,
     /// 后台任务日志存储。
@@ -60,6 +62,7 @@ impl AppState {
             storage: Arc::new(Mutex::new(storage)),
             engine: Arc::new(engine),
             ssh_sessions: Arc::new(Mutex::new(HashMap::new())),
+            ssh_pool_sessions: Arc::new(Mutex::new(HashMap::new())),
             output_buffers: output_buffer::new_buffers(),
             log_store: LogStore::new(500),
         }

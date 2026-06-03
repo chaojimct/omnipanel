@@ -23,6 +23,7 @@ export type HostSystemStats = {
   cpuUsage: number;
   memory: MemoryStats;
   disk: DiskStats;
+  osInfo: string;
   timestamp: number;
 };
 

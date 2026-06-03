@@ -1,138 +1,178 @@
-import type { SshManagerContext } from "../../hooks/useSshManager";
+import { useCallback, useEffect, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
+import { useHostOnlineStatus } from "../../../../stores/sshConnectionStore";
 
-type Props = Pick<
-  SshManagerContext,
-  "profile" | "openTerminal" | "openModule" | "triggerFileAction"
->;
+type SftpEntry = { name: string; isDir: boolean; size: number };
 
-export function SftpDetailTab({
-  profile,
-  openTerminal,
-  openModule,
-  triggerFileAction,
-}: Props) {
+type Props = {
+  activeResource: { id: string } | null;
+};
+
+const QUICK_PATHS = [
+  { label: "/", path: "/" },
+  { label: "/etc", path: "/etc" },
+  { label: "/var/log", path: "/var/log" },
+  { label: "/home", path: "/home" },
+  { label: "/tmp", path: "/tmp" },
+];
+
+function formatSize(bytes: number): string {
+  if (bytes === 0) return "—";
+  const units = ["B", "KB", "MB", "GB"];
+  const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+  return `${(bytes / 1024 ** i).toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
+}
+
+function fmtError(e: unknown): string {
+  if (e instanceof Error) return e.message;
+  if (typeof e === "string") return e;
+  if (e && typeof e === "object") {
+    const err = e as Record<string, unknown>;
+    if (typeof err.message === "string") return err.message;
+    if (typeof err.cause === "string") return err.cause;
+  }
+  try { return JSON.stringify(e); } catch { return String(e); }
+}
+
+export function SftpDetailTab({ activeResource }: Props) {
+  const [path, setPath] = useState("/");
+  const [entries, setEntries] = useState<SftpEntry[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [showMkdir, setShowMkdir] = useState(false);
+  const [mkdirName, setMkdirName] = useState("");
+  const status = useHostOnlineStatus(activeResource?.id ?? null);
+
+  const isOnline = status === "online";
+
+  const loadDir = useCallback(async (dir: string) => {
+    if (!activeResource?.id || !isOnline) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const list = await invoke<SftpEntry[]>("sftp_list", { id: activeResource.id, path: dir });
+      list.sort((a, b) => {
+        if (a.isDir !== b.isDir) return a.isDir ? -1 : 1;
+        return a.name.localeCompare(b.name);
+      });
+      setEntries(list);
+      setPath(dir);
+    } catch (e) {
+      setError(fmtError(e));
+      setEntries([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [activeResource?.id, isOnline]);
+
+  useEffect(() => {
+    if (isOnline) loadDir(path);
+  }, [isOnline]);
+
+  const navigateUp = () => {
+    if (path === "/") return;
+    const parent = path.split("/").slice(0, -1).join("/") || "/";
+    loadDir(parent);
+  };
+
+  const navigateTo = (entry: SftpEntry) => {
+    if (!entry.isDir) return;
+    const newPath = path === "/" ? `/${entry.name}` : `${path}/${entry.name}`;
+    loadDir(newPath);
+  };
+
+  const handleDelete = async (entry: SftpEntry) => {
+    const fullPath = path === "/" ? `/${entry.name}` : `${path}/${entry.name}`;
+    try {
+      await invoke("sftp_remove", { id: activeResource!.id, path: fullPath });
+      loadDir(path);
+    } catch (e) {
+      setError(fmtError(e));
+    }
+  };
+
+  const handleMkdir = async () => {
+    if (!mkdirName) return;
+    const fullPath = path === "/" ? `/${mkdirName}` : `${path}/${mkdirName}`;
+    try {
+      await invoke("sftp_mkdir", { id: activeResource!.id, path: fullPath });
+      setShowMkdir(false);
+      setMkdirName("");
+      loadDir(path);
+    } catch (e) {
+      setError(fmtError(e));
+    }
+  };
+
+  const pathParts = path.split("/").filter(Boolean);
+
   return (
-    <div className="ssh-workbench-grid">
-      <div>
-        <div className="sftp-toolbar">
-          <button
-            className="btn btn-secondary btn-sm"
-            onClick={() =>
-              triggerFileAction(
-                "上传文件到主机",
-                "通过 SFTP 上传当前运维文件",
-                "scp ./local-file deploy@host:/var/www/app",
-              )
-            }
-          >
-            Upload
-          </button>
-          <button
-            className="btn btn-secondary btn-sm"
-            onClick={() =>
-              triggerFileAction(
-                "下载主机文件",
-                "下载当前目录文件做本地分析",
-                "scp deploy@host:/var/www/app/config ./config.backup",
-              )
-            }
-          >
-            Download
-          </button>
-          <button
-            className="btn btn-secondary btn-sm"
-            onClick={() =>
-              triggerFileAction(
-                "创建远程目录",
-                "在当前目录下创建新文件夹",
-                "mkdir -p /var/www/app/releases",
-              )
-            }
-          >
-            New Folder
-          </button>
-          <div className="sftp-path" style={{ marginLeft: "auto" }}>
-            <span>/</span>
-            <span className="sep">/</span>
-            <span>var</span>
-            <span className="sep">/</span>
-            <span>www</span>
-            <span className="sep">/</span>
-            <span>app</span>
-          </div>
+    <div className="sftp-panel">
+      <div className="sftp-toolbar">
+        <button className="btn btn-secondary btn-sm" onClick={navigateUp} disabled={path === "/"} title="上级目录">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14"><path d="M15 18l-6-6 6-6" /></svg>
+        </button>
+        <button className="btn btn-secondary btn-sm" onClick={() => setShowMkdir(true)} title="新建文件夹">+ 目录</button>
+        <div className="sftp-path">
+          <button className="sftp-path-seg" onClick={() => loadDir("/")}>/</button>
+          {pathParts.map((seg, i) => {
+            const segPath = "/" + pathParts.slice(0, i + 1).join("/");
+            return (
+              <span key={segPath} className="sftp-path-group">
+                <span className="sftp-path-sep">/</span>
+                <button className="sftp-path-seg" onClick={() => loadDir(segPath)}>{seg}</button>
+              </span>
+            );
+          })}
         </div>
-        <table>
+      </div>
+      {showMkdir && (
+        <div className="sftp-mkdir-bar">
+          <input className="input input-sm" value={mkdirName} onChange={(e) => setMkdirName(e.target.value)} placeholder="文件夹名称" />
+          <button className="btn btn-primary btn-sm" onClick={handleMkdir}>创建</button>
+          <button className="btn btn-secondary btn-sm" onClick={() => { setShowMkdir(false); setMkdirName(""); }}>取消</button>
+        </div>
+      )}
+      {error && <div className="sftp-error">{error}</div>}
+      {!isOnline ? (
+        <div className="empty-state compact">主机未连接</div>
+      ) : loading ? (
+        <div className="empty-state compact">加载中…</div>
+      ) : (
+        <table className="sftp-table">
           <thead>
             <tr>
-              <th>Name</th>
-              <th>Type</th>
-              <th>Size</th>
-              <th>Modified</th>
+              <th className="sftp-col-name">名称</th>
+              <th className="sftp-col-size">大小</th>
+              <th className="sftp-col-actions"></th>
             </tr>
           </thead>
           <tbody>
-            {profile.files.map((file) => (
-              <tr key={file.name}>
-                <td>{file.name}</td>
-                <td className="text-muted">{file.type}</td>
-                <td className="text-muted">{file.size}</td>
-                <td className="text-muted">{file.modified}</td>
+            {entries.map((entry) => (
+              <tr key={entry.name} className={entry.isDir ? "sftp-row-dir" : "sftp-row-file"}>
+                <td className="sftp-col-name" onClick={() => entry.isDir && navigateTo(entry)}>
+                  <span className={`sftp-icon ${entry.isDir ? "sftp-icon-dir" : "sftp-icon-file"}`}>
+                    {entry.isDir ? "📁" : "📄"}
+                  </span>
+                  <span className={entry.isDir ? "sftp-name-dir" : "sftp-name-file"}>{entry.name}</span>
+                </td>
+                <td className="sftp-col-size text-muted">{entry.isDir ? "—" : formatSize(entry.size)}</td>
+                <td className="sftp-col-actions">
+                  <button className="sftp-action-btn" onClick={() => handleDelete(entry)} title="删除">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" /></svg>
+                  </button>
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
-      </div>
-      <div className="ssh-side-stack">
-        <div className="panel">
-          <div className="panel-header">
-            <h3>文件闭环</h3>
-          </div>
-          <div className="panel-body action-list">
-            <div className="action-row">
-              <span className="action-title">配置文件</span>
-              <span className="action-meta">
-                适合先下载、差异比对，再联动终端做热加载验证。
-              </span>
-            </div>
-            <div className="action-row">
-              <span className="action-title">部署脚本</span>
-              <span className="action-meta">
-                与 Workflow 模块共用一套发布上下文，避免手工改动漂移。
-              </span>
-            </div>
-            <div className="action-row">
-              <span className="action-title">回到终端</span>
-              <span className="action-meta">
-                完成文件操作后建议立即进入终端执行校验命令与留痕。
-              </span>
-            </div>
-          </div>
-        </div>
-        <div className="panel">
-          <div className="panel-header">
-            <h3>快捷跳转</h3>
-          </div>
-          <div className="panel-body ssh-module-list">
-            <button
-              type="button"
-              className="ssh-module-item"
-              onClick={() => openTerminal(profile.presets[0])}
-            >
-              <span className="action-title">打开排障终端</span>
-              <span className="action-meta">
-                把当前文件上下文带入终端工作区继续处理。
-              </span>
-            </button>
-            <button
-              type="button"
-              className="ssh-module-item"
-              onClick={() => openModule("/workflow")}
-            >
-              <span className="action-title">同步到 Workflow</span>
-              <span className="action-meta">将文件改动纳入发布或巡检链路。</span>
-            </button>
-          </div>
-        </div>
+      )}
+      <div className="sftp-quick-paths">
+        {QUICK_PATHS.map((qp) => (
+          <button key={qp.path} className="sftp-quick-btn" onClick={() => loadDir(qp.path)}>
+            {qp.label}
+          </button>
+        ))}
       </div>
     </div>
   );

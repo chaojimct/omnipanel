@@ -119,10 +119,11 @@ pub fn run() {
             );
             let pool_storage = app_state.storage.clone();
             let log_store = app_state.log_store.clone();
+            let pool_sessions = app_state.ssh_pool_sessions.clone();
             app.manage(app_state);
 
             // Start background scheduler (SSH connection pool + stats)
-            background::BackgroundScheduler::start(pool_storage, log_store, app.handle().clone());
+            background::BackgroundScheduler::start(pool_storage, log_store, pool_sessions, app.handle().clone());
 
             Ok(())
         })
@@ -189,7 +190,9 @@ pub fn run() {
             commands::ssh::ssh_disconnect,
             commands::ssh::sftp_list,
             commands::ssh::sftp_download,
-            commands::ssh::sftp_upload,
+commands::ssh::sftp_upload,
+            commands::ssh::sftp_mkdir,
+            commands::ssh::sftp_remove,
             commands::ssh::ssh_list_config_hosts,
             commands::ssh::ssh_connect_config_host,
             // Updater

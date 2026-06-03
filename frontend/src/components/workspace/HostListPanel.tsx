@@ -7,6 +7,12 @@ import {
 import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { useI18n } from "../../i18n";
 import { useHostOnlineStatus } from "../../stores/sshConnectionStore";
+import { useSshStats } from "../../stores/sshStatsStore";
+import { useConnectionStore } from "../../stores/connectionStore";
+import { isOpenSshHostId, getOpenSshConfigEntry, openSshHostAlias } from "../../lib/sshConfigHosts";
+import { ContextMenu, type ContextMenuItem } from "../ui/ContextMenu";
+import { SshConnectionDialog } from "../../modules/ssh/SshConnectionDialog";
+import type { Connection } from "../../ipc/bindings";
 
 const HOST_ICON = (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -47,6 +53,12 @@ function HostStatusDot({ resourceId }: { resourceId: string }) {
   return <span className={cls} title={title} />;
 }
 
+function HostOsInfo({ resourceId }: { resourceId: string }) {
+  const stats = useSshStats(resourceId);
+  if (!stats?.osInfo) return null;
+  return <span className="host-os-tag">{stats.osInfo}</span>;
+}
+
 export function HostListPanel({ resources, onConnect }: HostListPanelProps) {
   const { t } = useI18n();
   const navigate = useNavigate();
@@ -54,7 +66,14 @@ export function HostListPanel({ resources, onConnect }: HostListPanelProps) {
   const selectedResourceByPath = useWorkspaceStore((s) => s.selectedResourceByPath);
   const selectResource = useWorkspaceStore((s) => s.selectResource);
   const setActivePath = useWorkspaceStore((s) => s.setActivePath);
+  const connections = useConnectionStore((s) => s.connections);
+  const removeConn = useConnectionStore((s) => s.remove);
   const activeHostId = selectedResourceByPath[SSH_PATH];
+
+  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; host: WorkspaceResource } | null>(null);
+  const [showDialog, setShowDialog] = useState(false);
+  const [editConnection, setEditConnection] = useState<Connection | undefined>(undefined);
+  const [deleting, setDeleting] = useState(false);
 
   const grouped = useMemo(() => {
     const filtered = resources.filter(
@@ -78,11 +97,77 @@ export function HostListPanel({ resources, onConnect }: HostListPanelProps) {
     navigate(SSH_PATH);
   };
 
+  const handleContextMenu = (e: React.MouseEvent, host: WorkspaceResource) => {
+    e.preventDefault();
+    setCtxMenu({ x: e.clientX, y: e.clientY, host });
+  };
+
+  const handleDelete = async () => {
+    if (!ctxMenu || deleting) return;
+    const host = ctxMenu.host;
+    setCtxMenu(null);
+    if (isOpenSshHostId(host.id)) {
+      alert(t("ssh.dialog.configHostDeleteWarn"));
+      return;
+    }
+    if (!window.confirm(t("ssh.dialog.confirmDelete", { name: host.name }))) return;
+    setDeleting(true);
+    try {
+      await removeConn(host.id);
+    } catch { /* ignore */ }
+    setDeleting(false);
+  };
+
+  const handleEdit = () => {
+    if (!ctxMenu) return;
+    const host = ctxMenu.host;
+    setCtxMenu(null);
+    const conn = connections.find((c) => c.id === host.id);
+    if (conn) {
+      setEditConnection(conn);
+      setShowDialog(true);
+    } else if (isOpenSshHostId(host.id)) {
+      const alias = openSshHostAlias(host.id);
+      const entry = alias ? getOpenSshConfigEntry(host.id) : null;
+      if (entry) {
+        const config = JSON.stringify({
+          host: entry.hostName,
+          port: entry.port ?? 22,
+          user: entry.user ?? "root",
+          auth: { type: "password", password: "" },
+        });
+        const prefill: Connection = {
+          id: "",
+          kind: "ssh",
+          name: host.name,
+          group: "默认",
+          envTag: "unknown",
+          config,
+        };
+        setEditConnection(prefill);
+        setShowDialog(true);
+      }
+    }
+  };
+
+  const handleAdd = () => {
+    setEditConnection(undefined);
+    setShowDialog(true);
+  };
+
+  const ctxItems: ContextMenuItem[] = [
+    { label: t("ssh.dialog.edit"), onClick: handleEdit },
+    { label: t("ssh.dialog.delete"), onClick: handleDelete, danger: true },
+  ];
+
   return (
     <div className="host-list-panel">
       <div className="host-list-header">
         <h3>{t("ssh.sidebar.title")}</h3>
         <span className="badge badge-muted">{resources.length}</span>
+        <button className="btn btn-icon host-add-btn" title={t("ssh.dialog.addTitle")} onClick={handleAdd}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+        </button>
       </div>
       <div className="host-list-search">
         <input
@@ -104,6 +189,7 @@ export function HostListPanel({ resources, onConnect }: HostListPanelProps) {
                 <div
                   key={host.id}
                   className={`host-item-row${activeHostId === host.id ? " active" : ""}`}
+                  onContextMenu={(e) => handleContextMenu(e, host)}
                 >
                   <button
                     type="button"
@@ -113,27 +199,38 @@ export function HostListPanel({ resources, onConnect }: HostListPanelProps) {
                   >
                     <div className="host-icon">{HOST_ICON}</div>
                     <div className="host-info">
-                      <div className="host-name">{host.name}</div>
-                      <div className="host-addr">{host.subtitle}</div>
+                      <div className="host-row-1">
+                        <span className="host-name">{host.name}</span>
+                        <HostOsInfo resourceId={host.id} />
+                      </div>
+                      <div className="host-row-2">{host.subtitle}</div>
                     </div>
-                    <HostStatusDot resourceId={host.id} />
                   </button>
-                  {onConnect && (
-                    <button
-                      type="button"
-                      className="host-connect-btn"
-                      title={t("ssh.connect")}
-                      onClick={() => onConnect(host.id)}
-                    >
-                      {t("ssh.connect")}
-                    </button>
-                  )}
+                  <HostStatusDot resourceId={host.id} />
                 </div>
               ))}
             </div>
           ))
         )}
       </div>
+
+      {ctxMenu && (
+        <ContextMenu
+          items={ctxItems}
+          position={{ x: ctxMenu.x, y: ctxMenu.y }}
+          onClose={() => setCtxMenu(null)}
+        />
+      )}
+
+      <SshConnectionDialog
+        open={showDialog}
+        onClose={() => { setShowDialog(false); setEditConnection(undefined); }}
+        onSaved={() => {
+          useConnectionStore.getState().refresh();
+          useConnectionStore.getState().refresh();
+        }}
+        editConnection={editConnection}
+      />
     </div>
   );
 }

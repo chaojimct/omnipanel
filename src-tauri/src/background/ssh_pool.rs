@@ -50,6 +50,7 @@ pub struct HostSystemStats {
     pub cpu_usage: f64,
     pub memory: MemoryStats,
     pub disk: DiskStats,
+    pub os_info: String,
     pub timestamp: u64,
 }
 
@@ -58,7 +59,8 @@ echo "load=$(cat /proc/loadavg | cut -d' ' -f1-3)";
 echo "cores=$(nproc)";
 echo "cpu=$(top -bn1 | grep 'Cpu(s)' | awk '{print $2+$4}')";
 echo "mem=$(free -b | grep Mem | awk '{print $2,$3,$4}')";
-echo "disk=$(df -B1 / | tail -1 | awk '{print $2,$3,$4}')"
+echo "disk=$(df -B1 / | tail -1 | awk '{print $2,$3,$4}')";
+echo "os=$(cat /etc/os-release | grep '^PRETTY_NAME=' | cut -d'"' -f2)"
 "#;
 
 struct ConnSpec {
@@ -68,7 +70,7 @@ struct ConnSpec {
 }
 
 struct PoolEntry {
-    session: Option<SshSession>,
+    session: Option<Arc<SshSession>>,
     status: String,
     error: Option<String>,
     host_name: String,
@@ -79,14 +81,16 @@ struct PoolEntry {
 /// SSH 连接池：管理所有已配置主机的长连接，提供状态监控与资源采集。
 pub struct SshPool {
     entries: Arc<Mutex<HashMap<String, PoolEntry>>>,
+    pool_sessions: Arc<Mutex<HashMap<String, Arc<SshSession>>>>,
     log: LogStore,
 }
 
 #[allow(dead_code)]
 impl SshPool {
-    pub fn new(log: LogStore) -> Self {
+    pub fn new(log: LogStore, pool_sessions: Arc<Mutex<HashMap<String, Arc<SshSession>>>>) -> Self {
         Self {
             entries: Arc::new(Mutex::new(HashMap::new())),
+            pool_sessions,
             log,
         }
     }
@@ -215,7 +219,8 @@ impl SshPool {
             let entries = self.entries.clone();
             let handle = app_handle.clone();
             let log = self.log.clone();
-            Self::spawn_background_loop(entries, handle, log);
+            let pool_sessions = self.pool_sessions.clone();
+            Self::spawn_background_loop(entries, pool_sessions, handle, log);
             return;
         }
 
@@ -243,8 +248,10 @@ impl SshPool {
 
         // ── 4. 并发连接：每个主机一个 task，完成即更新 ────────────────────
         let entries = self.entries.clone();
+        let pool_sessions = self.pool_sessions.clone();
         for spec in specs {
             let entries = entries.clone();
+            let pool_sessions = pool_sessions.clone();
             let app = app_handle.clone();
             let log = self.log.clone();
             tokio::spawn(async move {
@@ -253,7 +260,7 @@ impl SshPool {
                     Ok(session) => {
                         info!("SSH 池：{} 已连接", spec.name);
                         log.log("ssh-pool", "info", &format!("{} 已连接", spec.name)).await;
-                        // 立即采集首次 stats
+                        let session = Arc::new(session);
                         let mut initial_stats: Option<HostSystemStats> = None;
                         match session.exec_command(STATS_SCRIPT).await {
                             Ok(output) => {
@@ -263,6 +270,7 @@ impl SshPool {
                                 log.log("ssh-pool", "warn", &format!("{} 首次 stats 采集失败: {e}", spec.name)).await;
                             }
                         }
+                        pool_sessions.lock().await.insert(spec.resource_id.clone(), Arc::clone(&session));
                         let mut pool = entries.lock().await;
                         pool.insert(
                             spec.resource_id.clone(),
@@ -283,6 +291,7 @@ impl SshPool {
                     Err(e) => {
                         warn!("SSH 池：{} 连接失败: {e}", spec.name);
                         log.log("ssh-pool", "error", &format!("{} 连接失败: {e}", spec.name)).await;
+                        pool_sessions.lock().await.remove(&spec.resource_id);
                         let mut pool = entries.lock().await;
                         pool.insert(
                             spec.resource_id.clone(),
@@ -302,11 +311,12 @@ impl SshPool {
         }
 
         // ── 5. 启动后台循环 ──────────────────────────────────────────────
-        Self::spawn_background_loop(self.entries.clone(), app_handle, self.log.clone());
+        Self::spawn_background_loop(self.entries.clone(), self.pool_sessions.clone(), app_handle, self.log.clone());
     }
 
-    fn spawn_background_loop(
+fn spawn_background_loop(
         entries: Arc<Mutex<HashMap<String, PoolEntry>>>,
+        pool_sessions: Arc<Mutex<HashMap<String, Arc<SshSession>>>>,
         app_handle: tauri::AppHandle,
         log: LogStore,
     ) {
@@ -319,7 +329,7 @@ impl SshPool {
             loop {
                 tokio::select! {
                     _ = health_interval.tick() => {
-                        Self::health_check(&entries, &app_handle, &log).await;
+                        Self::health_check(&entries, &pool_sessions, &app_handle, &log).await;
                     }
                     _ = stats_interval.tick() => {
                         Self::collect_all_stats(&entries, &app_handle, &log).await;
@@ -346,16 +356,17 @@ impl SshPool {
 
     async fn health_check(
         entries: &Arc<Mutex<HashMap<String, PoolEntry>>>,
+        pool_sessions: &Arc<Mutex<HashMap<String, Arc<SshSession>>>>,
         app_handle: &tauri::AppHandle,
         log: &LogStore,
     ) {
         let mut pool = entries.lock().await;
         let count = pool.len();
+        let mut dead_ids: Vec<String> = Vec::new();
         log.log("ssh-pool", "info", &format!("健康检查开始 ({count} 个条目)")).await;
         for (resource_id, entry) in pool.iter_mut() {
             let should_check = matches!(entry.status.as_str(), "connected" | "error");
             if !should_check {
-                // 仍发射当前状态，确保前端收到（初始化阶段可能错过首次 emit）
                 if entry.status == "disconnected" || entry.status == "connecting" {
                     emit_status(
                         app_handle,
@@ -386,10 +397,18 @@ impl SshPool {
                 emit_status(app_handle, resource_id, "connected", None);
             } else {
                 log.log("ssh-pool", "warn", &format!("{host} 健康检查未通过，标记为断开")).await;
+                dead_ids.push(resource_id.clone());
                 entry.session = None;
                 entry.status = "disconnected".into();
                 entry.error = Some("健康检查失败".into());
                 emit_status(app_handle, resource_id, "disconnected", Some("健康检查失败"));
+            }
+        }
+        drop(pool);
+        if !dead_ids.is_empty() {
+            let mut ps = pool_sessions.lock().await;
+            for id in dead_ids {
+                ps.remove(&id);
             }
         }
     }
@@ -455,6 +474,7 @@ impl SshPool {
 
         let memory = Self::parse_mem(map.get("mem").map(String::as_str).unwrap_or(""));
         let disk = Self::parse_disk(map.get("disk").map(String::as_str).unwrap_or(""));
+        let os_info = map.get("os").cloned().unwrap_or_default();
 
         Some(HostSystemStats {
             host_id: session_id.to_string(),
@@ -464,6 +484,7 @@ impl SshPool {
             cpu_usage,
             memory,
             disk,
+            os_info,
             timestamp: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap_or_default()
@@ -510,7 +531,7 @@ impl SshPool {
         log.log("ssh-pool", "info", &format!("正在重连 {name}")).await;
         match SshSession::connect_no_shell(entry.config.clone()).await {
             Ok(session) => {
-                entry.session = Some(session);
+                entry.session = Some(Arc::new(session));
                 entry.status = "connected".into();
                 entry.error = None;
                 info!("SSH 池：{name} 重连成功");
