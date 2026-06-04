@@ -87,6 +87,14 @@ pub struct DbIntrospectResult {
     pub tables: Vec<DbTableSchema>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct TableRowCount {
+    pub name: String,
+    /// 统计成功时为行数；单表失败时为 `null`（如视图、权限不足）。
+    pub count: Option<i64>,
+}
+
 /// 将领域错误转为前端可读文案（含底层 cause）。
 fn err_msg(e: OmniError) -> String {
     e.user_message()
@@ -471,14 +479,46 @@ pub async fn db_preview_table(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn db_count_table(
     connection: DbConnectionConfig,
+    schema: Option<String>,
     table: String,
 ) -> Result<i64, String> {
-    let driver = omnipanel_db::connect(&to_params(&connection))
-        .await
-        .map_err(err_msg)?;
-    driver.count(&table).await.map_err(err_msg)
+    let params = with_schema(&connection, schema);
+    if params.database.trim().is_empty() {
+        return Err("未指定数据库".to_string());
+    }
+    let driver = omnipanel_db::connect(&params).await.map_err(err_msg)?;
+    driver.count(&table.trim()).await.map_err(err_msg)
+}
+
+/// 在同一连接上顺序统计多表行数，避免前端并发 `db_count_table` 打满连接池。
+#[tauri::command]
+#[specta::specta]
+pub async fn db_count_tables(
+    connection: DbConnectionConfig,
+    schema: Option<String>,
+    tables: Vec<String>,
+) -> Result<Vec<TableRowCount>, String> {
+    let params = with_schema(&connection, schema);
+    if params.database.trim().is_empty() {
+        return Err("未指定数据库".to_string());
+    }
+    let driver = omnipanel_db::connect(&params).await.map_err(err_msg)?;
+    let mut out = Vec::with_capacity(tables.len());
+    for name in tables {
+        let trimmed = name.trim().to_string();
+        if trimmed.is_empty() {
+            continue;
+        }
+        let count = driver.count(&trimmed).await.ok();
+        out.push(TableRowCount {
+            name: trimmed,
+            count,
+        });
+    }
+    Ok(out)
 }
 
 /// 执行任意 SQL（SELECT 返回行集，DML 返回影响行数）。高风险写操作由前端经执行引擎确认后调用。

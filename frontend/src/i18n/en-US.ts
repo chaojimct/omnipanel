@@ -1,6 +1,10 @@
 import type { TranslationDict } from "./zh-CN";
 
 export const enUS: TranslationDict = {
+  app: {
+    tagline: "Your AI-native engineering workstation",
+    banner: "Terminal · SSH · Database · Docker · Protocol · Workflow",
+  },
   knowledge: {
     categories: "Categories",
     tags: "Tags",
@@ -189,6 +193,7 @@ export const enUS: TranslationDict = {
     export: "Export",
     confirm: "Confirm",
     cancel: "Cancel",
+    continue: "Continue",
     rows: "rows",
     readonly: "Read-only result",
     editable: "Editable",
@@ -379,6 +384,42 @@ export const enUS: TranslationDict = {
     },
     runSql: "Run SQL",
     running: "Running…",
+    toolbox: {
+      open: "Database toolbox",
+      tabs: {
+        dataSync: "Data sync",
+        schemaSync: "Schema sync",
+      },
+      side: {
+        source: "Source database",
+        target: "Target database",
+        connection: "Connection",
+        database: "Database",
+        noConnection: "Select a connection",
+        noDatabase: "Select a database",
+        loading: "Loading…",
+        emptyTables: "No tables",
+        rowCount: "{count} rows",
+        columnCount: "{count} columns",
+        counting: "Counting…",
+        countFailed: "Count failed",
+        selectTable: "Select table {table}",
+        searchTables: "Search tables…",
+        selectAll: "Select all",
+        noSearchMatch: "No matching tables",
+        tagChecking: "Checking",
+        tagNew: "New",
+        tagConflict: "Conflict",
+        strategyRewrite: "Replace",
+        strategyAppend: "Append",
+        strategyUpdate: "Update",
+        strategyRewriteHint: "Delete all rows in target, then insert all from source",
+        strategyAppendHint: "Insert rows whose IDs are missing in target; skip existing IDs",
+        strategyUpdateHint: "Update existing IDs in target only; do not insert new rows",
+        emptyTargetSync: "Select tables on the source side to sync",
+        selectTargetFirst: "Select target connection and database first",
+      },
+    },
     workspace: {
       sqlTab: "SQL",
       emptyTabs: "No open tabs. Use New Query in the Schema sidebar.",
@@ -393,7 +434,9 @@ export const enUS: TranslationDict = {
       meta: "{rows} rows · {ms}ms · {mode}",
       noConnection: "Select a database connection first",
       runHint: "Run SQL to see results",
+      emptySql: "No SQL statement to execute at cursor",
       affected: "Success, {rows} rows affected",
+      close: "Close result preview",
     },
     context: {
       title: "Database Context",
@@ -462,6 +505,13 @@ export const enUS: TranslationDict = {
     sidebar: {
       title: "Connections",
       search: "Search hosts…",
+      openSshGroup: "~/.ssh/config",
+      syncConfig: "Sync ~/.ssh/config to local storage",
+      syncConfigConfirmTitle: "Sync SSH Config",
+      syncConfigConfirmMessage:
+        "Syncing will overwrite connection info and groups for matching hosts from ~/.ssh/config. Continue?",
+      syncResult: "Sync done: {added} added, {updated} updated, {skipped} skipped",
+      syncFailures: "{count} host(s) skipped (e.g. missing identity file)",
     },
     tabs: { hosts: "Hosts", tunnels: "Tunnels", keys: "Keys" },
     detailTabs: {
@@ -505,6 +555,12 @@ export const enUS: TranslationDict = {
       title: "SSH Action Drafts",
       restartConfirm: "Generate Restart Confirmation",
       testConnection: "Test Connection",
+      moveTo: "Move to",
+      moveAllTo: "Move all to",
+      noOtherGroups: "No other groups",
+      editGroup: "Edit",
+      renameGroupPrompt: "Rename group «{name}» to:",
+      renameGroupEmpty: "Group name cannot be empty",
     },
     feed: {
       title: "Remote Action Feed",
@@ -538,6 +594,8 @@ export const enUS: TranslationDict = {
       passphrase: "Passphrase",
       passphrasePlaceholder: "Optional",
       group: "Group",
+      groupPlaceholder: "Type a group name, e.g. Production",
+      groupHint: "Enter a new group or pick from existing ones",
       defaultGroup: "Default",
       envTag: "Environment",
       save: "Save",
@@ -664,6 +722,14 @@ export const enUS: TranslationDict = {
       desc: "Display language for OmniPanel",
       zhCN: "中文（简体）",
       enUS: "English",
+    },
+    uiScale: {
+      label: "UI scale",
+      desc: "Resize the entire app UI (sidebar, panels, settings, etc.)",
+      value: "{percent}%",
+      reset: "Reset to default",
+      decrease: "Decrease UI scale",
+      increase: "Increase UI scale",
     },
   },
   tasks: {

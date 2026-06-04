@@ -180,7 +180,7 @@ HexHub 是目前与 OmniPanel 目标较接近的产品形态：它把 SSH、SFTP
 | 面板集成 | reqwest + 适配器模式 | 对接宝塔、1Panel 等服务器面板开放 API |
 | AI 接口 | reqwest + CLI Agent Adapter + 自定义抽象层 | 支持云端 API、本地模型、本机 CLI Agent |
 | IPC 类型契约 | tauri-specta + specta | 由 Rust 命令/类型自动生成前端 `bindings.ts`，编译期保证前后端类型一致 |
-| 持久化 | rusqlite (本地配置) + 系统 Keychain (凭据) | 本地元数据库（连接/审计），凭据走系统 Keychain |
+| 持久化 | rusqlite (本地配置) + 系统 Keychain (凭据) | 本地源数据库（连接/审计），凭据走系统 Keychain |
 | 整库加密 | SQLCipher（架构就位，feature 开关） | `Storage::open(path, cipher_key)` 密钥注入式接口已就绪，通过 `bundled-sqlcipher-vendored-openssl` feature 开启，默认关闭 |
 | 后端语言 | Rust | 内存安全、高性能、零运行时依赖 |
 | 前端语言 | TypeScript | 类型安全、React 生态 |

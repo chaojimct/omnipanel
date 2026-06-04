@@ -473,9 +473,10 @@ impl SshSession {
             if fields.len() < 11 { continue; }
             let command = fields[10].to_string();
             if command.is_empty() { continue; }
+            let Ok(pid) = fields[1].parse::<u32>() else { continue };
             processes.push(SshProcessInfo {
                 user: fields[0].to_string(),
-                pid: fields[1].parse().unwrap_or(0),
+                pid,
                 cpu: fields[2].parse().unwrap_or(0.0),
                 mem: fields[3].parse().unwrap_or(0.0),
                 vsz: fields[4].parse().unwrap_or(0),

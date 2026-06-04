@@ -2,10 +2,10 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import {
   getDefaultResourceForPath,
-  getResourceById,
   type EnvironmentTag,
   type WorkspaceResource,
 } from "../lib/resourceRegistry";
+import { resolveResourceById } from "./connectionStore";
 
 export interface WorkspaceInfo {
   id: string;
@@ -63,8 +63,6 @@ export const useWorkspaceStore = create<WorkspaceState>()(
 
       selectResource: (resourceId, contextPath) =>
         set((state) => {
-          const resource = getResourceById(resourceId);
-          if (!resource) return state;
           const pathKey = contextPath ?? state.activePath;
           return {
             activeResourceId: resourceId,
@@ -79,16 +77,16 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         const state = get();
         const remembered = state.selectedResourceByPath[path];
         if (remembered) {
-          return getResourceById(remembered);
+          return resolveResourceById(remembered);
         }
         return getDefaultResourceForPath(path);
       },
 
-      getActiveResource: () => getResourceById(get().activeResourceId),
+      getActiveResource: () => resolveResourceById(get().activeResourceId),
 
       getSnapshot: () => {
         const state = get();
-        const activeResource = getResourceById(state.activeResourceId);
+        const activeResource = resolveResourceById(state.activeResourceId);
         const environment = activeResource?.environment ?? "unknown";
         return {
           workspace: state.workspace,

@@ -62,6 +62,7 @@ fn export_ipc_bindings() {
         commands::ssh::sftp_mkdir,
         commands::ssh::sftp_remove,
         commands::ssh::ssh_list_config_hosts,
+        commands::ssh::ssh_sync_config_hosts,
         commands::ssh::ssh_connect_config_host,
         commands::ssh::ssh_process_list,
         commands::ssh::ssh_pool_load_overview,
@@ -197,6 +198,7 @@ pub fn run() {
             commands::database::db_list_tables,
             commands::database::db_preview_table,
             commands::database::db_count_table,
+            commands::database::db_count_tables,
             commands::database::db_execute_query,
             // Connections（统一连接模型）
             commands::connection::conn_list,
@@ -234,6 +236,7 @@ pub fn run() {
             commands::ssh::sftp_mkdir,
             commands::ssh::sftp_remove,
             commands::ssh::ssh_list_config_hosts,
+            commands::ssh::ssh_sync_config_hosts,
             commands::ssh::ssh_connect_config_host,
             commands::ssh::ssh_process_list,
             commands::ssh::ssh_pool_load_overview,

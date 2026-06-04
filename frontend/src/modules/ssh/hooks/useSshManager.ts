@@ -14,9 +14,9 @@ import type { DetailTab, HostSignal, LaunchPreset, ModuleTab } from "../types";
 export function useSshManager() {
   const { t } = useI18n();
   const navigate = useNavigate();
-  const getResourceForPath = useWorkspaceStore((s) => s.getResourceForPath);
   const selectResource = useWorkspaceStore((s) => s.selectResource);
   const setActivePath = useWorkspaceStore((s) => s.setActivePath);
+  const selectedSshId = useWorkspaceStore((s) => s.selectedResourceByPath[SSH_PATH]);
   const enqueueAction = useActionStore((s) => s.enqueueAction);
   const addTerminalTab = useTerminalStore((s) => s.addTab);
   const setTerminalTab = useTerminalStore((s) => s.setActiveTab);
@@ -26,9 +26,13 @@ export function useSshManager() {
   const [detailTab, setDetailTab] = useState<DetailTab>("overview");
 
   const sshResources = useSshHostResources();
-  const resolvedSsh = getResourceForPath(SSH_PATH);
-  const activeResource =
-    resolvedSsh?.type === "ssh" ? resolvedSsh : (sshResources[0] ?? null);
+  const activeResource = useMemo(() => {
+    if (selectedSshId) {
+      const match = sshResources.find((resource) => resource.id === selectedSshId);
+      if (match) return match;
+    }
+    return sshResources[0] ?? null;
+  }, [selectedSshId, sshResources]);
   const profile = getProfile(activeResource);
 
   const onlineHosts = useMemo(

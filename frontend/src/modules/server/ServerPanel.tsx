@@ -134,12 +134,18 @@ export function ServerPanel() {
   const [activeTab, setActiveTab] = useState<ServerTab>("monitor");
   const [processQuery, setProcessQuery] = useState("");
   const allResources = useWorkspaceResources();
-  const getResourceForPath = useWorkspaceStore((s) => s.getResourceForPath);
   const selectResource = useWorkspaceStore((s) => s.selectResource);
-  const activeResource = getResourceForPath(SERVER_PATH);
+  const selectedServerId = useWorkspaceStore((s) => s.selectedResourceByPath[SERVER_PATH]);
   const enqueueAction = useActionStore((s) => s.enqueueAction);
 
   const serverResources = useMemo(() => getServerMonitorResources(allResources), [allResources]);
+  const activeResource = useMemo(() => {
+    if (selectedServerId) {
+      const match = serverResources.find((resource) => resource.id === selectedServerId);
+      if (match) return match;
+    }
+    return serverResources[0] ?? null;
+  }, [selectedServerId, serverResources]);
 
   // 首次进入服务器页时，为 /server 路径写入默认选中项
   useEffect(() => {
