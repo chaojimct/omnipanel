@@ -1,7 +1,13 @@
 import { useState, useEffect, type ReactNode } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useAiStore } from "../../stores/aiStore";
-import { useSettingsStore, LOCALE_OPTIONS, type Locale } from "../../stores/settingsStore";
+import {
+  useSettingsStore,
+  LOCALE_OPTIONS,
+  UI_SCALE,
+  clampUiScale,
+  type Locale,
+} from "../../stores/settingsStore";
 import { useI18n } from "../../i18n";
 
 type Section = "general" | "appearance" | "keybindings" | "ai" | "security" | "terminal" | "data";
@@ -121,12 +127,88 @@ function SettingSelect({
   );
 }
 
+function UiScaleControl({
+  value,
+  onChange,
+}: {
+  value: number;
+  onChange: (percent: number) => void;
+}) {
+  const { t } = useI18n();
+  const atMin = value <= UI_SCALE.min;
+  const atMax = value >= UI_SCALE.max;
+
+  const stepBy = (delta: number) => onChange(clampUiScale(value + delta));
+
+  return (
+    <div className="setting-control setting-scale">
+      <div className="setting-scale__group" role="group" aria-label={t("settings.uiScale.label")}>
+        <button
+          type="button"
+          className="setting-scale__step"
+          disabled={atMin}
+          onClick={() => stepBy(-UI_SCALE.step)}
+          aria-label={t("settings.uiScale.decrease")}
+        >
+          −
+        </button>
+        <div className="setting-scale__field">
+          <input
+            type="number"
+            className="setting-scale__input"
+            min={UI_SCALE.min}
+            max={UI_SCALE.max}
+            step={UI_SCALE.step}
+            value={value}
+            onChange={(e) => {
+              const v = e.target.valueAsNumber;
+              if (Number.isFinite(v)) onChange(v);
+            }}
+            onBlur={(e) => {
+              const v = e.target.valueAsNumber;
+              if (Number.isFinite(v)) onChange(v);
+              else onChange(value);
+            }}
+            aria-label={t("settings.uiScale.value", { percent: value })}
+          />
+          <span className="setting-scale__suffix" aria-hidden>
+            %
+          </span>
+        </div>
+        <button
+          type="button"
+          className="setting-scale__step"
+          disabled={atMax}
+          onClick={() => stepBy(UI_SCALE.step)}
+          aria-label={t("settings.uiScale.increase")}
+        >
+          +
+        </button>
+      </div>
+      {value !== UI_SCALE.default && (
+        <>
+          <span className="setting-scale__sep" aria-hidden />
+          <button
+            type="button"
+            className="setting-scale__reset"
+            onClick={() => onChange(UI_SCALE.default)}
+          >
+            {t("settings.uiScale.reset")}
+          </button>
+        </>
+      )}
+    </div>
+  );
+}
+
 export function SettingsPanel() {
   const { t } = useI18n();
   const [activeSection, setActiveSection] = useState<Section>("general");
 
   const locale = useSettingsStore((s) => s.locale);
   const setLocale = useSettingsStore((s) => s.setLocale);
+  const uiScale = useSettingsStore((s) => s.uiScale);
+  const setUiScale = useSettingsStore((s) => s.setUiScale);
   const [launchOnStartup, setLaunchOnStartup] = useState(false);
   const [restoreSession, setRestoreSession] = useState(true);
   const [checkUpdates, setCheckUpdates] = useState(true);
@@ -234,6 +316,13 @@ export function SettingsPanel() {
                     </option>
                   ))}
                 </select>
+              </div>
+              <div className="setting-row">
+                <div className="setting-label">
+                  <h4>{t("settings.uiScale.label")}</h4>
+                  <p>{t("settings.uiScale.desc")}</p>
+                </div>
+                <UiScaleControl value={uiScale} onChange={setUiScale} />
               </div>
               <div className="setting-row">
                 <div className="setting-label">

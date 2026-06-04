@@ -1,0 +1,81 @@
+import { useEffect, type ReactNode } from "react";
+import { createPortal } from "react-dom";
+import { useI18n } from "../../i18n";
+
+export interface SubWindowProps {
+  open: boolean;
+  onClose: () => void;
+  children: ReactNode;
+  /** 相对主窗口可视区域的宽度比例，默认 0.9 */
+  widthRatio?: number;
+  /** 相对主窗口可视区域的高度比例，默认 0.9 */
+  heightRatio?: number;
+  className?: string;
+}
+
+const DEFAULT_RATIO = 0.9;
+
+export function SubWindow({
+  open,
+  onClose,
+  children,
+  widthRatio = DEFAULT_RATIO,
+  heightRatio = DEFAULT_RATIO,
+  className,
+}: SubWindowProps) {
+  const { t } = useI18n();
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        onClose();
+      }
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [open, onClose]);
+
+  if (!open) return null;
+
+  const panelClass = className ? `subwindow-panel ${className}` : "subwindow-panel";
+  const widthPct = `${Math.min(1, Math.max(0.1, widthRatio)) * 100}%`;
+  const heightPct = `${Math.min(1, Math.max(0.1, heightRatio)) * 100}%`;
+  const closeLabel = t("shell.topbar.close");
+
+  return createPortal(
+    <div className="subwindow-overlay" role="presentation" onClick={onClose}>
+      <div
+        className={panelClass}
+        role="dialog"
+        aria-modal="true"
+        style={{ width: widthPct, height: heightPct }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="subwindow-header">
+          <button
+            type="button"
+            className="btn-icon subwindow-close"
+            title={closeLabel}
+            aria-label={closeLabel}
+            onClick={onClose}
+          >
+            <svg
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              width="14"
+              height="14"
+            >
+              <path d="M4 4l8 8M12 4l-8 8" />
+            </svg>
+          </button>
+        </div>
+        <div className="subwindow-body">{children}</div>
+      </div>
+    </div>,
+    document.body,
+  );
+}

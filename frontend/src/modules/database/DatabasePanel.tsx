@@ -37,6 +37,9 @@ import {
 } from "./workspaceTabs";
 import { CellEditorDialog } from "./cell_editor";
 import { WorkspaceEmptyPage } from "../../components/ui/WorkspaceEmptyPage";
+import { SubWindow } from "../../components/ui/SubWindow";
+import { useDbToolboxStore } from "../../stores/dbToolboxStore";
+import { DatabaseToolbox } from "./toolbox/DatabaseToolbox";
 
 const DEFAULT_SQL = `SELECT 1;`;
 
@@ -141,6 +144,8 @@ export function DatabasePanel() {
     row: Record<string, unknown>;
   } | null>(null);
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; tabId: string; index: number } | null>(null);
+  const toolboxOpen = useDbToolboxStore((s) => s.open);
+  const setToolboxOpen = useDbToolboxStore((s) => s.setOpen);
 
   const activeGroupName = useMemo(
     () => getGroupName(activeGroupId),
@@ -347,7 +352,7 @@ export function DatabasePanel() {
       }));
       let totalRows = 0;
       try {
-        totalRows = await countTable(connForSchema, tableName);
+        totalRows = await countTable(connForSchema, tableName, dbName);
       } catch (e) {
         setTablePreviews((prevMap) => ({
           ...prevMap,
@@ -394,7 +399,7 @@ export function DatabasePanel() {
         const page = existing.page;
 
         Promise.all([
-          countTable(connForSchema, tableName),
+          countTable(connForSchema, tableName, dbName),
           previewTable(connForSchema, tableName, pageSize, page * pageSize),
         ])
           .then(([totalRows, data]) => {
@@ -1108,6 +1113,13 @@ export function DatabasePanel() {
         />,
         document.body,
       )}
+      <SubWindow open={toolboxOpen} onClose={() => setToolboxOpen(false)}>
+        <DatabaseToolbox
+          connections={groupConnections}
+          initialSourceConnectionId={activeConn?.id}
+          initialSourceDatabase={activeSqlDatabase}
+        />
+      </SubWindow>
       <ConnectionDialog
         open={dialogOpen}
         onClose={() => setDialogOpen(false)}

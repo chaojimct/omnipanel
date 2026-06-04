@@ -77,7 +77,13 @@ export function HostDetailPanel(ctx: Props) {
       </div>
 
       <div
-        className={`ssh-detail-body${detailTab === "terminal" ? " ssh-detail-body--terminal" : ""}`}
+        className={`ssh-detail-body${
+          detailTab === "terminal"
+            ? " ssh-detail-body--terminal"
+            : detailTab === "overview"
+              ? " ssh-detail-body--overview"
+              : ""
+        }`}
       >
         {detailTab === "overview" && <OverviewDetailTab {...ctx} />}
         <div

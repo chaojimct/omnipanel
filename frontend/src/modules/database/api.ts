@@ -165,9 +165,32 @@ export async function previewTable(
   return invoke<TablePreviewResult>("db_preview_table", { connection, table, limit, offset });
 }
 
+export interface TableRowCount {
+  name: string;
+  count: number | null;
+}
+
 export async function countTable(
   connection: DbConnectionConfig,
   table: string,
+  database?: string,
 ): Promise<number> {
-  return invoke<number>("db_count_table", { connection, table });
+  return invoke<number>("db_count_table", {
+    connection,
+    table,
+    schema: database?.trim() ? database.trim() : null,
+  });
+}
+
+/** 单连接顺序统计多表行数（工具箱数据同步用）。 */
+export async function countTables(
+  connection: DbConnectionConfig,
+  database: string,
+  tables: string[],
+): Promise<TableRowCount[]> {
+  return invoke<TableRowCount[]>("db_count_tables", {
+    connection,
+    schema: database.trim() ? database.trim() : null,
+    tables,
+  });
 }
