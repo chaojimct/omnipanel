@@ -1,5 +1,5 @@
 import { useState, useEffect, type ReactNode } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { useAiStore } from "../../stores/aiStore";
 import {
   useSettingsStore,
@@ -9,6 +9,8 @@ import {
   type Locale,
 } from "../../stores/settingsStore";
 import { useI18n } from "../../i18n";
+import { commands } from "../../ipc/bindings";
+import type { UpdateInfo } from "../../ipc/bindings";
 
 type Section = "general" | "appearance" | "keybindings" | "ai" | "security" | "terminal" | "data";
 
@@ -16,12 +18,6 @@ interface NavItem {
   id: Section;
   label: string;
   icon: ReactNode;
-}
-
-interface UpdateInfo {
-  available: boolean;
-  version: string;
-  body: string;
 }
 
 const NAV_ITEMS: NavItem[] = [
@@ -248,35 +244,66 @@ export function SettingsPanel() {
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
   const [checking, setChecking] = useState(false);
   const [updating, setUpdating] = useState(false);
+  const [downloadPercent, setDownloadPercent] = useState<number | null>(null);
+  const [updateError, setUpdateError] = useState<string | null>(null);
 
-  const checkUpdate = async () => {
+  const checkUpdateFn = async () => {
     setChecking(true);
+    setUpdateError(null);
     try {
-      const info = await invoke<UpdateInfo>("check_update");
-      setUpdateInfo(info);
-    } catch (e) {
-      console.error("Failed to check update:", e);
+      const result = await commands.checkUpdate();
+      if (result.status === "ok") {
+        setUpdateInfo(result.data);
+      } else {
+        setUpdateError(result.error ?? t("settings.update.error"));
+      }
+    } catch {
+      setUpdateError(t("settings.update.error"));
     } finally {
       setChecking(false);
     }
   };
 
-  const installUpdate = async () => {
+  const installUpdateFn = async () => {
+    if (!updateInfo?.available) return;
+    const confirmed = window.confirm(
+      t("settings.update.confirmInstall", { version: updateInfo.version })
+    );
+    if (!confirmed) return;
+
     setUpdating(true);
+    setDownloadPercent(0);
+    setUpdateError(null);
+    let downloaded = 0;
     try {
-      await invoke("install_update");
-    } catch (e) {
-      console.error("Failed to install update:", e);
+      const unlisten = await listen<{ chunk_length: number; content_length: number | null }>(
+        "update-download-progress",
+        (event) => {
+          downloaded += event.payload.chunk_length;
+          const total = event.payload.content_length;
+          if (total && total > 0) {
+            setDownloadPercent(Math.round((downloaded / total) * 100));
+          }
+        },
+      );
+      const result = await commands.installUpdate();
+      unlisten();
+      if (result.status === "error") {
+        setUpdateError(result.error ?? t("settings.update.installError"));
+      }
+    } catch {
+      setUpdateError(t("settings.update.installError"));
     } finally {
       setUpdating(false);
+      setDownloadPercent(null);
     }
   };
 
   useEffect(() => {
     if (checkUpdates) {
-      checkUpdate();
+      checkUpdateFn();
     }
-  }, [checkUpdates]);
+  }, []);
 
   return (
     <div className="settings-workspace">
@@ -340,39 +367,71 @@ export function SettingsPanel() {
               </div>
               <div className="setting-row">
                 <div className="setting-label">
-                  <h4>检查更新</h4>
-                  <p>自动检查新版本</p>
+                  <h4>{t("settings.update.checkLabel")}</h4>
+                  <p>{t("settings.update.checkDesc")}</p>
                 </div>
                 <Toggle value={checkUpdates} onChange={setCheckUpdates} />
               </div>
               <div className="setting-row">
                 <div className="setting-label">
-                  <h4>软件更新</h4>
+                  <h4>{t("settings.update.updateLabel")}</h4>
                   <p>
-                    当前版本：v0.1.0
+                    {t("settings.update.currentVersion", {
+                      version: updateInfo?.current_version ?? "0.1.0",
+                    })}
                     {updateInfo?.available && (
                       <span style={{ color: "var(--accent)", marginLeft: "var(--sp-2)" }}>
-                        发现新版本：v{updateInfo.version}
+                        {t("settings.update.newVersion", { version: updateInfo.version })}
+                      </span>
+                    )}
+                    {updateInfo && !updateInfo.available && !checking && (
+                      <span style={{ color: "var(--success)", marginLeft: "var(--sp-2)" }}>
+                        {t("settings.update.upToDate")}
                       </span>
                     )}
                   </p>
+                  {updateInfo?.body && (
+                    <details className="update-changelog" style={{ marginTop: "var(--sp-1)" }}>
+                      <summary>{t("settings.update.releaseNotes")}</summary>
+                      <pre
+                        className="update-changelog-body"
+                        style={{ fontSize: 11, maxHeight: 160, overflow: "auto", whiteSpace: "pre-wrap" }}
+                      >
+                        {updateInfo.body}
+                      </pre>
+                    </details>
+                  )}
+                  {updateError && (
+                    <p style={{ color: "var(--danger)", marginTop: "var(--sp-1)" }}>{updateError}</p>
+                  )}
                 </div>
-                <div style={{ display: "flex", gap: "var(--sp-2)" }}>
-                  <button
-                    className="btn btn-secondary btn-sm"
-                    onClick={checkUpdate}
-                    disabled={checking}
-                  >
-                    {checking ? "检查中..." : "检查更新"}
-                  </button>
-                  {updateInfo?.available && (
+                <div style={{ display: "flex", flexDirection: "column", gap: "var(--sp-2)", alignItems: "flex-end" }}>
+                  <div style={{ display: "flex", gap: "var(--sp-2)" }}>
                     <button
-                      className="btn btn-primary btn-sm"
-                      onClick={installUpdate}
-                      disabled={updating}
+                      className="btn btn-secondary btn-sm"
+                      onClick={checkUpdateFn}
+                      disabled={checking || updating}
                     >
-                      {updating ? "更新中..." : "立即更新"}
+                      {checking ? t("settings.update.checking") : t("settings.update.checkBtn")}
                     </button>
+                    {updateInfo?.available && !updating && (
+                      <button
+                        className="btn btn-primary btn-sm"
+                        onClick={installUpdateFn}
+                      >
+                        {t("settings.update.installBtn")}
+                      </button>
+                    )}
+                  </div>
+                  {updating && downloadPercent != null && (
+                    <div className="update-progress-bar">
+                      <div className="update-progress-fill" style={{ width: `${downloadPercent}%` }} />
+                    </div>
+                  )}
+                  {updating && (
+                    <span style={{ fontSize: 11, color: "var(--meta)" }}>
+                      {t("settings.update.installing")}
+                    </span>
                   )}
                 </div>
               </div>

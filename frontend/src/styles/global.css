@@ -2221,3 +2221,11 @@
 .proc-pager { display: flex; align-items: center; justify-content: center; gap: var(--sp-2); padding: var(--sp-2); border-top: 1px solid var(--border); font-size: 11px; color: var(--meta); flex-shrink: 0; }
 .proc-pager button { background: none; border: 1px solid var(--border); border-radius: var(--r-sm); color: var(--fg); cursor: pointer; padding: 2px 8px; font-size: 12px; }
 .proc-pager button:disabled { opacity: 0.3; cursor: default; }
+
+/* Update progress bar */
+.update-progress-bar { width: 140px; height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; }
+.update-progress-fill { height: 100%; background: var(--accent); border-radius: 2px; transition: width 0.3s ease; }
+.update-changelog { margin-top: var(--sp-1); }
+.update-changelog summary { cursor: pointer; font-size: 11px; color: var(--meta); }
+.update-changelog summary:hover { color: var(--fg); }
+.update-changelog-body { background: var(--bg-deeper); border: 1px solid var(--border); border-radius: var(--r-sm); padding: var(--sp-2); margin-top: var(--sp-1); }
