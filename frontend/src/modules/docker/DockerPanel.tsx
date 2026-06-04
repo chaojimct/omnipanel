@@ -15,8 +15,6 @@ import type {
   DockerContainerSummary,
 } from "../../ipc/bindings";
 
-const DOCKER_PATH = "/docker";
-
 type WorkspaceTab = "containers" | "images" | "compose";
 
 interface ConfirmState {

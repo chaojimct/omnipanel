@@ -13,7 +13,7 @@ type SshConnectionState = {
   setStatus: (ev: PoolStatusEvent) => void;
 };
 
-export const useSshConnectionStore = create<SshConnectionState>((set, get) => ({
+export const useSshConnectionStore = create<SshConnectionState>((set) => ({
   statusMap: {},
   setStatus: (ev) =>
     set((state) => ({

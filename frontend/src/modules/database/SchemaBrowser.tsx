@@ -11,7 +11,6 @@ import {
 import { useDbSchemaFilterStore } from "../../stores/dbSchemaFilterStore";
 import {
   DatabaseFilterDialog,
-  type SchemaFilterState,
   getVisibleItems,
   makeTableFilterKey,
   mergeFilter,

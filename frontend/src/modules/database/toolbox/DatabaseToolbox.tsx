@@ -203,7 +203,7 @@ export function DatabaseToolbox({
     }
 
     if (targetTablesLoading) {
-      setTableTargetStatus((prev) => {
+      setTableTargetStatus(() => {
         const next: Record<string, TableTargetStatus> = {};
         for (const name of sourceSelected) {
           next[name] = "checking";
@@ -213,7 +213,7 @@ export function DatabaseToolbox({
       return;
     }
 
-    setTableTargetStatus((prev) => {
+    setTableTargetStatus(() => {
       const next: Record<string, TableTargetStatus> = {};
       for (const name of sourceSelected) {
         next[name] = targetTableNames.has(name) ? "conflict" : "new";

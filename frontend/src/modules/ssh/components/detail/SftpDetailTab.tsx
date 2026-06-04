@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useHostOnlineStatus } from "../../../../stores/sshConnectionStore";
 
@@ -45,29 +45,38 @@ export function SftpDetailTab({ activeResource }: Props) {
 
   const isOnline = status === "online";
 
-  const loadDir = useCallback(async (dir: string) => {
-    if (!activeResource?.id || !isOnline) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const list = await invoke<SftpEntry[]>("sftp_list", { id: activeResource.id, path: dir });
-      list.sort((a, b) => {
-        if (a.isDir !== b.isDir) return a.isDir ? -1 : 1;
-        return a.name.localeCompare(b.name);
-      });
-      setEntries(list);
-      setPath(dir);
-    } catch (e) {
-      setError(fmtError(e));
-      setEntries([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [activeResource?.id, isOnline]);
+  const loadDirRef = useRef<(dir: string) => Promise<void>>();
 
   useEffect(() => {
-    if (isOnline) loadDir(path);
-  }, [isOnline]);
+    if (!activeResource?.id) {
+      loadDirRef.current = undefined;
+      return;
+    }
+    const id = activeResource.id;
+    loadDirRef.current = async (dir: string) => {
+      setLoading(true);
+      setError(null);
+      try {
+        const list = await invoke<SftpEntry[]>("sftp_list", { id, path: dir });
+        list.sort((a, b) => {
+          if (a.isDir !== b.isDir) return a.isDir ? -1 : 1;
+          return a.name.localeCompare(b.name);
+        });
+        setEntries(list);
+        setPath(dir);
+      } catch (e) {
+        setError(fmtError(e));
+        setEntries([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+  }, [activeResource?.id]);
+
+  useEffect(() => {
+    if (!isOnline || !loadDirRef.current) return;
+    loadDirRef.current(path);
+  }, [isOnline, path, loadDirRef]);
 
   const navigateUp = () => {
     if (path === "/") return;
