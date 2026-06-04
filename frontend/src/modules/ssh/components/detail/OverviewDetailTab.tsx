@@ -175,8 +175,8 @@ function ProcessListPanel({ processes, loading, error, onRefresh }: ProcessListP
             </tr>
           </thead>
           <tbody>
-            {paged.map(p => (
-              <tr key={p.pid}>
+            {paged.map((p, rowIndex) => (
+              <tr key={`${p.pid}-${p.user}-${rowIndex}`}>
                 <td>{p.user}</td>
                 <td className="proc-cell-right">{p.pid}</td>
                 <td className="proc-cell-right">{p.cpu?.toFixed(1) ?? "—"}</td>

@@ -12,6 +12,7 @@ import {
   type ResourceType,
   type WorkspaceResource,
 } from "../lib/resourceRegistry";
+import { getOpenSshHostResource } from "../lib/sshConfigHosts";
 import { normalizeSshGroup, sanitizeSshGroupInput } from "../lib/sshGroups";
 
 /**
@@ -60,6 +61,16 @@ function deriveSubtitle(connection: Connection): string {
     // config 非合法 JSON 时忽略，回退到 group
   }
   return connection.group || "";
+}
+
+/** 按 id 解析资源（持久化连接、OpenSSH 缓存、SEED 占位）。 */
+export function resolveResourceById(id: string | null | undefined): WorkspaceResource | null {
+  if (!id) return null;
+  const fromConfig = getOpenSshHostResource(id);
+  if (fromConfig) return fromConfig;
+  const conn = useConnectionStore.getState().connections.find((c) => c.id === id);
+  if (conn) return connectionToResource(conn);
+  return SEED_RESOURCES.find((resource) => resource.id === id) ?? null;
 }
 
 /** 将后端 Connection 映射为前端展示用的 WorkspaceResource。 */
