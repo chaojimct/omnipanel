@@ -519,6 +519,7 @@ export type UpdateInfo = {
 	available: boolean,
 	version: string,
 	body: string,
+	current_version: string,
 };
 
 /* Tauri Specta runtime */
