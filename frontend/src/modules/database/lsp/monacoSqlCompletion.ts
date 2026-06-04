@@ -156,7 +156,7 @@ function tableSuggestions(
 
 function tableDotSuggestions(
   monaco: Monaco,
-  model: editor.ITextModel,
+  _model: editor.ITextModel,
   position: Position,
   linePrefix: string,
   ctx: TableDotContext,

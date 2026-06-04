@@ -211,16 +211,16 @@ export function OverviewDetailTab({
   const resourceId = activeResource?.id ?? null;
   const { phase, stats, processes, error, refresh } = useSshOverview(resourceId);
 
-  const cpuPct = stats ? Math.round(stats.cpuUsage) : 0;
+  const cpuPct = stats ? Math.round(stats.cpuUsage ?? 0) : 0;
   const memPct = stats
-    ? Math.round((stats.memory.used / (stats.memory.total || 1)) * 100)
+    ? Math.round(((stats.memory.used ?? 0) / (stats.memory.total ?? 1)) * 100)
     : 0;
   const diskPct = stats
-    ? Math.round((stats.disk.used / (stats.disk.total || 1)) * 100)
+    ? Math.round(((stats.disk.used ?? 0) / (stats.disk.total ?? 1)) * 100)
     : 0;
 
   const cpuDetails = stats
-    ? [`${stats.cpuUsage.toFixed(1)}% 使用率 · ${stats.cpuCores} 核心`, `负载 ${stats.load}`]
+    ? [`${(stats.cpuUsage ?? 0).toFixed(1)}% 使用率 · ${stats.cpuCores} 核心`, `负载 ${stats.load}`]
     : [profile.cpu ?? "—"];
   const memDetails = stats
     ? [`${formatBytes(stats.memory.used)} / ${formatBytes(stats.memory.total)}`, `${formatBytes(stats.memory.available)} 可用`]

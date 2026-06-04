@@ -45,38 +45,32 @@ export function SftpDetailTab({ activeResource }: Props) {
 
   const isOnline = status === "online";
 
-  const loadDirRef = useRef<(dir: string) => Promise<void>>();
+  const activeResourceRef = useRef(activeResource);
+  activeResourceRef.current = activeResource;
 
-  useEffect(() => {
-    if (!activeResource?.id) {
-      loadDirRef.current = undefined;
-      return;
+  const loadDir = async (dir: string) => {
+    if (!activeResourceRef.current?.id || !isOnline) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const list = await invoke<SftpEntry[]>("sftp_list", { id: activeResourceRef.current.id, path: dir });
+      list.sort((a, b) => {
+        if (a.isDir !== b.isDir) return a.isDir ? -1 : 1;
+        return a.name.localeCompare(b.name);
+      });
+      setEntries(list);
+      setPath(dir);
+    } catch (e) {
+      setError(fmtError(e));
+      setEntries([]);
+    } finally {
+      setLoading(false);
     }
-    const id = activeResource.id;
-    loadDirRef.current = async (dir: string) => {
-      setLoading(true);
-      setError(null);
-      try {
-        const list = await invoke<SftpEntry[]>("sftp_list", { id, path: dir });
-        list.sort((a, b) => {
-          if (a.isDir !== b.isDir) return a.isDir ? -1 : 1;
-          return a.name.localeCompare(b.name);
-        });
-        setEntries(list);
-        setPath(dir);
-      } catch (e) {
-        setError(fmtError(e));
-        setEntries([]);
-      } finally {
-        setLoading(false);
-      }
-    };
-  }, [activeResource?.id]);
+  };
 
   useEffect(() => {
-    if (!isOnline || !loadDirRef.current) return;
-    loadDirRef.current(path);
-  }, [isOnline, path, loadDirRef]);
+    if (isOnline) loadDir(path);
+  }, [isOnline]);
 
   const navigateUp = () => {
     if (path === "/") return;

@@ -14,10 +14,11 @@ type Point = { ts: number; value: number };
 /** 根据两次累计计数计算合并不收发吞吐量（MB/s）。 */
 function networkMbps(prev: HostSystemStats, cur: HostSystemStats): number | null {
   if (!prev.network || !cur.network) return null;
+  if (cur.timestamp == null || prev.timestamp == null) return null;
   const dt = cur.timestamp - prev.timestamp;
   if (dt <= 0) return null;
-  const drx = Math.max(0, cur.network.rxBytes - prev.network.rxBytes);
-  const dtx = Math.max(0, cur.network.txBytes - prev.network.txBytes);
+  const drx = Math.max(0, (cur.network.rxBytes ?? 0) - (prev.network.rxBytes ?? 0));
+  const dtx = Math.max(0, (cur.network.txBytes ?? 0) - (prev.network.txBytes ?? 0));
   const bytesPerSec = (drx + dtx) / dt;
   return bytesPerSec / (1024 * 1024);
 }
@@ -25,9 +26,10 @@ function networkMbps(prev: HostSystemStats, cur: HostSystemStats): number | null
 function appendPoint(
   history: Point[],
   stats: HostSystemStats,
-  extract: (s: HostSystemStats) => number,
+  extract: (s: HostSystemStats) => number | null,
 ): Point[] {
   const v = extract(stats);
+  if (v == null || stats.timestamp == null) return history;
   const ts = stats.timestamp * 1000;
   const last = history[history.length - 1];
   if (last && last.ts === ts) return history;
@@ -182,13 +184,14 @@ export function MonitoringDetailTab({ activeResource }: Props) {
     if (!stats) return;
     setCpuSeries((h) => appendPoint(h, stats, (s) => s.cpuUsage));
     setMemSeries((h) =>
-      appendPoint(h, stats, (s) => (s.memory.used / (s.memory.total || 1)) * 100),
+      appendPoint(h, stats, (s) => ((s.memory.used ?? 0) / (s.memory.total ?? 1)) * 100),
     );
 
     const prev = prevStatsRef.current;
-    if (prev && prev.timestamp !== stats.timestamp) {
+    if (prev && prev.timestamp != null && prev.timestamp !== stats.timestamp) {
       const mbps = networkMbps(prev, stats);
       if (mbps != null) {
+        if (stats.timestamp == null) return;
         const ts = stats.timestamp * 1000;
         setNetSeries((h) => {
           const last = h[h.length - 1];

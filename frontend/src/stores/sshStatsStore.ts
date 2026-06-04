@@ -4,20 +4,20 @@ import { listen } from "@tauri-apps/api/event";
 import { useTerminalStore } from "./terminalStore";
 
 export type MemoryStats = {
-  total: number;
-  used: number;
-  available: number;
+  total: number | null;
+  used: number | null;
+  available: number | null;
 };
 
 export type DiskStats = {
-  total: number;
-  used: number;
-  available: number;
+  total: number | null;
+  used: number | null;
+  available: number | null;
 };
 
 export type NetworkStats = {
-  rxBytes: number;
-  txBytes: number;
+  rxBytes: number | null;
+  txBytes: number | null;
 };
 
 export type HostSystemStats = {
@@ -25,12 +25,12 @@ export type HostSystemStats = {
   hostName: string;
   load: string;
   cpuCores: number;
-  cpuUsage: number;
+  cpuUsage: number | null;
   memory: MemoryStats;
   disk: DiskStats;
   network: NetworkStats;
   osInfo: string;
-  timestamp: number;
+  timestamp: number | null;
 };
 
 type SshStatsState = {
@@ -102,8 +102,8 @@ export function useSshStats(resourceId: string | null): HostSystemStats | null {
   return backendSessionId ? (statsMap[backendSessionId] ?? null) : null;
 }
 
-export function formatBytes(bytes: number): string {
-  if (bytes === 0) return "0 B";
+export function formatBytes(bytes: number | null | undefined): string {
+  if (!bytes) return "0 B";
   const units = ["B", "KB", "MB", "GB", "TB"];
   const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
   const val = bytes / 1024 ** i;
