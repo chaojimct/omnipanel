@@ -11,6 +11,7 @@ import {
   getPromptPrefix,
   seedMockTerminal,
 } from "./mockTerminal";
+import { triggerAiDrawerToggle } from "../../hooks/useAiDrawerShortcut";
 
 const isTauriRuntime =
   typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
@@ -93,7 +94,7 @@ export function TerminalView({
     });
 
     term.open(container);
-    term.attachCustomKeyEventHandler(() => false);
+    term.attachCustomKeyEventHandler((e) => triggerAiDrawerToggle(e));
     termRef.current = term;
     seedMockTerminal(term, resource, startup);
     setStatus(sessionId, "connected");

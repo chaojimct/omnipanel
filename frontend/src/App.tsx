@@ -5,7 +5,7 @@ import { Topbar } from "./components/shell/Topbar";
 import { StatusBar } from "./components/shell/StatusBar";
 import { CommandPalette } from "./components/shell/CommandPalette";
 import { NotificationDrawer } from "./components/shell/NotificationDrawer";
-import { AiDrawer, AiPinnedPanel } from "./components/ai/AiDrawer";
+import { AiDrawer } from "./components/ai/AiDrawer";
 import { DangerConfirmDialog } from "./components/terminal/DangerConfirmDialog";
 import { QuickInputHost } from "./components/ui/QuickInputHost";
 import { WindowResize } from "./components/shell/WindowResize";
@@ -20,7 +20,7 @@ import { WorkflowPanel } from "./modules/workflow/WorkflowPanel";
 import { KnowledgePanel } from "./modules/knowledge/KnowledgePanel";
 import { TasksPanel } from "./modules/tasks/TasksPanel";
 import { SettingsPanel } from "./modules/settings/SettingsPanel";
-import { useAiStore } from "./stores/aiStore";
+import { useAiDrawerShortcut } from "./hooks/useAiDrawerShortcut";
 import { useWorkspaceStore } from "./stores/workspaceStore";
 import { useActionStore, getPendingRiskAction } from "./stores/actionStore";
 import { useTopbarStore } from "./stores/topbarStore";
@@ -34,8 +34,6 @@ function TopbarPageActions() {
   const { t } = useI18n();
   const location = useLocation();
   const path = location.pathname;
-  const openAi = () => useAiStore.getState().openDrawer();
-  const enqueueAction = useActionStore((state) => state.enqueueAction);
   const activeResourceId = useWorkspaceStore((state) => state.activeResourceId);
   const activeResource = getResourceById(activeResourceId);
 
@@ -113,43 +111,19 @@ function TopbarPageActions() {
     return null;
   }
 
-  return (
-    <>
-      <button
-        className="btn btn-ghost btn-sm"
-        onClick={() =>
-          enqueueAction({
-            type: "workflow",
-            title: t("actions.recordContext"),
-            description: t("actions.recordContextDesc", {
-              name: activeResource?.name ?? t("shell.nav.workspace"),
-            }),
-            resourceId: activeResource?.id,
-            source: "用户",
-          })
-        }
-      >
-        {t("shell.topbar.recordContext")}
-      </button>
-      <button className="btn btn-primary btn-sm" onClick={openAi}>
-        {t("shell.topbar.askAi")}
-      </button>
-    </>
-  );
+  return null;
 }
 
 const TOPBAR_TAB_ROUTES = ["/terminal", "/ssh", "/database", "/docker", "/server", "/tasks", "/protocol"];
 
 function AppShell() {
+  useAiDrawerShortcut();
   const location = useLocation();
   const navigate = useNavigate();
   const title = getRouteTitle(location.pathname);
   const isTerminal = location.pathname === "/terminal";
   const [otherRoutesMounted, setOtherRoutesMounted] = useState(!isTerminal);
   const [terminalMounted, setTerminalMounted] = useState(isTerminal);
-  const drawerOpen = useAiStore((state) => state.drawerOpen);
-  const drawerMode = useAiStore((state) => state.drawerMode);
-  const isPinned = drawerOpen && drawerMode === "pinned";
   const setActivePath = useWorkspaceStore((state) => state.setActivePath);
   const confirmAction = useActionStore((state) => state.confirmAction);
   const cancelAction = useActionStore((state) => state.cancelAction);
@@ -228,7 +202,6 @@ function AppShell() {
               )}
             </div>
           </div>
-          {isPinned && <AiPinnedPanel />}
         </div>
         <StatusBar />
       </div>

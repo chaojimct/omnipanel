@@ -5,6 +5,7 @@ import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { useActionStore } from "../../stores/actionStore";
 import { openLocalTerminalSession } from "../../lib/terminalSession";
 import { useI18n } from "../../i18n";
+import { formatModShortcut } from "../../lib/platform";
 
 interface CommandItem {
   id: string;
@@ -31,7 +32,7 @@ const COMMAND_DEFS: CommandItem[] = [
   { id: "new-ssh", labelKey: "shell.commandPalette.commands.newSsh", path: "/ssh", categoryKey: "shell.commandPalette.categories.action" },
   { id: "new-query", labelKey: "shell.commandPalette.commands.newQuery", categoryKey: "shell.commandPalette.categories.action" },
   { id: "risk-check", labelKey: "shell.commandPalette.commands.riskCheck", path: "/tasks", categoryKey: "shell.commandPalette.categories.security" },
-  { id: "open-ai", labelKey: "shell.commandPalette.commands.openAi", shortcut: "⌘L", action: () => useAiStore.getState().openDrawer(), categoryKey: "shell.commandPalette.categories.ai" },
+  { id: "open-ai", labelKey: "shell.commandPalette.commands.openAi", shortcut: "$mod+L", action: () => useAiStore.getState().openDrawer(), categoryKey: "shell.commandPalette.categories.ai" },
   { id: "new-ai-conv", labelKey: "shell.commandPalette.commands.newAiConv", action: () => { useAiStore.getState().createConversation(); useAiStore.getState().openDrawer(); }, categoryKey: "shell.commandPalette.categories.ai" },
 ];
 
@@ -51,6 +52,8 @@ export function CommandPalette() {
         ...cmd,
         label: t(cmd.labelKey),
         category: t(cmd.categoryKey),
+        shortcut:
+          cmd.shortcut === "$mod+L" ? formatModShortcut("L") : cmd.shortcut,
       })),
     [t]
   );

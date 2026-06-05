@@ -223,7 +223,7 @@ export const enUS: TranslationDict = {
       ai: "AI Assistant",
     },
     topbar: {
-      aiAssistant: "AI Assistant (Ctrl+L)",
+      aiAssistant: "AI Assistant ({shortcut})",
       notifications: "Notifications",
       commandPalette: "Command Palette (Ctrl+K)",
       minimize: "Minimize",
@@ -235,9 +235,7 @@ export const enUS: TranslationDict = {
       closeRight: "Close Right",
       closeOthers: "Close Others",
       closeAll: "Close All",
-      recordContext: "Capture Context",
-    askAi: "Ask AI",
-    newTab: "New Tab",
+      newTab: "New Tab",
     newConnection: "New Connection",
     addHost: "Add Host",
   },
@@ -1126,9 +1124,6 @@ export const enUS: TranslationDict = {
     emptyTitle: "I already have the current workspace context",
     emptyHint: "Ask me to explain the scene, suggest a troubleshooting path, or draft high-risk actions for confirmation.",
     noConversation: "No conversation",
-  },
-  actions: {
-    recordContext: "Capture Current Context",
-    recordContextDesc: "Captured context for {name}",
+    toggleHint: "Toggle with {shortcut}",
   },
 };

@@ -8,8 +8,10 @@ import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { getResourceById } from "../../lib/resourceRegistry";
 import type { AiMessage, ToolCallState } from "../../stores/aiStore";
 import { IconRobot } from "../ui/Icons";
+import { SubWindow } from "../ui/SubWindow";
 import { CommandSuggestion, isShellLanguage } from "./CommandSuggestion";
 import { useI18n } from "../../i18n";
+import { formatModShortcut } from "../../lib/platform";
 
 function extractText(node: unknown): string {
   if (typeof node === "string") return node;
@@ -165,7 +167,7 @@ function MessageBubble({ msg }: { msg: AiMessage }) {
 
 // ─── Conversation Switcher ───
 
-function ConversationSwitcher({ compact = false }: { compact?: boolean }) {
+function ConversationSwitcher() {
   const { t } = useI18n();
   const conversations = useAiStore((s) => s.conversations);
   const activeId = useAiStore((s) => s.activeConversationId);
@@ -178,7 +180,7 @@ function ConversationSwitcher({ compact = false }: { compact?: boolean }) {
   const active = conversations.find((c) => c.id === activeId);
 
   return (
-    <div className={`ai-conversation-switcher${compact ? " compact" : ""}`}>
+    <div className="ai-conversation-switcher">
       <div className="ai-conversation-switcher-bar">
         <button
           className="ai-conversation-trigger"
@@ -402,55 +404,7 @@ function useAiChat() {
   };
 }
 
-// ─── Shared: Panel header + content ───
-
-function AiPanelHeader({ onPinToggle, onClose, isPinned, compact = false }: {
-  onPinToggle: () => void;
-  onClose: () => void;
-  isPinned: boolean;
-  compact?: boolean;
-}) {
-  const { t } = useI18n();
-  const currentModel = useAiStore((s) => s.currentModel);
-
-  return (
-    <div
-      className={`ai-shell-header${compact ? " compact" : ""}`}
-      onDoubleClick={onPinToggle}
-    >
-      <IconRobot size={16} className="text-accent shrink-0" />
-      <span className="ai-shell-title">{t("ai.title")}</span>
-      <span className="ai-shell-model">{currentModel}</span>
-      <button
-        className="ai-shell-icon-btn"
-        title={isPinned ? "取消固定" : "固定到右侧"}
-        onClick={onPinToggle}
-      >
-        <svg
-          width="14"
-          height="14"
-          viewBox="0 0 24 24"
-          fill={isPinned ? "currentColor" : "none"}
-          stroke="currentColor"
-          strokeWidth="2"
-        >
-          <path d="M12 17v5 M9 10.76a2 2 0 01-1.11 1.79l-1.78.9A2 2 0 005 15.24V16h14v-.76a2 2 0 00-1.11-1.79l-1.78-.9A2 2 0 0115 10.76V7a1 1 0 011-1 2 2 0 002-2H6a2 2 0 002 2 1 1 0 011 1z" />
-        </svg>
-      </button>
-      <button
-        className="ai-shell-icon-btn"
-        title="关闭 (Ctrl+L)"
-        onClick={onClose}
-      >
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <path d="M18 6L6 18M6 6l12 12" />
-        </svg>
-      </button>
-    </div>
-  );
-}
-
-function AiPanelBody({ compact = false }: { compact?: boolean }) {
+function AiPanelBody() {
   const { t } = useI18n();
   const {
     input,
@@ -474,9 +428,9 @@ function AiPanelBody({ compact = false }: { compact?: boolean }) {
 
   return (
     <>
-      <ConversationSwitcher compact={compact} />
+      <ConversationSwitcher />
 
-      <div className={`ai-context-strip${compact ? " compact" : ""}`}>
+      <div className="ai-context-strip">
         <div className="ai-context-row">
           <span className="ai-context-label">{t("ai.currentContext")}</span>
           <span className={`env-badge env-${environment}`}>
@@ -485,13 +439,13 @@ function AiPanelBody({ compact = false }: { compact?: boolean }) {
         </div>
         <div className="ai-context-main">
           <span>{activeResource ? activeResource.name : workspace.name}</span>
-          {!compact && activeResource && (
+          {activeResource && (
             <span className="text-meta">
               {t(`resourceType.${activeResource.type}`)} · {activeResource.subtitle}
             </span>
           )}
         </div>
-        {!compact && recentActions.length > 0 && (
+        {recentActions.length > 0 && (
           <div className="ai-action-preview">
             {recentActions.map((action) => (
               <span key={action.id} className={`action-chip action-${action.status}`}>
@@ -502,7 +456,7 @@ function AiPanelBody({ compact = false }: { compact?: boolean }) {
         )}
       </div>
 
-      <div className={`ai-message-list${compact ? " compact" : ""}`}>
+      <div className="ai-message-list">
         {!activeConversation || activeConversation.messages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center">
             <IconRobot size={32} className="text-muted mb-3" />
@@ -520,7 +474,7 @@ function AiPanelBody({ compact = false }: { compact?: boolean }) {
       </div>
 
       {/* Context Chips */}
-      <div className={`ai-context-chip-bar${compact ? " compact" : ""}`}>
+      <div className="ai-context-chip-bar">
         {(activeConversation?.context || []).map((ctx) => (
           <span
             key={ctx.type}
@@ -548,7 +502,7 @@ function AiPanelBody({ compact = false }: { compact?: boolean }) {
         </button>
       </div>
 
-      <div className={`ai-input-shell${compact ? " compact" : ""}`}>
+      <div className="ai-input-shell">
         <div className="ai-input-shell-inner">
           <textarea
             ref={textareaRef}
@@ -557,7 +511,7 @@ function AiPanelBody({ compact = false }: { compact?: boolean }) {
             onKeyDown={handleKeyDown}
             placeholder="询问当前资源、命令、SQL 或排障流程..."
             rows={1}
-            className={`ai-input-textarea${compact ? " compact" : ""}`}
+            className="ai-input-textarea"
           />
           <button
             onClick={handleSend}
@@ -571,98 +525,35 @@ function AiPanelBody({ compact = false }: { compact?: boolean }) {
         </div>
         <div className="ai-input-hint-row">
           <span className="text-[10px] text-meta">Shift+Enter 换行</span>
-          <span className="text-[10px] text-meta">Ctrl+L 切换</span>
+          <span className="text-[10px] text-meta">
+            {t("ai.toggleHint", { shortcut: formatModShortcut("L") })}
+          </span>
         </div>
       </div>
     </>
   );
 }
 
-// ─── Exported: AiDrawer (overlay, drawer mode only) ───
+// ─── Exported: AiDrawer (SubWindow) ───
 
 export function AiDrawer() {
+  const { t } = useI18n();
   const drawerOpen = useAiStore((s) => s.drawerOpen);
-  const drawerMode = useAiStore((s) => s.drawerMode);
   const closeDrawer = useAiStore((s) => s.closeDrawer);
-  const setDrawerMode = useAiStore((s) => s.setDrawerMode);
-
-  const isDrawerMode = drawerOpen && drawerMode === "drawer";
-
-  // Skip animation when switching between pinned ↔ drawer (panel is already visible)
-  const [noTransition, setNoTransition] = useState(false);
-  const prevModeRef = useRef<{ open: boolean; mode: "drawer" | "pinned" }>({
-    open: drawerOpen,
-    mode: drawerMode,
-  });
-
-  useEffect(() => {
-    const prev = prevModeRef.current;
-    const switchedMode = prev.open && drawerOpen && prev.mode !== drawerMode;
-    prevModeRef.current = { open: drawerOpen, mode: drawerMode };
-    if (switchedMode) {
-      setNoTransition(true);
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => setNoTransition(false));
-      });
-    }
-  }, [drawerOpen, drawerMode]);
-
-  // Ctrl+L toggle (global)
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === "l") {
-        e.preventDefault();
-        useAiStore.getState().toggleDrawer();
-      }
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, []);
-
-  // Escape to close (only in drawer mode)
-  useEffect(() => {
-    if (!isDrawerMode) return;
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") closeDrawer();
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [isDrawerMode, closeDrawer]);
+  const currentModel = useAiStore((s) => s.currentModel);
 
   return (
-    <>
-      <div
-        className={`ai-drawer-backdrop${isDrawerMode ? " open" : ""}`}
-      />
-      <div
-        className={`ai-drawer-overlay${isDrawerMode ? " open" : ""}${noTransition ? " notransition" : ""}`}
-      >
-        <AiPanelHeader
-          isPinned={false}
-          compact={false}
-          onPinToggle={() => setDrawerMode("pinned")}
-          onClose={closeDrawer}
-        />
-        <AiPanelBody compact={false} />
+    <SubWindow
+      open={drawerOpen}
+      title={`${t("ai.title")} · ${currentModel}`}
+      onClose={closeDrawer}
+      className="ai-subwindow"
+      widthRatio={0.82}
+      heightRatio={0.85}
+    >
+      <div className="ai-subwindow-content">
+        <AiPanelBody />
       </div>
-    </>
-  );
-}
-
-// ─── Exported: AiPinnedPanel (inline, inside content area) ───
-
-export function AiPinnedPanel() {
-  const setDrawerMode = useAiStore((s) => s.setDrawerMode);
-
-  return (
-    <div className="ai-pinned-panel ai-pinned-panel--compact">
-      <AiPanelHeader
-        isPinned={true}
-        compact={true}
-        onPinToggle={() => setDrawerMode("drawer")}
-        onClose={() => useAiStore.getState().closeDrawer()}
-      />
-      <AiPanelBody compact={true} />
-    </div>
+    </SubWindow>
   );
 }
