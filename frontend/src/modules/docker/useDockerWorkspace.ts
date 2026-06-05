@@ -1,16 +1,37 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { listen } from "@tauri-apps/api/event";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { commands } from "../../ipc/bindings";
 import type {
   DockerComposeProject,
   DockerConnectionInfo,
   DockerContainerDetail,
   DockerContainerSummary,
+  DockerCreateNetworkRequest,
+  DockerCreateVolumeRequest,
+  DockerFileEntry,
+  DockerImageDetail,
+  DockerImageHistoryLayer,
   DockerImageSummary,
   DockerLogLine,
+  DockerNetworkDetail,
+  DockerNetworkSummary,
   DockerOverview,
   DockerProbe,
+  DockerVolumeDetail,
+  DockerVolumeSummary,
 } from "../../ipc/bindings";
+
+/**
+ * 与后端 `DockerImageProgress` 对应：镜像拉取/推送/构建进度事件。
+ * 该类型通过 `app.emit` 推送，不在 IPC 命令签名中，故不在 bindings.ts 自动导出；
+ * 此处手动声明一份以保持类型安全。
+ */
+export interface DockerImageProgress {
+  id: string;
+  status: string;
+  progress: number | null;
+  detail: string | null;
+}
 
 export type ContainerFilter = "all" | "running" | "stopped";
 
@@ -27,6 +48,11 @@ interface DockerWorkspaceState {
   containers: DockerContainerSummary[];
   images: DockerImageSummary[];
   composeProjects: DockerComposeProject[];
+  networks: DockerNetworkSummary[];
+  volumes: DockerVolumeSummary[];
+  files: DockerFileEntry[];
+  filePath: string;
+  fileContainerId: string | null;
   connectionsLoading: boolean;
   dataLoading: boolean;
   error: string | null;
@@ -52,14 +78,21 @@ export function useDockerWorkspace() {
     containers: [],
     images: [],
     composeProjects: [],
+    networks: [],
+    volumes: [],
+    files: [],
+    filePath: "/",
+    fileContainerId: null,
     connectionsLoading: true,
     dataLoading: false,
     error: null,
   });
 
-  // 用 ref 保存当前选中连接，避免闭包捕获过期值。
+  // 用 ref 保存当前选中连接与镜像列表，避免闭包捕获过期值。
   const selectedRef = useRef<string | null>(null);
   selectedRef.current = state.selectedConnectionId;
+  const imagesRef = useRef<DockerImageSummary[]>([]);
+  imagesRef.current = state.images;
 
   const loadConnections = useCallback(async () => {
     setState((s) => ({ ...s, connectionsLoading: true }));
@@ -95,6 +128,9 @@ export function useDockerWorkspace() {
         containers: [],
         images: [],
         composeProjects: [],
+        networks: [],
+        volumes: [],
+        files: [],
         dataLoading: false,
         error: String(e),
       }));
@@ -127,6 +163,8 @@ export function useDockerWorkspace() {
         containers: [],
         images: [],
         composeProjects: [],
+        networks: [],
+        volumes: [],
         dataLoading: false,
         error: probe?.warningMessage ?? "Docker 未安装或未启动",
       }));
@@ -134,11 +172,13 @@ export function useDockerWorkspace() {
     }
 
     // 并行拉取业务数据；单项失败不阻断其余。
-    const [overview, containers, images, composeProjects] = await Promise.all([
+    const [overview, containers, images, composeProjects, networks, volumes] = await Promise.all([
       unwrap(commands.dockerGetOverview(connectionId)).catch(() => null),
       unwrap(commands.dockerListContainers(connectionId, null)).catch(() => []),
       unwrap(commands.dockerListImages(connectionId)).catch(() => []),
       unwrap(commands.dockerListComposeProjects(connectionId)).catch(() => []),
+      unwrap(commands.dockerListNetworks(connectionId)).catch(() => []),
+      unwrap(commands.dockerListVolumes(connectionId)).catch(() => []),
     ]);
 
     if (selectedRef.current !== connectionId) return;
@@ -148,6 +188,8 @@ export function useDockerWorkspace() {
       containers,
       images,
       composeProjects,
+      networks,
+      volumes,
       dataLoading: false,
     }));
   }, []);
@@ -213,20 +255,72 @@ export function useDockerWorkspace() {
     []
   );
 
+  const inspectImage = useCallback(
+    async (imageId: string): Promise<DockerImageDetail | null> => {
+      const id = selectedRef.current;
+      if (!id) return null;
+      try {
+        return await unwrap(commands.dockerInspectImage(id, imageId));
+      } catch {
+        return null;
+      }
+    },
+    []
+  );
+
+  const imageHistory = useCallback(
+    async (imageId: string): Promise<DockerImageHistoryLayer[] | null> => {
+      const id = selectedRef.current;
+      if (!id) return null;
+      try {
+        return await unwrap(commands.dockerImageHistory(id, imageId));
+      } catch {
+        return null;
+      }
+    },
+    []
+  );
+
+  const inspectNetwork = useCallback(
+    async (name: string): Promise<DockerNetworkDetail | null> => {
+      const id = selectedRef.current;
+      if (!id) return null;
+      try {
+        return await unwrap(commands.dockerInspectNetwork(id, name));
+      } catch {
+        return null;
+      }
+    },
+    []
+  );
+
+  const inspectVolume = useCallback(
+    async (name: string): Promise<DockerVolumeDetail | null> => {
+      const id = selectedRef.current;
+      if (!id) return null;
+      try {
+        return await unwrap(commands.dockerInspectVolume(id, name));
+      } catch {
+        return null;
+      }
+    },
+    []
+  );
+
   const removeImage = useCallback(
     async (imageId: string, force: boolean): Promise<DockerActionResult> => {
       const id = selectedRef.current;
       if (!id) return { ok: false, message: "未选择连接" };
       try {
         await unwrap(commands.dockerRemoveImage(id, imageId, force));
-        const images = await unwrap(commands.dockerListImages(id)).catch(() => state.images);
+        const images = await unwrap(commands.dockerListImages(id)).catch(() => imagesRef.current);
         setState((s) => ({ ...s, images }));
         return { ok: true };
       } catch (e) {
         return { ok: false, message: String(e) };
       }
     },
-    [state.images]
+    []
   );
 
   const pruneImages = useCallback(async (): Promise<DockerActionResult> => {
@@ -242,8 +336,280 @@ export function useDockerWorkspace() {
     }
   }, [refresh]);
 
+  const pullImage = useCallback(
+    async (
+      image: string,
+      onProgress?: (p: DockerImageProgress) => void
+    ): Promise<DockerActionResult> => {
+      const id = selectedRef.current;
+      if (!id) return { ok: false, message: "未选择连接" };
+      const channel = `docker-image-progress:${id}:${Date.now()}`;
+      let unlisten: UnlistenFn | null = null;
+      try {
+        unlisten = await listen<DockerImageProgress>(channel, (e) => onProgress?.(e.payload));
+        await unwrap(commands.dockerPullImage(id, image, channel));
+        const images = await unwrap(commands.dockerListImages(id)).catch(() => imagesRef.current);
+        setState((s) => ({ ...s, images }));
+        return { ok: true, message: `已拉取 ${image}` };
+      } catch (e) {
+        return { ok: false, message: String(e) };
+      } finally {
+        unlisten?.();
+      }
+    },
+    []
+  );
+
+  const pushImage = useCallback(
+    async (
+      image: string,
+      onProgress?: (p: DockerImageProgress) => void
+    ): Promise<DockerActionResult> => {
+      const id = selectedRef.current;
+      if (!id) return { ok: false, message: "未选择连接" };
+      const channel = `docker-image-progress:${id}:${Date.now()}`;
+      let unlisten: UnlistenFn | null = null;
+      try {
+        unlisten = await listen<DockerImageProgress>(channel, (e) => onProgress?.(e.payload));
+        await unwrap(commands.dockerPushImage(id, image, channel));
+        return { ok: true, message: `已推送 ${image}` };
+      } catch (e) {
+        return { ok: false, message: String(e) };
+      } finally {
+        unlisten?.();
+      }
+    },
+    []
+  );
+
+  const tagImage = useCallback(
+    async (source: string, target: string): Promise<DockerActionResult> => {
+      const id = selectedRef.current;
+      if (!id) return { ok: false, message: "未选择连接" };
+      try {
+        await unwrap(commands.dockerTagImage(id, source, target));
+        const images = await unwrap(commands.dockerListImages(id)).catch(() => imagesRef.current);
+        setState((s) => ({ ...s, images }));
+        return { ok: true, message: `已打 tag: ${target}` };
+      } catch (e) {
+        return { ok: false, message: String(e) };
+      }
+    },
+    []
+  );
+
+  const buildImage = useCallback(
+    async (
+      contextDir: string,
+      tag: string,
+      dockerfile: string | null,
+      onProgress?: (p: DockerImageProgress) => void
+    ): Promise<DockerActionResult> => {
+      const id = selectedRef.current;
+      if (!id) return { ok: false, message: "未选择连接" };
+      const channel = `docker-image-progress:${id}:${Date.now()}`;
+      let unlisten: UnlistenFn | null = null;
+      try {
+        unlisten = await listen<DockerImageProgress>(channel, (e) => onProgress?.(e.payload));
+        const ctx = {
+          contextDir,
+          tag,
+          dockerfile,
+          buildArgs: [],
+          useBuildKit: true,
+        };
+        await unwrap(commands.dockerBuildImage(id, ctx, channel));
+        const images = await unwrap(commands.dockerListImages(id)).catch(() => imagesRef.current);
+        setState((s) => ({ ...s, images }));
+        return { ok: true, message: `已构建 ${tag}` };
+      } catch (e) {
+        return { ok: false, message: String(e) };
+      } finally {
+        unlisten?.();
+      }
+    },
+    []
+  );
+
+  const composeAction = useCallback(
+    async (
+      action: "up" | "down" | "restart" | "pull" | "logs",
+      project: string,
+      services: string[] = [],
+      detached = true,
+      workingDir?: string | null,
+      configFile?: string | null
+    ): Promise<DockerActionResult> => {
+      const id = selectedRef.current;
+      if (!id) return { ok: false, message: "未选择连接" };
+      try {
+        const req = {
+          project,
+          workingDir: workingDir ?? null,
+          configFile: configFile ?? null,
+          services,
+          detached,
+        };
+        const result = await unwrap(commands.dockerComposeAction(id, action, req));
+        if (result.exitCode !== 0) {
+          return {
+            ok: false,
+            message: `Compose ${action} 退出码 ${result.exitCode}：${result.stderrExcerpt || result.stdoutExcerpt || ""}`,
+          };
+        }
+        refresh();
+        return { ok: true, message: `Compose ${action} 完成` };
+      } catch (e) {
+        return { ok: false, message: String(e) };
+      }
+    },
+    [refresh]
+  );
+
   const selectedConnection =
     state.connections.find((c) => c.connectionId === state.selectedConnectionId) ?? null;
+
+  const listNetworks = useCallback(async (): Promise<void> => {
+    const id = selectedRef.current;
+    if (!id) return;
+    try {
+      const networks = await unwrap(commands.dockerListNetworks(id));
+      setState((s) => ({ ...s, networks }));
+    } catch (e) {
+      setState((s) => ({ ...s, error: String(e) }));
+    }
+  }, []);
+
+  const createNetwork = useCallback(
+    async (req: DockerCreateNetworkRequest): Promise<DockerActionResult> => {
+      const id = selectedRef.current;
+      if (!id) return { ok: false, message: "未选择连接" };
+      try {
+        await unwrap(commands.dockerCreateNetwork(id, req));
+        await listNetworks();
+        return { ok: true, message: `已创建网络 ${req.name}` };
+      } catch (e) {
+        return { ok: false, message: String(e) };
+      }
+    },
+    [listNetworks]
+  );
+
+  const removeNetwork = useCallback(
+    async (name: string): Promise<DockerActionResult> => {
+      const id = selectedRef.current;
+      if (!id) return { ok: false, message: "未选择连接" };
+      try {
+        await unwrap(commands.dockerRemoveNetwork(id, name));
+        await listNetworks();
+        return { ok: true, message: `已删除网络 ${name}` };
+      } catch (e) {
+        return { ok: false, message: String(e) };
+      }
+    },
+    [listNetworks]
+  );
+
+  const listVolumes = useCallback(async (): Promise<void> => {
+    const id = selectedRef.current;
+    if (!id) return;
+    try {
+      const volumes = await unwrap(commands.dockerListVolumes(id));
+      setState((s) => ({ ...s, volumes }));
+    } catch (e) {
+      setState((s) => ({ ...s, error: String(e) }));
+    }
+  }, []);
+
+  const createVolume = useCallback(
+    async (req: DockerCreateVolumeRequest): Promise<DockerActionResult> => {
+      const id = selectedRef.current;
+      if (!id) return { ok: false, message: "未选择连接" };
+      try {
+        await unwrap(commands.dockerCreateVolume(id, req));
+        await listVolumes();
+        return { ok: true, message: `已创建卷 ${req.name}` };
+      } catch (e) {
+        return { ok: false, message: String(e) };
+      }
+    },
+    [listVolumes]
+  );
+
+  const removeVolume = useCallback(
+    async (name: string, force: boolean): Promise<DockerActionResult> => {
+      const id = selectedRef.current;
+      if (!id) return { ok: false, message: "未选择连接" };
+      try {
+        await unwrap(commands.dockerRemoveVolume(id, name, force));
+        await listVolumes();
+        return { ok: true, message: `已删除卷 ${name}` };
+      } catch (e) {
+        return { ok: false, message: String(e) };
+      }
+    },
+    [listVolumes]
+  );
+
+  const pruneVolumes = useCallback(async (): Promise<DockerActionResult> => {
+    const id = selectedRef.current;
+    if (!id) return { ok: false, message: "未选择连接" };
+    try {
+      const result = await unwrap(commands.dockerPruneVolumes(id));
+      await listVolumes();
+      return {
+        ok: true,
+        message: `已清理 ${result.deleted.length} 个卷，释放约 ${((result.freedSpaceBytes ?? 0) / 1_000_000).toFixed(1)} MB`,
+      };
+    } catch (e) {
+      return { ok: false, message: String(e) };
+    }
+  }, [listVolumes]);
+
+  const listContainerDir = useCallback(
+    async (containerId: string, path: string): Promise<DockerFileEntry[]> => {
+      const id = selectedRef.current;
+      if (!id) return [];
+      try {
+        const files = await unwrap(commands.dockerListContainerDir(id, containerId, path));
+        setState((s) => ({ ...s, files, filePath: path, fileContainerId: containerId }));
+        return files;
+      } catch (e) {
+        setState((s) => ({ ...s, error: String(e) }));
+        return [];
+      }
+    },
+    []
+  );
+
+  const readContainerFile = useCallback(
+    async (containerId: string, path: string, maxBytes: number): Promise<string> => {
+      const id = selectedRef.current;
+      if (!id) return "";
+      try {
+        const bytes = await unwrap(commands.dockerReadContainerFile(id, containerId, path, maxBytes));
+        return new TextDecoder("utf-8", { fatal: false }).decode(new Uint8Array(bytes));
+      } catch (e) {
+        return `[读取失败] ${e}`;
+      }
+    },
+    []
+  );
+
+  const writeContainerFile = useCallback(
+    async (containerId: string, path: string, data: string): Promise<DockerActionResult> => {
+      const id = selectedRef.current;
+      if (!id) return { ok: false, message: "未选择连接" };
+      try {
+        const bytes = Array.from(new TextEncoder().encode(data));
+        await unwrap(commands.dockerWriteContainerFile(id, containerId, path, bytes));
+        return { ok: true, message: `已写入 ${path}` };
+      } catch (e) {
+        return { ok: false, message: String(e) };
+      }
+    },
+    []
+  );
 
   return {
     ...state,
@@ -253,8 +619,27 @@ export function useDockerWorkspace() {
     refreshContainers,
     containerAction,
     inspect,
+    inspectImage,
+    imageHistory,
+    inspectNetwork,
+    inspectVolume,
     removeImage,
     pruneImages,
+    pullImage,
+    pushImage,
+    tagImage,
+    buildImage,
+    composeAction,
+    listNetworks,
+    createNetwork,
+    removeNetwork,
+    listVolumes,
+    createVolume,
+    removeVolume,
+    pruneVolumes,
+    listContainerDir,
+    readContainerFile,
+    writeContainerFile,
     reloadConnections: loadConnections,
   };
 }

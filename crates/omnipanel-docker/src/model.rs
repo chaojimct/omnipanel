@@ -11,11 +11,13 @@ use serde::{Deserialize, Serialize};
 pub enum DockerConnectionSource {
     /// 本地 Docker Engine / Docker Desktop。
     LocalEngine,
-    /// 远程 Docker Engine API（TCP/TLS）。后续增强。
+    /// 远程 Docker Engine API（TCP/TLS）。
     RemoteEngine,
     /// 通过 SSH 宿主机调用远程 `docker` CLI。
     SshEngine,
-    /// 通过 1Panel / 宝塔 / Portainer 等面板 API 适配。后续增强。
+    /// 通过 1Panel 面板 API 适配。
+    OnePanel,
+    /// 预留：宝塔 / Portainer 等其他面板 API。
     PanelAdapter,
 }
 
@@ -25,6 +27,7 @@ impl DockerConnectionSource {
             "local-engine" => Self::LocalEngine,
             "remote-engine" => Self::RemoteEngine,
             "ssh-engine" => Self::SshEngine,
+            "onepanel" => Self::OnePanel,
             "panel-adapter" => Self::PanelAdapter,
             _ => Self::LocalEngine,
         }
@@ -70,6 +73,39 @@ impl DockerCapabilities {
             can_prune: true,
             read_only: false,
             source,
+        }
+    }
+
+    /// SSH 宿主机 adapter 能力子集：日志流式通过 `docker logs -f` 实现；
+    /// 容器内交互终端（docker exec -it）需 PTY 通道，尚未实现。
+    pub fn ssh_engine() -> Self {
+        Self {
+            can_overview: true,
+            can_stream_logs: true,
+            can_container_exec: false,
+            can_inspect: true,
+            can_manage_containers: true,
+            can_manage_images: true,
+            can_compose: true,
+            can_prune: true,
+            read_only: false,
+            source: DockerConnectionSource::SshEngine,
+        }
+    }
+
+    /// 1Panel 适配器能力：基础 CRUD；exec/stats/build/push/pull/容器文件 暂不支持。
+    pub fn onepanel() -> Self {
+        Self {
+            can_overview: true,
+            can_stream_logs: false,
+            can_container_exec: false,
+            can_inspect: true,
+            can_manage_containers: true,
+            can_manage_images: true,
+            can_compose: true,
+            can_prune: true,
+            read_only: false,
+            source: DockerConnectionSource::OnePanel,
         }
     }
 }
@@ -287,6 +323,56 @@ pub struct DockerPruneResult {
     pub freed_space_bytes: i64,
 }
 
+/// 镜像详情。
+#[derive(Debug, Clone, Default, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct DockerImageDetail {
+    /// 与 `DockerImageSummary.id` 相同。
+    pub id: String,
+    /// 所有 repo:tag 引用。
+    pub repo_tags: Vec<String>,
+    pub architecture: Option<String>,
+    pub os: Option<String>,
+    pub driver: Option<String>,
+    #[specta(type = f64)]
+    pub created_at: i64,
+    #[specta(type = f64)]
+    pub size_bytes: i64,
+    pub author: Option<String>,
+    pub comment: Option<String>,
+    pub config: DockerImageConfig,
+    /// 历史层（`docker history` 精简版）。
+    pub history: Vec<DockerImageHistoryLayer>,
+}
+
+/// `docker inspect .Config` 关键字段。
+#[derive(Debug, Clone, Default, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct DockerImageConfig {
+    pub env: Vec<String>,
+    pub cmd: Option<String>,
+    pub entrypoint: Option<String>,
+    pub working_dir: Option<String>,
+    pub user: Option<String>,
+    pub exposed_ports: Vec<String>,
+    pub labels: Vec<DockerKeyValue>,
+    pub volumes: Vec<String>,
+}
+
+/// `docker history` 单层。
+#[derive(Debug, Clone, Default, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct DockerImageHistoryLayer {
+    pub id: String,
+    #[specta(type = f64)]
+    pub created_at: i64,
+    pub created_by: String,
+    #[specta(type = f64)]
+    pub size_bytes: i64,
+    pub comment: String,
+    pub tags: Vec<String>,
+}
+
 /// Compose 项目（按 `com.docker.compose.project` 标签聚合容器得到）。
 #[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
@@ -308,4 +394,234 @@ pub struct DockerComposeService {
     pub image: String,
     pub container_count: u32,
     pub running_container_count: u32,
+}
+
+/// 镜像拉取/推送/构建的进度事件。前端按行渲染进度。
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct DockerImageProgress {
+    pub id: String,
+    pub status: String,
+    pub progress: Option<f64>,
+    pub detail: Option<String>,
+}
+
+/// 镜像拉取结果。
+#[derive(Debug, Clone, Default, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct DockerPullResult {
+    pub image: String,
+    pub tag: String,
+    pub digest: Option<String>,
+}
+
+/// 镜像构建结果。
+#[derive(Debug, Clone, Default, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct DockerBuildResult {
+    pub tag: String,
+    pub image_id: Option<String>,
+}
+
+/// Compose 生命周期动作。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "lowercase")]
+pub enum DockerComposeAction {
+    #[default]
+    Up,
+    Down,
+    Restart,
+    Pull,
+    Logs,
+}
+
+/// 单条 Compose 命令的入参。
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct DockerComposeRequest {
+    pub project: String,
+    pub working_dir: Option<String>,
+    pub config_file: Option<String>,
+    pub services: Vec<String>,
+    pub detached: bool,
+}
+
+/// 单条 Compose 命令的结果。
+#[derive(Debug, Clone, Default, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct DockerComposeResult {
+    pub action: DockerComposeAction,
+    pub project: String,
+    pub stdout_excerpt: String,
+    pub stderr_excerpt: String,
+    pub exit_code: i32,
+}
+
+/// 容器统计快照。
+#[derive(Debug, Clone, Default, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct DockerContainerStats {
+    pub container_id: String,
+    pub name: String,
+    pub cpu_percent: f64,
+    #[specta(type = f64)]
+    pub memory_usage_bytes: i64,
+    #[specta(type = f64)]
+    pub memory_limit_bytes: Option<i64>,
+    pub memory_percent: f64,
+    #[specta(type = f64)]
+    pub net_rx_bytes: i64,
+    #[specta(type = f64)]
+    pub net_tx_bytes: i64,
+    #[specta(type = f64)]
+    pub block_read_bytes: i64,
+    #[specta(type = f64)]
+    pub block_write_bytes: i64,
+    #[specta(type = f64)]
+    pub timestamp_ms: i64,
+}
+
+/// 网络摘要。
+#[derive(Debug, Clone, Default, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct DockerNetworkSummary {
+    pub id: String,
+    pub name: String,
+    pub driver: String,
+    pub scope: String,
+    pub internal: bool,
+    #[specta(type = f64)]
+    pub created_at: i64,
+}
+
+/// 创建网络请求。
+#[derive(Debug, Clone, Default, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct DockerCreateNetworkRequest {
+    pub name: String,
+    pub driver: Option<String>,
+    pub internal: bool,
+    pub subnet: Option<String>,
+}
+
+/// 网络详情。
+#[derive(Debug, Clone, Default, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct DockerNetworkDetail {
+    /// 与 `DockerNetworkSummary.id` 相同。
+    pub id: String,
+    pub name: String,
+    pub driver: String,
+    pub scope: String,
+    pub internal: bool,
+    pub enable_ipv6: bool,
+    #[specta(type = f64)]
+    pub created_at: i64,
+    /// 子网 + 网关 列表（来自 IPAM）。
+    pub subnets: Vec<DockerNetworkSubnet>,
+    /// 当前已连接容器。
+    pub containers: Vec<DockerNetworkContainer>,
+    pub labels: Vec<DockerKeyValue>,
+    /// 网络选项（如 `com.docker.network.bridge.name=br0`）。
+    pub options: Vec<DockerKeyValue>,
+}
+
+/// IPAM 子网条目。
+#[derive(Debug, Clone, Default, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct DockerNetworkSubnet {
+    pub subnet: Option<String>,
+    pub gateway: Option<String>,
+    pub ip_range: Option<String>,
+}
+
+/// 已挂接网络容器摘要。
+#[derive(Debug, Clone, Default, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct DockerNetworkContainer {
+    pub container_id: String,
+    pub name: String,
+    pub endpoint_id: Option<String>,
+    pub mac_address: Option<String>,
+    pub ipv4_address: Option<String>,
+    pub ipv6_address: Option<String>,
+}
+
+/// 卷摘要。
+#[derive(Debug, Clone, Default, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct DockerVolumeSummary {
+    pub name: String,
+    pub driver: String,
+    pub mountpoint: String,
+    #[specta(type = f64)]
+    pub created_at: i64,
+    #[specta(type = f64)]
+    pub size_bytes: i64,
+    pub in_use: bool,
+}
+
+/// 卷清理结果。
+#[derive(Debug, Clone, Default, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct DockerPruneVolumesResult {
+    pub deleted: Vec<String>,
+    #[specta(type = f64)]
+    pub freed_space_bytes: i64,
+}
+
+/// 创建卷请求。
+#[derive(Debug, Clone, Default, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct DockerCreateVolumeRequest {
+    pub name: String,
+    pub driver: Option<String>,
+    pub labels: Vec<(String, String)>,
+}
+
+/// 卷详情。
+#[derive(Debug, Clone, Default, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct DockerVolumeDetail {
+    /// 与 `DockerVolumeSummary.name` 相同。
+    pub name: String,
+    pub driver: String,
+    pub mountpoint: String,
+    pub scope: String,
+    #[specta(type = f64)]
+    pub created_at: i64,
+    #[specta(type = f64)]
+    pub size_bytes: i64,
+    pub labels: Vec<DockerKeyValue>,
+    /// 驱动选项。
+    pub options: Vec<DockerKeyValue>,
+    /// 引用计数字段（来自 `Volume.UsageData.RefCount`）。
+    #[specta(type = f64)]
+    pub reference_count: i64,
+}
+
+/// 容器内文件条目。
+#[derive(Debug, Clone, Default, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct DockerFileEntry {
+    pub name: String,
+    pub path: String,
+    #[specta(type = f64)]
+    pub size_bytes: i64,
+    #[specta(type = f64)]
+    pub modified_at: i64,
+    pub mode: u32,
+    pub is_dir: bool,
+    pub is_symlink: bool,
+}
+
+/// 镜像构建的输入上下文。
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct DockerBuildContext {
+    pub context_dir: String,
+    pub tag: String,
+    pub dockerfile: Option<String>,
+    pub build_args: Vec<String>,
+    pub use_build_kit: bool,
 }

@@ -1,0 +1,96 @@
+import { useEffect, useState } from "react";
+import { Modal } from "../../components/ui/Modal";
+
+/* eslint-disable react-hooks/set-state-in-effect -- controlled form state reset */
+
+interface DockerFileEditorProps {
+  open: boolean;
+  filePath: string | null;
+  initialContent: string;
+  onClose: () => void;
+  onSave: (content: string) => Promise<{ ok: boolean; message: string }>;
+}
+
+const MAX_SAFE_BYTES = 64 * 1024;
+
+export function DockerFileEditor({ open, filePath, initialContent, onClose, onSave }: DockerFileEditorProps) {
+  const [content, setContent] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (open) {
+      setContent(initialContent);
+      setSaving(false);
+    }
+  }, [open, initialContent]);
+
+  if (!open || filePath == null) return null;
+
+  const bytes = new TextEncoder().encode(content).length;
+  const tooLarge = bytes > MAX_SAFE_BYTES;
+  const dirty = content !== initialContent;
+
+  const handleSave = async () => {
+    if (!dirty || saving) return;
+    setSaving(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const r = await onSave(content);
+      if (r.ok) {
+        setMessage(r.message);
+      } else {
+        setError(r.message);
+      }
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal open={open} onClose={saving ? () => undefined : onClose}>
+      <div className="modal-dialog docker-file-editor" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h3 title={filePath}>编辑文件 · {filePath}</h3>
+          <button className="btn-icon" onClick={onClose} disabled={saving} title="关闭">×</button>
+        </div>
+        <div className="modal-body">
+          <div className="docker-file-editor-meta">
+            <span className="text-muted text-sm">
+              {bytes} / {MAX_SAFE_BYTES} 字节
+            </span>
+            {tooLarge && (
+              <span className="docker-file-editor-warn text-sm">
+                超出 {MAX_SAFE_BYTES / 1024} KB 编辑安全阈值，建议在外部编辑器中修改
+              </span>
+            )}
+          </div>
+          <textarea
+            className="input docker-file-editor-textarea"
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            spellCheck={false}
+            disabled={saving}
+            style={{ width: "100%", minHeight: 360, fontFamily: "var(--font-mono, monospace)" }}
+          />
+          {error && <div className="text-danger text-sm" style={{ marginTop: 8 }}>{error}</div>}
+          {message && <div className="text-success text-sm" style={{ marginTop: 8 }}>{message}</div>}
+        </div>
+        <div className="modal-footer">
+          <button className="btn btn-secondary" onClick={onClose} disabled={saving}>关闭</button>
+          <button
+            className="btn btn-primary"
+            onClick={handleSave}
+            disabled={saving || !dirty || tooLarge}
+          >
+            {saving ? "保存中…" : "保存"}
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
+}

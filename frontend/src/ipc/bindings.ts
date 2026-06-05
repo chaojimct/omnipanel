@@ -65,6 +65,10 @@ export const commands = {
 	dockerRemoveImage: (connectionId: string, imageId: string, force: boolean) => typedError<null, OmniError_Serialize>(__TAURI_INVOKE("docker_remove_image", { connectionId, imageId, force })),
 	/**  清理悬空镜像（高风险，前端需确认）。 */
 	dockerPruneImages: (connectionId: string) => typedError<DockerPruneResult, OmniError_Serialize>(__TAURI_INVOKE("docker_prune_images", { connectionId })),
+	/**  镜像详情（`docker inspect`）。 */
+	dockerInspectImage: (connectionId: string, imageId: string) => typedError<DockerImageDetail, OmniError_Serialize>(__TAURI_INVOKE("docker_inspect_image", { connectionId, imageId })),
+	/**  镜像历史层（`docker history`）。 */
+	dockerImageHistory: (connectionId: string, imageId: string) => typedError<DockerImageHistoryLayer[], OmniError_Serialize>(__TAURI_INVOKE("docker_image_history", { connectionId, imageId })),
 	/**
 	 *  创建容器交互终端会话（仅本地 Engine）。返回 sessionId；
 	 *  终端输出复用 `terminal-output` 事件，前端可直接用 xterm 绑定该 sessionId。
@@ -78,6 +82,39 @@ export const commands = {
 	dockerExecClose: (sessionId: string) => typedError<null, OmniError_Serialize>(__TAURI_INVOKE("docker_exec_close", { sessionId })),
 	/**  识别 Compose 项目（按容器标签聚合）。 */
 	dockerListComposeProjects: (connectionId: string) => typedError<DockerComposeProject[], OmniError_Serialize>(__TAURI_INVOKE("docker_list_compose_projects", { connectionId })),
+	/**  Compose 生命周期（up/down/restart/pull/logs）。 */
+	dockerComposeAction: (connectionId: string, action: DockerComposeAction, request: DockerComposeRequest) => typedError<DockerComposeResult, OmniError_Serialize>(__TAURI_INVOKE("docker_compose_action", { connectionId, action, request })),
+	dockerListNetworks: (connectionId: string) => typedError<DockerNetworkSummary[], OmniError_Serialize>(__TAURI_INVOKE("docker_list_networks", { connectionId })),
+	dockerCreateNetwork: (connectionId: string, request: DockerCreateNetworkRequest) => typedError<string, OmniError_Serialize>(__TAURI_INVOKE("docker_create_network", { connectionId, request })),
+	dockerRemoveNetwork: (connectionId: string, name: string) => typedError<null, OmniError_Serialize>(__TAURI_INVOKE("docker_remove_network", { connectionId, name })),
+	/**  网络详情（`docker network inspect`）。 */
+	dockerInspectNetwork: (connectionId: string, name: string) => typedError<DockerNetworkDetail, OmniError_Serialize>(__TAURI_INVOKE("docker_inspect_network", { connectionId, name })),
+	dockerConnectNetwork: (connectionId: string, network: string, containerId: string) => typedError<null, OmniError_Serialize>(__TAURI_INVOKE("docker_connect_network", { connectionId, network, containerId })),
+	dockerDisconnectNetwork: (connectionId: string, network: string, containerId: string) => typedError<null, OmniError_Serialize>(__TAURI_INVOKE("docker_disconnect_network", { connectionId, network, containerId })),
+	dockerListVolumes: (connectionId: string) => typedError<DockerVolumeSummary[], OmniError_Serialize>(__TAURI_INVOKE("docker_list_volumes", { connectionId })),
+	dockerCreateVolume: (connectionId: string, request: DockerCreateVolumeRequest) => typedError<string, OmniError_Serialize>(__TAURI_INVOKE("docker_create_volume", { connectionId, request })),
+	dockerRemoveVolume: (connectionId: string, name: string, force: boolean) => typedError<null, OmniError_Serialize>(__TAURI_INVOKE("docker_remove_volume", { connectionId, name, force })),
+	/**  卷详情（`docker volume inspect`）。 */
+	dockerInspectVolume: (connectionId: string, name: string) => typedError<DockerVolumeDetail, OmniError_Serialize>(__TAURI_INVOKE("docker_inspect_volume", { connectionId, name })),
+	dockerPruneVolumes: (connectionId: string) => typedError<DockerPruneVolumesResult, OmniError_Serialize>(__TAURI_INVOKE("docker_prune_volumes", { connectionId })),
+	dockerListContainerDir: (connectionId: string, containerId: string, path: string) => typedError<DockerFileEntry[], OmniError_Serialize>(__TAURI_INVOKE("docker_list_container_dir", { connectionId, containerId, path })),
+	dockerReadContainerFile: (connectionId: string, containerId: string, path: string, maxBytes: number) => typedError<number[], OmniError_Serialize>(__TAURI_INVOKE("docker_read_container_file", { connectionId, containerId, path, maxBytes })),
+	dockerWriteContainerFile: (connectionId: string, containerId: string, path: string, data: number[]) => typedError<null, OmniError_Serialize>(__TAURI_INVOKE("docker_write_container_file", { connectionId, containerId, path, data })),
+	/**  拉取镜像。进度通过 `docker_image_progress` 事件向指定 `progress_channel` 投递。 */
+	dockerPullImage: (connectionId: string, image: string, progressChannel: string) => typedError<DockerPullResult, OmniError_Serialize>(__TAURI_INVOKE("docker_pull_image", { connectionId, image, progressChannel })),
+	/**  推送镜像。进度通过 `docker_image_progress` 事件向指定 `progress_channel` 投递。 */
+	dockerPushImage: (connectionId: string, image: string, progressChannel: string) => typedError<DockerPullResult, OmniError_Serialize>(__TAURI_INVOKE("docker_push_image", { connectionId, image, progressChannel })),
+	/**  给本地或远端镜像打 tag。 */
+	dockerTagImage: (connectionId: string, source: string, target: string) => typedError<null, OmniError_Serialize>(__TAURI_INVOKE("docker_tag_image", { connectionId, source, target })),
+	/**  构建镜像（Dockerfile）。进度通过 `progress_channel` 事件上报。 */
+	dockerBuildImage: (connectionId: string, context: DockerBuildContext, progressChannel: string) => typedError<DockerBuildResult, OmniError_Serialize>(__TAURI_INVOKE("docker_build_image", { connectionId, context, progressChannel })),
+	/**
+	 *  启动容器 stats 实时流。返回 streamId；每次统计通过 `docker-stats` 事件回传，
+	 *  结束/出错通过 `docker-stats-end` 事件通知。
+	 */
+	dockerStreamStats: (connectionId: string, containerId: string) => typedError<string, OmniError_Serialize>(__TAURI_INVOKE("docker_stream_stats", { connectionId, containerId })),
+	/**  停止一个 stats 流。 */
+	dockerStopStatsStream: (streamId: string) => typedError<null, OmniError_Serialize>(__TAURI_INVOKE("docker_stop_stats_stream", { streamId })),
 	/**
 	 *  执行一个动作：按 kind 分发到执行引擎，过程通过 `action-progress` 事件流式回流，
 	 *  完成后写入审计日志，返回退出码（0 成功）。
@@ -201,6 +238,21 @@ export type DiskStats = {
 	available: number | null,
 };
 
+/**  镜像构建的输入上下文。 */
+export type DockerBuildContext = {
+	contextDir: string,
+	tag: string,
+	dockerfile: string | null,
+	buildArgs: string[],
+	useBuildKit: boolean,
+};
+
+/**  镜像构建结果。 */
+export type DockerBuildResult = {
+	tag: string,
+	imageId: string | null,
+};
+
 /**  连接级能力探测结果。前端据此决定页签/按钮显隐与降级。 */
 export type DockerCapabilities = {
 	canOverview: boolean,
@@ -215,6 +267,9 @@ export type DockerCapabilities = {
 	source: DockerConnectionSource,
 };
 
+/**  Compose 生命周期动作。 */
+export type DockerComposeAction = "up" | "down" | "restart" | "pull" | "logs";
+
 /**  Compose 项目（按 `com.docker.compose.project` 标签聚合容器得到）。 */
 export type DockerComposeProject = {
 	name: string,
@@ -224,6 +279,24 @@ export type DockerComposeProject = {
 	containerCount: number,
 	runningContainerCount: number,
 	services: DockerComposeService[],
+};
+
+/**  单条 Compose 命令的入参。 */
+export type DockerComposeRequest = {
+	project: string,
+	workingDir: string | null,
+	configFile: string | null,
+	services: string[],
+	detached: boolean,
+};
+
+/**  单条 Compose 命令的结果。 */
+export type DockerComposeResult = {
+	action: DockerComposeAction,
+	project: string,
+	stdoutExcerpt: string,
+	stderrExcerpt: string,
+	exitCode: number,
 };
 
 /**  Compose 服务（按 `com.docker.compose.service` 标签聚合）。 */
@@ -255,11 +328,13 @@ export type DockerConnectionInfo = {
 export type DockerConnectionSource = 
 /**  本地 Docker Engine / Docker Desktop。 */
 "local-engine" | 
-/**  远程 Docker Engine API（TCP/TLS）。后续增强。 */
+/**  远程 Docker Engine API（TCP/TLS）。 */
 "remote-engine" | 
 /**  通过 SSH 宿主机调用远程 `docker` CLI。 */
 "ssh-engine" | 
-/**  通过 1Panel / 宝塔 / Portainer 等面板 API 适配。后续增强。 */
+/**  通过 1Panel 面板 API 适配。 */
+"one-panel" | 
+/**  预留：宝塔 / Portainer 等其他面板 API。 */
 "panel-adapter";
 
 /**  连接状态。 */
@@ -290,6 +365,72 @@ export type DockerContainerSummary = {
 	ports: DockerPort[],
 	networks: string[],
 	createdAt: number | null,
+};
+
+/**  创建网络请求。 */
+export type DockerCreateNetworkRequest = {
+	name: string,
+	driver: string | null,
+	internal: boolean,
+	subnet: string | null,
+};
+
+/**  创建卷请求。 */
+export type DockerCreateVolumeRequest = {
+	name: string,
+	driver: string | null,
+	labels: ([string, string])[],
+};
+
+/**  容器内文件条目。 */
+export type DockerFileEntry = {
+	name: string,
+	path: string,
+	sizeBytes: number | null,
+	modifiedAt: number | null,
+	mode: number,
+	isDir: boolean,
+	isSymlink: boolean,
+};
+
+/**  `docker inspect .Config` 关键字段。 */
+export type DockerImageConfig = {
+	env: string[],
+	cmd: string | null,
+	entrypoint: string | null,
+	workingDir: string | null,
+	user: string | null,
+	exposedPorts: string[],
+	labels: DockerKeyValue[],
+	volumes: string[],
+};
+
+/**  镜像详情。 */
+export type DockerImageDetail = {
+	/**  与 `DockerImageSummary.id` 相同。 */
+	id: string,
+	/**  所有 repo:tag 引用。 */
+	repoTags: string[],
+	architecture: string | null,
+	os: string | null,
+	driver: string | null,
+	createdAt: number | null,
+	sizeBytes: number | null,
+	author: string | null,
+	comment: string | null,
+	config: DockerImageConfig,
+	/**  历史层（`docker history` 精简版）。 */
+	history: DockerImageHistoryLayer[],
+};
+
+/**  `docker history` 单层。 */
+export type DockerImageHistoryLayer = {
+	id: string,
+	createdAt: number | null,
+	createdBy: string,
+	sizeBytes: number | null,
+	comment: string,
+	tags: string[],
 };
 
 /**  镜像列表项。 */
@@ -331,6 +472,52 @@ export type DockerNetworkAttachment = {
 	ipAddress: string | null,
 };
 
+/**  已挂接网络容器摘要。 */
+export type DockerNetworkContainer = {
+	containerId: string,
+	name: string,
+	endpointId: string | null,
+	macAddress: string | null,
+	ipv4Address: string | null,
+	ipv6Address: string | null,
+};
+
+/**  网络详情。 */
+export type DockerNetworkDetail = {
+	/**  与 `DockerNetworkSummary.id` 相同。 */
+	id: string,
+	name: string,
+	driver: string,
+	scope: string,
+	internal: boolean,
+	enableIpv6: boolean,
+	createdAt: number | null,
+	/**  子网 + 网关 列表（来自 IPAM）。 */
+	subnets: DockerNetworkSubnet[],
+	/**  当前已连接容器。 */
+	containers: DockerNetworkContainer[],
+	labels: DockerKeyValue[],
+	/**  网络选项（如 `com.docker.network.bridge.name=br0`）。 */
+	options: DockerKeyValue[],
+};
+
+/**  IPAM 子网条目。 */
+export type DockerNetworkSubnet = {
+	subnet: string | null,
+	gateway: string | null,
+	ipRange: string | null,
+};
+
+/**  网络摘要。 */
+export type DockerNetworkSummary = {
+	id: string,
+	name: string,
+	driver: string,
+	scope: string,
+	internal: boolean,
+	createdAt: number | null,
+};
+
 /**  总览页数据。 */
 export type DockerOverview = {
 	capabilities: DockerCapabilities,
@@ -362,12 +549,51 @@ export type DockerPruneResult = {
 	freedSpaceBytes: number | null,
 };
 
+/**  卷清理结果。 */
+export type DockerPruneVolumesResult = {
+	deleted: string[],
+	freedSpaceBytes: number | null,
+};
+
+/**  镜像拉取结果。 */
+export type DockerPullResult = {
+	image: string,
+	tag: string,
+	digest: string | null,
+};
+
 /**  资源统计（总览页）。 */
 export type DockerResourceSummary = {
 	containersTotal: number,
 	containersRunning: number,
 	containersStopped: number,
 	images: number,
+};
+
+/**  卷详情。 */
+export type DockerVolumeDetail = {
+	/**  与 `DockerVolumeSummary.name` 相同。 */
+	name: string,
+	driver: string,
+	mountpoint: string,
+	scope: string,
+	createdAt: number | null,
+	sizeBytes: number | null,
+	labels: DockerKeyValue[],
+	/**  驱动选项。 */
+	options: DockerKeyValue[],
+	/**  引用计数字段（来自 `Volume.UsageData.RefCount`）。 */
+	referenceCount: number | null,
+};
+
+/**  卷摘要。 */
+export type DockerVolumeSummary = {
+	name: string,
+	driver: string,
+	mountpoint: string,
+	createdAt: number | null,
+	sizeBytes: number | null,
+	inUse: boolean,
 };
 
 /**  错误分类码。前端按 `code` 决定提示文案与重试策略。 */

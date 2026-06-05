@@ -1,0 +1,135 @@
+import { useState } from "react";
+import { Modal } from "../../components/ui/Modal";
+import type { DockerNetworkSummary, DockerCreateNetworkRequest } from "../../ipc/bindings";
+import type { DockerActionResult } from "./useDockerWorkspace";
+
+interface DockerNetworksTabProps {
+  networks: DockerNetworkSummary[];
+  canManage: boolean;
+  onRefresh: () => Promise<void>;
+  onCreate: (req: DockerCreateNetworkRequest) => Promise<DockerActionResult>;
+  onRemove: (name: string) => Promise<DockerActionResult>;
+  onInspect: (name: string) => void;
+}
+
+function formatTimestamp(seconds: number | null | undefined): string {
+  if (!seconds) return "-";
+  return new Date(seconds * 1000).toLocaleString();
+}
+
+export function DockerNetworksTab({ networks, canManage, onRefresh, onCreate, onRemove, onInspect }: DockerNetworksTabProps) {
+  const [showCreate, setShowCreate] = useState(false);
+  const [name, setName] = useState("");
+  const [driver, setDriver] = useState("bridge");
+  const [internal, setInternal] = useState(false);
+  const [subnet, setSubnet] = useState("");
+
+  return (
+    <div className="container-list">
+      <div className="docker-filters">
+        <span className="text-muted text-sm">{networks.length} 个网络</span>
+        <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
+          <button className="btn btn-secondary btn-sm" onClick={onRefresh}>刷新</button>
+          <button
+            className="btn btn-primary btn-sm"
+            disabled={!canManage}
+            onClick={() => setShowCreate(true)}
+          >
+            新建网络
+          </button>
+        </div>
+      </div>
+      <div className="list-header network-row">
+        <span>名称</span>
+        <span>驱动</span>
+        <span>范围</span>
+        <span>内部</span>
+        <span>创建时间</span>
+        <span></span>
+      </div>
+      {networks.length === 0 ? (
+        <div className="docker-empty" style={{ minHeight: 120 }}>暂无网络</div>
+      ) : (
+          networks.map((n) => (
+            <div
+              key={n.id}
+              className="container-card network-row"
+              onClick={() => onInspect(n.name)}
+            >
+              <div className="container-title">{n.name}</div>
+              <div className="text-sm">{n.driver}</div>
+              <div className="text-sm text-muted">{n.scope}</div>
+              <div className="text-sm">{n.internal ? "是" : "否"}</div>
+              <div className="text-sm text-muted">{formatTimestamp(n.createdAt)}</div>
+              <div className="container-actions" onClick={(e) => e.stopPropagation()}>
+                <button
+                  className="btn-icon text-danger"
+                  title="删除网络"
+                  disabled={!canManage || n.name === "bridge" || n.name === "host" || n.name === "none"}
+                  onClick={() => {
+                    if (!window.confirm(`删除网络 ${n.name}？`)) return;
+                    void onRemove(n.name);
+                  }}
+                >
+                  ×
+                </button>
+              </div>
+            </div>
+          ))
+      )}
+
+      <Modal open={showCreate} onClose={() => setShowCreate(false)}>
+        <div className="modal-dialog" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-header">
+            <h3>新建网络</h3>
+            <button className="btn-icon" onClick={() => setShowCreate(false)} title="关闭">×</button>
+          </div>
+          <div className="modal-body">
+            <div className="form-field">
+              <label className="form-label">名称</label>
+              <input className="input" value={name} onChange={(e) => setName(e.target.value)} style={{ width: "100%" }} />
+            </div>
+            <div className="form-field">
+              <label className="form-label">驱动</label>
+              <select className="input" value={driver} onChange={(e) => setDriver(e.target.value)} style={{ width: "100%" }}>
+                <option value="bridge">bridge</option>
+                <option value="overlay">overlay</option>
+                <option value="macvlan">macvlan</option>
+              </select>
+            </div>
+            <div className="form-field">
+              <label className="form-label">子网（CIDR，可选）</label>
+              <input className="input" value={subnet} onChange={(e) => setSubnet(e.target.value)} placeholder="172.20.0.0/16" style={{ width: "100%" }} />
+            </div>
+            <div className="form-field" style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+              <input id="net-internal" type="checkbox" checked={internal} onChange={(e) => setInternal(e.target.checked)} />
+              <label htmlFor="net-internal" className="form-label" style={{ marginBottom: 0 }}>内部网络（无外网）</label>
+            </div>
+          </div>
+          <div className="modal-footer">
+            <button className="btn btn-secondary" onClick={() => setShowCreate(false)}>取消</button>
+            <button
+              className="btn btn-primary"
+              disabled={!name.trim()}
+              onClick={async () => {
+                const r = await onCreate({
+                  name: name.trim(),
+                  driver: driver.trim() || null,
+                  internal,
+                  subnet: subnet.trim() || null,
+                });
+                if (r.ok) {
+                  setShowCreate(false);
+                  setName("");
+                  setSubnet("");
+                }
+              }}
+            >
+              创建
+            </button>
+          </div>
+        </div>
+      </Modal>
+    </div>
+  );
+}

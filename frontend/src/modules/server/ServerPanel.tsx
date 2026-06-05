@@ -20,7 +20,6 @@ function serverEntryToResource(entry: ServerEntry): WorkspaceResource {
 
 export function ServerPanel() {
   const { t } = useI18n();
-  const selectResource = useWorkspaceStore((s) => s.selectResource);
   const selectedServerId = useWorkspaceStore((s) => s.selectedResourceByPath["/server"]);
 
   const [servers, setServers] = useState<ServerEntry[]>([]);

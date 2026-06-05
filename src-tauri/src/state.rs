@@ -44,6 +44,8 @@ pub struct AppState {
     pub docker_ssh_sessions: Arc<Mutex<HashMap<String, Arc<Mutex<SshSession>>>>>,
     /// 活跃 Docker 日志流的停止句柄（按 streamId 索引）。
     pub docker_log_streams: Arc<Mutex<HashMap<String, Arc<std::sync::atomic::AtomicBool>>>>,
+    /// 活跃 Docker stats 流的停止句柄（按 streamId 索引）。
+    pub docker_stats_streams: Arc<Mutex<HashMap<String, Arc<std::sync::atomic::AtomicBool>>>>,
     /// 活跃 Docker 容器交互终端会话（按 sessionId 索引）。
     pub docker_exec_sessions: Arc<Mutex<HashMap<String, omnipanel_docker::DockerExecSession>>>,
 }
@@ -82,6 +84,7 @@ impl AppState {
             log_store,
             docker_ssh_sessions: Arc::new(Mutex::new(HashMap::new())),
             docker_log_streams: Arc::new(Mutex::new(HashMap::new())),
+            docker_stats_streams: Arc::new(Mutex::new(HashMap::new())),
             docker_exec_sessions: Arc::new(Mutex::new(HashMap::new())),
         }
     }

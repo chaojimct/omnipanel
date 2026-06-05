@@ -9,15 +9,21 @@
 mod compose;
 pub mod local;
 pub mod model;
+pub mod onepanel;
 pub mod ssh;
 
 use async_trait::async_trait;
+use std::sync::Arc;
 use omnipanel_error::OmniResult;
 
 pub use compose::aggregate_compose;
 pub use local::{DockerExecOutput, DockerExecSession, LocalDockerAdapter};
 pub use model::*;
+pub use onepanel::{OnePanelAdapter, OnePanelClient};
 pub use ssh::SshDockerAdapter;
+
+/// 重新导出 bollard，供命令层直接构造远程 Engine 客户端。
+pub use bollard;
 
 /// 容器列表筛选。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -71,12 +77,100 @@ pub trait DockerAdapter: Send + Sync {
     async fn container_logs(&self, id: &str, tail: i64) -> OmniResult<Vec<DockerLogLine>>;
     /// 镜像列表。
     async fn list_images(&self) -> OmniResult<Vec<DockerImageSummary>>;
+    /// 镜像详情（配置 / 历史层）。
+    async fn inspect_image(&self, id: &str) -> OmniResult<DockerImageDetail>;
+    /// `docker history` 精简版。
+    async fn image_history(&self, id: &str) -> OmniResult<Vec<DockerImageHistoryLayer>>;
     /// 删除镜像。
     async fn remove_image(&self, id: &str, force: bool) -> OmniResult<()>;
     /// 清理悬空镜像。
     async fn prune_images(&self) -> OmniResult<DockerPruneResult>;
     /// Compose 项目识别。
     async fn list_compose_projects(&self) -> OmniResult<Vec<DockerComposeProject>>;
+    /// 拉取镜像。`progress` 回调（可选）逐条上报拉取阶段。
+    async fn pull_image(
+        &self,
+        image: &str,
+        progress: Option<Box<dyn Fn(DockerImageProgress) + Send + Sync>>,
+    ) -> OmniResult<DockerPullResult>;
+    /// 推送镜像到注册表。`progress` 回调同 `pull_image`。
+    async fn push_image(
+        &self,
+        image: &str,
+        progress: Option<Box<dyn Fn(DockerImageProgress) + Send + Sync>>,
+    ) -> OmniResult<DockerPullResult>;
+    /// 给已有镜像打 tag。
+    async fn tag_image(&self, source: &str, target: &str) -> OmniResult<()>;
+    /// 通过 Dockerfile 构建镜像。`progress` 回调（可选）逐条上报构建阶段。
+    async fn build_image(
+        &self,
+        ctx: &DockerBuildContext,
+        progress: Option<Box<dyn Fn(DockerImageProgress) + Send + Sync>>,
+    ) -> OmniResult<DockerBuildResult>;
+    /// Compose 生命周期（up/down/restart/pull）。
+    async fn compose_action(
+        &self,
+        action: DockerComposeAction,
+        req: &DockerComposeRequest,
+    ) -> OmniResult<DockerComposeResult>;
+    /// 流式容器 stats。`stop` 置位时停止，`sink` 持续接收统计快照。
+    /// 本地 Engine 走 bollard；SSH 走 `docker stats --format '{{json .}}'`。
+    async fn stream_stats(
+        &self,
+        container_id: &str,
+        stop: Arc<std::sync::atomic::AtomicBool>,
+        sink: Box<dyn FnMut(DockerContainerStats) + Send>,
+    ) -> OmniResult<()>;
+    /// 网络列表。
+    async fn list_networks(&self) -> OmniResult<Vec<DockerNetworkSummary>>;
+    /// 网络详情（IPAM + 已挂接容器）。
+    async fn inspect_network(&self, name_or_id: &str) -> OmniResult<DockerNetworkDetail>;
+    /// 创建网络。
+    async fn create_network(&self, req: &DockerCreateNetworkRequest) -> OmniResult<String>;
+    /// 删除网络。
+    async fn remove_network(&self, name: &str) -> OmniResult<()>;
+    /// 把容器接入网络。
+    async fn connect_container_to_network(
+        &self,
+        network: &str,
+        container_id: &str,
+    ) -> OmniResult<()>;
+    /// 把容器从网络断开。
+    async fn disconnect_container_from_network(
+        &self,
+        network: &str,
+        container_id: &str,
+    ) -> OmniResult<()>;
+    /// 卷列表。
+    async fn list_volumes(&self) -> OmniResult<Vec<DockerVolumeSummary>>;
+    /// 卷详情（标签 + 驱动选项 + 引用计数）。
+    async fn inspect_volume(&self, name: &str) -> OmniResult<DockerVolumeDetail>;
+    /// 创建卷。
+    async fn create_volume(&self, req: &DockerCreateVolumeRequest) -> OmniResult<String>;
+    /// 删除卷。
+    async fn remove_volume(&self, name: &str, force: bool) -> OmniResult<()>;
+    /// 清理未使用卷。
+    async fn prune_volumes(&self) -> OmniResult<DockerPruneVolumesResult>;
+    /// 列出容器内目录。
+    async fn list_container_dir(
+        &self,
+        container_id: &str,
+        path: &str,
+    ) -> OmniResult<Vec<DockerFileEntry>>;
+    /// 读取容器内文件（按字节返回）。最大 16 MiB 防御性检查。
+    async fn read_container_file(
+        &self,
+        container_id: &str,
+        path: &str,
+        max_bytes: i64,
+    ) -> OmniResult<Vec<u8>>;
+    /// 写入容器内文件（覆盖）。注意：bollard 走 tar 协议，SSH 走 `docker cp`。
+    async fn write_container_file(
+        &self,
+        container_id: &str,
+        path: &str,
+        data: Vec<u8>,
+    ) -> OmniResult<()>;
 }
 
 /// 取容器 id 短格式（前 12 位）。

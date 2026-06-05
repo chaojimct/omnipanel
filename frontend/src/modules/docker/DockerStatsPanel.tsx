@@ -1,0 +1,136 @@
+import { useEffect, useState } from "react";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { commands } from "../../ipc/bindings";
+
+interface ContainerStats {
+  containerId: string;
+  name: string;
+  cpuPercent: number;
+  memoryUsageBytes: number;
+  memoryLimitBytes: number | null;
+  memoryPercent: number;
+  netRxBytes: number;
+  netTxBytes: number;
+  blockReadBytes: number;
+  blockWriteBytes: number;
+  timestampMs: number;
+}
+
+interface DockerStatsPanelProps {
+  connectionId: string | null;
+  containerId: string | null;
+  containerName: string;
+  onClose: () => void;
+}
+
+function fmtBytes(b: number | null | undefined): string {
+  if (b == null) return "-";
+  if (b < 1024) return `${b} B`;
+  if (b < 1024 * 1024) return `${(b / 1024).toFixed(1)} KB`;
+  if (b < 1024 * 1024 * 1024) return `${(b / 1024 / 1024).toFixed(1)} MB`;
+  return `${(b / 1024 / 1024 / 1024).toFixed(2)} GB`;
+}
+
+function fmtPercent(v: number | null | undefined): string {
+  if (v == null) return "-";
+  return `${v.toFixed(1)}%`;
+}
+
+export function DockerStatsPanel({ connectionId, containerId, containerName, onClose }: DockerStatsPanelProps) {
+  const [stats, setStats] = useState<ContainerStats | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [active, setActive] = useState(true);
+  const [streamId, setStreamId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!connectionId || !containerId || !active) return;
+    let disposed = false;
+    const unlistens: UnlistenFn[] = [];
+    const start = async () => {
+      try {
+        const unlistenStats = await listen<ContainerStats>("docker-stats", (e) => {
+          if (disposed) return;
+          if (e.payload.containerId === containerId) {
+            setStats(e.payload);
+            setError(null);
+          }
+        });
+        unlistens.push(unlistenStats);
+        const unlistenEnd = await listen<{ containerId: string; error?: string }>("docker-stats-end", (e) => {
+          if (disposed) return;
+          if (e.payload.containerId === containerId) {
+            if (e.payload.error) setError(e.payload.error);
+          }
+        });
+        unlistens.push(unlistenEnd);
+        const r = await commands.dockerStreamStats(connectionId, containerId);
+        if (r.status === "ok") {
+          setStreamId(r.data);
+        } else {
+          setError(r.error.message);
+        }
+      } catch (e) {
+        setError(String(e));
+      }
+    };
+    void start();
+    return () => {
+      disposed = true;
+      unlistens.forEach((u) => u());
+    };
+  }, [connectionId, containerId, active]);
+
+  useEffect(() => {
+    return () => {
+      if (streamId) {
+        void commands.dockerStopStatsStream(streamId).catch(() => {});
+      }
+    };
+  }, [streamId]);
+
+  return (
+    <div className="docker-stats-panel">
+      <div className="docker-stats-header">
+        <strong>资源监控 — {containerName}</strong>
+        <div className="flex items-center gap-2">
+          <label className="text-sm text-muted" style={{ display: "flex", alignItems: "center", gap: 4 }}>
+            <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} />
+            启用
+          </label>
+          <button className="btn-icon" onClick={onClose} title="关闭">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
+              <path d="M18 6L6 18M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      </div>
+      {error && <div className="docker-stats-error text-sm text-danger">{error}</div>}
+      {stats ? (
+        <div className="docker-stats-grid">
+          <Stat label="CPU" value={fmtPercent(stats.cpuPercent)} highlight={stats.cpuPercent > 80} />
+          <Stat label="内存使用" value={fmtBytes(stats.memoryUsageBytes)} />
+          <Stat
+            label="内存限额"
+            value={stats.memoryLimitBytes != null ? fmtBytes(stats.memoryLimitBytes) : "无"}
+          />
+          <Stat label="内存占比" value={fmtPercent(stats.memoryPercent)} highlight={stats.memoryPercent > 80} />
+          <Stat label="网络 RX" value={fmtBytes(stats.netRxBytes)} />
+          <Stat label="网络 TX" value={fmtBytes(stats.netTxBytes)} />
+          <Stat label="块设备读" value={fmtBytes(stats.blockReadBytes)} />
+          <Stat label="块设备写" value={fmtBytes(stats.blockWriteBytes)} />
+        </div>
+      ) : (
+        <div className="text-muted text-sm">等待数据…</div>
+      )}
+    </div>
+  );
+}
+
+function Stat({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
+  return (
+    <div className="docker-stat-item">
+      <div className="docker-stat-label">{label}</div>
+      <div className={`docker-stat-value${highlight ? " text-danger" : ""}`}>{value}</div>
+    </div>
+  );
+}

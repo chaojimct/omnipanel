@@ -60,6 +60,10 @@ portable-pty = "0.8"
 russh = { version = "0.54", default-features = false, features = ["flate2", "ring", "rsa"] }
 russh-sftp = "2"
 
-# Docker（bollard 本地 Engine 客户端；default-features=false 避免引入 TLS/OpenSSL 构建链，本地 socket/命名管道连接不需要 TLS）
-bollard = { version = "0.21", default-features = false }
+# Docker（bollard）：
+# - default-features=false：避免引入 TLS/OpenSSL 构建链。
+# - 必须显式开启 "pipe"：Windows 命名管道（\\.\pipe\docker_engine）和 Unix socket（/var/run/docker.sock）支持都在该 feature 下，否则
+#   connect_with_defaults() 在 Windows 上会落到 UnsupportedURISchemeError，导致本地 Docker Desktop 始终探测为 offline。
+# - "http"：远程 Engine API（TCP/HTTP，不含 TLS），用于后续 RemoteEngine 来源。
+bollard = { version = "0.21", default-features = false, features = ["pipe", "http", "ssl"] }
 futures = "0.3"

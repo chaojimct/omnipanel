@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 OmniPanel is an AI-native cross-platform engineering workstation for developers. It unifies terminal, SSH, database, Docker, server management, and AI assistance into a single desktop application.
 
-**Status:** Phase 0 complete — Tauri + React framework skeleton搭建完成，Shell 组件（Sidebar、Topbar、StatusBar、CommandPalette）就位，所有功能面板 UI 骨架就位。下一步聚焦终端和 SSH 模块的真实后端实现。
+**Status:** Phase 0 complete — Tauri + React framework skeleton搭建完成，Shell 组件（Sidebar、Topbar、StatusBar、CommandPalette）就位。Phase 1 (MVP) 进行中 — Docker 模块后端全功能完成（本地 / 远程 Engine / SSH 宿主机 / 1Panel 面板四种来源），前端 6 个子页签（容器 / 镜像 / Compose / 网络 / 卷 / 文件）+ 资源监控 + 连接对话框就位。下一步聚焦 Database 模块后端实现。
 
 ## Technology Stack
 

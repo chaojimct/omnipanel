@@ -10,12 +10,24 @@ import {
   type ContainerFilter,
 } from "./useDockerWorkspace";
 import { DockerExecTerminal } from "./DockerExecTerminal";
+import { DockerConnectionDialog } from "./DockerConnectionDialog";
+import { DockerStatsPanel } from "./DockerStatsPanel";
+import { ImageActionBar } from "./ImageActionBar";
+import { DockerNetworksTab } from "./DockerNetworksTab";
+import { DockerVolumesTab } from "./DockerVolumesTab";
+import { DockerFilesTab } from "./DockerFilesTab";
+import { DockerImageDrawer } from "./DockerImageDrawer";
+import { DockerNetworkDrawer } from "./DockerNetworkDrawer";
+import { DockerVolumeDrawer } from "./DockerVolumeDrawer";
+import { DockerComposeDrawer } from "./DockerComposeDrawer";
+import { DockerFileEditor } from "./DockerFileEditor";
+import type { DockerComposeAction } from "../../ipc/bindings";
 import type {
   DockerContainerDetail,
   DockerContainerSummary,
 } from "../../ipc/bindings";
 
-type WorkspaceTab = "containers" | "images" | "compose";
+type WorkspaceTab = "containers" | "images" | "compose" | "networks" | "volumes" | "files";
 
 interface ConfirmState {
   title: string;
@@ -48,6 +60,7 @@ const SOURCE_LABEL: Record<string, string> = {
   "local-engine": "本地 Engine",
   "remote-engine": "远程 Engine",
   "ssh-engine": "SSH 宿主机",
+  "onepanel": "1Panel 面板",
   "panel-adapter": "面板适配",
 };
 
@@ -69,14 +82,39 @@ export function DockerPanel() {
     containers,
     images,
     composeProjects,
+    networks,
+    volumes,
+    files,
+    filePath,
+    fileContainerId,
+    composeAction,
+    pullImage,
+    pushImage,
+    tagImage,
+    buildImage,
+    listNetworks,
+    createNetwork,
+    removeNetwork,
+    listVolumes,
+    createVolume,
+    removeVolume,
+    pruneVolumes,
+    listContainerDir,
+    readContainerFile,
+    writeContainerFile,
     connectionsLoading,
     dataLoading,
     error,
     refresh,
     containerAction,
     inspect,
+    inspectImage,
+    imageHistory,
+    inspectNetwork,
+    inspectVolume,
     removeImage,
     pruneImages,
+    reloadConnections: loadConnections,
   } = docker;
 
   const [tab, setTab] = useState<WorkspaceTab>("containers");
@@ -85,6 +123,13 @@ export function DockerPanel() {
   const [confirm, setConfirm] = useState<ConfirmState | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [drawerId, setDrawerId] = useState<string | null>(null);
+  const [showAddConn, setShowAddConn] = useState(false);
+  const [statsContainer, setStatsContainer] = useState<{ id: string; name: string } | null>(null);
+  const [imageDrawerId, setImageDrawerId] = useState<string | null>(null);
+  const [networkDrawerName, setNetworkDrawerName] = useState<string | null>(null);
+  const [volumeDrawerName, setVolumeDrawerName] = useState<string | null>(null);
+  const [composeDrawerName, setComposeDrawerName] = useState<string | null>(null);
+  const [fileEditor, setFileEditor] = useState<{ path: string; content: string } | null>(null);
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -104,8 +149,11 @@ export function DockerPanel() {
 
   useTopbarTabs(
     topbarTabs,
-    { onSelect: (id) => selectConnection(id) },
-    { mode: "connection", showAddTab: false }
+    {
+      onSelect: (id) => selectConnection(id),
+      onAdd: () => setShowAddConn(true),
+    },
+    { mode: "connection", showAddTab: true, addTabTitle: "添加 Docker 连接" }
   );
 
   // 切换连接时复位本地视图状态。
@@ -251,7 +299,12 @@ export function DockerPanel() {
         {connectionsLoading ? (
           <div className="docker-empty">正在加载 Docker 连接…</div>
         ) : connections.length === 0 ? (
-          <div className="docker-empty">暂无 Docker 连接</div>
+          <div className="docker-empty">
+            <div className="docker-empty-title">暂无 Docker 连接</div>
+            <button className="btn btn-primary btn-sm" style={{ marginTop: 12 }} onClick={() => setShowAddConn(true)}>
+              添加 Docker 连接
+            </button>
+          </div>
         ) : isOffline ? (
           <div className="docker-empty">
             <div className="docker-empty-title">Docker 未安装或未启动</div>
@@ -270,9 +323,18 @@ export function DockerPanel() {
 
             {/* 子页签 */}
             <div className="docker-subtabs">
-              {(["containers", "images", "compose"] as const).map((key) => (
+              {(
+                [
+                  { key: "containers", label: "容器" },
+                  { key: "images", label: "镜像" },
+                  { key: "compose", label: "Compose" },
+                  { key: "networks", label: "网络" },
+                  { key: "volumes", label: "卷" },
+                  { key: "files", label: "文件" },
+                ] as const
+              ).map(({ key, label }) => (
                 <button key={key} type="button" className={`subtab${tab === key ? " active" : ""}`} onClick={() => setTab(key)}>
-                  {key === "containers" ? "容器" : key === "images" ? "镜像" : "Compose"}
+                  {label}
                 </button>
               ))}
             </div>
@@ -337,6 +399,14 @@ export function DockerPanel() {
                         </div>
                         <div className="text-sm text-muted">{container.networks.join(", ") || "-"}</div>
                         <div className="container-actions" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            className="btn-icon"
+                            title="资源监控"
+                            disabled={!container.running || !probe?.capabilities?.canManageContainers}
+                            onClick={() => setStatsContainer({ id: container.id, name: container.name })}
+                          >
+                            📊
+                          </button>
                           {container.running ? (
                             <>
                               <button className="btn-icon" title="重启" onClick={() => runContainerAction(container, "restart", "重启")}>
@@ -368,9 +438,25 @@ export function DockerPanel() {
               <div className="container-list">
                 <div className="docker-filters">
                   <span className="text-muted text-sm">{images.length} 个镜像</span>
-                  <button className="btn btn-secondary btn-sm" style={{ marginLeft: "auto" }} onClick={confirmPrune}>
-                    清理悬空镜像
-                  </button>
+                  <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
+                    <ImageActionBar
+                      canManage={probe?.capabilities?.canManageImages ?? false}
+                      onPull={async (image, onProgress) => {
+                        const r = await pullImage(image, onProgress);
+                        showToast(r.message ?? (r.ok ? "拉取完成" : "拉取失败"));
+                        return r;
+                      }}
+                      onBuild={async (ctx, tag, df, onProgress) => {
+                        const r = await buildImage(ctx, tag, df, onProgress);
+                        showToast(r.message ?? (r.ok ? "构建完成" : "构建失败"));
+                        return r;
+                      }}
+                      onMessage={(msg) => showToast(msg)}
+                    />
+                    <button className="btn btn-secondary btn-sm" onClick={confirmPrune}>
+                      清理悬空
+                    </button>
+                  </div>
                 </div>
                 <div className="list-header image-row">
                   <span>仓库</span>
@@ -383,7 +469,11 @@ export function DockerPanel() {
                   <div className="docker-empty" style={{ minHeight: 120 }}>{dataLoading ? "加载中…" : "暂无镜像"}</div>
                 ) : (
                   images.map((img, idx) => (
-                    <div key={`${img.id}-${img.repository}-${img.tag}-${idx}`} className="container-card image-row">
+                    <div
+                      key={`${img.id}-${img.repository}-${img.tag}-${idx}`}
+                      className="container-card image-row"
+                      onClick={() => setImageDrawerId(img.id)}
+                    >
                       <div className="container-title">
                         {img.repository}
                         {img.dangling && <span className="badge badge-warn" style={{ marginLeft: 6 }}>悬空</span>}
@@ -391,8 +481,37 @@ export function DockerPanel() {
                       <div className="text-sm text-muted">{img.tag}</div>
                       <div className="text-sm">{formatBytes(img.sizeBytes)}</div>
                       <div className="text-sm text-muted">{formatTimestamp(img.createdAt)}</div>
-                      <div className="container-actions">
-                        <button className="btn-icon text-danger" title="删除镜像" onClick={() => confirmImageRemove(img.id, `${img.repository}:${img.tag}`)}>
+                      <div className="container-actions" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          className="btn-icon"
+                          title="推送"
+                          disabled={!probe?.capabilities?.canManageImages || img.dangling}
+                          onClick={async () => {
+                            const ref = `${img.repository}:${img.tag}`;
+                            const r = await pushImage(ref);
+                            showToast(r.message ?? (r.ok ? "推送完成" : "推送失败"));
+                          }}
+                        >
+                          ↑
+                        </button>
+                        <button
+                          className="btn-icon"
+                          title="打 tag"
+                          disabled={!probe?.capabilities?.canManageImages}
+                          onClick={async () => {
+                            const newTag = window.prompt(`为 ${img.repository}:${img.tag} 设置新 tag`, `${img.repository}:latest`);
+                            if (!newTag) return;
+                            const r = await tagImage(`${img.repository}:${img.tag}`, newTag);
+                            showToast(r.message ?? (r.ok ? "已打 tag" : "打 tag 失败"));
+                          }}
+                        >
+                            ⎘
+                          </button>
+                        <button
+                          className="btn-icon text-danger"
+                          title="删除镜像"
+                          onClick={() => confirmImageRemove(img.id, `${img.repository}:${img.tag}`)}
+                        >
                           <TrashIcon />
                         </button>
                       </div>
@@ -410,13 +529,55 @@ export function DockerPanel() {
                   </div>
                 ) : (
                   composeProjects.map((proj) => (
-                    <div key={proj.name} className="compose-card">
+                    <div key={proj.name} className="compose-card" onClick={() => setComposeDrawerName(proj.name)} style={{ cursor: "pointer" }}>
                       <div className="compose-head">
                         <strong>{proj.name}</strong>
                         <span className="text-muted text-xs">
                           {proj.runningContainerCount}/{proj.containerCount} 运行 · {proj.serviceCount} 服务
                         </span>
                         {proj.workingDir && <span className="text-muted text-xs">{proj.workingDir}</span>}
+                        <div style={{ marginLeft: "auto", display: "flex", gap: 6 }} onClick={(e) => e.stopPropagation()}>
+                          <button
+                            className="btn btn-secondary btn-sm"
+                            disabled={!probe?.capabilities?.canCompose}
+                            onClick={async () => {
+                              const r = await composeAction("up", proj.name);
+                              showToast(r.message ?? (r.ok ? "已 up" : "up 失败"));
+                            }}
+                          >
+                            Up
+                          </button>
+                          <button
+                            className="btn btn-secondary btn-sm"
+                            disabled={!probe?.capabilities?.canCompose}
+                            onClick={async () => {
+                              const r = await composeAction("down", proj.name);
+                              showToast(r.message ?? (r.ok ? "已 down" : "down 失败"));
+                            }}
+                          >
+                            Down
+                          </button>
+                          <button
+                            className="btn btn-secondary btn-sm"
+                            disabled={!probe?.capabilities?.canCompose}
+                            onClick={async () => {
+                              const r = await composeAction("restart", proj.name);
+                              showToast(r.message ?? (r.ok ? "已 restart" : "restart 失败"));
+                            }}
+                          >
+                            Restart
+                          </button>
+                          <button
+                            className="btn btn-secondary btn-sm"
+                            disabled={!probe?.capabilities?.canCompose}
+                            onClick={async () => {
+                              const r = await composeAction("pull", proj.name);
+                              showToast(r.message ?? (r.ok ? "已 pull" : "pull 失败"));
+                            }}
+                          >
+                            Pull
+                          </button>
+                        </div>
                       </div>
                       <div className="compose-services">
                         {proj.services.map((svc) => (
@@ -435,6 +596,71 @@ export function DockerPanel() {
                 )}
               </div>
             )}
+
+            {tab === "networks" && (
+              <DockerNetworksTab
+                networks={networks}
+                canManage={probe?.capabilities?.canManageContainers ?? false}
+                onRefresh={listNetworks}
+                onCreate={async (req) => {
+                  const r = await createNetwork(req);
+                  showToast(r.message ?? (r.ok ? "已创建" : "创建失败"));
+                  return r;
+                }}
+                onRemove={async (name) => {
+                  const r = await removeNetwork(name);
+                  showToast(r.message ?? (r.ok ? "已删除" : "删除失败"));
+                  return r;
+                }}
+                onInspect={(name) => setNetworkDrawerName(name)}
+              />
+            )}
+
+            {tab === "volumes" && (
+              <DockerVolumesTab
+                volumes={volumes}
+                canManage={probe?.capabilities?.canManageContainers ?? false}
+                onRefresh={listVolumes}
+                onCreate={async (req) => {
+                  const r = await createVolume(req);
+                  showToast(r.message ?? (r.ok ? "已创建" : "创建失败"));
+                  return r;
+                }}
+                onRemove={async (name) => {
+                  const r = await removeVolume(name, false);
+                  showToast(r.message ?? (r.ok ? "已删除" : "删除失败"));
+                  return r;
+                }}
+                onPrune={async () => {
+                  const r = await pruneVolumes();
+                  showToast(r.message ?? (r.ok ? "已清理" : "清理失败"));
+                  return r;
+                }}
+                onInspect={(name) => setVolumeDrawerName(name)}
+              />
+            )}
+
+            {tab === "files" && (
+              <DockerFilesTab
+                containers={containers}
+                files={files}
+                filePath={filePath}
+                fileContainerId={fileContainerId}
+                onPickContainer={async (cid) => {
+                  await listContainerDir(cid, "/");
+                }}
+                onEnter={async (entry) => {
+                  if (!fileContainerId) return;
+                  const next = filePath === "/" ? `/${entry.name}` : `${filePath}/${entry.name}`;
+                  if (entry.isDir) {
+                    await listContainerDir(fileContainerId, next);
+                  } else {
+                    const content = await readContainerFile(fileContainerId, next, 64 * 1024);
+                    setFileEditor({ path: next, content });
+                  }
+                }}
+              />
+            )}
           </>
         )}
       </div>
@@ -443,6 +669,7 @@ export function DockerPanel() {
         connectionId={selectedConnectionId}
         containerId={drawerId}
         canExec={selectedConnection?.source === "local-engine"}
+        canStreamLogs={probe?.capabilities?.canStreamLogs ?? false}
         hostLabel={selectedConnection?.hostLabel ?? null}
         sourceLabel={selectedConnection ? SOURCE_LABEL[selectedConnection.source] ?? selectedConnection.source : null}
         inspect={inspect}
@@ -473,8 +700,103 @@ export function DockerPanel() {
         }}
       />
 
+      <DockerImageDrawer
+        imageId={imageDrawerId}
+        onClose={() => setImageDrawerId(null)}
+        inspectImage={inspectImage}
+        imageHistory={imageHistory}
+        onRemove={async (id) => {
+          const r = await removeImage(id, true);
+          showToast(r.message ?? (r.ok ? "已删除" : "删除失败"));
+          return r;
+        }}
+        onPrune={async () => {
+          const r = await pruneImages();
+          showToast(r.message ?? (r.ok ? "清理完成" : "清理失败"));
+          return r;
+        }}
+        onCopyId={(id) => {
+          void navigator.clipboard?.writeText(id).then(
+            () => showToast("已复制镜像 ID"),
+            () => showToast("复制失败")
+          );
+        }}
+      />
+
+      <DockerNetworkDrawer
+        name={networkDrawerName}
+        onClose={() => setNetworkDrawerName(null)}
+        inspectNetwork={inspectNetwork}
+        onRemove={async (name) => {
+          const r = await removeNetwork(name);
+          showToast(r.message ?? (r.ok ? "已删除" : "删除失败"));
+          return r;
+        }}
+      />
+
+      <DockerVolumeDrawer
+        name={volumeDrawerName}
+        onClose={() => setVolumeDrawerName(null)}
+        inspectVolume={inspectVolume}
+        onRemove={async (name) => {
+          const r = await removeVolume(name, false);
+          showToast(r.message ?? (r.ok ? "已删除" : "删除失败"));
+          return r;
+        }}
+      />
+
+      <DockerComposeDrawer
+        project={composeProjects.find((p) => p.name === composeDrawerName) ?? null}
+        onClose={() => setComposeDrawerName(null)}
+        onAction={async (action, proj) => {
+          const r = await composeAction(action as DockerComposeAction, proj.name);
+          showToast(r.message ?? (r.ok ? "已执行" : "执行失败"));
+          return r;
+        }}
+      />
+
+      <DockerFileEditor
+        open={fileEditor !== null}
+        filePath={fileEditor?.path ?? null}
+        initialContent={fileEditor?.content ?? ""}
+        onClose={() => setFileEditor(null)}
+        onSave={async (content) => {
+          if (!fileEditor || !fileContainerId) {
+            return { ok: false, message: "上下文丢失" };
+          }
+          const r = await writeContainerFile(fileContainerId, fileEditor.path, content);
+          if (r.ok) {
+            showToast(r.message ?? "已写入");
+          } else {
+            showToast(r.message ?? "写入失败");
+          }
+          return r;
+        }}
+      />
+
       {confirm && (
         <ConfirmModal confirm={confirm} onCancel={() => setConfirm(null)} />
+      )}
+
+      <DockerConnectionDialog
+        open={showAddConn}
+        onClose={() => setShowAddConn(false)}
+        onSaved={() => {
+          void reloadConnections();
+        }}
+      />
+
+      {statsContainer && (
+        <div className="docker-drawer-mask" onClick={() => setStatsContainer(null)}>
+          <div className="docker-drawer docker-stats-drawer" onClick={(e) => e.stopPropagation()}>
+            <DockerStatsPanel
+              connectionId={selectedConnectionId}
+              containerId={statsContainer.id}
+              containerName={statsContainer.name}
+              onClose={() => setStatsContainer(null)}
+            />
+          </div>
+        </div>
       )}
 
       {toast && <div className="docker-toast">{toast}</div>}
@@ -509,6 +831,7 @@ interface ContainerDrawerProps {
   connectionId: string | null;
   containerId: string | null;
   canExec: boolean;
+  canStreamLogs: boolean;
   hostLabel: string | null;
   sourceLabel: string | null;
   inspect: (id: string) => Promise<DockerContainerDetail | null>;
@@ -525,6 +848,7 @@ function ContainerDrawer({
   connectionId,
   containerId,
   canExec,
+  canStreamLogs,
   hostLabel,
   sourceLabel,
   inspect,
@@ -582,7 +906,14 @@ function ContainerDrawer({
 
             <div className="drawer-subtabs">
               <button className={`subtab${drawerTab === "info" ? " active" : ""}`} onClick={() => setDrawerTab("info")}>详情</button>
-              <button className={`subtab${drawerTab === "logs" ? " active" : ""}`} onClick={() => setDrawerTab("logs")}>日志</button>
+              <button
+                className={`subtab${drawerTab === "logs" ? " active" : ""}`}
+                disabled={!canStreamLogs}
+                title={canStreamLogs ? "查看日志" : "当前连接不支持日志流式"}
+                onClick={() => setDrawerTab("logs")}
+              >
+                日志
+              </button>
               {canExec && detail?.summary.running && (
                 <button className={`subtab${drawerTab === "terminal" ? " active" : ""}`} onClick={() => setDrawerTab("terminal")}>终端</button>
               )}
