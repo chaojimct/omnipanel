@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type RefObject } from "react";
 import { useI18n } from "../../../i18n";
+import { DataLoading, type DataLoadingProps } from "../../../components/ui/DataLoading";
 import type { DbConnectionConfig } from "../api";
 import type {
   DataSyncStrategy,
@@ -8,6 +9,7 @@ import type {
   TableTargetStatus,
   ToolboxTabId,
 } from "./types";
+import type { SchemaColumnDiff, SchemaTableDiff } from "./schemaDiff";
 
 /** 源侧完整表列表；目标侧仅展示源库已选表的同步状态 */
 export type SyncTableListMode = "source" | "targetSync";
@@ -23,12 +25,16 @@ interface SyncSidePanelProps {
   databases: string[];
   databasesLoading: boolean;
   snapshot: SyncSideSnapshot;
+  /** 加载中时传入 DataLoading 的进度参数 */
+  loadingProgress?: Pick<DataLoadingProps, "total" | "current" | "message">;
   tab: ToolboxTabId;
   expandedTables: Set<string>;
   onToggleTable: (tableName: string) => void;
   selectedTables: Set<string>;
   onToggleSelect: (tableName: string) => void;
   onSelectAllTables: (tableNames: string[], selected: boolean) => void;
+  /** 正在统计行数的表名 */
+  countingTables?: Set<string>;
   /** 目标同步列表：源侧已勾选的表名（有序） */
   sourceSelectedTableNames?: string[];
   targetConfigured?: boolean;
@@ -36,6 +42,8 @@ interface SyncSidePanelProps {
   tableTargetStatus?: Record<string, TableTargetStatus>;
   tableSyncStrategies?: Record<string, DataSyncStrategy>;
   onSyncStrategyChange?: (tableName: string, strategy: DataSyncStrategy) => void;
+  /** 结构同步：源表与目标表的字段差异 */
+  schemaTableDiffs?: Record<string, SchemaTableDiff>;
 }
 
 function TableSelectCheckbox({
@@ -247,6 +255,88 @@ function TargetSyncTableRow({
   );
 }
 
+function SchemaDiffKindTag({ kind }: { kind: SchemaColumnDiff["kind"] }) {
+  const { t } = useI18n();
+  const label =
+    kind === "added"
+      ? t("database.toolbox.side.schemaDiffAdded")
+      : kind === "removed"
+        ? t("database.toolbox.side.schemaDiffRemoved")
+        : t("database.toolbox.side.schemaDiffChanged");
+
+  return (
+    <span className={`db-toolbox-schema-diff-tag db-toolbox-schema-diff-tag--${kind}`}>
+      {label}
+    </span>
+  );
+}
+
+function SchemaColumnDiffRow({ diff }: { diff: SchemaColumnDiff }) {
+  const typeLabel =
+    diff.kind === "added"
+      ? diff.sourceType
+      : diff.kind === "removed"
+        ? diff.targetType
+        : `${diff.targetType} → ${diff.sourceType}`;
+
+  return (
+    <li className={`db-toolbox-schema-diff-row db-toolbox-schema-diff-row--${diff.kind}`}>
+      <SchemaDiffKindTag kind={diff.kind} />
+      <span className="db-toolbox-schema-diff-row__name">{diff.name}</span>
+      {typeLabel ? <span className="db-toolbox-schema-diff-row__type">{typeLabel}</span> : null}
+    </li>
+  );
+}
+
+function SchemaTargetSyncTableRow({
+  tableName,
+  diff,
+}: {
+  tableName: string;
+  diff?: SchemaTableDiff;
+}) {
+  const { t } = useI18n();
+  const status = diff?.status ?? "checking";
+
+  const statusTag: TableTargetStatus | undefined =
+    status === "checking"
+      ? "checking"
+      : status === "new"
+        ? "new"
+        : status === "diff"
+          ? "conflict"
+          : undefined;
+
+  return (
+    <li className="db-toolbox-schema-target-table">
+      <div className="db-toolbox-table-row db-toolbox-table-row--target">
+        <span className="db-toolbox-table-row__name">{tableName}</span>
+        {status === "match" ? (
+          <span className="db-toolbox-sync-tag db-toolbox-sync-tag--match">
+            {t("database.toolbox.side.schemaDiffMatch")}
+          </span>
+        ) : status === "error" ? (
+          <span className="db-toolbox-sync-tag db-toolbox-sync-tag--error">
+            {t("database.toolbox.side.schemaDiffLoadFailed")}
+          </span>
+        ) : statusTag ? (
+          <TableTargetTag status={statusTag} />
+        ) : null}
+      </div>
+      {status === "error" && diff?.error && (
+        <div className="db-toolbox-schema-target-table__error">{diff.error}</div>
+      )}
+      {(status === "new" || status === "diff") && diff && diff.columns.length > 0 && (
+        <ul className="db-toolbox-schema-diff-list">
+          {diff.columns.map((col) => (
+            <SchemaColumnDiffRow key={`${col.kind}-${col.name}`} diff={col} />
+          ))}
+        </ul>
+      )}
+    </li>
+  );
+}
+
 export function SyncSidePanel({
   sideLabel,
   tableListMode = "source",
@@ -258,18 +348,21 @@ export function SyncSidePanel({
   databases,
   databasesLoading,
   snapshot,
+  loadingProgress,
   tab,
   expandedTables,
   onToggleTable,
   selectedTables,
   onToggleSelect,
   onSelectAllTables,
+  countingTables,
   sourceSelectedTableNames = [],
   targetConfigured = false,
   targetTablesLoading = false,
   tableTargetStatus = {},
   tableSyncStrategies = {},
   onSyncStrategyChange,
+  schemaTableDiffs = {},
 }: SyncSidePanelProps) {
   const { t } = useI18n();
   const [search, setSearch] = useState("");
@@ -357,10 +450,22 @@ export function SyncSidePanel({
 
       <div className="db-toolbox-side__list">
         {isTargetSync ? (
-          tab !== "dataSync" ? (
-            <div className="db-toolbox-side__empty">{t("database.toolbox.side.emptyTargetSync")}</div>
-          ) : !targetConfigured ? (
+          !targetConfigured ? (
             <div className="db-toolbox-side__empty">{t("database.toolbox.side.selectTargetFirst")}</div>
+          ) : sourceSelectedTableNames.length === 0 ? (
+            <div className="db-toolbox-side__empty">{t("database.toolbox.side.emptyTargetSync")}</div>
+          ) : tab === "schemaSync" ? (
+            <ul className="db-toolbox-table-list db-toolbox-table-list--target db-toolbox-table-list--schema-target">
+              {[...sourceSelectedTableNames]
+                .sort((a, b) => a.localeCompare(b))
+                .map((name) => (
+                  <SchemaTargetSyncTableRow
+                    key={name}
+                    tableName={name}
+                    diff={schemaTableDiffs[name]}
+                  />
+                ))}
+            </ul>
           ) : targetSyncRows.length === 0 ? (
             <div className="db-toolbox-side__empty">{t("database.toolbox.side.emptyTargetSync")}</div>
           ) : (
@@ -377,7 +482,12 @@ export function SyncSidePanel({
             </ul>
           )
         ) : snapshot.loading ? (
-          <div className="db-toolbox-side__empty">{t("database.toolbox.side.loading")}</div>
+          <DataLoading
+            total={loadingProgress?.total ?? 1}
+            current={loadingProgress?.current ?? 0}
+            message={loadingProgress?.message}
+            className="db-toolbox-side__loading"
+          />
         ) : snapshot.error ? (
           <div className="db-toolbox-side__empty db-toolbox-side__empty--error">{snapshot.error}</div>
         ) : snapshot.tables.length === 0 ? (
@@ -391,6 +501,7 @@ export function SyncSidePanel({
                 key={table.name}
                 table={table}
                 selected={selectedTables.has(table.name)}
+                counting={countingTables?.has(table.name) ?? false}
                 onToggleSelect={onToggleSelect}
               />
             ))}
@@ -417,14 +528,24 @@ export function SyncSidePanel({
 function DataSyncTableRow({
   table,
   selected,
+  counting,
   onToggleSelect,
 }: {
   table: SyncTableInfo;
   selected: boolean;
+  counting: boolean;
   onToggleSelect: (tableName: string) => void;
 }) {
   const { t } = useI18n();
-  const failed = table.rowCount === null || table.rowCount < 0;
+  const failed = table.rowCount !== null && table.rowCount < 0;
+
+  const metaLabel = !selected
+    ? "—"
+    : counting || table.rowCount === null
+      ? t("database.toolbox.side.counting")
+      : failed
+        ? t("database.toolbox.side.countFailed")
+        : t("database.toolbox.side.rowCount", { count: table.rowCount });
 
   return (
     <li className="db-toolbox-table-row">
@@ -434,12 +555,8 @@ function DataSyncTableRow({
         onToggle={onToggleSelect}
       />
       <span className="db-toolbox-table-row__name">{table.name}</span>
-      <span className={`db-toolbox-table-row__meta${failed ? " text-danger" : ""}`}>
-        {table.rowCount === null
-          ? t("database.toolbox.side.counting")
-          : failed
-            ? t("database.toolbox.side.countFailed")
-            : t("database.toolbox.side.rowCount", { count: table.rowCount })}
+      <span className={`db-toolbox-table-row__meta${failed && selected ? " text-danger" : ""}`}>
+        {metaLabel}
       </span>
     </li>
   );

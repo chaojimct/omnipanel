@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { Modal } from "./Modal";
+import { useI18n } from "../../i18n";
+import { SubWindow } from "./SubWindow";
 
 type LogEntry = {
   timestamp: string;
@@ -22,6 +23,7 @@ const LOG_LEVELS: Record<string, string> = {
 };
 
 export function LogModal({ open, onClose }: LogModalProps) {
+  const { t } = useI18n();
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [filterModule, setFilterModule] = useState<string | null>(null);
   const [filterLevel, setFilterLevel] = useState<string | null>(null);
@@ -69,41 +71,43 @@ export function LogModal({ open, onClose }: LogModalProps) {
   });
 
   return (
-    <Modal open={open} onClose={onClose}>
-      <div className="modal-dialog log-modal">
-        <div className="modal-header">
-          <h3>后台日志</h3>
-          <div className="log-modal-toolbar">
-            <select
-              className="log-modal-select"
-              value={filterModule ?? ""}
-              onChange={(e) => setFilterModule(e.target.value || null)}
-            >
-              <option value="">全部模块</option>
-              {modules.map((m) => (
-                <option key={m} value={m}>
-                  {m}
-                </option>
-              ))}
-            </select>
-            <select
-              className="log-modal-select"
-              value={filterLevel ?? ""}
-              onChange={(e) => setFilterLevel(e.target.value || null)}
-            >
-              <option value="">全部级别</option>
-              {LEVEL_ORDER.map((l) => (
-                <option key={l} value={l}>
-                  {l.toUpperCase()}
-                </option>
-              ))}
-            </select>
-            <button className="log-modal-btn" onClick={handleClear}>
-              清空
-            </button>
-          </div>
+    <SubWindow
+      open={open}
+      title={t("shell.statusbar.backendLogs")}
+      onClose={onClose}
+      className="log-subwindow"
+    >
+      <div className="log-window">
+        <div className="log-modal-toolbar">
+          <select
+            className="log-modal-select"
+            value={filterModule ?? ""}
+            onChange={(e) => setFilterModule(e.target.value || null)}
+          >
+            <option value="">全部模块</option>
+            {modules.map((m) => (
+              <option key={m} value={m}>
+                {m}
+              </option>
+            ))}
+          </select>
+          <select
+            className="log-modal-select"
+            value={filterLevel ?? ""}
+            onChange={(e) => setFilterLevel(e.target.value || null)}
+          >
+            <option value="">全部级别</option>
+            {LEVEL_ORDER.map((l) => (
+              <option key={l} value={l}>
+                {l.toUpperCase()}
+              </option>
+            ))}
+          </select>
+          <button type="button" className="log-modal-btn" onClick={handleClear}>
+            清空
+          </button>
         </div>
-        <div className="modal-body log-modal-body" onScroll={handleScroll}>
+        <div className="log-modal-body" onScroll={handleScroll}>
           {filtered.length === 0 ? (
             <div className="log-modal-empty">暂无日志</div>
           ) : (
@@ -120,12 +124,10 @@ export function LogModal({ open, onClose }: LogModalProps) {
           )}
           <div ref={bottomRef} />
         </div>
-        <div className="modal-footer">
-          <span className="modal-footer-status modal-footer-status--info">
-            {filtered.length} 条日志
-          </span>
+        <div className="log-window-footer">
+          <span className="log-window-footer__status">{filtered.length} 条日志</span>
         </div>
       </div>
-    </Modal>
+    </SubWindow>
   );
 }

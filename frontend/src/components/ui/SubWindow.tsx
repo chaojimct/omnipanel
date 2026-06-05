@@ -4,6 +4,7 @@ import { useI18n } from "../../i18n";
 
 export interface SubWindowProps {
   open: boolean;
+  title: string;
   onClose: () => void;
   children: ReactNode;
   /** 相对主窗口可视区域的宽度比例，默认 0.9 */
@@ -17,6 +18,7 @@ const DEFAULT_RATIO = 0.9;
 
 export function SubWindow({
   open,
+  title,
   onClose,
   children,
   widthRatio = DEFAULT_RATIO,
@@ -50,10 +52,14 @@ export function SubWindow({
         className={panelClass}
         role="dialog"
         aria-modal="true"
+        aria-labelledby="subwindow-title"
         style={{ width: widthPct, height: heightPct }}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="subwindow-header">
+          <h2 id="subwindow-title" className="subwindow-title">
+            {title}
+          </h2>
           <button
             type="button"
             className="btn-icon subwindow-close"

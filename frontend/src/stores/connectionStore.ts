@@ -189,11 +189,13 @@ export const useConnectionStore = create<ConnectionState>((set, get) => ({
  * 后端无连接时回退 `SEED_RESOURCES`，保证首启与空态界面不空白。
  */
 export function useWorkspaceResources(): WorkspaceResource[] {
-  return useConnectionStore((state) =>
-    state.connections.length > 0
-      ? state.connections.map(connectionToResource)
-      : SEED_RESOURCES,
-  );
+  const connections = useConnectionStore((state) => state.connections);
+  return useMemo(() => {
+    if (connections.length > 0) {
+      return connections.map(connectionToResource);
+    }
+    return SEED_RESOURCES;
+  }, [connections]);
 }
 
 /** 应用启动时拉取一次后端连接。 */

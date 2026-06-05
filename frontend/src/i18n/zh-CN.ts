@@ -189,6 +189,7 @@ export const zhCN = {
     export: "导出",
     confirm: "确认",
     cancel: "取消",
+    save: "保存",
     continue: "继续",
     rows: "行",
     readonly: "只读结果",
@@ -386,6 +387,11 @@ export const zhCN = {
         dataSync: "数据同步",
         schemaSync: "结构同步",
       },
+      loading: {
+        schema: "正在加载表结构…",
+        schemaDone: "已加载 {count} 张表",
+        countingTable: "正在统计 {table} 行数…",
+      },
       side: {
         source: "源数据库",
         target: "目标数据库",
@@ -414,6 +420,12 @@ export const zhCN = {
         strategyUpdateHint: "仅覆盖目标表中已存在 ID 的行，不新增行",
         emptyTargetSync: "请在源数据库勾选要同步的表",
         selectTargetFirst: "请先选择目标连接和数据库",
+        schemaDiffMatch: "字段一致",
+        schemaDiffAdded: "新增",
+        schemaDiffRemoved: "缺失",
+        schemaDiffChanged: "变更",
+        schemaDiffNewTable: "新建表",
+        schemaDiffLoadFailed: "加载目标表结构失败",
       },
     },
     workspace: {
@@ -671,11 +683,30 @@ export const zhCN = {
   server: {
     sidebar: {
       title: "服务器",
+      addServer: "添加服务器",
+      edit: "编辑",
+      delete: "删除",
     },
     toolbar: {
       hint: "监控、进程、服务和日志统一进入工作区上下文。",
     },
     refresh: "刷新状态",
+    edit: {
+      title: "编辑服务器",
+    },
+    create: {
+      title: "创建服务器",
+      name: "名称",
+      address: "服务器地址",
+      key: "密钥",
+      serviceType: "服务类型",
+      confirm: "创建",
+    },
+    empty: {
+      title: "暂无服务器",
+      description: '点击"+"按钮或下方按钮添加服务器。',
+    },
+    placeholder: "{name} 已就绪。服务器管理功能即将上线。",
     tabs: {
       monitor: "监控",
       processes: "进程",

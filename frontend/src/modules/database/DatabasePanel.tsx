@@ -1113,7 +1113,11 @@ export function DatabasePanel() {
         />,
         document.body,
       )}
-      <SubWindow open={toolboxOpen} onClose={() => setToolboxOpen(false)}>
+      <SubWindow
+        open={toolboxOpen}
+        title={t("database.toolbox.open")}
+        onClose={() => setToolboxOpen(false)}
+      >
         <DatabaseToolbox
           connections={groupConnections}
           initialSourceConnectionId={activeConn?.id}

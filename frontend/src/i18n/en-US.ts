@@ -191,8 +191,9 @@ export const enUS: TranslationDict = {
     restart: "Restart",
     import: "Import",
     export: "Export",
-    confirm: "Confirm",
     cancel: "Cancel",
+    save: "Save",
+    confirm: "Confirm",
     continue: "Continue",
     rows: "rows",
     readonly: "Read-only result",
@@ -390,6 +391,11 @@ export const enUS: TranslationDict = {
         dataSync: "Data sync",
         schemaSync: "Schema sync",
       },
+      loading: {
+        schema: "Loading table schema…",
+        schemaDone: "Loaded {count} tables",
+        countingTable: "Counting rows in {table}…",
+      },
       side: {
         source: "Source database",
         target: "Target database",
@@ -418,6 +424,12 @@ export const enUS: TranslationDict = {
         strategyUpdateHint: "Update existing IDs in target only; do not insert new rows",
         emptyTargetSync: "Select tables on the source side to sync",
         selectTargetFirst: "Select target connection and database first",
+        schemaDiffMatch: "Columns match",
+        schemaDiffAdded: "Added",
+        schemaDiffRemoved: "Missing",
+        schemaDiffChanged: "Changed",
+        schemaDiffNewTable: "New table",
+        schemaDiffLoadFailed: "Failed to load target table schema",
       },
     },
     workspace: {
@@ -675,11 +687,30 @@ export const enUS: TranslationDict = {
   server: {
     sidebar: {
       title: "Servers",
+      addServer: "Add Server",
+      edit: "Edit",
+      delete: "Delete",
     },
     toolbar: {
       hint: "Monitoring, processes, services and logs share workspace context.",
     },
     refresh: "Refresh Status",
+    edit: {
+      title: "Edit Server",
+    },
+    create: {
+      title: "Create Server",
+      name: "Name",
+      address: "Server Address",
+      key: "API Key",
+      serviceType: "Service Type",
+      confirm: "Create",
+    },
+    empty: {
+      title: "No Servers",
+      description: 'Click the "+" button or the button below to add a server.',
+    },
+    placeholder: "{name} is ready. Server management features coming soon.",
     tabs: {
       monitor: "Monitoring",
       processes: "Processes",
