@@ -3127,6 +3127,7 @@ dependencies = [
  "futures",
  "futures-util",
  "hex",
+ "md5",
  "omnipanel-ai",
  "omnipanel-core",
  "omnipanel-db",

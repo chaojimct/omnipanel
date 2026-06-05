@@ -1,6 +1,7 @@
 mod background;
 mod commands;
 mod log_store;
+mod panel;
 mod output_buffer;
 mod protocol;
 mod state;
@@ -34,6 +35,10 @@ fn export_ipc_bindings() {
         commands::connection::conn_save,
         commands::connection::conn_delete,
         commands::connection::conn_test,
+        commands::panel::panel_1panel_request,
+        commands::panel::panel_1panel_test_connection,
+        commands::panel::panel_1panel_app_icon,
+        commands::panel::panel_1panel_request_text,
         commands::docker::docker_list_connections,
         commands::docker::docker_probe_connection,
         commands::docker::docker_get_overview,
@@ -197,6 +202,11 @@ pub fn run() {
             commands::connection::conn_save,
             commands::connection::conn_delete,
             commands::connection::conn_test,
+            // 1Panel API
+            commands::panel::panel_1panel_request,
+            commands::panel::panel_1panel_test_connection,
+            commands::panel::panel_1panel_app_icon,
+            commands::panel::panel_1panel_request_text,
             // Docker（容器工作区）
             commands::docker::docker_list_connections,
             commands::docker::docker_probe_connection,
