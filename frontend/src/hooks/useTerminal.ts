@@ -14,6 +14,7 @@ import {
 import { useConnectionStore } from "../stores/connectionStore";
 import { isOpenSshHostId, openSshHostAlias } from "../lib/sshConfigHosts";
 import { createBlockId, useBlocksStore, type TerminalBlock } from "../stores/blocksStore";
+import { triggerAiDrawerToggle } from "./useAiDrawerShortcut";
 
 const TERMINAL_THEME: ITheme = {
   background: "#1a1717",
@@ -466,7 +467,7 @@ export function useTerminal(
         void ensureBackendSession(term.cols, term.rows);
 
         if (inputMode === "external") {
-          term.attachCustomKeyEventHandler(() => false);
+          term.attachCustomKeyEventHandler((e) => triggerAiDrawerToggle(e));
         } else {
           disposables.push(
             term.onData((data) => {
@@ -499,6 +500,7 @@ export function useTerminal(
 
         if (onCommandRef.current) {
           term.attachCustomKeyEventHandler((e: KeyboardEvent) => {
+            if (triggerAiDrawerToggle(e)) return true;
             if (e.key === "Enter" && !e.ctrlKey && !e.altKey && !e.metaKey && e.type === "keydown") {
               const buf = term!.buffer.active;
               const y = buf.cursorY + buf.baseY;

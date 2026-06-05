@@ -2,6 +2,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useAiStore } from "../../stores/aiStore";
 import { useTopbarStore } from "../../stores/topbarStore";
 import { useI18n } from "../../i18n";
+import { formatModShortcut } from "../../lib/platform";
 import type { ReactNode } from "react";
 import { useEffect, useRef, useState, useCallback } from "react";
 import { TopbarTabs } from "../ui/TopbarTabs";
@@ -119,7 +120,7 @@ export function Topbar({ title, children }: TopbarProps) {
           {showGlobalAiButton && (
             <button
               className={`topbar-btn${aiDrawerOpen ? " active" : ""}`}
-              title={t("shell.topbar.aiAssistant")}
+              title={t("shell.topbar.aiAssistant", { shortcut: formatModShortcut("L") })}
               onClick={handleAi}
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">

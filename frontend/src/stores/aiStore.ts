@@ -36,7 +36,6 @@ interface AiStore {
   conversations: AiConversation[];
   activeConversationId: string | null;
   drawerOpen: boolean;
-  drawerMode: "drawer" | "pinned";
   currentProvider: string;
   currentModel: string;
   isGenerating: boolean;
@@ -45,7 +44,6 @@ interface AiStore {
   toggleDrawer: () => void;
   openDrawer: () => void;
   closeDrawer: () => void;
-  setDrawerMode: (mode: "drawer" | "pinned") => void;
   createConversation: (provider?: string, model?: string) => string;
   setActiveConversation: (id: string) => void;
   deleteConversation: (id: string) => void;
@@ -83,7 +81,6 @@ export const useAiStore = create<AiStore>()(
       conversations: [],
       activeConversationId: null,
       drawerOpen: false,
-      drawerMode: "drawer",
       currentProvider: "openai",
       currentModel: "gpt-4o",
       isGenerating: false,
@@ -95,8 +92,6 @@ export const useAiStore = create<AiStore>()(
       openDrawer: () => set({ drawerOpen: true }),
 
       closeDrawer: () => set({ drawerOpen: false }),
-
-      setDrawerMode: (mode) => set({ drawerMode: mode }),
 
       createConversation: (provider, model) => {
         const id = genId("conv");
@@ -242,7 +237,6 @@ export const useAiStore = create<AiStore>()(
         activeConversationId: state.activeConversationId,
         currentProvider: state.currentProvider,
         currentModel: state.currentModel,
-        drawerMode: state.drawerMode,
       }),
     }
   )

@@ -219,7 +219,7 @@ export const zhCN = {
       ai: "AI 助手",
     },
     topbar: {
-      aiAssistant: "AI 助手 (Ctrl+L)",
+      aiAssistant: "AI 助手 ({shortcut})",
       notifications: "通知",
       commandPalette: "命令面板 (Ctrl+K)",
       minimize: "最小化",
@@ -231,9 +231,7 @@ export const zhCN = {
       closeRight: "关闭右侧",
       closeOthers: "关闭其他",
       closeAll: "关闭全部",
-      recordContext: "记录现场",
-    askAi: "询问 AI",
-    newTab: "新建标签",
+      newTab: "新建标签",
     newConnection: "新建连接",
     addHost: "添加主机",
   },
@@ -729,6 +727,7 @@ export const zhCN = {
     empty: {
       title: "暂无服务器",
       description: '点击"+"按钮或下方按钮添加服务器。',
+      selectServer: "在左侧选择服务器，或在顶栏点击「+」打开服务器标签页。",
     },
     placeholder: "{name} 已就绪。服务器管理功能即将上线。",
     apps: {
@@ -757,11 +756,15 @@ export const zhCN = {
         document: "文档",
         github: "GitHub",
         message: "状态消息",
+        description: "应用描述",
+        config: "应用配置",
+        serverIp: "服务器 IP",
         logsLoading: "加载日志中…",
         logsEmpty: "暂无日志",
       },
     },
     tabs: {
+      openServer: "打开服务器",
       monitor: "监控",
       processes: "进程",
       services: "服务",
@@ -1117,10 +1120,7 @@ common: {
     emptyTitle: "我已经读取当前工作区上下文",
     emptyHint: "可以让我解释现场、生成排查路径，或把高风险操作整理成待确认草稿。",
     noConversation: "暂无对话",
-  },
-  actions: {
-    recordContext: "记录当前上下文",
-    recordContextDesc: "已记录 {name} 的现场状态",
+    toggleHint: "{shortcut} 切换",
   },
 };
 
