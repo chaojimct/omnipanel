@@ -21,8 +21,7 @@ pub async fn panel_1panel_request(
         _ => None,
     };
 
-    let result =
-        crate::panel::onepanel::request(&host, &api_key, &method, &path, body_val).await?;
+    let result = crate::panel::onepanel::request(&host, &api_key, &method, &path, body_val).await?;
     serde_json::to_string(&result)
         .map_err(|e| OmniError::internal("序列化 1Panel 响应失败").with_cause(e.to_string()))
 }
@@ -30,7 +29,10 @@ pub async fn panel_1panel_request(
 /// 1Panel 连通性测试。
 #[tauri::command]
 #[specta::specta]
-pub async fn panel_1panel_test_connection(host: String, api_key: String) -> Result<bool, OmniError> {
+pub async fn panel_1panel_test_connection(
+    host: String,
+    api_key: String,
+) -> Result<bool, OmniError> {
     crate::panel::onepanel::test_connection(&host, &api_key).await?;
     Ok(true)
 }
@@ -87,9 +89,7 @@ pub async fn panel_bt_request(
                 Value::Object(map) => Some(map),
                 Value::Null => None,
                 _ => {
-                    return Err(OmniError::invalid_input(
-                        "宝塔 API 请求体必须是 JSON 对象",
-                    ));
+                    return Err(OmniError::invalid_input("宝塔 API 请求体必须是 JSON 对象"));
                 }
             }
         }

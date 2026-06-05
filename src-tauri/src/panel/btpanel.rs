@@ -6,7 +6,8 @@ use std::sync::{LazyLock, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 /// 按面板地址复用带 Cookie 的 HTTP 客户端（文档要求保存 cookie 并在后续请求附带）。
-static CLIENTS: LazyLock<Mutex<HashMap<String, Client>>> = LazyLock::new(|| Mutex::new(HashMap::new()));
+static CLIENTS: LazyLock<Mutex<HashMap<String, Client>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
 
 /// 生成 request_token：`md5(string(request_time) + md5(api_sk))`（小写 hex）。
 pub fn build_request_token(api_sk: &str, request_time: i64) -> String {
@@ -92,11 +93,8 @@ fn parse_response_value(text: &str) -> Result<Value, OmniError> {
 
     let lower = trimmed.to_ascii_lowercase();
     if lower.starts_with("<!doctype") || lower.starts_with("<html") {
-        return Err(
-            OmniError::internal("宝塔面板返回了 HTML 页面而非 JSON").with_cause(truncate_text(
-                trimmed, 300,
-            )),
-        );
+        return Err(OmniError::internal("宝塔面板返回了 HTML 页面而非 JSON")
+            .with_cause(truncate_text(trimmed, 300)));
     }
 
     let value: Value = serde_json::from_str(trimmed).map_err(|e| {
@@ -160,11 +158,10 @@ pub async fn request(
     }
 
     if !status.is_success() {
-        return Err(OmniError::new(
-            ErrorCode::Connection,
-            format!("宝塔 API 错误 ({status})"),
-        )
-        .with_cause(truncate_text(&text, 300)));
+        return Err(
+            OmniError::new(ErrorCode::Connection, format!("宝塔 API 错误 ({status})"))
+                .with_cause(truncate_text(&text, 300)),
+        );
     }
 
     parse_response_value(&text)
@@ -183,7 +180,11 @@ mod tests {
     fn request_token_matches_md5_spec() {
         let token = build_request_token("test-key", 1_700_000_000);
         assert_eq!(token.len(), 32);
-        assert!(token.chars().all(|c| c.is_ascii_hexdigit() && !c.is_uppercase()));
+        assert!(
+            token
+                .chars()
+                .all(|c| c.is_ascii_hexdigit() && !c.is_uppercase())
+        );
     }
 
     #[test]

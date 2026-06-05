@@ -1,4 +1,4 @@
-use base64::{engine::general_purpose::STANDARD, Engine as _};
+use base64::{Engine as _, engine::general_purpose::STANDARD};
 use omnipanel_error::{ErrorCode, OmniError};
 use reqwest::Method;
 use serde_json::Value;
@@ -44,11 +44,8 @@ fn parse_response_text(text: &str) -> Result<Value, OmniError> {
 
     let lower = trimmed.to_ascii_lowercase();
     if lower.starts_with("<!doctype") || lower.starts_with("<html") {
-        return Err(
-            OmniError::internal("1Panel 返回了 HTML 页面而非 JSON").with_cause(truncate_text(
-                trimmed, 300,
-            )),
-        );
+        return Err(OmniError::internal("1Panel 返回了 HTML 页面而非 JSON")
+            .with_cause(truncate_text(trimmed, 300)));
     }
 
     serde_json::from_str(trimmed).map_err(|e| {
@@ -71,9 +68,9 @@ async fn send_request(
     let timestamp = current_timestamp();
     let token = build_token(api_key, timestamp);
 
-    let method = method.parse::<Method>().map_err(|_| {
-        OmniError::invalid_input(format!("不支持的 HTTP 方法：{method}"))
-    })?;
+    let method = method
+        .parse::<Method>()
+        .map_err(|_| OmniError::invalid_input(format!("不支持的 HTTP 方法：{method}")))?;
 
     let path = if path.starts_with('/') {
         path.to_string()
@@ -122,14 +119,13 @@ async fn send_request(
     }
 
     if !status.is_success() {
-        return Err(OmniError::new(
-            ErrorCode::Connection,
-            format!("1Panel API 错误 ({status})"),
-        )
-        .with_cause(truncate_text(
-            std::str::from_utf8(&bytes).unwrap_or(""),
-            300,
-        )));
+        return Err(
+            OmniError::new(ErrorCode::Connection, format!("1Panel API 错误 ({status})"))
+                .with_cause(truncate_text(
+                    std::str::from_utf8(&bytes).unwrap_or(""),
+                    300,
+                )),
+        );
     }
 
     Ok((status, content_type, bytes))
@@ -198,10 +194,7 @@ fn resolve_icon_value(base: &str, data: &Value) -> Result<String, OmniError> {
             if s.is_empty() {
                 return Err(OmniError::not_found("应用图标为空"));
             }
-            if s.starts_with("data:")
-                || s.starts_with("http://")
-                || s.starts_with("https://")
-            {
+            if s.starts_with("data:") || s.starts_with("http://") || s.starts_with("https://") {
                 return Ok(s.to_string());
             }
             if s.starts_with('/') {
@@ -219,7 +212,11 @@ fn resolve_icon_value(base: &str, data: &Value) -> Result<String, OmniError> {
     }
 }
 
-fn icon_bytes_to_data_url(base: &str, content_type: &str, bytes: &[u8]) -> Result<String, OmniError> {
+fn icon_bytes_to_data_url(
+    base: &str,
+    content_type: &str,
+    bytes: &[u8],
+) -> Result<String, OmniError> {
     if bytes.is_empty() {
         return Err(OmniError::not_found("应用图标为空"));
     }
@@ -328,6 +325,10 @@ mod tests {
     fn token_matches_md5_spec() {
         let token = build_token("test-key", 1_700_000_000);
         assert_eq!(token.len(), 32);
-        assert!(token.chars().all(|c| c.is_ascii_hexdigit() && !c.is_uppercase()));
+        assert!(
+            token
+                .chars()
+                .all(|c| c.is_ascii_hexdigit() && !c.is_uppercase())
+        );
     }
 }

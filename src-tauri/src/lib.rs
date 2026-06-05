@@ -1,8 +1,8 @@
 mod background;
 mod commands;
 mod log_store;
-mod panel;
 mod output_buffer;
+mod panel;
 mod protocol;
 mod state;
 
