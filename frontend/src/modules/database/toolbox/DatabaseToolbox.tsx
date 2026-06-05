@@ -3,6 +3,7 @@ import { useI18n } from "../../../i18n";
 import { useDataLoading } from "../../../components/ui/DataLoading";
 import {
   countTable,
+  countTables,
   introspectSchema,
   introspectTable,
   listDatabases,
@@ -18,6 +19,7 @@ import {
 } from "./schemaDiff";
 import {
   connectionWithDatabase,
+  resolveDataSyncConflictStatus,
   type DataSyncStrategy,
   type SyncSideSnapshot,
   type SyncTableInfo,
@@ -71,6 +73,8 @@ export function DatabaseToolbox({
 
   const countingRef = useRef(new Set<string>());
   const [countingTables, setCountingTables] = useState<Set<string>>(() => new Set());
+  const targetCountingRef = useRef(new Set<string>());
+  const [targetRowCounts, setTargetRowCounts] = useState<Record<string, number | null>>({});
 
   const schemaFetchingRef = useRef(new Set<string>());
   const [schemaTableDiffs, setSchemaTableDiffs] = useState<Record<string, SchemaTableDiff>>({});
@@ -166,6 +170,11 @@ export function DatabaseToolbox({
     void loadTargetTableNames();
   }, [loadTargetTableNames]);
 
+  useEffect(() => {
+    targetCountingRef.current.clear();
+    setTargetRowCounts({});
+  }, [targetConnId, targetDb]);
+
   const loadSideSnapshot = useCallback(
     async (connId: string, database: string, mode: ToolboxTabId) => {
       const conn = connections.find((c) => c.id === connId);
@@ -208,6 +217,8 @@ export function DatabaseToolbox({
     setSourceSelected(new Set());
     setTableTargetStatus({});
     setTableSyncStrategies({});
+    setTargetRowCounts({});
+    targetCountingRef.current.clear();
     void loadSideSnapshot(sourceConnId, sourceDb, tab);
   }, [sourceConnId, sourceDb, tab, loadSideSnapshot]);
 
@@ -280,7 +291,79 @@ export function DatabaseToolbox({
     };
   }, [tab, sourceSnapshot.loading, sourceSnapshot.tables, sourceSelected, sourceConnId, sourceDb, connections]);
 
-  /** 已勾选源表：对照目标库表名更新冲突/新增状态 */
+  /** 数据同步：已勾选且目标存在的表，统计目标侧行数 */
+  useEffect(() => {
+    if (tab !== "dataSync" || !targetConfigured || targetTablesLoading) return;
+
+    const conn = connections.find((c) => c.id === targetConnId);
+    if (!conn || !targetDb.trim()) return;
+
+    const pending = Array.from(sourceSelected).filter(
+      (name) =>
+        targetTableNames.has(name) &&
+        !targetCountingRef.current.has(name) &&
+        !(name in targetRowCounts),
+    );
+
+    if (pending.length === 0) return;
+
+    const scoped = connectionWithDatabase(conn, targetDb);
+    let cancelled = false;
+
+    for (const name of pending) {
+      targetCountingRef.current.add(name);
+    }
+
+    void (async () => {
+      try {
+        const results = await countTables(scoped, targetDb, pending);
+        if (cancelled) return;
+        setTargetRowCounts((prev) => {
+          const next = { ...prev };
+          for (const row of results) {
+            next[row.name] = row.count ?? -1;
+          }
+          for (const name of pending) {
+            if (!(name in next)) {
+              next[name] = -1;
+            }
+          }
+          return next;
+        });
+      } catch {
+        if (cancelled) return;
+        setTargetRowCounts((prev) => {
+          const next = { ...prev };
+          for (const name of pending) {
+            next[name] = -1;
+          }
+          return next;
+        });
+      } finally {
+        for (const name of pending) {
+          targetCountingRef.current.delete(name);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      for (const name of pending) {
+        targetCountingRef.current.delete(name);
+      }
+    };
+  }, [
+    tab,
+    targetConfigured,
+    targetTablesLoading,
+    sourceSelected,
+    targetTableNames,
+    targetConnId,
+    targetDb,
+    connections,
+  ]);
+
+  /** 已勾选源表：按源/目标行数判定冲突或新增 */
   useEffect(() => {
     if (!targetConfigured || tab !== "dataSync") {
       setTableTargetStatus({});
@@ -299,10 +382,22 @@ export function DatabaseToolbox({
       return;
     }
 
+    const sourceCountByName = new Map(
+      sourceSnapshot.tables.map((tbl) => [tbl.name, tbl.rowCount] as const),
+    );
+
     setTableTargetStatus(() => {
       const next: Record<string, TableTargetStatus> = {};
       for (const name of sourceSelected) {
-        next[name] = targetTableNames.has(name) ? "conflict" : "new";
+        const status = resolveDataSyncConflictStatus(
+          name,
+          targetTableNames,
+          sourceCountByName.get(name),
+          targetRowCounts[name],
+        );
+        if (status) {
+          next[name] = status;
+        }
       }
       return next;
     });
@@ -310,13 +405,27 @@ export function DatabaseToolbox({
     setTableSyncStrategies((prev) => {
       const next: Record<string, DataSyncStrategy> = {};
       for (const name of sourceSelected) {
-        if (targetTableNames.has(name)) {
+        const status = resolveDataSyncConflictStatus(
+          name,
+          targetTableNames,
+          sourceCountByName.get(name),
+          targetRowCounts[name],
+        );
+        if (status === "conflict") {
           next[name] = prev[name] ?? "rewrite";
         }
       }
       return next;
     });
-  }, [sourceSelected, targetTableNames, targetTablesLoading, targetConfigured, tab]);
+  }, [
+    sourceSelected,
+    sourceSnapshot.tables,
+    targetTableNames,
+    targetRowCounts,
+    targetTablesLoading,
+    targetConfigured,
+    tab,
+  ]);
 
   /** 结构同步：勾选源表后对比目标表字段差异 */
   useEffect(() => {

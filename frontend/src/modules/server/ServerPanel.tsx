@@ -1,94 +1,165 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { SidebarWorkspace } from "../../components/ui/SidebarWorkspace";
 import { ServerSidebar } from "../../components/workspace/ServerSidebar";
-import { type WorkspaceResource } from "../../lib/resourceRegistry";
+import { useConnectionStore } from "../../stores/connectionStore";
+import { useServerGroupStore } from "../../stores/serverGroupStore";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
+import { useTopbarTabs } from "../../hooks/useTopbarTabs";
 import { useI18n } from "../../i18n";
+import { quickInput } from "../../lib/quickInput";
 import { WorkspaceEmptyPage } from "../../components/ui/WorkspaceEmptyPage";
 import { CreateServerDialog, type ServerEntry } from "./CreateServerDialog";
+import { ServerInstalledApps } from "./ServerInstalledApps";
+import {
+  connectionMatchesServerGroup,
+  connectionToServerEntry,
+  serverEntryToConnection,
+} from "./panelConnection";
 
-function serverEntryToResource(entry: ServerEntry): WorkspaceResource {
-  return {
-    id: entry.id,
-    type: "server",
-    name: entry.name,
-    subtitle: entry.address,
-    modulePath: "/server",
-    environment: "dev",
-    status: "idle",
-  };
-}
+const SERVER_PATH = "/server";
 
 export function ServerPanel() {
   const { t } = useI18n();
   const selectResource = useWorkspaceStore((s) => s.selectResource);
-  const selectedServerId = useWorkspaceStore((s) => s.selectedResourceByPath["/server"]);
+  const selectedServerId = useWorkspaceStore((s) => s.selectedResourceByPath[SERVER_PATH]);
+  const connections = useConnectionStore((s) => s.connections);
+  const saveConnection = useConnectionStore((s) => s.save);
+  const removeConnection = useConnectionStore((s) => s.remove);
 
-  const [servers, setServers] = useState<ServerEntry[]>([]);
+  const groups = useServerGroupStore((s) => s.groups);
+  const activeGroupId = useServerGroupStore((s) => s.activeGroupId);
+  const setActiveGroupId = useServerGroupStore((s) => s.setActiveGroupId);
+  const addGroup = useServerGroupStore((s) => s.addGroup);
+  const getGroupName = useServerGroupStore((s) => s.getGroupName);
+
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingServer, setEditingServer] = useState<ServerEntry | null>(null);
 
-  const serverResources = useMemo(() => servers.map(serverEntryToResource), [servers]);
+  const activeGroupName = useMemo(
+    () => getGroupName(activeGroupId),
+    [activeGroupId, getGroupName],
+  );
 
-  const activeResource = useMemo(() => {
-    if (selectedServerId) {
-      return serverResources.find((r) => r.id === selectedServerId) ?? null;
+  const groupServers = useMemo(
+    () =>
+      connections
+        .filter((c) => c.kind === "panel" && connectionMatchesServerGroup(c, activeGroupName))
+        .map(connectionToServerEntry),
+    [connections, activeGroupName],
+  );
+
+  const activeServer = useMemo(() => {
+    if (!selectedServerId) return null;
+    return groupServers.find((s) => s.id === selectedServerId) ?? null;
+  }, [selectedServerId, groupServers]);
+
+  useEffect(() => {
+    if (selectedServerId && !groupServers.some((s) => s.id === selectedServerId)) {
+      const fallback = groupServers[0];
+      if (fallback) {
+        selectResource(fallback.id, SERVER_PATH);
+      }
     }
-    return null;
-  }, [selectedServerId, serverResources]);
+  }, [groupServers, selectedServerId, selectResource]);
 
-  const handleCreateServer = useCallback((entry: ServerEntry) => {
-    setServers((prev) => [...prev, entry]);
-  }, []);
+  const handleCreateServer = useCallback(
+    async (entry: ServerEntry) => {
+      await saveConnection(serverEntryToConnection(entry, activeGroupName));
+    },
+    [activeGroupName, saveConnection],
+  );
 
-  const handleUpdateServer = useCallback((entry: ServerEntry) => {
-    setServers((prev) => prev.map((s) => (s.id === entry.id ? entry : s)));
-  }, []);
+  const handleUpdateServer = useCallback(
+    async (entry: ServerEntry) => {
+      const existing = useConnectionStore.getState().connections.find((c) => c.id === entry.id);
+      const group = existing?.group ?? activeGroupName;
+      await saveConnection(serverEntryToConnection(entry, group));
+    },
+    [activeGroupName, saveConnection],
+  );
 
-  const handleDeleteServer = useCallback((resourceId: string) => {
-    setServers((prev) => prev.filter((s) => s.id !== resourceId));
-  }, []);
+  const handleDeleteServer = useCallback(
+    async (resourceId: string) => {
+      await removeConnection(resourceId);
+    },
+    [removeConnection],
+  );
 
   const handleSidebarCreate = useCallback(() => {
     setEditingServer(null);
     setDialogOpen(true);
   }, []);
 
-  const handleEditServer = useCallback((resource: WorkspaceResource) => {
-    const entry = servers.find((s) => s.id === resource.id);
-    if (entry) {
-      setEditingServer(entry);
-      setDialogOpen(true);
-    }
-  }, [servers]);
+  const handleEditServer = useCallback((server: ServerEntry) => {
+    setEditingServer(server);
+    setDialogOpen(true);
+  }, []);
 
   const handleDialogClose = useCallback(() => {
     setDialogOpen(false);
     setEditingServer(null);
   }, []);
 
+  const handleCreateGroup = useCallback(async () => {
+    const name = await quickInput({
+      title: t("server.groups.createTitle"),
+      subtitle: t("server.groups.nameLabel"),
+      placeholder: t("server.groups.namePlaceholder"),
+      validate: (value) => {
+        if (!value.trim()) {
+          return t("server.groups.nameRequired");
+        }
+        if (groups.some((group) => group.name === value.trim())) {
+          return t("server.groups.duplicate");
+        }
+        return null;
+      },
+    });
+    if (name) {
+      addGroup(name);
+    }
+  }, [addGroup, groups, t]);
+
+  const topbarTabs = useMemo(
+    () =>
+      groups.map((group) => ({
+        id: group.id,
+        label: group.name,
+        active: group.id === activeGroupId,
+      })),
+    [groups, activeGroupId],
+  );
+
+  useTopbarTabs(
+    topbarTabs,
+    {
+      onSelect: (id) => setActiveGroupId(id),
+      onAdd: () => void handleCreateGroup(),
+    },
+    { mode: "connection", showAddTab: true, addTabTitle: t("server.groups.new") },
+  );
+
   return (
-    <div className="server-workspace">
-      <ServerSidebar
-        resources={serverResources}
-        onCreateServer={handleSidebarCreate}
-        onEditServer={handleEditServer}
-        onDeleteServer={handleDeleteServer}
-      />
-      <div className="server-main">
-        {activeResource ? (
-          <div className="server-content">
-            <div className="panel" style={{ padding: "var(--sp-8)", textAlign: "center" }}>
-              <h3>{activeResource.name}</h3>
-              <p className="text-muted">{activeResource.subtitle}</p>
-              <p style={{ marginTop: "var(--sp-4)", color: "var(--meta)" }}>
-                {t("server.placeholder", { name: activeResource.name })}
-              </p>
-            </div>
-          </div>
-        ) : (
-          <WorkspaceEmptyPage hint={t("server.empty.description")} />
-        )}
-      </div>
+    <>
+      <SidebarWorkspace
+        preset="server"
+        sidebar={
+          <ServerSidebar
+            servers={groupServers}
+            onCreateServer={handleSidebarCreate}
+            onEditServer={handleEditServer}
+            onDeleteServer={handleDeleteServer}
+          />
+        }
+      >
+        <div className="server-main">
+          {activeServer ? (
+            <ServerInstalledApps server={activeServer} />
+          ) : (
+            <WorkspaceEmptyPage hint={t("server.empty.description")} />
+          )}
+        </div>
+      </SidebarWorkspace>
       <CreateServerDialog
         open={dialogOpen}
         editServer={editingServer}
@@ -96,6 +167,6 @@ export function ServerPanel() {
         onCreate={handleCreateServer}
         onUpdate={handleUpdateServer}
       />
-    </div>
+    </>
   );
 }

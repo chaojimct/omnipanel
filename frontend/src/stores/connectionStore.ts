@@ -54,8 +54,10 @@ function deriveSubtitle(connection: Connection): string {
     const port = typeof cfg.port === "number" ? cfg.port : undefined;
     const user = typeof cfg.user === "string" ? cfg.user : undefined;
     const database = typeof cfg.database === "string" ? cfg.database : undefined;
+    const address = typeof cfg.address === "string" ? cfg.address : undefined;
     if (host && user) return `${user}@${host}${port ? `:${port}` : ""}`;
     if (host) return `${host}${port ? `:${port}` : ""}`;
+    if (address) return address;
     if (database) return database;
   } catch {
     // config 非合法 JSON 时忽略，回退到 group
@@ -232,4 +234,14 @@ export function useSshHostResources(): WorkspaceResource[] {
     if (loaded) return SEED_RESOURCES.filter((r) => r.type === "ssh");
     return [];
   }, [connections, loaded]);
+}
+
+/** 服务器模块列表：仅展示持久化存储中的 Panel 连接。 */
+export function usePanelHostResources(): WorkspaceResource[] {
+  const connections = useConnectionStore((state) => state.connections);
+
+  return useMemo(
+    () => connections.filter((c) => c.kind === "panel").map(connectionToResource),
+    [connections],
+  );
 }

@@ -32,6 +32,17 @@ export const commands = {
 	/**  测试连接连通性。当前支持 database（MySQL）；其余类型将在对应里程碑接入。 */
 	connTest: (connection: Connection) => typedError<string, OmniError_Serialize>(__TAURI_INVOKE("conn_test", { connection })),
 	/**
+	 *  通用 1Panel API 请求（由 Rust 后端发起，避免 WebView CORS）。
+	 *  `body` 为 JSON 字符串；返回 JSON 字符串。
+	 */
+	panel1panelRequest: (host: string, apiKey: string, method: string, path: string, body: string | null) => typedError<string, OmniError_Serialize>(__TAURI_INVOKE("panel_1panel_request", { host, apiKey, method, path, body })),
+	/**  1Panel 连通性测试。 */
+	panel1panelTestConnection: (host: string, apiKey: string) => typedError<boolean, OmniError_Serialize>(__TAURI_INVOKE("panel_1panel_test_connection", { host, apiKey })),
+	/**  获取 1Panel 应用图标（GET /apps/icon/:key），返回 data URL 或绝对 URL。 */
+	panel1panelAppIcon: (host: string, apiKey: string, appKey: string) => typedError<string, OmniError_Serialize>(__TAURI_INVOKE("panel_1panel_app_icon", { host, apiKey, appKey })),
+	/**  1Panel 原始文本请求（用于日志下载等）。 */
+	panel1panelRequestText: (host: string, apiKey: string, method: string, path: string, body: string | null) => typedError<string, OmniError_Serialize>(__TAURI_INVOKE("panel_1panel_request_text", { host, apiKey, method, path, body })),
+	/**
 	 *  列出全部 Docker 连接：内建本地 Engine + 已保存的 docker 类型连接。
 	 *  不在此处做连通性探测（避免逐一连接远端阻塞），状态由 `docker_probe_connection` 按需更新。
 	 */

@@ -1,3 +1,4 @@
+import { SidebarWorkspace } from "../../components/ui/SidebarWorkspace";
 import { HostListPanel } from "../../components/workspace/HostListPanel";
 import { HostDetailPanel } from "./components/HostDetailPanel";
 import { KeysModuleView } from "./components/KeysModuleView";
@@ -10,9 +11,13 @@ export function SshManager() {
 
   return (
     <div className="ssh-layout">
-      {moduleTab === "hosts" && <HostListPanel resources={sshResources} />}
       {moduleTab === "hosts" ? (
-        <HostDetailPanel {...ctx} />
+        <SidebarWorkspace
+          preset="host"
+          sidebar={<HostListPanel resources={sshResources} />}
+        >
+          <HostDetailPanel {...ctx} />
+        </SidebarWorkspace>
       ) : moduleTab === "tunnels" ? (
         <TunnelsModuleView {...ctx} />
       ) : (

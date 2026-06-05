@@ -4,6 +4,7 @@ pub mod database;
 pub mod docker;
 pub mod exec;
 pub mod log;
+pub mod panel;
 pub mod protocol;
 pub mod ssh;
 pub mod terminal;
