@@ -3138,7 +3138,7 @@ dependencies = [
 
 [[package]]
 name = "omnipanel-ai"
-version = "0.1.0"
+version = "0.0.5"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -3154,7 +3154,7 @@ dependencies = [
 
 [[package]]
 name = "omnipanel-app"
-version = "0.1.0"
+version = "0.0.5"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -3195,7 +3195,7 @@ dependencies = [
 
 [[package]]
 name = "omnipanel-core"
-version = "0.1.0"
+version = "0.0.5"
 dependencies = [
  "anyhow",
  "portable-pty",
@@ -3208,7 +3208,7 @@ dependencies = [
 
 [[package]]
 name = "omnipanel-db"
-version = "0.1.0"
+version = "0.0.5"
 dependencies = [
  "async-trait",
  "omnipanel-error",
@@ -3222,7 +3222,7 @@ dependencies = [
 
 [[package]]
 name = "omnipanel-docker"
-version = "0.1.0"
+version = "0.0.5"
 dependencies = [
  "async-trait",
  "bollard",
@@ -3238,7 +3238,7 @@ dependencies = [
 
 [[package]]
 name = "omnipanel-error"
-version = "0.1.0"
+version = "0.0.5"
 dependencies = [
  "anyhow",
  "serde",
@@ -3249,7 +3249,7 @@ dependencies = [
 
 [[package]]
 name = "omnipanel-exec"
-version = "0.1.0"
+version = "0.0.5"
 dependencies = [
  "async-trait",
  "omnipanel-error",
@@ -3262,7 +3262,7 @@ dependencies = [
 
 [[package]]
 name = "omnipanel-ssh"
-version = "0.1.0"
+version = "0.0.5"
 dependencies = [
  "omnipanel-error",
  "russh",
@@ -3276,7 +3276,7 @@ dependencies = [
 
 [[package]]
 name = "omnipanel-store"
-version = "0.1.0"
+version = "0.0.5"
 dependencies = [
  "getrandom 0.2.17",
  "keyring",
