@@ -163,19 +163,19 @@ pub async fn request_text(
         let value: Value = serde_json::from_str(trimmed).map_err(|e| {
             OmniError::internal("1Panel 响应不是合法 JSON").with_cause(e.to_string())
         })?;
-        if let Some(code) = value.get("code").and_then(|v| v.as_i64()) {
-            if code != 200 {
-                let message = value
-                    .get("message")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("1Panel API 错误");
-                return Err(OmniError::new(ErrorCode::Connection, message));
-            }
+        if let Some(code) = value.get("code").and_then(|v| v.as_i64())
+            && code != 200
+        {
+            let message = value
+                .get("message")
+                .and_then(|v| v.as_str())
+                .unwrap_or("1Panel API 错误");
+            return Err(OmniError::new(ErrorCode::Connection, message));
         }
-        if let Some(data) = value.get("data") {
-            if let Some(s) = data.as_str() {
-                return Ok(s.to_string());
-            }
+        if let Some(data) = value.get("data")
+            && let Some(s) = data.as_str()
+        {
+            return Ok(s.to_string());
         }
     }
 
@@ -227,14 +227,14 @@ fn icon_bytes_to_data_url(
             let value: Value = serde_json::from_str(trimmed).map_err(|e| {
                 OmniError::internal("应用图标响应不是合法 JSON").with_cause(e.to_string())
             })?;
-            if let Some(code) = value.get("code").and_then(|v| v.as_i64()) {
-                if code != 200 {
-                    let message = value
-                        .get("message")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("获取应用图标失败");
-                    return Err(OmniError::new(ErrorCode::Connection, message));
-                }
+            if let Some(code) = value.get("code").and_then(|v| v.as_i64())
+                && code != 200
+            {
+                let message = value
+                    .get("message")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("获取应用图标失败");
+                return Err(OmniError::new(ErrorCode::Connection, message));
             }
             if let Some(data) = value.get("data") {
                 return resolve_icon_value(base, data);

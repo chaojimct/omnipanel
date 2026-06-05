@@ -479,7 +479,7 @@ pub async fn db_count_table(
         return Err("未指定数据库".to_string());
     }
     let driver = omnipanel_db::connect(&params).await.map_err(err_msg)?;
-    driver.count(&table.trim()).await.map_err(err_msg)
+    driver.count(table.trim()).await.map_err(err_msg)
 }
 
 /// 在同一连接上顺序统计多表行数，避免前端并发 `db_count_table` 打满连接池。
