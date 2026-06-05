@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { Modal } from "../../components/ui/Modal";
 import { useI18n } from "../../i18n";
+import { createBtPanelClient } from "../../lib/btpanel";
+import { createOnePanelClient } from "../../lib/onepanel";
 
 export interface ServerEntry {
   id: string;
@@ -26,6 +28,10 @@ export function CreateServerDialog({ open, editServer, onClose, onCreate, onUpda
   const [address, setAddress] = useState("");
   const [key, setKey] = useState("");
   const [serviceType, setServiceType] = useState<"bt" | "1panel">("bt");
+  const [status, setStatus] = useState<{ kind: "info" | "success" | "error"; message: string } | null>(
+    null,
+  );
+  const [testing, setTesting] = useState(false);
 
   useEffect(() => {
     if (open && editServer) {
@@ -38,8 +44,48 @@ export function CreateServerDialog({ open, editServer, onClose, onCreate, onUpda
       setAddress("");
       setKey("");
       setServiceType("bt");
+      setStatus(null);
+      setTesting(false);
     }
   }, [open, editServer]);
+
+  const handleTest = async () => {
+    if (!address.trim() || !key.trim()) {
+      setStatus({
+        kind: "error",
+        message: !address.trim() ? t("server.create.addressRequired") : t("server.create.keyRequired"),
+      });
+      return;
+    }
+    setTesting(true);
+    setStatus({ kind: "info", message: t("server.create.testing") });
+    try {
+      if (serviceType === "1panel") {
+        const client = createOnePanelClient(address.trim(), key.trim());
+        const info = await client.getDeviceBase();
+        const hostname = info.hostname ?? address.trim();
+        setStatus({
+          kind: "success",
+          message: t("server.create.testSuccess", { hostname }),
+        });
+      } else {
+        const client = createBtPanelClient(address.trim(), key.trim());
+        const info = await client.getSystemTotal();
+        const hostname = info.system ?? info.version ?? address.trim();
+        setStatus({
+          kind: "success",
+          message: t("server.create.testSuccess", { hostname }),
+        });
+      }
+    } catch (error) {
+      setStatus({
+        kind: "error",
+        message: t("server.create.testFailed", { error: String(error) }),
+      });
+    } finally {
+      setTesting(false);
+    }
+  };
 
   const handleSubmit = () => {
     if (!name.trim() || !address.trim() || !key.trim()) return;
@@ -127,14 +173,31 @@ export function CreateServerDialog({ open, editServer, onClose, onCreate, onUpda
           </div>
         </div>
         <div className="modal-footer">
-          <div className="modal-footer-spacer" />
-          <button type="button" className="btn btn-ghost" onClick={onClose}>
+          <button type="button" className="btn btn-secondary" onClick={onClose} disabled={testing}>
             {t("common.cancel")}
+          </button>
+          {status ? (
+            <span
+              className={`modal-footer-status modal-footer-status--${status.kind}`}
+              title={status.message}
+            >
+              {status.message}
+            </span>
+          ) : (
+            <div className="modal-footer-spacer" />
+          )}
+          <button
+            type="button"
+            className="btn btn-ghost"
+            disabled={testing || !address.trim() || !key.trim()}
+            onClick={() => void handleTest()}
+          >
+            {testing ? t("server.create.testing") : t("server.create.test")}
           </button>
           <button
             type="button"
             className="btn btn-primary"
-            disabled={!name.trim() || !address.trim() || !key.trim()}
+            disabled={testing || !name.trim() || !address.trim() || !key.trim()}
             onClick={handleSubmit}
           >
             {isEdit ? t("common.save") : t("server.create.confirm")}

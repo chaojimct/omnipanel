@@ -529,7 +529,7 @@ impl SshPool {
             .await?;
         let processes = session.process_list().await?;
 
-        let _ = app_handle.emit("ssh-system-stats", &[stats.clone()]);
+        let _ = app_handle.emit("ssh-system-stats", std::slice::from_ref(&stats));
 
         Ok(SshHostOverview { stats, processes })
     }
@@ -551,7 +551,7 @@ impl SshPool {
         let stats = self
             .collect_stats(&session, resource_id, &host_name)
             .await?;
-        let _ = app_handle.emit("ssh-system-stats", &[stats.clone()]);
+        let _ = app_handle.emit("ssh-system-stats", std::slice::from_ref(&stats));
         Ok(stats)
     }
 

@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useI18n } from "../../i18n";
+import { LogViewer } from "./LogViewer";
 import { SubWindow } from "./SubWindow";
 
 type LogEntry = {
@@ -16,19 +17,29 @@ interface LogModalProps {
 }
 
 const LEVEL_ORDER = ["error", "warn", "info"] as const;
-const LOG_LEVELS: Record<string, string> = {
-  error: "log-level--error",
-  warn: "log-level--warn",
-  info: "log-level--info",
+
+const LEVEL_ANSI: Record<string, string> = {
+  error: "\x1b[31m",
+  warn: "\x1b[33m",
+  info: "\x1b[36m",
 };
+
+const ANSI_RESET = "\x1b[0m";
+
+function formatLogText(entries: LogEntry[]): string {
+  return entries
+    .map((entry) => {
+      const color = LEVEL_ANSI[entry.level] ?? "";
+      return `${entry.timestamp}\t${color}${entry.level.toUpperCase()}${ANSI_RESET}\t${entry.module}\t${entry.message}`;
+    })
+    .join("\n");
+}
 
 export function LogModal({ open, onClose }: LogModalProps) {
   const { t } = useI18n();
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [filterModule, setFilterModule] = useState<string | null>(null);
   const [filterLevel, setFilterLevel] = useState<string | null>(null);
-  const bottomRef = useRef<HTMLDivElement>(null);
-  const autoScrollRef = useRef(true);
 
   const fetchLogs = useCallback(async () => {
     try {
@@ -46,29 +57,24 @@ export function LogModal({ open, onClose }: LogModalProps) {
     return () => clearInterval(timer);
   }, [open, fetchLogs]);
 
-  useEffect(() => {
-    if (autoScrollRef.current && bottomRef.current) {
-      bottomRef.current.scrollIntoView({ behavior: "smooth" });
-    }
-  }, [logs]);
-
-  const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
-    const el = e.currentTarget;
-    autoScrollRef.current = el.scrollTop + el.clientHeight >= el.scrollHeight - 40;
-  }, []);
-
-  const handleClear = async () => {
+  const handleClear = useCallback(async () => {
     await invoke("clear_backend_logs");
     setLogs([]);
-  };
+  }, []);
 
-  const modules = [...new Set(logs.map((l) => l.module))].sort();
+  const modules = useMemo(() => [...new Set(logs.map((l) => l.module))].sort(), [logs]);
 
-  const filtered = logs.filter((l) => {
-    if (filterModule && l.module !== filterModule) return false;
-    if (filterLevel && l.level !== filterLevel) return false;
-    return true;
-  });
+  const filtered = useMemo(
+    () =>
+      logs.filter((l) => {
+        if (filterModule && l.module !== filterModule) return false;
+        if (filterLevel && l.level !== filterLevel) return false;
+        return true;
+      }),
+    [logs, filterModule, filterLevel],
+  );
+
+  const logText = useMemo(() => formatLogText(filtered), [filtered]);
 
   return (
     <SubWindow
@@ -77,57 +83,40 @@ export function LogModal({ open, onClose }: LogModalProps) {
       onClose={onClose}
       className="log-subwindow"
     >
-      <div className="log-window">
-        <div className="log-modal-toolbar">
-          <select
-            className="log-modal-select"
-            value={filterModule ?? ""}
-            onChange={(e) => setFilterModule(e.target.value || null)}
-          >
-            <option value="">全部模块</option>
-            {modules.map((m) => (
-              <option key={m} value={m}>
-                {m}
-              </option>
-            ))}
-          </select>
-          <select
-            className="log-modal-select"
-            value={filterLevel ?? ""}
-            onChange={(e) => setFilterLevel(e.target.value || null)}
-          >
-            <option value="">全部级别</option>
-            {LEVEL_ORDER.map((l) => (
-              <option key={l} value={l}>
-                {l.toUpperCase()}
-              </option>
-            ))}
-          </select>
-          <button type="button" className="log-modal-btn" onClick={handleClear}>
-            清空
-          </button>
-        </div>
-        <div className="log-modal-body" onScroll={handleScroll}>
-          {filtered.length === 0 ? (
-            <div className="log-modal-empty">暂无日志</div>
-          ) : (
-            filtered.map((entry, i) => (
-              <div key={i} className="log-modal-entry">
-                <span className="log-modal-ts">{entry.timestamp}</span>
-                <span className={`log-modal-level ${LOG_LEVELS[entry.level] ?? ""}`}>
-                  {entry.level.toUpperCase()}
-                </span>
-                <span className="log-modal-module">{entry.module}</span>
-                <span className="log-modal-msg">{entry.message}</span>
-              </div>
-            ))
-          )}
-          <div ref={bottomRef} />
-        </div>
-        <div className="log-window-footer">
-          <span className="log-window-footer__status">{filtered.length} 条日志</span>
-        </div>
-      </div>
+      <LogViewer
+        text={logText}
+        emptyText={t("logViewer.empty")}
+        onClear={handleClear}
+        footer={<span className="log-viewer-panel__footer-text">{t("logViewer.lineCount", { count: filtered.length })}</span>}
+        toolbar={
+          <>
+            <select
+              className="log-viewer-panel__select"
+              value={filterModule ?? ""}
+              onChange={(e) => setFilterModule(e.target.value || null)}
+            >
+              <option value="">全部模块</option>
+              {modules.map((m) => (
+                <option key={m} value={m}>
+                  {m}
+                </option>
+              ))}
+            </select>
+            <select
+              className="log-viewer-panel__select"
+              value={filterLevel ?? ""}
+              onChange={(e) => setFilterLevel(e.target.value || null)}
+            >
+              <option value="">全部级别</option>
+              {LEVEL_ORDER.map((l) => (
+                <option key={l} value={l}>
+                  {l.toUpperCase()}
+                </option>
+              ))}
+            </select>
+          </>
+        }
+      />
     </SubWindow>
   );
 }

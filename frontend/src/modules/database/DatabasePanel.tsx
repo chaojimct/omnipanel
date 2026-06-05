@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
-import { DockLayout, DockHandle, DockPanel, DockWorkspace } from "../../components/dock";
+import { DockLayout, DockHandle, DockPanel } from "../../components/dock";
+import { SidebarWorkspace } from "../../components/ui/SidebarWorkspace";
 import { SchemaBrowser, type SchemaTableSelection } from "./SchemaBrowser";
 import { ConnectionDialog } from "./ConnectionDialog";
 import { TableDataGrid } from "./TableDataGrid";
-import { TabContextMenu } from "../../components/shell/TabContextMenu";
+import { ContextMenu } from "../../components/ui/ContextMenu";
+import { buildTabCloseMenuItems } from "../../components/ui/contextMenuItems";
 import { useActionStore } from "../../stores/actionStore";
 import { useDbGroupStore } from "../../stores/dbGroupStore";
 import { useDbSchemaFilterStore } from "../../stores/dbSchemaFilterStore";
@@ -645,14 +646,6 @@ export function DatabasePanel() {
     [ctxMenu, workspaceTabs, closeWorkspaceTab],
   );
 
-  useEffect(() => {
-    if (!ctxMenu) return;
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setCtxMenu(null);
-    };
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [ctxMenu]);
 
   const handleCreateGroup = useCallback(async () => {
     const name = await quickInput({
@@ -1035,10 +1028,10 @@ export function DatabasePanel() {
 
   return (
     <>
-      <DockWorkspace
-        leftPreset="schema"
-        leftMinPx={280}
-        left={
+      <SidebarWorkspace
+        preset="schema"
+        sidebarMinPx={280}
+        sidebar={
           <SchemaBrowser
             onCreateConnection={() => setDialogOpen(true)}
             onNewQuery={openNewSqlTab}
@@ -1048,7 +1041,7 @@ export function DatabasePanel() {
             groupFilter={activeGroupName}
           />
         }
-        main={
+      >
           <div className="db-workspace">
             <div className="db-workspace-tabs" role="tablist">
               {workspaceTabs.map((tab, idx) => (
@@ -1100,18 +1093,13 @@ export function DatabasePanel() {
               )}
             </div>
           </div>
-        }
-      />
-      {ctxMenu && createPortal(
-        <TabContextMenu
-          x={ctxMenu.x}
-          y={ctxMenu.y}
-          tabCount={workspaceTabs.length}
-          tabIndex={ctxMenu.index}
-          onClose={handleContextAction}
-          onDismiss={() => setCtxMenu(null)}
-        />,
-        document.body,
+      </SidebarWorkspace>
+      {ctxMenu && (
+        <ContextMenu
+          items={buildTabCloseMenuItems(t, workspaceTabs.length, ctxMenu.index, handleContextAction)}
+          position={{ x: ctxMenu.x, y: ctxMenu.y }}
+          onClose={() => setCtxMenu(null)}
+        />
       )}
       <SubWindow
         open={toolboxOpen}

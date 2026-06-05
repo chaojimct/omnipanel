@@ -190,7 +190,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("connections.json");
         let a = sample("a");
-        save_database_connections_to(&path, &[a.clone()]).unwrap();
+        save_database_connections_to(&path, std::slice::from_ref(&a)).unwrap();
         let loaded = load_database_connections_from(&path).unwrap();
         assert_eq!(loaded.len(), 1);
         assert_eq!(loaded[0].id, "a");

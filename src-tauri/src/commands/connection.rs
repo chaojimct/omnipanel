@@ -2,10 +2,30 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use omnipanel_error::{ErrorCode, OmniError};
 use omnipanel_store::{Connection, ConnectionKind};
+use serde::Deserialize;
+use serde_json::Value;
 use tauri::State;
 
 use crate::state::AppState;
 use omnipanel_store::DbConnectionConfig;
+
+#[derive(Debug, Deserialize)]
+struct PanelConfig {
+    address: String,
+    key: String,
+    #[serde(rename = "serviceType")]
+    service_type: String,
+}
+
+fn panel_success_message(data: &Value) -> String {
+    let hostname = data
+        .get("data")
+        .and_then(|d| d.get("hostname"))
+        .or_else(|| data.get("hostname"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("1Panel");
+    format!("连接成功：{hostname}")
+}
 
 fn now_secs() -> i64 {
     SystemTime::now()
@@ -76,6 +96,32 @@ pub async fn conn_test(connection: Connection) -> Result<String, OmniError> {
                     OmniError::new(ErrorCode::Connection, "数据库连接测试失败").with_cause(e)
                 })?;
             Ok(format!("连接成功：{version}"))
+        }
+        ConnectionKind::Panel => {
+            let cfg: PanelConfig = serde_json::from_str(&connection.config).map_err(|e| {
+                OmniError::new(ErrorCode::InvalidInput, "面板连接配置解析失败")
+                    .with_cause(e.to_string())
+            })?;
+            if cfg.address.trim().is_empty() {
+                return Err(OmniError::invalid_input("请填写服务器地址"));
+            }
+            if cfg.key.trim().is_empty() {
+                return Err(OmniError::invalid_input("请填写 API 密钥"));
+            }
+            match cfg.service_type.as_str() {
+                "1panel" => {
+                    let data =
+                        crate::panel::onepanel::test_connection(&cfg.address, &cfg.key).await?;
+                    Ok(panel_success_message(&data))
+                }
+                "bt" => Err(OmniError::new(
+                    ErrorCode::InvalidInput,
+                    "宝塔面板连接测试尚未实现",
+                )),
+                other => Err(OmniError::invalid_input(format!(
+                    "不支持的面板类型：{other}"
+                ))),
+            }
         }
         other => Err(OmniError::new(
             ErrorCode::InvalidInput,
