@@ -2,6 +2,15 @@ export const zhCN = {
   app: {
     tagline: "AI 原生的个人工程工作台",
     banner: "终端 · SSH · 数据库 · 容器 · 协议 · 工作流",
+    splash: {
+      loading: "OmniPanel 正在启动",
+      steps: {
+        runtime: "初始化运行时环境",
+        connections: "同步连接与配置",
+        editor: "加载编辑器与终端内核",
+        workspace: "准备工作区",
+      },
+    },
   },
   knowledge: {
     categories: "分类",

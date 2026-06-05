@@ -4,6 +4,15 @@ export const enUS: TranslationDict = {
   app: {
     tagline: "Your AI-native engineering workstation",
     banner: "Terminal · SSH · Database · Docker · Protocol · Workflow",
+    splash: {
+      loading: "Starting OmniPanel",
+      steps: {
+        runtime: "Initializing runtime",
+        connections: "Syncing connections",
+        editor: "Loading editor & terminal",
+        workspace: "Preparing workspace",
+      },
+    },
   },
   knowledge: {
     categories: "Categories",
