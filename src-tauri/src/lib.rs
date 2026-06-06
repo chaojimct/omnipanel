@@ -100,6 +100,13 @@ fn export_ipc_bindings() {
         commands::ssh::ssh_pool_fetch_stats,
         commands::updater::check_update,
         commands::updater::install_update,
+        commands::knowledge::knowledge_list,
+        commands::knowledge::knowledge_get,
+        commands::knowledge::knowledge_save,
+        commands::knowledge::knowledge_delete,
+        commands::knowledge::knowledge_search,
+        commands::knowledge::knowledge_tags,
+        commands::knowledge::knowledge_increment_usage,
     ]);
 
     // 用 CARGO_MANIFEST_DIR 拼绝对路径，避免 cwd 在不同入口（cargo test/run）下不一致。
@@ -300,6 +307,14 @@ pub fn run() {
             // Backend logs
             commands::log::get_backend_logs,
             commands::log::clear_backend_logs,
+            // Knowledge（知识库）
+            commands::knowledge::knowledge_list,
+            commands::knowledge::knowledge_get,
+            commands::knowledge::knowledge_save,
+            commands::knowledge::knowledge_delete,
+            commands::knowledge::knowledge_search,
+            commands::knowledge::knowledge_tags,
+            commands::knowledge::knowledge_increment_usage,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

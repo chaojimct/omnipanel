@@ -3,6 +3,7 @@
 
 mod connection;
 mod database;
+mod knowledge;
 mod paths;
 mod schema_filters;
 mod storage;
@@ -21,4 +22,5 @@ pub use schema_filters::{
     save_schema_filters,
 };
 pub use storage::{AuditEntry, Storage};
+pub use knowledge::{KnowledgeEntry, KnowledgeSearchResult};
 pub use vault::Vault;

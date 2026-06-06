@@ -32,6 +32,38 @@ const MIGRATIONS: &[&str] = &[
     CREATE INDEX idx_connections_kind ON connections(kind);
     CREATE INDEX idx_audit_ts ON audit_log(ts);
     "#,
+    // v2 — 知识库（knowledge_entries + FTS5 全文索引）
+    r#"
+    CREATE TABLE IF NOT EXISTS knowledge_entries (
+        id TEXT PRIMARY KEY,
+        kind TEXT NOT NULL,
+        title TEXT NOT NULL,
+        content TEXT NOT NULL,
+        tags TEXT NOT NULL DEFAULT '[]',
+        risk_level TEXT NOT NULL DEFAULT 'safe',
+        source TEXT NOT NULL DEFAULT '',
+        env_tag TEXT NOT NULL DEFAULT 'dev',
+        language TEXT NOT NULL DEFAULT '',
+        usage_count INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+    );
+    CREATE VIRTUAL TABLE IF NOT EXISTS knowledge_fts USING fts5(
+        title, content, tags,
+        content=knowledge_entries,
+        content_rowid=rowid
+    );
+    CREATE TRIGGER IF NOT EXISTS knowledge_ai AFTER INSERT ON knowledge_entries BEGIN
+        INSERT INTO knowledge_fts(rowid, title, content, tags) VALUES (new.rowid, new.title, new.content, new.tags);
+    END;
+    CREATE TRIGGER IF NOT EXISTS knowledge_ad AFTER DELETE ON knowledge_entries BEGIN
+        INSERT INTO knowledge_fts(knowledge_fts, rowid, title, content, tags) VALUES('delete', old.rowid, old.title, old.content, old.tags);
+    END;
+    CREATE TRIGGER IF NOT EXISTS knowledge_au AFTER UPDATE ON knowledge_entries BEGIN
+        INSERT INTO knowledge_fts(knowledge_fts, rowid, title, content, tags) VALUES('delete', old.rowid, old.title, old.content, old.tags);
+        INSERT INTO knowledge_fts(rowid, title, content, tags) VALUES (new.rowid, new.title, new.content, new.tags);
+    END;
+    "#,
 ];
 
 /// 审计日志条目。所有高风险操作经执行引擎写入此表。

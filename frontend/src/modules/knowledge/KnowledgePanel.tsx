@@ -1,250 +1,196 @@
+import { useEffect, useRef, useState } from "react";
+import { useKnowledgeStore, type KnowledgeTab } from "../../stores/knowledgeStore";
 import { useI18n } from "../../i18n";
+import { KnowledgeCard } from "./KnowledgeCard";
+import { KnowledgeDetail } from "./KnowledgeDetail";
+import { CreateEntryDialog } from "./CreateEntryDialog";
 
-const SNIPPET_ITEMS = [
-  {
-    id: "findLargeFiles" as const,
-    tags: ["linux", "disk"],
-    risk: "readonly" as const,
-    used: 12,
-    recent: "days2" as const,
-    lines: [
-      { comment: "comment1", cmd: "find /var -type f -size +100M -exec ls -lh {} \\; 2>/dev/null | sort -k5 -h" },
-      { comment: "comment2", cmd: "find ~ -type f -size +1G -printf '%s %p\\n' | sort -rn | head -20" },
-    ],
-  },
-  {
-    id: "dockerStats" as const,
-    tags: ["docker", "monitoring"],
-    risk: "readonly" as const,
-    used: 28,
-    recent: "hour1" as const,
-    lines: [
-      {
-        comment: "comment1",
-        cmd: 'docker stats --no-stream --format "table {{.Name}}\\t{{.CPUPerc}}\\t{{.MemUsage}}\\t{{.NetIO}}\\t{{.BlockIO}}"',
-      },
-      {
-        comment: "comment2",
-        cmd: 'docker stats nginx-proxy --no-stream --format "CPU: {{.CPUPerc}} | MEM: {{.MemUsage}}"',
-      },
-    ],
-  },
-  {
-    id: "pgSlowQuery" as const,
-    tags: ["postgresql", "performance"],
-    risk: "readonly" as const,
-    used: 15,
-    recent: "days3" as const,
-    lines: [
-      { comment: "comment1", cmd: "SELECT query, calls, mean_exec_time, total_exec_time, rows" },
-      { comment: null, cmd: "FROM pg_stat_statements" },
-      { comment: null, cmd: "ORDER BY mean_exec_time DESC LIMIT 20;" },
-      { comment: "comment2", cmd: "SELECT pid, now() - pg_stat_activity.query_start AS duration, query, state" },
-      { comment: null, cmd: "FROM pg_stat_activity WHERE state != 'idle' ORDER BY duration DESC;" },
-    ],
-  },
-  {
-    id: "nginxReload" as const,
-    tags: ["nginx", "deploy"],
-    risk: "medium" as const,
-    used: 8,
-    recent: "week1" as const,
-    lines: [
-      { comment: "comment1", cmd: 'nginx -t && echo "Config OK" || echo "Config ERROR"' },
-      { comment: "comment2", cmd: "nginx -s reload" },
-      { comment: "comment3", cmd: "ls -la /etc/nginx/sites-enabled/" },
-    ],
-  },
-] as const;
-
-const CASE_ITEMS = [
-  {
-    id: "nginxCpu" as const,
-    env: "production" as const,
-    date: "2026-05-26",
-    tags: ["nginx", "security", "rate-limit", "production"],
-    sections: ["symptom", "rootCause", "resolution", "prevention"] as const,
-  },
-  {
-    id: "diskFull" as const,
-    env: "staging" as const,
-    date: "2026-05-20",
-    tags: ["postgresql", "disk", "docker"],
-    sections: ["symptom", "rootCause", "resolution"] as const,
-  },
-] as const;
-
-const AI_ITEMS = [
-  {
-    id: "nginxLogs" as const,
-    generated: "hours2" as const,
-    source: "terminalAi" as const,
-    lines: ["line1", "line2", "line3", "line4"] as const,
-  },
-  {
-    id: "dbSchema" as const,
-    generated: "day1" as const,
-    source: "database" as const,
-    lines: ["line1", "line2", "line3", "line4", "line5", "line6"] as const,
-  },
-] as const;
-
-const SIDEBAR_TAGS = ["nginx", "docker", "postgresql", "ssh", "security"] as const;
+const TAB_ICONS: Record<KnowledgeTab, string> = {
+  all: "📚",
+  snippet: "📄",
+  case: "🔧",
+  ai: "🤖",
+};
 
 export function KnowledgePanel() {
   const { t } = useI18n();
+  const {
+    entries, searchResults, allTags,
+    activeTab, searchQuery, selectedTag, selectedEntryId, editingEntry,
+    isLoading, error,
+    loadEntries, loadTags, search,
+    setActiveTab, setSearchQuery, setSelectedTag, setSelectedEntry, setEditingEntry, clearError,
+  } = useKnowledgeStore();
+
+  const [showCreate, setShowCreate] = useState(false);
+  const searchInput = searchQuery;
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>();
+
+  // 初始加载
+  useEffect(() => {
+    loadEntries();
+    loadTags();
+  }, []);
+
+  // tab 切换时重新加载
+  useEffect(() => {
+    const kind = activeTab !== "all" ? activeTab : undefined;
+    loadEntries(kind, selectedTag ?? undefined);
+  }, [activeTab, selectedTag]);
+
+  // 搜索防抖
+  const handleSearchChange = (value: string) => {
+    setSearchQuery(value);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      if (value.trim()) {
+        search(value, activeTab !== "all" ? activeTab : undefined);
+      }
+    }, 300);
+  };
+
+  // 决定显示哪些条目
+  const displayEntries = searchQuery.trim()
+    ? searchResults.map((r) => r.entry)
+    : entries;
+
+  const selectedEntry = displayEntries.find((e) => e.id === selectedEntryId) ?? null;
+
+  // 相对时间
+  const relativeTime = (ts: number) => {
+    const diff = Date.now() - ts;
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return t("knowledge.time.justNow");
+    if (mins < 60) return t("knowledge.time.minutesAgo", { n: mins });
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return t("knowledge.time.hoursAgo", { n: hours });
+    const days = Math.floor(hours / 24);
+    return t("knowledge.time.daysAgo", { n: days });
+  };
 
   return (
-    <div className="kb-workspace">
-      <div className="kb-sidebar">
-        <div className="kb-section-title">{t("knowledge.categories")}</div>
-        <div className="kb-nav-item active" data-kb="snippets">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M4 17l6-6-6-6" />
-            <path d="M12 19h8" />
+    <div className="knowledge-panel">
+      {/* ── 左侧边栏 ─────────────────────────────── */}
+      <div className="knowledge-sidebar">
+        <div className="knowledge-search">
+          <svg className="knowledge-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
+            <circle cx="11" cy="11" r="8" /><path d="M21 21l-4.35-4.35" />
           </svg>
-          {t("knowledge.nav.snippets")}
+          <input
+            type="text"
+            placeholder={t("knowledge.searchPlaceholder")}
+            value={searchInput}
+            onChange={(e) => handleSearchChange(e.target.value)}
+          />
         </div>
-        <div className="kb-nav-item" data-kb="cases">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z" />
-          </svg>
-          {t("knowledge.nav.cases")}
-        </div>
-        <div className="kb-nav-item" data-kb="ai">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M12 2a4 4 0 014 4v1a4 4 0 01-8 0V6a4 4 0 014-4z" />
-            <path d="M12 17v4M8 21h8" />
-          </svg>
-          {t("knowledge.nav.ai")}
-        </div>
-        <div className="kb-section-title" style={{ marginTop: "var(--sp-3)" }}>
-          {t("knowledge.tags")}
-        </div>
-        {SIDEBAR_TAGS.map((tag) => (
-          <div key={tag} className="kb-nav-item">
-            <span className="tag" style={{ width: "100%", justifyContent: "center" }}>
-              {tag}
-            </span>
-          </div>
-        ))}
-      </div>
 
-      <div className="kb-main">
-        <div className="kb-content">
-          <div className="kb-panel active" id="panel-snippets">
-            <div style={{ marginBottom: "var(--sp-4)" }}>
-              <h2 style={{ fontSize: "16px", fontWeight: 700, marginBottom: "4px" }}>
-                {t("knowledge.snippets.title")}
-              </h2>
-              <p className="text-muted" style={{ fontSize: "12px" }}>
-                {t("knowledge.snippets.desc")}
-              </p>
+        <div className="knowledge-categories">
+          <div className="knowledge-section-title">{t("knowledge.categories")}</div>
+          {(["all", "snippet", "case", "ai"] as KnowledgeTab[]).map((tab) => (
+            <div
+              key={tab}
+              className={`knowledge-category-tab ${activeTab === tab ? "active" : ""}`}
+              onClick={() => setActiveTab(tab)}
+            >
+              <span className="knowledge-tab-icon">{TAB_ICONS[tab]}</span>
+              <span>{t(`knowledge.nav.${tab}`)}</span>
             </div>
+          ))}
+        </div>
 
-            {SNIPPET_ITEMS.map((item) => (
-              <div key={item.id} className="snippet-card">
-                <div className="snippet-header">
-                  <h3>{t(`knowledge.demo.snippets.${item.id}.title`)}</h3>
-                  {item.tags.map((tag) => (
-                    <span key={tag} className="tag">
-                      {tag}
-                    </span>
-                  ))}
-                </div>
-                <div className="snippet-desc">{t(`knowledge.demo.snippets.${item.id}.desc`)}</div>
-                <div className="snippet-code">
-                  {item.lines.map((line, i) => (
-                    <span key={i}>
-                      {line.comment && (
-                        <span className="comment">
-                          {t(`knowledge.demo.snippets.${item.id}.${line.comment}`)}
-                        </span>
-                      )}
-                      <span className="cmd">{line.cmd}</span>
-                    </span>
-                  ))}
-                </div>
-                <div className="snippet-meta">
-                  <span className={`badge badge-${item.risk === "medium" ? "warn" : "success"}`}>
-                    {t(`knowledge.risk.${item.risk}`)}
-                  </span>
-                  <span>{t("knowledge.meta.used", { count: item.used })}</span>
-                  <span>{t("knowledge.meta.recent", { time: t(`knowledge.relativeTime.${item.recent}`) })}</span>
-                </div>
-              </div>
+        <div className="knowledge-tags-section">
+          <div className="knowledge-section-title">{t("knowledge.tags")}</div>
+          <div className="knowledge-tag-cloud">
+            {selectedTag && (
+              <span
+                className="knowledge-tag-pill active"
+                onClick={() => setSelectedTag(null)}
+              >
+                ✕ {selectedTag}
+              </span>
+            )}
+            {allTags.map((tag) => (
+              <span
+                key={tag}
+                className={`knowledge-tag-pill ${selectedTag === tag ? "active" : ""}`}
+                onClick={() => setSelectedTag(selectedTag === tag ? null : tag)}
+              >
+                {tag}
+              </span>
             ))}
-          </div>
-
-          <div className="kb-panel" id="panel-cases">
-            <div style={{ marginBottom: "var(--sp-4)" }}>
-              <h2 style={{ fontSize: "16px", fontWeight: 700, marginBottom: "4px" }}>
-                {t("knowledge.cases.title")}
-              </h2>
-              <p className="text-muted" style={{ fontSize: "12px" }}>
-                {t("knowledge.cases.desc")}
-              </p>
-            </div>
-
-            {CASE_ITEMS.map((item) => (
-              <div key={item.id} className="case-card">
-                <div className="case-header">
-                  <h3>{t(`knowledge.demo.cases.${item.id}.title`)}</h3>
-                  <span className={`badge badge-${item.env === "production" ? "danger" : "warn"}`}>
-                    {t(`knowledge.envBadge.${item.env}`)}
-                  </span>
-                  <span className="text-muted text-sm">{item.date}</span>
-                </div>
-                {item.sections.map((section) => (
-                  <div key={section} className="case-section">
-                    <h4>{t(`knowledge.caseSections.${section}`)}</h4>
-                    <p>{t(`knowledge.demo.cases.${item.id}.${section}`)}</p>
-                  </div>
-                ))}
-                <div className="case-tags">
-                  {item.tags.map((tag) => (
-                    <span key={tag} className="case-tag">
-                      {tag}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <div className="kb-panel" id="panel-ai">
-            <div style={{ marginBottom: "var(--sp-4)" }}>
-              <h2 style={{ fontSize: "16px", fontWeight: 700, marginBottom: "4px" }}>
-                {t("knowledge.ai.title")}
-              </h2>
-              <p className="text-muted" style={{ fontSize: "12px" }}>
-                {t("knowledge.ai.desc")}
-              </p>
-            </div>
-
-            {AI_ITEMS.map((item) => (
-              <div key={item.id} className="snippet-card">
-                <div className="snippet-header">
-                  <h3>{t(`knowledge.demo.ai.${item.id}.title`)}</h3>
-                  <span className="badge badge-accent">{t("knowledge.aiGenerated")}</span>
-                </div>
-                <div className="snippet-desc">{t(`knowledge.demo.ai.${item.id}.desc`)}</div>
-                <div className="snippet-code">
-                  <span className="comment">{t(`knowledge.demo.ai.${item.id}.summary`)}</span>
-                  {item.lines.map((line) => (
-                    <span key={line}>{t(`knowledge.demo.ai.${item.id}.${line}`)}</span>
-                  ))}
-                  <span className="comment">{t(`knowledge.demo.ai.${item.id}.recommendation`)}</span>
-                </div>
-                <div className="snippet-meta">
-                  <span>{t("knowledge.aiMeta.generated", { time: t(`knowledge.relativeTime.${item.generated}`) })}</span>
-                  <span>{t("knowledge.aiMeta.from", { source: t(`knowledge.aiSources.${item.source}`) })}</span>
-                </div>
-              </div>
-            ))}
+            {allTags.length === 0 && (
+              <span className="text-muted text-sm">{t("knowledge.noTags")}</span>
+            )}
           </div>
         </div>
       </div>
+
+      {/* ── 中间列表 ─────────────────────────────── */}
+      <div className="knowledge-list">
+        <div className="knowledge-list-header">
+          <span className="knowledge-list-count">
+            {isLoading ? "…" : `${displayEntries.length} ${t("knowledge.entries")}`}
+          </span>
+          <button className="btn btn-primary btn-sm" onClick={() => setShowCreate(true)}>
+            + {t("knowledge.create")}
+          </button>
+        </div>
+
+        {error && (
+          <div className="knowledge-error">
+            <span>{error}</span>
+            <button onClick={clearError}>×</button>
+          </div>
+        )}
+
+        <div className="knowledge-list-body">
+          {displayEntries.map((entry) => (
+            <KnowledgeCard
+              key={entry.id}
+              entry={entry}
+              selected={entry.id === selectedEntryId}
+              onClick={() => {
+                setSelectedEntry(entry.id);
+                setEditingEntry(null);
+              }}
+              relativeTime={relativeTime}
+            />
+          ))}
+
+          {!isLoading && displayEntries.length === 0 && (
+            <div className="knowledge-empty">
+              <div className="knowledge-empty-icon">📚</div>
+              <div className="knowledge-empty-title">
+                {searchQuery.trim() ? t("knowledge.noResults") : t("knowledge.noEntries")}
+              </div>
+              {!searchQuery.trim() && (
+                <div className="knowledge-empty-desc">{t("knowledge.createFirst")}</div>
+              )}
+            </div>
+          )}
+
+          {isLoading && (
+            <div className="knowledge-loading">
+              <div className="knowledge-loading-spinner" />
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── 右侧详情 ─────────────────────────────── */}
+      <div className="knowledge-detail">
+        {selectedEntry ? (
+          <KnowledgeDetail entry={selectedEntry} relativeTime={relativeTime} />
+        ) : (
+          <div className="knowledge-detail-empty">
+            <div className="knowledge-detail-empty-icon">📝</div>
+            <div className="text-muted">{t("knowledge.selectEntry")}</div>
+          </div>
+        )}
+      </div>
+
+      {/* ── 新建对话框 ───────────────────────────── */}
+      {showCreate && <CreateEntryDialog onClose={() => setShowCreate(false)} />}
     </div>
   );
 }

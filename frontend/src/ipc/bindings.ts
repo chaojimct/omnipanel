@@ -175,6 +175,18 @@ export const commands = {
 	sshPoolFetchStats: (resourceId: string) => typedError<HostSystemStats, OmniError_Serialize>(__TAURI_INVOKE("ssh_pool_fetch_stats", { resourceId })),
 	checkUpdate: () => typedError<UpdateInfo, string>(__TAURI_INVOKE("check_update")),
 	installUpdate: () => typedError<null, string>(__TAURI_INVOKE("install_update")),
+	/**  列出知识条目（可选按 kind / tag 过滤）。 */
+	knowledgeList: (kind: string | null, tag: string | null) => typedError<KnowledgeEntry[], OmniError_Serialize>(__TAURI_INVOKE("knowledge_list", { kind, tag })),
+	/**  全文搜索知识条目（FTS5）。 */
+	knowledgeSearch: (query: string, kind: string | null) => typedError<KnowledgeSearchResult[], OmniError_Serialize>(__TAURI_INVOKE("knowledge_search", { query, kind })),
+	/**  获取所有已使用的标签。 */
+	knowledgeTags: () => typedError<string[], OmniError_Serialize>(__TAURI_INVOKE("knowledge_tags")),
+	/**  保存（新建或更新）知识条目。 */
+	knowledgeSave: (entry: KnowledgeEntry) => typedError<KnowledgeEntry, OmniError_Serialize>(__TAURI_INVOKE("knowledge_save", { entry })),
+	/**  删除知识条目。 */
+	knowledgeDelete: (id: string) => typedError<null, OmniError_Serialize>(__TAURI_INVOKE("knowledge_delete", { id })),
+	/**  递增知识条目使用次数。 */
+	knowledgeIncrementUsage: (id: string) => typedError<null, OmniError_Serialize>(__TAURI_INVOKE("knowledge_increment_usage", { id })),
 };
 
 /* Types */
@@ -757,6 +769,26 @@ export type SshProcessInfo = {
 	start: string,
 	time: string,
 	command: string,
+};
+
+export type KnowledgeEntry = {
+	id: string,
+	kind: string,
+	title: string,
+	content: string,
+	tags: string[],
+	riskLevel: string,
+	source: string | null,
+	envTag: string | null,
+	language: string | null,
+	usageCount: number,
+	createdAt: string,
+	updatedAt: string,
+};
+
+export type KnowledgeSearchResult = {
+	entry: KnowledgeEntry,
+	snippet: string,
 };
 
 export type UpdateInfo = {

@@ -3,6 +3,7 @@ pub mod connection;
 pub mod database;
 pub mod docker;
 pub mod exec;
+pub mod knowledge;
 pub mod log;
 pub mod panel;
 pub mod protocol;
