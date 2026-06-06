@@ -803,12 +803,16 @@ pub async fn stream_stats(
     let mut handle: omnipanel_ssh::SshStreamHandle = session.exec_stream(&cmd, tx).await?;
 
     let mut line_buf: Vec<u8> = Vec::new();
+    let mut stop_interval = tokio::time::interval(std::time::Duration::from_millis(200));
+    stop_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
     loop {
-        if stop.load(Ordering::Relaxed) {
-            handle.signal_stop();
-            break;
-        }
         tokio::select! {
+            _ = stop_interval.tick() => {
+                if stop.load(Ordering::Relaxed) {
+                    handle.signal_stop();
+                    break;
+                }
+            }
             chunk = rx.recv() => {
                 match chunk {
                     Some(omnipanel_ssh::StreamChunk::Stdout(bytes)) => {

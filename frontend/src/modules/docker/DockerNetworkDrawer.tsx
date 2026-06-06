@@ -1,6 +1,14 @@
 import { useEffect, useState } from "react";
 import type { DockerNetworkDetail } from "../../ipc/bindings";
 
+interface ConfirmState {
+  title: string;
+  message: string;
+  detail?: string;
+  confirmLabel: string;
+  onConfirm: () => void;
+}
+
 /* eslint-disable react-hooks/set-state-in-effect -- data-fetching effect pattern */
 
 interface DockerNetworkDrawerProps {
@@ -19,6 +27,7 @@ export function DockerNetworkDrawer({ name, onClose, inspectNetwork, onRemove }:
   const [detail, setDetail] = useState<DockerNetworkDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [confirm, setConfirm] = useState<ConfirmState | null>(null);
 
   useEffect(() => {
     if (!name) return;
@@ -151,15 +160,42 @@ export function DockerNetworkDrawer({ name, onClose, inspectNetwork, onRemove }:
             title={isSystem ? "系统网络不可删除" : ""}
             onClick={async () => {
               if (!detail) return;
-              if (!window.confirm(`删除网络 ${name}？`)) return;
-              const r = await onRemove(name);
-              if (r.ok) onClose();
+              setConfirm({
+                title: `删除网络 ${name}`,
+                message: `将永久删除网络 ${name}，此操作不可恢复。`,
+                confirmLabel: "确认删除",
+                onConfirm: async () => {
+                  setConfirm(null);
+                  const r = await onRemove(name);
+                  if (r.ok) onClose();
+                },
+              });
             }}
           >
             删除网络
           </button>
         </footer>
       </aside>
+      {confirm && (
+        <ConfirmModal confirm={confirm} onCancel={() => setConfirm(null)} />
+      )}
+    </>
+  );
+}
+
+function ConfirmModal({ confirm, onCancel }: { confirm: ConfirmState; onCancel: () => void }) {
+  return (
+    <>
+      <div className="drawer-overlay show" onClick={onCancel} />
+      <div className="confirm-modal">
+        <h3>{confirm.title}</h3>
+        <p className="text-sm">{confirm.message}</p>
+        {confirm.detail && <p className="text-muted text-xs">{confirm.detail}</p>}
+        <div className="flex gap-2" style={{ marginTop: 16, justifyContent: "flex-end" }}>
+          <button className="btn btn-secondary btn-sm" onClick={onCancel}>取消</button>
+          <button className="btn btn-danger btn-sm" onClick={confirm.onConfirm}>{confirm.confirmLabel}</button>
+        </div>
+      </div>
     </>
   );
 }

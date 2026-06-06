@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { commands } from "../../ipc/bindings";
 
@@ -41,6 +41,7 @@ export function DockerStatsPanel({ connectionId, containerId, containerName, onC
   const [error, setError] = useState<string | null>(null);
   const [active, setActive] = useState(true);
   const [streamId, setStreamId] = useState<string | null>(null);
+  const streamIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!connectionId || !containerId || !active) return;
@@ -48,17 +49,17 @@ export function DockerStatsPanel({ connectionId, containerId, containerName, onC
     const unlistens: UnlistenFn[] = [];
     const start = async () => {
       try {
-        const unlistenStats = await listen<ContainerStats>("docker-stats", (e) => {
+        const unlistenStats = await listen<{ streamId: string; stats: ContainerStats }>("docker-stats", (e) => {
           if (disposed) return;
-          if (e.payload.containerId === containerId) {
-            setStats(e.payload);
+          if (e.payload.streamId === streamIdRef.current) {
+            setStats(e.payload.stats);
             setError(null);
           }
         });
         unlistens.push(unlistenStats);
-        const unlistenEnd = await listen<{ containerId: string; error?: string }>("docker-stats-end", (e) => {
+        const unlistenEnd = await listen<{ streamId: string; error?: string }>("docker-stats-end", (e) => {
           if (disposed) return;
-          if (e.payload.containerId === containerId) {
+          if (e.payload.streamId === streamIdRef.current) {
             if (e.payload.error) setError(e.payload.error);
           }
         });
@@ -66,6 +67,7 @@ export function DockerStatsPanel({ connectionId, containerId, containerName, onC
         const r = await commands.dockerStreamStats(connectionId, containerId);
         if (r.status === "ok") {
           setStreamId(r.data);
+          streamIdRef.current = r.data;
         } else {
           setError(r.error.message);
         }

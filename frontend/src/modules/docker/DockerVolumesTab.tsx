@@ -3,6 +3,14 @@ import { Modal } from "../../components/ui/Modal";
 import type { DockerVolumeSummary, DockerCreateVolumeRequest } from "../../ipc/bindings";
 import type { DockerActionResult } from "./useDockerWorkspace";
 
+interface ConfirmState {
+  title: string;
+  message: string;
+  detail?: string;
+  confirmLabel: string;
+  onConfirm: () => void;
+}
+
 interface DockerVolumesTabProps {
   volumes: DockerVolumeSummary[];
   canManage: boolean;
@@ -25,6 +33,7 @@ export function DockerVolumesTab({ volumes, canManage, onRefresh, onCreate, onRe
   const [showCreate, setShowCreate] = useState(false);
   const [name, setName] = useState("");
   const [driver, setDriver] = useState("local");
+  const [confirm, setConfirm] = useState<ConfirmState | null>(null);
 
   return (
     <div className="container-list">
@@ -36,8 +45,15 @@ export function DockerVolumesTab({ volumes, canManage, onRefresh, onCreate, onRe
             className="btn btn-secondary btn-sm"
             disabled={!canManage}
             onClick={async () => {
-              if (!window.confirm("清理未使用的卷？")) return;
-              await onPrune();
+              setConfirm({
+                title: "清理未使用的卷",
+                message: "将删除所有未使用的卷以释放磁盘空间。",
+                confirmLabel: "确认清理",
+                onConfirm: async () => {
+                  setConfirm(null);
+                  await onPrune();
+                },
+              });
             }}
           >
             清理
@@ -78,9 +94,16 @@ export function DockerVolumesTab({ volumes, canManage, onRefresh, onCreate, onRe
                   className="btn-icon text-danger"
                   title="删除卷"
                   disabled={!canManage}
-                onClick={() => {
-                  if (!window.confirm(`删除卷 ${v.name}？`)) return;
-                  void onRemove(v.name);
+                  onClick={() => {
+                  setConfirm({
+                    title: `删除卷 ${v.name}`,
+                    message: `将永久删除卷 ${v.name}，此操作不可恢复。`,
+                    confirmLabel: "确认删除",
+                    onConfirm: async () => {
+                      setConfirm(null);
+                      await onRemove(v.name);
+                    },
+                  });
                 }}
               >
                 ×
@@ -128,6 +151,26 @@ export function DockerVolumesTab({ volumes, canManage, onRefresh, onCreate, onRe
           </div>
         </div>
       </Modal>
+      {confirm && (
+        <ConfirmModal confirm={confirm} onCancel={() => setConfirm(null)} />
+      )}
     </div>
+  );
+}
+
+function ConfirmModal({ confirm, onCancel }: { confirm: ConfirmState; onCancel: () => void }) {
+  return (
+    <>
+      <div className="drawer-overlay show" onClick={onCancel} />
+      <div className="confirm-modal">
+        <h3>{confirm.title}</h3>
+        <p className="text-sm">{confirm.message}</p>
+        {confirm.detail && <p className="text-muted text-xs">{confirm.detail}</p>}
+        <div className="flex gap-2" style={{ marginTop: 16, justifyContent: "flex-end" }}>
+          <button className="btn btn-secondary btn-sm" onClick={onCancel}>取消</button>
+          <button className="btn btn-danger btn-sm" onClick={confirm.onConfirm}>{confirm.confirmLabel}</button>
+        </div>
+      </div>
+    </>
   );
 }

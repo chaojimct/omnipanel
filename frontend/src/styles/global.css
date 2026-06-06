@@ -1942,10 +1942,10 @@
   .container-card .container-actions { display: flex; gap: var(--sp-1); opacity: 0; transition: opacity 0.12s; }
   .container-card:hover .container-actions { opacity: 1; }
   .list-header { display: grid; grid-template-columns: 1fr 120px 100px 140px 100px 80px; gap: var(--sp-3); padding: var(--sp-2) var(--sp-4); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--meta); border-bottom: 1px solid var(--border); }
-  .drawer-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 50; display: none; }
-  .drawer-overlay.show { display: block; }
-  .drawer { position: fixed; top: 0; right: -480px; width: 480px; height: 100vh; background: var(--bg); border-left: 1px solid var(--border); z-index: 51; display: flex; flex-direction: column; transition: right 0.2s ease; }
-  .drawer.show { right: 0; }
+  .drawer-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 50; opacity: 0; pointer-events: none; transition: opacity 0.25s ease; }
+  .drawer-overlay.show { opacity: 1; pointer-events: auto; }
+  .drawer { position: fixed; top: 0; right: 0; width: 480px; height: 100vh; background: var(--bg); border-left: 1px solid var(--border); z-index: 51; display: flex; flex-direction: column; transform: translateX(100%); transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1); will-change: transform; }
+  .drawer.show { transform: translateX(0); }
   .drawer-header { display: flex; align-items: center; padding: var(--sp-4) var(--sp-6); border-bottom: 1px solid var(--border); gap: var(--sp-3); }
   .drawer-header h2 { font-size: 16px; font-weight: 700; flex: 1; }
   .drawer-body { flex: 1; overflow-y: auto; padding: var(--sp-6); }
@@ -2730,3 +2730,107 @@
   0%, 100% { opacity: 0.45; transform: scale(0.92); }
   50% { opacity: 1; transform: scale(1); }
 }
+
+/* ====== Skeleton Loader ====== */
+.skeleton { display: flex; flex-direction: column; gap: 8px; padding: 16px; }
+.skeleton-row {
+  height: 16px;
+  border-radius: 6px;
+  background: linear-gradient(90deg, var(--surface-2, #1e1e2e) 25%, var(--surface-3, #2a2a3e) 50%, var(--surface-2, #1e1e2e) 75%);
+  background-size: 200% 100%;
+  animation: skeletonPulse 1.5s ease-in-out infinite;
+}
+.skeleton-card .skeleton-row { height: 80px; }
+.skeleton-text .skeleton-row { height: 12px; }
+@keyframes skeletonPulse { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+
+/* ====== Docker Error Banner ====== */
+.docker-error-banner {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 16px; margin: 0 16px 12px;
+  background: rgba(255, 59, 48, 0.08);
+  border: 1px solid rgba(255, 59, 48, 0.2);
+  border-radius: 8px; color: #ff3b30;
+  font-size: 13px;
+  animation: errorSlideIn 0.3s ease-out;
+}
+.docker-error-icon { font-size: 16px; flex-shrink: 0; }
+.docker-error-text { flex: 1; }
+.docker-error-dismiss {
+  background: none; border: none; color: inherit; cursor: pointer;
+  font-size: 18px; padding: 0 4px; opacity: 0.6; transition: opacity 0.2s;
+}
+.docker-error-dismiss:hover { opacity: 1; }
+@keyframes errorSlideIn { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
+
+/* ====== Tab Content Transition ====== */
+@keyframes tabFadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.docker-tab-content-animate {
+  animation: tabFadeIn 0.2s ease-out;
+}
+
+/* ====== List Item Enter Animation ====== */
+@keyframes listItemEnter {
+  from { opacity: 0; transform: translateX(-12px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+.docker-list-item {
+  animation: listItemEnter 0.25s ease-out both;
+}
+
+/* ====== Toast Animation ====== */
+@keyframes toastIn {
+  from { opacity: 0; transform: translateY(16px) scale(0.95); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes toastOut {
+  from { opacity: 1; transform: translateY(0) scale(1); }
+  to { opacity: 0; transform: translateY(-8px) scale(0.95); }
+}
+.docker-toast {
+  animation: toastIn 0.3s ease-out;
+}
+
+/* ====== Connection Switch Overlay ====== */
+.docker-switch-overlay {
+  position: absolute; inset: 0; z-index: 100;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px;
+  background: rgba(0, 0, 0, 0.5); backdrop-filter: blur(4px);
+  color: var(--text-1, #fff); font-size: 14px;
+  animation: fadeInDocker 0.2s ease-out;
+}
+.docker-switch-spinner {
+  width: 28px; height: 28px; border: 3px solid rgba(255,255,255,0.2);
+  border-top-color: var(--accent, #6366f1); border-radius: 50%;
+  animation: spinDocker 0.6s linear infinite;
+}
+@keyframes spinDocker { to { transform: rotate(360deg); } }
+@keyframes fadeInDocker { from { opacity: 0; } to { opacity: 1; } }
+
+/* ====== Breadcrumb ====== */
+.docker-breadcrumb {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 2px;
+  padding: 8px 12px; font-size: 13px; font-family: var(--font-mono, monospace);
+  background: var(--surface-1, #18181b); border-radius: 6px; margin-bottom: 8px;
+}
+.docker-breadcrumb-item {
+  cursor: pointer; color: var(--text-2, #a1a1aa); padding: 2px 4px; border-radius: 3px;
+  transition: color 0.15s, background 0.15s;
+}
+.docker-breadcrumb-item:hover { color: var(--text-1, #fff); background: var(--surface-2, #27272a); }
+.docker-breadcrumb-sep { color: var(--text-3, #52525b); }
+
+/* ====== Empty State ====== */
+.docker-empty-state {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 48px 24px; gap: 8px;
+  animation: emptyFadeIn 0.4s ease-out;
+}
+.docker-empty-icon { font-size: 48px; margin-bottom: 8px; opacity: 0.8; }
+.docker-empty-title { font-size: 15px; color: var(--text-1, #e4e4e7); font-weight: 500; }
+.docker-empty-desc { font-size: 13px; color: var(--text-3, #71717a); }
+@keyframes emptyFadeIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+

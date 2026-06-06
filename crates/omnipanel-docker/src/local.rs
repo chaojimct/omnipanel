@@ -1027,7 +1027,7 @@ impl DockerAdapter for LocalDockerAdapter {
                 driver: n.driver.unwrap_or_default(),
                 scope: n.scope.unwrap_or_default(),
                 internal: n.internal.unwrap_or(false),
-                created_at: 0,
+                created_at: parse_iso_to_unix_ms(n.created.as_deref()),
             })
             .collect())
     }

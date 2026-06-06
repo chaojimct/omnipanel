@@ -120,6 +120,9 @@ export function DockerPanel() {
   const [tab, setTab] = useState<WorkspaceTab>("containers");
   const [filter, setFilter] = useState<ContainerFilter>("all");
   const [query, setQuery] = useState("");
+  const [searchInput, setSearchInput] = useState("");
+  const [errorDismissed, setErrorDismissed] = useState(false);
+  const [switching, setSwitching] = useState(false);
   const [confirm, setConfirm] = useState<ConfirmState | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [drawerId, setDrawerId] = useState<string | null>(null);
@@ -162,7 +165,23 @@ export function DockerPanel() {
     setTab("containers");
     setFilter("all");
     setQuery("");
+    setSearchInput("");
+    setErrorDismissed(false);
+    setSwitching(true);
   }, [selectedConnectionId]);
+
+  // Clear switching overlay when data finishes loading
+  useEffect(() => {
+    if (switching && !dataLoading) {
+      setSwitching(false);
+    }
+  }, [dataLoading, switching]);
+
+  // Search debounce
+  useEffect(() => {
+    const timer = setTimeout(() => setQuery(searchInput), 300);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
 
   const counts = useMemo(
     () => ({
@@ -274,7 +293,15 @@ export function DockerPanel() {
 
   return (
     <>
-      <div className="docker-layout">
+      <div className="docker-layout" style={{ position: "relative" }}>
+        {/* Switching Overlay */}
+        {switching && (
+          <div className="docker-switch-overlay">
+            <div className="docker-switch-spinner" />
+            <span>正在连接…</span>
+          </div>
+        )}
+
         {/* 连接头部 */}
         {selectedConnection && (
           <div className="docker-conn-header">
@@ -321,6 +348,15 @@ export function DockerPanel() {
               <StatCard color="warn" value={composeProjects.length} label="Compose" />
             </div>
 
+            {/* Error Banner */}
+            {error && !isOffline && !errorDismissed && (
+              <div className="docker-error-banner">
+                <span className="docker-error-icon">⚠</span>
+                <span className="docker-error-text">{error}</span>
+                <button className="docker-error-dismiss" onClick={() => setErrorDismissed(true)}>×</button>
+              </div>
+            )}
+
             {/* 子页签 */}
             <div className="docker-subtabs">
               {(
@@ -339,6 +375,7 @@ export function DockerPanel() {
               ))}
             </div>
 
+            <div key={tab} className="docker-tab-content-animate">
             {tab === "containers" && (
               <>
                 <div className="docker-filters">
@@ -353,8 +390,8 @@ export function DockerPanel() {
                       className="input input-search"
                       placeholder="筛选容器…"
                       style={{ fontSize: 11, width: 200 }}
-                      value={query}
-                      onChange={(e) => setQuery(e.target.value)}
+                      value={searchInput}
+                      onChange={(e) => setSearchInput(e.target.value)}
                     />
                   </span>
                 </div>
@@ -369,14 +406,14 @@ export function DockerPanel() {
                   </div>
                   {filteredContainers.length === 0 ? (
                     <div className="docker-empty" style={{ minHeight: 120 }}>
-                      {dataLoading ? "加载中…" : "没有匹配的容器"}
+                      {dataLoading ? "加载中…" : <EmptyState icon="📦" title="暂无容器" desc="创建或拉取一个容器开始使用" />}
                     </div>
                   ) : (
-                    filteredContainers.map((container) => (
+                    filteredContainers.map((container, idx) => (
                       <div
                         key={container.id}
-                        className="container-card container-card-5"
-                        style={!container.running ? { opacity: 0.65 } : undefined}
+                        className="container-card container-card-5 docker-list-item"
+                        style={!container.running ? { opacity: 0.65, animationDelay: `${idx * 0.03}s` } : { animationDelay: `${idx * 0.03}s` }}
                         onClick={() => setDrawerId(container.id)}
                       >
                         <div className="container-name">
@@ -466,12 +503,13 @@ export function DockerPanel() {
                   <span></span>
                 </div>
                 {images.length === 0 ? (
-                  <div className="docker-empty" style={{ minHeight: 120 }}>{dataLoading ? "加载中…" : "暂无镜像"}</div>
+                  <div className="docker-empty" style={{ minHeight: 120 }}>{dataLoading ? "加载中…" : <EmptyState icon="🖼️" title="暂无镜像" desc="拉取或构建镜像" />}</div>
                 ) : (
                   images.map((img, idx) => (
                     <div
                       key={`${img.id}-${img.repository}-${img.tag}-${idx}`}
-                      className="container-card image-row"
+                      className="container-card image-row docker-list-item"
+                      style={{ animationDelay: `${idx * 0.03}s` }}
                       onClick={() => setImageDrawerId(img.id)}
                     >
                       <div className="container-title">
@@ -525,7 +563,7 @@ export function DockerPanel() {
               <div className="container-list">
                 {composeProjects.length === 0 ? (
                   <div className="docker-empty" style={{ minHeight: 120 }}>
-                    {dataLoading ? "加载中…" : "未识别到 Compose 项目"}
+                    {dataLoading ? "加载中…" : <EmptyState icon="🐳" title="未识别到 Compose 项目" />}
                   </div>
                 ) : (
                   composeProjects.map((proj) => (
@@ -661,6 +699,7 @@ export function DockerPanel() {
                 }}
               />
             )}
+            </div>
           </>
         )}
       </div>
@@ -668,7 +707,7 @@ export function DockerPanel() {
       <ContainerDrawer
         connectionId={selectedConnectionId}
         containerId={drawerId}
-        canExec={selectedConnection?.source === "local-engine"}
+        canExec={probe?.capabilities?.canContainerExec ?? false}
         canStreamLogs={probe?.capabilities?.canStreamLogs ?? false}
         hostLabel={selectedConnection?.hostLabel ?? null}
         sourceLabel={selectedConnection ? SOURCE_LABEL[selectedConnection.source] ?? selectedConnection.source : null}
@@ -804,7 +843,37 @@ export function DockerPanel() {
   );
 }
 
+function EmptyState({ icon, title, desc }: { icon: string; title: string; desc?: string }) {
+  return (
+    <div className="docker-empty-state">
+      <div className="docker-empty-icon">{icon}</div>
+      <div className="docker-empty-title">{title}</div>
+      {desc && <div className="docker-empty-desc">{desc}</div>}
+    </div>
+  );
+}
+
+function useCountUp(target: number, duration = 600) {
+  const [value, setValue] = useState(0);
+  const prevRef = useRef(0);
+  useEffect(() => {
+    const start = performance.now();
+    const from = prevRef.current;
+    const tick = (now: number) => {
+      const progress = Math.min((now - start) / duration, 1);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      const current = Math.round(from + (target - from) * eased);
+      setValue(current);
+      if (progress < 1) requestAnimationFrame(tick);
+      else prevRef.current = target;
+    };
+    requestAnimationFrame(tick);
+  }, [target, duration]);
+  return value;
+}
+
 function StatCard({ color, value, label }: { color: string; value: number; label: string }) {
+  const animatedValue = useCountUp(value);
   const bg = `var(--${color}-soft)`;
   const fg = `var(--${color})`;
   return (
@@ -813,7 +882,7 @@ function StatCard({ color, value, label }: { color: string; value: number; label
         <BoxIcon />
       </div>
       <div className="stat-info">
-        <span className="stat-val">{value}</span>
+        <span className="stat-val">{animatedValue}</span>
         <span className="stat-label">{label}</span>
       </div>
     </div>

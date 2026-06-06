@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Modal } from "../../components/ui/Modal";
+import Editor from "@monaco-editor/react";
 
 /* eslint-disable react-hooks/set-state-in-effect -- controlled form state reset */
 
@@ -69,14 +70,24 @@ export function DockerFileEditor({ open, filePath, initialContent, onClose, onSa
               </span>
             )}
           </div>
-          <textarea
-            className="input docker-file-editor-textarea"
-            value={content}
-            onChange={(e) => setContent(e.target.value)}
-            spellCheck={false}
-            disabled={saving}
-            style={{ width: "100%", minHeight: 360, fontFamily: "var(--font-mono, monospace)" }}
-          />
+          <div className="docker-file-editor-monaco" style={{ height: 360, border: "1px solid var(--border-1, #27272a)", borderRadius: 6, overflow: "hidden" }}>
+            <Editor
+              height="100%"
+              language={filePath?.endsWith(".sql") ? "sql" : filePath?.endsWith(".json") ? "json" : filePath?.endsWith(".yaml") || filePath?.endsWith(".yml") ? "yaml" : filePath?.endsWith(".sh") ? "shell" : "dockerfile"}
+              value={content}
+              onChange={(v) => setContent(v ?? "")}
+              theme="vs-dark"
+              options={{
+                minimap: { enabled: false },
+                fontSize: 13,
+                wordWrap: "on",
+                scrollBeyondLastLine: false,
+                lineNumbers: "on",
+                readOnly: saving,
+                padding: { top: 8 },
+              }}
+            />
+          </div>
           {error && <div className="text-danger text-sm" style={{ marginTop: 8 }}>{error}</div>}
           {message && <div className="text-success text-sm" style={{ marginTop: 8 }}>{message}</div>}
         </div>

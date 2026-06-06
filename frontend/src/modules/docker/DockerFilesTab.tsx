@@ -8,6 +8,25 @@ interface DockerFilesTabProps {
   fileContainerId: string | null;
   onPickContainer: (id: string) => Promise<void>;
   onEnter: (entry: DockerFileEntry) => Promise<void>;
+  onNavigatePath?: (path: string) => void;
+}
+
+function Breadcrumb({ path, onNavigate }: { path: string; onNavigate: (p: string) => void }) {
+  const parts = path.split("/").filter(Boolean);
+  return (
+    <div className="docker-breadcrumb">
+      <span className="docker-breadcrumb-item" onClick={() => onNavigate("/")}>/</span>
+      {parts.map((part, i) => {
+        const subPath = "/" + parts.slice(0, i + 1).join("/");
+        return (
+          <span key={i} className="docker-breadcrumb-segment">
+            <span className="docker-breadcrumb-sep">/</span>
+            <span className="docker-breadcrumb-item" onClick={() => onNavigate(subPath)}>{part}</span>
+          </span>
+        );
+      })}
+    </div>
+  );
 }
 
 function formatBytes(bytes: number | null | undefined): string {
@@ -17,7 +36,7 @@ function formatBytes(bytes: number | null | undefined): string {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
-export function DockerFilesTab({ containers, files, filePath, fileContainerId, onPickContainer, onEnter }: DockerFilesTabProps) {
+export function DockerFilesTab({ containers, files, filePath, fileContainerId, onPickContainer, onEnter, onNavigatePath }: DockerFilesTabProps) {
   const [selectedCid, setSelectedCid] = useState<string | null>(fileContainerId);
 
   return (
@@ -38,7 +57,11 @@ export function DockerFilesTab({ containers, files, filePath, fileContainerId, o
             <option key={c.id} value={c.id}>{c.name}</option>
           ))}
         </select>
-        <span className="text-muted text-sm" style={{ marginLeft: 12 }}>路径：{filePath}</span>
+        {onNavigatePath ? (
+          <Breadcrumb path={filePath} onNavigate={onNavigatePath} />
+        ) : (
+          <span className="text-muted text-sm" style={{ marginLeft: 12 }}>路径：{filePath}</span>
+        )}
       </div>
       {!fileContainerId ? (
         <div className="docker-empty" style={{ minHeight: 120 }}>请先选择一个容器</div>
