@@ -27,7 +27,7 @@ pub struct WsMessage {
 
 /// A connected WebSocket session.
 pub struct WsSession {
-    write_tx: mpsc::UnboundedSender<String>,
+    write_tx: mpsc::UnboundedSender<Message>,
     _task: tokio::task::JoinHandle<()>,
 }
 
@@ -59,12 +59,12 @@ impl WsSession {
             .map_err(|e| format!("WebSocket connect failed: {e}"))?;
 
         let (mut write, mut read) = ws_stream.split();
-        let (write_tx, mut write_rx) = mpsc::unbounded_channel::<String>();
+        let (write_tx, mut write_rx) = mpsc::unbounded_channel::<Message>();
 
         // Task: forward outgoing messages from channel to WebSocket
         let send_task = tokio::spawn(async move {
-            while let Some(text) = write_rx.recv().await {
-                if write.send(Message::Text(text.into())).await.is_err() {
+            while let Some(msg) = write_rx.recv().await {
+                if write.send(msg).await.is_err() {
                     break;
                 }
             }
@@ -137,26 +137,22 @@ impl WsSession {
     /// Send a text message through the WebSocket.
     pub fn send_text(&self, text: String) -> Result<(), String> {
         self.write_tx
-            .send(text)
+            .send(Message::Text(text.into()))
             .map_err(|e| format!("Send failed: {e}"))
     }
 
-    /// Send binary data through the WebSocket (hex-encoded).
+    /// Send binary data through the WebSocket (hex-encoded input, sent as binary frame).
     pub fn send_binary_hex(&self, hex_data: &str) -> Result<(), String> {
         let data = hex::decode(hex_data).map_err(|e| format!("Invalid hex data: {e}"))?;
-        // For binary, we need to go through the write channel differently
-        // For now, send as text with hex encoding
         self.write_tx
-            .send(String::from_utf8_lossy(&data).to_string())
+            .send(Message::Binary(data.into()))
             .map_err(|e| format!("Send failed: {e}"))
     }
 
-    /// Send a ping message.
+    /// Send a real WebSocket Ping frame.
     pub fn send_ping(&self) -> Result<(), String> {
-        // Ping is handled at the protocol level by tungstenite
-        // We send an empty text message as a keep-alive
         self.write_tx
-            .send(String::new())
+            .send(Message::Ping(vec![].into()))
             .map_err(|e| format!("Ping failed: {e}"))
     }
 }
