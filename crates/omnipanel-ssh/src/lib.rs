@@ -688,6 +688,23 @@ impl SshSession {
             .map_err(|e| OmniError::new(ErrorCode::Ssh, "删除失败").with_cause(e.to_string()))
     }
 
+    /// 重命名远程文件/目录。
+    pub async fn sftp_rename(&self, old_path: &str, new_path: &str) -> OmniResult<()> {
+        let sftp = self.open_sftp().await?;
+        sftp.rename(old_path, new_path)
+            .await
+            .map_err(|e| OmniError::new(ErrorCode::Ssh, "重命名失败").with_cause(e.to_string()))
+    }
+
+    /// 修改远程文件权限（通过 exec chmod）。
+    pub async fn sftp_chmod(&self, path: &str, mode: u32) -> OmniResult<()> {
+        let cmd = format!("chmod {:o} {}", mode, path);
+        self.exec_capture(&cmd)
+            .await?
+            .ok_or_err("chmod 失败")?;
+        Ok(())
+    }
+
     /// 列出远程进程列表（解析 ps aux 输出）。
     pub async fn process_list(&self) -> OmniResult<Vec<SshProcessInfo>> {
         let output = self

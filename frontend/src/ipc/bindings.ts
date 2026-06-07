@@ -188,6 +188,26 @@ export const commands = {
 	knowledgeDelete: (id: string) => typedError<null, OmniError_Serialize>(__TAURI_INVOKE("knowledge_delete", { id })),
 	/**  递增知识条目使用次数。 */
 	knowledgeIncrementUsage: (id: string) => typedError<null, OmniError_Serialize>(__TAURI_INVOKE("knowledge_increment_usage", { id })),
+	/**  创建容器。 */
+	dockerCreateContainer: (connectionId: string, request: DockerCreateContainerRequest) => typedError<string, OmniError_Serialize>(__TAURI_INVOKE("docker_create_container", { connectionId, request })),
+	/**  创建 SSH 隧道。 */
+	sshCreateTunnel: (connectionId: string, tunnelType: string, localPort: number, remoteHost: string, remotePort: number) => typedError<SshTunnelInfo, OmniError_Serialize>(__TAURI_INVOKE("ssh_create_tunnel", { connectionId, tunnelType, localPort, remoteHost, remotePort })),
+	/**  关闭 SSH 隧道。 */
+	sshCloseTunnel: (tunnelId: string) => typedError<null, OmniError_Serialize>(__TAURI_INVOKE("ssh_close_tunnel", { tunnelId })),
+	/**  列出 SSH 隧道。 */
+	sshListTunnels: () => typedError<SshTunnelInfo[], OmniError_Serialize>(__TAURI_INVOKE("ssh_list_tunnels")),
+	/**  列出 SSH 密钥。 */
+	sshListKeys: () => typedError<SshKeyInfo[], OmniError_Serialize>(__TAURI_INVOKE("ssh_list_keys")),
+	/**  生成 SSH 密钥。 */
+	sshGenerateKey: (keyType: string, bits: number | null, comment: string, passphrase: string) => typedError<SshKeyInfo, OmniError_Serialize>(__TAURI_INVOKE("ssh_generate_key", { keyType, bits, comment, passphrase })),
+	/**  导入 SSH 密钥。 */
+	sshImportKey: (name: string, privateKey: string) => typedError<SshKeyInfo, OmniError_Serialize>(__TAURI_INVOKE("ssh_import_key", { name, privateKey })),
+	/**  删除 SSH 密钥。 */
+	sshDeleteKey: (name: string) => typedError<null, OmniError_Serialize>(__TAURI_INVOKE("ssh_delete_key", { name })),
+	/**  SFTP 重命名文件。 */
+	sftpRename: (id: string, oldPath: string, newPath: string) => typedError<null, OmniError_Serialize>(__TAURI_INVOKE("sftp_rename", { id, oldPath, newPath })),
+	/**  SFTP 修改文件权限。 */
+	sftpChmod: (id: string, path: string, mode: number) => typedError<null, OmniError_Serialize>(__TAURI_INVOKE("sftp_chmod", { id, path, mode })),
 	/**  列出任务，可选按状态过滤。 */
 	taskList: (statusFilter: string | null, limit: number) => typedError<Task[], OmniError_Serialize>(__TAURI_INVOKE("task_list", { statusFilter, limit })),
 	/**  获取单个任务。 */
@@ -937,6 +957,40 @@ export type SaveTaskRequest = {
 	risk: TaskRisk,
 	status: TaskStatus,
 	source: TaskSource,
+};
+
+/**  创建容器请求。 */
+export type DockerCreateContainerRequest = {
+	image: string,
+	name?: string,
+	ports: string[],
+	volumes: string[],
+	env: string[],
+	network?: string,
+	cmd?: string[],
+	restartPolicy?: string,
+	autoRemove: boolean,
+};
+
+/**  SSH 隧道信息。 */
+export type SshTunnelInfo = {
+	id: string,
+	connectionId: string,
+	tunnelType: "local" | "remote" | "dynamic",
+	localPort: number,
+	remoteHost: string,
+	remotePort: number,
+	status: string,
+	startedAt: number,
+};
+
+/**  SSH 密钥信息。 */
+export type SshKeyInfo = {
+	name: string,
+	keyType: string,
+	path: string,
+	fingerprint: string,
+	comment: string,
 };
 
 export type UpdateInfo = {

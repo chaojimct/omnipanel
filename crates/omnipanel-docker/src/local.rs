@@ -656,6 +656,103 @@ impl DockerAdapter for LocalDockerAdapter {
         }
     }
 
+    async fn create_container(&self, req: &DockerCreateContainerRequest) -> OmniResult<String> {
+        use bollard::models::{ContainerCreateBody, HostConfig, PortBinding, PortMap};
+        use bollard::query_parameters::CreateContainerOptions;
+        use std::collections::HashMap;
+
+        let mut host_config = HostConfig::default();
+
+        // Port mappings: "8080:80/tcp" → port_bindings
+        if !req.ports.is_empty() {
+            let mut port_map: PortMap = HashMap::new();
+            for mapping in &req.ports {
+                let parts: Vec<&str> = mapping.split(':').collect();
+                if parts.len() >= 2 {
+                    let host_port = parts[0].to_string();
+                    let container_part = parts[1];
+                    let (container_port, proto) =
+                        if let Some((p, pr)) = container_part.split_once('/') {
+                            (p.to_string(), pr.to_string())
+                        } else {
+                            (container_part.to_string(), "tcp".to_string())
+                        };
+                    let key = format!("{}/{}", container_port, proto);
+                    port_map
+                        .entry(key)
+                        .or_insert_with(|| Some(vec![]))
+                        .as_mut()
+                        .unwrap()
+                        .push(PortBinding {
+                            host_ip: Some("0.0.0.0".to_string()),
+                            host_port: Some(host_port),
+                            ..Default::default()
+                        });
+                }
+            }
+            host_config.port_bindings = Some(port_map);
+        }
+
+        // Volume binds: "/host:/container[:ro]"
+        if !req.volumes.is_empty() {
+            host_config.binds = Some(req.volumes.clone());
+        }
+
+        // Restart policy
+        if let Some(ref policy) = req.restart_policy {
+            let name = match policy.as_str() {
+                "always" => bollard::models::RestartPolicyNameEnum::ALWAYS,
+                "on-failure" => bollard::models::RestartPolicyNameEnum::ON_FAILURE,
+                "unless-stopped" => bollard::models::RestartPolicyNameEnum::UNLESS_STOPPED,
+                _ => bollard::models::RestartPolicyNameEnum::EMPTY,
+            };
+            host_config.restart_policy = Some(bollard::models::RestartPolicy {
+                name: Some(name),
+                ..Default::default()
+            });
+        }
+
+        if req.auto_remove {
+            host_config.auto_remove = Some(true);
+        }
+
+        // Build networking config
+        let networking_config = req.network.as_ref().map(|net| {
+            use bollard::models::{EndpointSettings, NetworkingConfig};
+            let mut endpoints = HashMap::new();
+            endpoints.insert(net.clone(), EndpointSettings::default());
+            NetworkingConfig {
+                endpoints_config: Some(endpoints),
+            }
+        });
+
+        let config = ContainerCreateBody {
+            image: Some(req.image.clone()),
+            env: if req.env.is_empty() {
+                None
+            } else {
+                Some(req.env.clone())
+            },
+            cmd: req.cmd.clone(),
+            host_config: Some(host_config),
+            networking_config,
+            ..Default::default()
+        };
+
+        let options = req.name.as_ref().map(|n| CreateContainerOptions {
+            name: Some(n.clone()),
+            ..Default::default()
+        });
+
+        let resp = self
+            .docker
+            .create_container(options, config)
+            .await
+            .map_err(map_bollard)?;
+
+        Ok(resp.id)
+    }
+
     async fn container_logs(&self, id: &str, tail: i64) -> OmniResult<Vec<DockerLogLine>> {
         let options = LogsOptionsBuilder::default()
             .stdout(true)

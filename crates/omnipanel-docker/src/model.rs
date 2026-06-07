@@ -578,6 +578,30 @@ pub struct DockerCreateVolumeRequest {
     pub labels: Vec<(String, String)>,
 }
 
+/// 创建容器请求。
+#[derive(Debug, Clone, Default, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct DockerCreateContainerRequest {
+    /// 镜像名称（含 tag）。
+    pub image: String,
+    /// 容器名称，留空则 Docker 自动生成。
+    pub name: Option<String>,
+    /// 端口映射：host_port:container_port/tcp|udp。
+    pub ports: Vec<String>,
+    /// 卷挂载：host_path:container_path[:ro]。
+    pub volumes: Vec<String>,
+    /// 环境变量：KEY=VALUE。
+    pub env: Vec<String>,
+    /// 连接的网络名。
+    pub network: Option<String>,
+    /// 启动命令覆盖。
+    pub cmd: Option<Vec<String>>,
+    /// 重启策略：no|always|on-failure|unless-stopped。
+    pub restart_policy: Option<String>,
+    /// 自动删除容器（退出后自动 rm）。
+    pub auto_remove: bool,
+}
+
 /// 卷详情。
 #[derive(Debug, Clone, Default, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]

@@ -15,6 +15,7 @@ use omnipanel_store::{DatabaseConnectionStore, Storage};
 use omnipanel_ai::provider::AiProviderRegistry;
 
 use crate::background::SshPool;
+use crate::commands::ssh::SshTunnelInfo;
 use crate::log_store::LogStore;
 use crate::output_buffer::{self, OutputBuffers};
 
@@ -48,6 +49,8 @@ pub struct AppState {
     pub docker_stats_streams: Arc<Mutex<HashMap<String, Arc<std::sync::atomic::AtomicBool>>>>,
     /// 活跃 Docker 容器交互终端会话（按 sessionId 索引）。
     pub docker_exec_sessions: Arc<Mutex<HashMap<String, omnipanel_docker::DockerExecSession>>>,
+    /// 活跃 SSH 隧道（按 tunnelId 索引）。
+    pub ssh_tunnels: Arc<Mutex<HashMap<String, SshTunnelInfo>>>,
 }
 
 impl AppState {
@@ -86,6 +89,7 @@ impl AppState {
             docker_log_streams: Arc::new(Mutex::new(HashMap::new())),
             docker_stats_streams: Arc::new(Mutex::new(HashMap::new())),
             docker_exec_sessions: Arc::new(Mutex::new(HashMap::new())),
+            ssh_tunnels: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 }

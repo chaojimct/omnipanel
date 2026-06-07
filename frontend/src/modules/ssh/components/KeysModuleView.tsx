@@ -1,104 +1,233 @@
-import { SSH_KEYS } from "../data/sshKeys";
-import type { SshManagerContext } from "../hooks/useSshManager";
+import { useCallback, useEffect, useState } from "react";
+import { commands } from "../../../ipc/bindings";
+import type { SshKeyInfo } from "../../../ipc/bindings";
 
-type Props = Pick<
-  SshManagerContext,
-  "profile" | "hostName" | "keyCoverage" | "triggerKeyAction"
->;
+export function KeysModuleView() {
+  const [keys, setKeys] = useState<SshKeyInfo[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [showGenerate, setShowGenerate] = useState(false);
+  const [showImport, setShowImport] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
 
-export function KeysModuleView({
-  profile,
-  hostName,
-  keyCoverage,
-  triggerKeyAction,
-}: Props) {
+  // Generate form
+  const [genKeyType, setGenKeyType] = useState<"ed25519" | "rsa">("ed25519");
+  const [genBits, setGenBits] = useState("4096");
+  const [genComment, setGenComment] = useState("");
+  const [genPassphrase, setGenPassphrase] = useState("");
+  const [generating, setGenerating] = useState(false);
+
+  // Import form
+  const [importName, setImportName] = useState("");
+  const [importKey, setImportKey] = useState("");
+  const [importing, setImporting] = useState(false);
+
+  const loadKeys = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await commands.sshListKeys();
+      if (res.status === "ok") {
+        setKeys(res.data);
+      } else {
+        setError(res.error.message);
+      }
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadKeys();
+  }, [loadKeys]);
+
+  const handleGenerate = async () => {
+    setGenerating(true);
+    setError(null);
+    try {
+      const res = await commands.sshGenerateKey(
+        genKeyType,
+        genKeyType === "rsa" ? parseInt(genBits, 10) || 4096 : null,
+        genComment,
+        genPassphrase
+      );
+      if (res.status === "ok") {
+        setShowGenerate(false);
+        setGenComment("");
+        setGenPassphrase("");
+        loadKeys();
+      } else {
+        setError(res.error.message);
+      }
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const handleImport = async () => {
+    if (!importName.trim() || !importKey.trim()) {
+      setError("请填写名称和私钥内容");
+      return;
+    }
+    setImporting(true);
+    setError(null);
+    try {
+      const res = await commands.sshImportKey(importName.trim(), importKey.trim());
+      if (res.status === "ok") {
+        setShowImport(false);
+        setImportName("");
+        setImportKey("");
+        loadKeys();
+      } else {
+        setError(res.error.message);
+      }
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const handleDelete = async (name: string) => {
+    try {
+      const res = await commands.sshDeleteKey(name);
+      if (res.status === "ok") {
+        setConfirmDelete(null);
+        loadKeys();
+      } else {
+        setError(res.error.message);
+      }
+    } catch (e) {
+      setError(String(e));
+    }
+  };
+
   return (
     <div className="ssh-detail">
       <div className="ssh-detail-header">
         <div>
           <div className="host-title">SSH Keys</div>
-          <div className="host-addr-detail">
-            统一管理密钥、用途、覆盖主机与风险范围
+          <div className="host-addr-detail">统一管理本地 SSH 密钥</div>
+        </div>
+        <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
+          <button className="btn btn-secondary btn-sm" onClick={() => { setShowGenerate(true); setShowImport(false); }}>
+            生成密钥
+          </button>
+          <button className="btn btn-primary btn-sm" onClick={() => { setShowImport(true); setShowGenerate(false); }}>
+            + 导入密钥
+          </button>
+        </div>
+      </div>
+
+      {error && <div className="sftp-error">{error}</div>}
+
+      {showGenerate && (
+        <div className="panel" style={{ marginBottom: 8 }}>
+          <div className="panel-header"><h3>生成新密钥</h3></div>
+          <div className="panel-body" style={{ padding: 12 }}>
+            <div className="form-field">
+              <label className="form-label">密钥类型</label>
+              <select className="input" value={genKeyType} onChange={(e) => setGenKeyType(e.target.value as "ed25519" | "rsa")} style={{ width: "100%" }}>
+                <option value="ed25519">ED25519（推荐）</option>
+                <option value="rsa">RSA</option>
+              </select>
+            </div>
+            {genKeyType === "rsa" && (
+              <div className="form-field">
+                <label className="form-label">位数</label>
+                <input className="input" type="number" value={genBits} onChange={(e) => setGenBits(e.target.value)} style={{ width: "100%" }} />
+              </div>
+            )}
+            <div className="form-field">
+              <label className="form-label">注释</label>
+              <input className="input" placeholder="user@host" value={genComment} onChange={(e) => setGenComment(e.target.value)} style={{ width: "100%" }} />
+            </div>
+            <div className="form-field">
+              <label className="form-label">密码（可选）</label>
+              <input className="input" type="password" placeholder="留空无密码" value={genPassphrase} onChange={(e) => setGenPassphrase(e.target.value)} style={{ width: "100%" }} />
+            </div>
+            <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+              <button className="btn btn-primary btn-sm" onClick={handleGenerate} disabled={generating}>
+                {generating ? "生成中…" : "生成"}
+              </button>
+              <button className="btn btn-secondary btn-sm" onClick={() => setShowGenerate(false)}>取消</button>
+            </div>
           </div>
         </div>
-        <button
-          className="btn btn-primary btn-sm"
-          style={{ marginLeft: "auto" }}
-          onClick={() =>
-            triggerKeyAction(
-              "导入 SSH 密钥",
-              "从密钥总览页导入新的 SSH Key",
-              "ssh-add ~/.ssh/new_key",
-            )
-          }
-        >
-          + Import Key
-        </button>
-      </div>
-      <div className="ssh-detail-body ssh-workbench-grid">
-        <div className="panel">
-          <div className="panel-header">
-            <h3>Available Keys</h3>
+      )}
+
+      {showImport && (
+        <div className="panel" style={{ marginBottom: 8 }}>
+          <div className="panel-header"><h3>导入密钥</h3></div>
+          <div className="panel-body" style={{ padding: 12 }}>
+            <div className="form-field">
+              <label className="form-label">名称</label>
+              <input className="input" placeholder="id_ed25519" value={importName} onChange={(e) => setImportName(e.target.value)} style={{ width: "100%" }} />
+            </div>
+            <div className="form-field">
+              <label className="form-label">私钥内容</label>
+              <textarea
+                className="input"
+                rows={6}
+                placeholder="-----BEGIN OPENSSH PRIVATE KEY-----&#10;..."
+                value={importKey}
+                onChange={(e) => setImportKey(e.target.value)}
+                style={{ width: "100%", resize: "vertical", fontFamily: "monospace" }}
+              />
+            </div>
+            <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+              <button className="btn btn-primary btn-sm" onClick={handleImport} disabled={importing}>
+                {importing ? "导入中…" : "导入"}
+              </button>
+              <button className="btn btn-secondary btn-sm" onClick={() => setShowImport(false)}>取消</button>
+            </div>
           </div>
+        </div>
+      )}
+
+      <div className="ssh-detail-body">
+        <div className="panel">
+          <div className="panel-header"><h3>Available Keys</h3></div>
           <div className="panel-body action-list">
-            {SSH_KEYS.map((key) => (
-              <div key={key.name} className="action-row">
-                <span className="action-title">{key.name}</span>
-                <span className="action-meta">
-                  {key.meta} · {key.usage}
-                </span>
+            {loading && <div className="text-muted text-sm" style={{ padding: 12 }}>加载中…</div>}
+            {!loading && keys.length === 0 && <div className="text-muted text-sm" style={{ padding: 12 }}>暂无密钥</div>}
+            {keys.map((key) => (
+              <div key={key.name} className="action-row" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <div style={{ flex: 1 }}>
+                  <div className="action-title">{key.name}</div>
+                  <div className="action-meta">
+                    {key.keyType} · {key.path} · {key.fingerprint}
+                    {key.comment && ` · ${key.comment}`}
+                  </div>
+                </div>
+                <button className="btn-icon text-danger" title="删除" onClick={() => setConfirmDelete(key.name)}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
+                    <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2" />
+                  </svg>
+                </button>
               </div>
             ))}
           </div>
         </div>
-        <div className="ssh-side-stack">
-          <div className="panel">
-            <div className="panel-header">
-              <h3>覆盖情况</h3>
-            </div>
-            <div className="panel-body action-list">
-              <div className="action-row">
-                <span className="action-title">当前主机</span>
-                <span className="action-meta">
-                  {hostName} 使用 {profile.keyFile}，覆盖范围 {profile.keyScope}。
-                </span>
-              </div>
-              <div className="action-row">
-                <span className="action-title">密钥命中</span>
-                <span className="action-meta">
-                  当前画像已匹配 {keyCoverage}{" "}
-                  组密钥信息，可继续做轮换或权限治理。
-                </span>
-              </div>
-              <div className="action-row">
-                <span className="action-title">与终端协同</span>
-                <span className="action-meta">
-                  密钥与主机上下文进入终端工作区后，才能形成真正可复用的运维工作台。
-                </span>
-              </div>
-            </div>
-          </div>
-          <div className="panel">
-            <div className="panel-header">
-              <h3>治理建议</h3>
-            </div>
-            <div className="panel-body action-list">
-              <div className="action-row">
-                <span className="action-title">连接治理</span>
-                <span className="action-meta">
-                  SSH 模块不只是连上主机，还要对密钥边界、风险范围与工作流授权负责。
-                </span>
-              </div>
-              <div className="action-row">
-                <span className="action-title">轮换策略</span>
-                <span className="action-meta">
-                  建议按环境划分密钥，避免生产、预发与跳板机共用长期凭据。
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
       </div>
+
+      {confirmDelete && (
+        <>
+          <div className="drawer-overlay show" onClick={() => setConfirmDelete(null)} />
+          <div className="confirm-modal">
+            <h3>删除密钥</h3>
+            <p className="text-sm">确定要删除密钥 <code>{confirmDelete}</code> 吗？此操作不可恢复。</p>
+            <div className="flex gap-2" style={{ marginTop: 16, justifyContent: "flex-end" }}>
+              <button className="btn btn-secondary btn-sm" onClick={() => setConfirmDelete(null)}>取消</button>
+              <button className="btn btn-danger btn-sm" onClick={() => handleDelete(confirmDelete)}>确认删除</button>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

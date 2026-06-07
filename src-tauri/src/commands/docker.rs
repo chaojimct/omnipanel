@@ -15,7 +15,7 @@ use omnipanel_docker::{
     DockerComposeAction, DockerComposeProject, DockerComposeRequest, DockerComposeResult,
     DockerConnectionInfo, DockerConnectionSource, DockerConnectionStatus, DockerContainerAction,
     DockerContainerDetail, DockerContainerStats, DockerContainerSummary,
-    DockerCreateNetworkRequest, DockerCreateVolumeRequest, DockerFileEntry, DockerImageDetail,
+    DockerCreateContainerRequest, DockerCreateNetworkRequest, DockerCreateVolumeRequest, DockerFileEntry, DockerImageDetail,
     DockerImageHistoryLayer, DockerImageProgress, DockerImageSummary, DockerLogLine,
     DockerNetworkDetail, DockerNetworkSummary, DockerOverview, DockerProbe, DockerPruneResult,
     DockerPruneVolumesResult, DockerPullResult, DockerVolumeDetail, DockerVolumeSummary,
@@ -1177,4 +1177,24 @@ pub struct SshHostInfo {
     pub host: String,
     pub port: u16,
     pub user: String,
+}
+
+/// 创建容器。返回新容器 ID。
+#[tauri::command]
+#[specta::specta]
+pub async fn docker_create_container(
+    state: State<'_, AppState>,
+    connection_id: String,
+    request: DockerCreateContainerRequest,
+) -> Result<String, OmniError> {
+    tracing::info!(
+        connection = %connection_id,
+        image = %request.image,
+        name = ?request.name,
+        "创建 Docker 容器"
+    );
+    resolve_adapter(&state, &connection_id)
+        .await?
+        .create_container(&request)
+        .await
 }

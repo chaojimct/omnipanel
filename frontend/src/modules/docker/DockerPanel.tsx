@@ -22,6 +22,7 @@ import { DockerVolumeDrawer } from "./DockerVolumeDrawer";
 import { DockerComposeDrawer } from "./DockerComposeDrawer";
 import { DockerFileEditor } from "./DockerFileEditor";
 import type { DockerComposeAction } from "../../ipc/bindings";
+import { CreateContainerDialog } from "./CreateContainerDialog";
 import type {
   DockerContainerDetail,
   DockerContainerSummary,
@@ -133,6 +134,9 @@ export function DockerPanel() {
   const [volumeDrawerName, setVolumeDrawerName] = useState<string | null>(null);
   const [composeDrawerName, setComposeDrawerName] = useState<string | null>(null);
   const [fileEditor, setFileEditor] = useState<{ path: string; content: string } | null>(null);
+  const [showCreateContainer, setShowCreateContainer] = useState(false);
+  const [selectedContainers, setSelectedContainers] = useState<Set<string>>(new Set());
+  const [selectedImages, setSelectedImages] = useState<Set<string>>(new Set());
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -168,6 +172,8 @@ export function DockerPanel() {
     setSearchInput("");
     setErrorDismissed(false);
     setSwitching(true);
+    setSelectedContainers(new Set());
+    setSelectedImages(new Set());
   }, [selectedConnectionId]);
 
   // Clear switching overlay when data finishes loading
@@ -291,6 +297,68 @@ export function DockerPanel() {
 
   const isOffline = probe?.status === "offline";
 
+  const toggleContainerSelect = (id: string) => {
+    setSelectedContainers((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleImageSelect = (id: string) => {
+    setSelectedImages((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const batchRemoveContainers = async () => {
+    if (selectedContainers.size === 0) return;
+    setConfirm({
+      title: `批量删除 ${selectedContainers.size} 个容器`,
+      message: "将逐个删除选中的容器，此操作不可恢复。",
+      detail: selectedConnection?.name ?? "",
+      confirmLabel: "确认删除",
+      onConfirm: async () => {
+        setConfirm(null);
+        let ok = 0;
+        let fail = 0;
+        for (const cid of selectedContainers) {
+          const res = await containerAction(cid, "remove");
+          if (res.ok) ok++;
+          else fail++;
+        }
+        setSelectedContainers(new Set());
+        showToast(`批量删除完成：成功 ${ok}，失败 ${fail}`);
+      },
+    });
+  };
+
+  const batchRemoveImages = async () => {
+    if (selectedImages.size === 0) return;
+    setConfirm({
+      title: `批量删除 ${selectedImages.size} 个镜像`,
+      message: "将逐个强制删除选中的镜像，此操作不可恢复。",
+      detail: selectedConnection?.name ?? "",
+      confirmLabel: "确认删除",
+      onConfirm: async () => {
+        setConfirm(null);
+        let ok = 0;
+        let fail = 0;
+        for (const imgId of selectedImages) {
+          const res = await removeImage(imgId, true);
+          if (res.ok) ok++;
+          else fail++;
+        }
+        setSelectedImages(new Set());
+        showToast(`批量删除完成：成功 ${ok}，失败 ${fail}`);
+      },
+    });
+  };
+
   return (
     <>
       <div className="docker-layout" style={{ position: "relative" }}>
@@ -385,6 +453,14 @@ export function DockerPanel() {
                       <span className="count">{counts[key]}</span>
                     </button>
                   ))}
+                  {selectedContainers.size > 0 && (
+                    <button className="btn btn-danger btn-sm" onClick={batchRemoveContainers}>
+                      批量删除 ({selectedContainers.size})
+                    </button>
+                  )}
+                  <button className="btn btn-primary btn-sm" onClick={() => setShowCreateContainer(true)} disabled={!probe?.capabilities?.canManageContainers}>
+                    + 创建容器
+                  </button>
                   <span style={{ marginLeft: "auto" }}>
                     <input
                       className="input input-search"
@@ -398,6 +474,12 @@ export function DockerPanel() {
 
                 <div className="container-list">
                   <div className="list-header list-5">
+                    <span style={{ width: 24 }}>
+                      <input type="checkbox" checked={selectedContainers.size > 0 && selectedContainers.size === filteredContainers.length} onChange={(e) => {
+                        if (e.target.checked) setSelectedContainers(new Set(filteredContainers.map((c) => c.id)));
+                        else setSelectedContainers(new Set());
+                      }} />
+                    </span>
                     <span>{t("docker.list.container")}</span>
                     <span>{t("docker.list.status")}</span>
                     <span>{t("docker.list.ports")}</span>
@@ -416,6 +498,9 @@ export function DockerPanel() {
                         style={!container.running ? { opacity: 0.65, animationDelay: `${idx * 0.03}s` } : { animationDelay: `${idx * 0.03}s` }}
                         onClick={() => setDrawerId(container.id)}
                       >
+                        <div style={{ width: 24 }} onClick={(e) => e.stopPropagation()}>
+                          <input type="checkbox" checked={selectedContainers.has(container.id)} onChange={() => toggleContainerSelect(container.id)} />
+                        </div>
                         <div className="container-name">
                           <div className="container-icon" style={{ color: container.running ? "var(--success)" : "var(--muted)" }}>
                             <BoxIcon />
@@ -475,6 +560,11 @@ export function DockerPanel() {
               <div className="container-list">
                 <div className="docker-filters">
                   <span className="text-muted text-sm">{images.length} 个镜像</span>
+                  {selectedImages.size > 0 && (
+                    <button className="btn btn-danger btn-sm" onClick={batchRemoveImages}>
+                      批量删除 ({selectedImages.size})
+                    </button>
+                  )}
                   <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
                     <ImageActionBar
                       canManage={probe?.capabilities?.canManageImages ?? false}
@@ -496,6 +586,12 @@ export function DockerPanel() {
                   </div>
                 </div>
                 <div className="list-header image-row">
+                  <span style={{ width: 24 }}>
+                    <input type="checkbox" checked={selectedImages.size > 0 && selectedImages.size === images.length} onChange={(e) => {
+                      if (e.target.checked) setSelectedImages(new Set(images.map((i) => i.id)));
+                      else setSelectedImages(new Set());
+                    }} />
+                  </span>
                   <span>仓库</span>
                   <span>标签</span>
                   <span>大小</span>
@@ -512,6 +608,9 @@ export function DockerPanel() {
                       style={{ animationDelay: `${idx * 0.03}s` }}
                       onClick={() => setImageDrawerId(img.id)}
                     >
+                      <div style={{ width: 24 }} onClick={(e) => e.stopPropagation()}>
+                        <input type="checkbox" checked={selectedImages.has(img.id)} onChange={() => toggleImageSelect(img.id)} />
+                      </div>
                       <div className="container-title">
                         {img.repository}
                         {img.dangling && <span className="badge badge-warn" style={{ marginLeft: 6 }}>悬空</span>}
@@ -822,6 +921,16 @@ export function DockerPanel() {
         onClose={() => setShowAddConn(false)}
         onSaved={() => {
           void reloadConnections();
+        }}
+      />
+
+      <CreateContainerDialog
+        open={showCreateContainer}
+        connectionId={selectedConnectionId}
+        onClose={() => setShowCreateContainer(false)}
+        onCreated={() => {
+          void refresh();
+          showToast("容器创建成功");
         }}
       />
 

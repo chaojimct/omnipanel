@@ -592,6 +592,13 @@ export const zhCN = {
       create: "创建隧道",
       delete: "删除",
       empty: "暂无隧道",
+      type: "类型",
+      localPort: "本地端口",
+      remoteHost: "远程地址",
+      remotePort: "远程端口",
+      status: "状态",
+      active: "活跃",
+      closed: "已关闭",
     },
     capabilities: {
       title: "连接能力",

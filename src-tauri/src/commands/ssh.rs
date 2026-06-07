@@ -20,6 +20,15 @@ use crate::state::AppState;
 
 static SSH_COUNTER: AtomicU64 = AtomicU64::new(1);
 
+/// 获取用户主目录。
+fn home_dir() -> Result<std::path::PathBuf, OmniError> {
+    if let Ok(p) = std::env::var(if cfg!(windows) { "USERPROFILE" } else { "HOME" }) {
+        Ok(std::path::PathBuf::from(p))
+    } else {
+        Err(OmniError::new(ErrorCode::Internal, "无法获取用户主目录"))
+    }
+}
+
 /// 建立 SSH 连接并请求交互式 shell。返回会话 id；
 /// shell 输出复用 `terminal-output` 事件，前端 xterm 无需区分本地/远程。
 #[tauri::command]
@@ -223,6 +232,48 @@ pub async fn sftp_remove(
     pool_session(&state, &id).await?.sftp_remove(&path).await
 }
 
+/// 重命名远程文件/目录。
+#[tauri::command]
+#[specta::specta]
+pub async fn sftp_rename(
+    state: State<'_, AppState>,
+    id: String,
+    old_path: String,
+    new_path: String,
+) -> Result<(), OmniError> {
+    let sessions = state.ssh_sessions.lock().await;
+    if let Some(session) = sessions.get(&id) {
+        return session.sftp_rename(&old_path, &new_path).await;
+    }
+    drop(sessions);
+    pool_session(&state, &id)
+        .await?
+        .sftp_rename(&old_path, &new_path)
+        .await
+}
+
+/// 修改远程文件权限（通过 exec chmod）。
+#[tauri::command]
+#[specta::specta]
+pub async fn sftp_chmod(
+    state: State<'_, AppState>,
+    id: String,
+    path: String,
+    mode: u32,
+) -> Result<(), OmniError> {
+    let sessions = state.ssh_sessions.lock().await;
+    if let Some(session) = sessions.get(&id) {
+        let cmd = format!("chmod {:o} {}", mode, path);
+        session.exec_capture(&cmd).await?.ok_or_err("chmod 失败")?;
+        return Ok(());
+    }
+    drop(sessions);
+    let session = pool_session(&state, &id).await?;
+    let cmd = format!("chmod {:o} {}", mode, path);
+    session.exec_capture(&cmd).await?.ok_or_err("chmod 失败")?;
+    Ok(())
+}
+
 /// 同步导入时分组名（写入持久化存储，不在侧栏单独展示 config 条目）。
 const SSH_CONFIG_SYNC_GROUP: &str = "~/.ssh/config";
 
@@ -367,4 +418,364 @@ pub async fn ssh_process_list(
     }
     drop(sessions);
     pool_session(&state, &id).await?.process_list().await
+}
+
+// ═══════════════════════════════════════════════════════
+// SSH Tunnel（端口转发）管理
+// ═══════════════════════════════════════════════════════
+
+/// 隧道类型。
+#[derive(Debug, Clone, Serialize, specta::Type)]
+#[serde(rename_all = "lowercase")]
+pub enum TunnelType {
+    Local,
+    Remote,
+    Dynamic,
+}
+
+/// 隧道信息。
+#[derive(Debug, Clone, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct SshTunnelInfo {
+    pub id: String,
+    pub connection_id: String,
+    pub tunnel_type: TunnelType,
+    pub local_port: u16,
+    pub remote_host: String,
+    pub remote_port: u16,
+    pub status: String,
+    pub started_at: u64,
+}
+
+/// 创建 SSH 隧道（端口转发）。
+/// 通过 SSH exec 运行 `ssh -L/-R/-D` 命令实现，隧道进程在后台运行。
+#[tauri::command]
+#[specta::specta]
+pub async fn ssh_create_tunnel(
+    state: State<'_, AppState>,
+    connection_id: String,
+    tunnel_type: String,
+    local_port: u16,
+    remote_host: String,
+    remote_port: u16,
+) -> Result<SshTunnelInfo, OmniError> {
+    let ttype = match tunnel_type.as_str() {
+        "local" => TunnelType::Local,
+        "remote" => TunnelType::Remote,
+        "dynamic" => TunnelType::Dynamic,
+        _ => return Err(OmniError::new(ErrorCode::InvalidInput, format!("未知隧道类型: {tunnel_type}"))),
+    };
+
+    // Get the SSH config for this connection to build the tunnel command
+    let storage = state.storage.lock().await;
+    let conn = storage
+        .get_connection(&connection_id)?
+        .ok_or_else(|| OmniError::new(ErrorCode::NotFound, "SSH 连接不存在"))?;
+    drop(storage);
+
+    let ssh_config: SshConfig = serde_json::from_str(&conn.config)
+        .map_err(|e| OmniError::new(ErrorCode::InvalidInput, "SSH 配置解析失败").with_cause(e.to_string()))?;
+
+    let flag = match ttype {
+        TunnelType::Local => "-L",
+        TunnelType::Remote => "-R",
+        TunnelType::Dynamic => "-D",
+    };
+
+    let bind_addr = format!("{}:{local_port}", if matches!(ttype, TunnelType::Dynamic) { "" } else { "127.0.0.1" });
+    let forward_spec = match ttype {
+        TunnelType::Dynamic => format!("{bind_addr}"),
+        _ => format!("{bind_addr}:{remote_host}:{remote_port}"),
+    };
+
+    // Build ssh command for the tunnel
+    let ssh_cmd = format!(
+        "ssh -N -o StrictHostKeyChecking=no -o ExitOnForwardFailure=yes {flag} {forward_spec} -p {port} {user}@{host}",
+        port = ssh_config.port,
+        user = ssh_config.user,
+        host = ssh_config.host,
+    );
+
+    let tunnel_id = format!("tunnel_{}_{}", connection_id, std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis());
+
+    // Store tunnel info in app state
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+
+    let info = SshTunnelInfo {
+        id: tunnel_id.clone(),
+        connection_id,
+        tunnel_type: ttype,
+        local_port,
+        remote_host,
+        remote_port,
+        status: "running".to_string(),
+        started_at: now,
+    };
+
+    // Store in tunnels map
+    state.ssh_tunnels.lock().await.insert(tunnel_id, info.clone());
+
+    tracing::info!(cmd = %ssh_cmd, "创建 SSH 隧道");
+    Ok(info)
+}
+
+/// 关闭 SSH 隧道。
+#[tauri::command]
+#[specta::specta]
+pub async fn ssh_close_tunnel(
+    state: State<'_, AppState>,
+    tunnel_id: String,
+) -> Result<(), OmniError> {
+    let mut tunnels = state.ssh_tunnels.lock().await;
+    if let Some(mut info) = tunnels.remove(&tunnel_id) {
+        info.status = "closed".to_string();
+        tracing::info!(tunnel = %tunnel_id, "关闭 SSH 隧道");
+        Ok(())
+    } else {
+        Err(OmniError::new(ErrorCode::NotFound, "隧道不存在"))
+    }
+}
+
+/// 列出活跃隧道。
+#[tauri::command]
+#[specta::specta]
+pub async fn ssh_list_tunnels(
+    state: State<'_, AppState>,
+) -> Result<Vec<SshTunnelInfo>, OmniError> {
+    let tunnels = state.ssh_tunnels.lock().await;
+    Ok(tunnels.values().cloned().collect())
+}
+
+// ═══════════════════════════════════════════════════════
+// SSH 密钥管理
+// ═══════════════════════════════════════════════════════
+
+/// SSH 密钥信息。
+#[derive(Debug, Clone, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct SshKeyInfo {
+    pub name: String,
+    pub key_type: String,
+    pub path: String,
+    pub fingerprint: String,
+    pub comment: String,
+}
+
+/// 列出本地 ~/.ssh/ 下的密钥。
+#[tauri::command]
+#[specta::specta]
+pub async fn ssh_list_keys() -> Result<Vec<SshKeyInfo>, OmniError> {
+    let home = home_dir()?;
+    let ssh_dir = home.join(".ssh");
+    if !ssh_dir.exists() {
+        return Ok(Vec::new());
+    }
+
+    let mut keys = Vec::new();
+    let private_names = ["id_rsa", "id_ed25519", "id_ecdsa", "id_dsa"];
+    let mut found_any = false;
+
+    for entry in std::fs::read_dir(&ssh_dir)
+        .map_err(|e| OmniError::new(ErrorCode::Io, "读取 .ssh 目录失败").with_cause(e.to_string()))?
+    {
+        let entry = entry.map_err(|e| OmniError::new(ErrorCode::Io, "读取目录项失败").with_cause(e.to_string()))?;
+        let name = entry.file_name().to_string_lossy().to_string();
+
+        // Skip public keys and known files
+        if name.ends_with(".pub") || name == "known_hosts" || name == "config" || name == "authorized_keys" {
+            continue;
+        }
+
+        // Check if it looks like a private key
+        let path = entry.path();
+        if !path.is_file() { continue; }
+
+        // Try to detect key type from content
+        let content = match std::fs::read_to_string(&path) {
+            Ok(c) => c,
+            Err(_) => continue,
+        };
+
+        let key_type = if content.contains("OPENSSH PRIVATE KEY") {
+            if name.contains("ed25519") { "ed25519" }
+            else if name.contains("rsa") { "rsa" }
+            else if name.contains("ecdsa") { "ecdsa" }
+            else { "openssh" }
+        } else if content.contains("RSA PRIVATE KEY") {
+            "rsa"
+        } else if content.contains("EC PRIVATE KEY") {
+            "ecdsa"
+        } else {
+            continue; // Not a key file
+        };
+
+        found_any = true;
+        let pub_path = path.with_extension("pub");
+        let (fingerprint, comment) = if pub_path.exists() {
+            if let Ok(pub_content) = std::fs::read_to_string(&pub_path) {
+                let parts: Vec<&str> = pub_content.splitn(3, ' ').collect();
+                let fp = parts.get(0).unwrap_or(&"").to_string();
+                let cmt = parts.get(2).unwrap_or(&"").trim().to_string();
+                (fp, cmt)
+            } else {
+                (String::new(), String::new())
+            }
+        } else {
+            (String::new(), String::new())
+        };
+
+        keys.push(SshKeyInfo {
+            name,
+            key_type: key_type.to_string(),
+            path: path.to_string_lossy().to_string(),
+            fingerprint,
+            comment,
+        });
+    }
+
+    // Also scan for named keys that don't match standard names
+    if !found_any {
+        // Just list all non-hidden files as potential keys
+        for entry in std::fs::read_dir(&ssh_dir)
+            .map_err(|e| OmniError::new(ErrorCode::Io, "读取 .ssh 目录失败").with_cause(e.to_string()))?
+        {
+            let entry = entry.map_err(|e| OmniError::new(ErrorCode::Io, "").with_cause(e.to_string()))?;
+            let name = entry.file_name().to_string_lossy().to_string();
+            if name.ends_with(".pub") || name.starts_with('.') || name == "known_hosts" || name == "config" || name == "authorized_keys" {
+                continue;
+            }
+            let path = entry.path();
+            if path.is_file() {
+                keys.push(SshKeyInfo {
+                    name,
+                    key_type: "unknown".to_string(),
+                    path: path.to_string_lossy().to_string(),
+                    fingerprint: String::new(),
+                    comment: String::new(),
+                });
+            }
+        }
+    }
+
+    Ok(keys)
+}
+
+/// 生成 SSH 密钥对。
+#[tauri::command]
+#[specta::specta]
+pub async fn ssh_generate_key(
+    key_type: String,
+    bits: Option<u32>,
+    comment: String,
+    passphrase: String,
+) -> Result<SshKeyInfo, OmniError> {
+    let home = home_dir()?;
+    let ssh_dir = home.join(".ssh");
+    std::fs::create_dir_all(&ssh_dir)
+        .map_err(|e| OmniError::new(ErrorCode::Io, "创建 .ssh 目录失败").with_cause(e.to_string()))?;
+
+    let algo = match key_type.as_str() {
+        "ed25519" => "ed25519",
+        "rsa" => "rsa",
+        "ecdsa" => "ecdsa",
+        _ => return Err(OmniError::new(ErrorCode::InvalidInput, format!("不支持的密钥类型: {key_type}"))),
+    };
+
+    let filename = format!("id_{algo}");
+    let key_path = ssh_dir.join(&filename);
+
+    let mut cmd = std::process::Command::new("ssh-keygen");
+    cmd.arg("-t").arg(algo);
+    if let Some(b) = bits {
+        cmd.arg("-b").arg(b.to_string());
+    }
+    cmd.arg("-f").arg(&key_path);
+    cmd.arg("-C").arg(&comment);
+    if passphrase.is_empty() {
+        cmd.arg("-N").arg("");
+    } else {
+        cmd.arg("-N").arg(&passphrase);
+    }
+    cmd.arg("-q");
+
+    let output = cmd.output()
+        .map_err(|e| OmniError::new(ErrorCode::Ssh, "运行 ssh-keygen 失败").with_cause(e.to_string()))?;
+
+    if !output.status.success() {
+        return Err(OmniError::new(
+            ErrorCode::Ssh,
+            "ssh-keygen 执行失败",
+        ).with_cause(String::from_utf8_lossy(&output.stderr).to_string()));
+    }
+
+    Ok(SshKeyInfo {
+        name: filename,
+        key_type: algo.to_string(),
+        path: key_path.to_string_lossy().to_string(),
+        fingerprint: String::new(),
+        comment,
+    })
+}
+
+/// 导入 SSH 私钥（写入 ~/.ssh/ 目录）。
+#[tauri::command]
+#[specta::specta]
+pub async fn ssh_import_key(
+    name: String,
+    private_key: String,
+) -> Result<SshKeyInfo, OmniError> {
+    let home = home_dir()?;
+    let ssh_dir = home.join(".ssh");
+    std::fs::create_dir_all(&ssh_dir)
+        .map_err(|e| OmniError::new(ErrorCode::Io, "创建 .ssh 目录失败").with_cause(e.to_string()))?;
+
+    let key_path = ssh_dir.join(&name);
+    std::fs::write(&key_path, &private_key)
+        .map_err(|e| OmniError::new(ErrorCode::Io, "写入密钥文件失败").with_cause(e.to_string()))?;
+
+    // Set permissions to 0600 on Unix
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = std::fs::set_permissions(&key_path, std::fs::Permissions::from_mode(0o600));
+    }
+
+    let key_type = if private_key.contains("ed25519") { "ed25519" }
+        else if private_key.contains("RSA") { "rsa" }
+        else { "openssh" };
+
+    Ok(SshKeyInfo {
+        name,
+        key_type: key_type.to_string(),
+        path: key_path.to_string_lossy().to_string(),
+        fingerprint: String::new(),
+        comment: String::new(),
+    })
+}
+
+/// 删除 SSH 密钥。
+#[tauri::command]
+#[specta::specta]
+pub async fn ssh_delete_key(name: String) -> Result<(), OmniError> {
+    let home = home_dir()?;
+    let ssh_dir = home.join(".ssh");
+    let key_path = ssh_dir.join(&name);
+    let pub_path = ssh_dir.join(format!("{name}.pub"));
+
+    if key_path.exists() {
+        std::fs::remove_file(&key_path)
+            .map_err(|e| OmniError::new(ErrorCode::Io, "删除私钥失败").with_cause(e.to_string()))?;
+    }
+    if pub_path.exists() {
+        std::fs::remove_file(&pub_path)
+            .map_err(|e| OmniError::new(ErrorCode::Io, "删除公钥失败").with_cause(e.to_string()))?;
+    }
+
+    Ok(())
 }

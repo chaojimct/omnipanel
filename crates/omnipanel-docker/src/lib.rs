@@ -73,6 +73,8 @@ pub trait DockerAdapter: Send + Sync {
     async fn inspect_container(&self, id: &str) -> OmniResult<DockerContainerDetail>;
     /// 容器生命周期动作。
     async fn container_action(&self, id: &str, action: DockerContainerAction) -> OmniResult<()>;
+    /// 创建容器。
+    async fn create_container(&self, req: &DockerCreateContainerRequest) -> OmniResult<String>;
     /// 拉取容器日志（一次性，tail 行）。流式由命令层另行处理。
     async fn container_logs(&self, id: &str, tail: i64) -> OmniResult<Vec<DockerLogLine>>;
     /// 镜像列表。
