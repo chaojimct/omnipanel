@@ -3,6 +3,7 @@ import type { TerminalPane } from "../../stores/terminalStore";
 import type { WorkspaceResource } from "../../lib/resourceRegistry";
 import { CommandInput, type CommandInputHandle } from "./CommandInput";
 import { TerminalView } from "./TerminalView";
+import { Button } from "../../components/ui/Button";
 import { formatPaneHeaderTitle } from "./paneHeader";
 
 export type TerminalPaneViewHandle = {
@@ -79,8 +80,9 @@ export const TerminalPaneView = forwardRef<TerminalPaneViewHandle, TerminalPaneV
             </span>
           )}
           <div className="term-pane-actions">
-            <button
-              className="btn-icon term-pane-action"
+            <Button
+              variant="icon"
+              className="term-pane-action"
               onClick={(e) => {
                 e.stopPropagation();
                 onSplitHorizontal();
@@ -98,9 +100,10 @@ export const TerminalPaneView = forwardRef<TerminalPaneViewHandle, TerminalPaneV
                 <rect x="1" y="2" width="14" height="12" rx="1.5" />
                 <line x1="8" y1="2" x2="8" y2="14" />
               </svg>
-            </button>
-            <button
-              className="btn-icon term-pane-action"
+            </Button>
+            <Button
+              variant="icon"
+              className="term-pane-action"
               onClick={(e) => {
                 e.stopPropagation();
                 onSplitVertical();
@@ -118,10 +121,11 @@ export const TerminalPaneView = forwardRef<TerminalPaneViewHandle, TerminalPaneV
                 <rect x="1" y="2" width="14" height="12" rx="1.5" />
                 <line x1="1" y1="8" x2="15" y2="8" />
               </svg>
-            </button>
+            </Button>
             {canClose && (
-              <button
-                className="btn-icon term-pane-action term-pane-action--close"
+              <Button
+                variant="icon"
+                className="term-pane-action term-pane-action--close"
                 onClick={(e) => {
                   e.stopPropagation();
                   onClose();
@@ -136,10 +140,10 @@ export const TerminalPaneView = forwardRef<TerminalPaneViewHandle, TerminalPaneV
                   width="14"
                   height="14"
                 >
-                  <line x1="4" y1="4" x2="12" y2="12" />
-                  <line x1="12" y1="4" x2="4" y2="12" />
-                </svg>
-              </button>
+                <line x1="4" y1="4" x2="12" y2="12" />
+                <line x1="12" y1="4" x2="4" y2="12" />
+              </svg>
+              </Button>
             )}
           </div>
         </div>

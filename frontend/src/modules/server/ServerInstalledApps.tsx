@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useI18n } from "../../i18n";
+import { Button } from "../../components/ui/Button";
 import type { ServerEntry } from "./CreateServerDialog";
 import {
   getAppDescription,
@@ -137,14 +138,14 @@ export function ServerInstalledApps({ server }: ServerInstalledAppsProps) {
             <strong>{server.name}</strong>
             <span>{server.address}</span>
           </div>
-          <button
-            type="button"
-            className="btn btn-ghost btn-sm"
+          <Button
+            variant="ghost"
+            size="sm"
             disabled={loading}
             onClick={() => void refresh()}
           >
             {loading ? t("server.apps.loading") : t("server.refresh")}
-          </button>
+          </Button>
         </div>
 
         <div className="server-apps-toolbar">

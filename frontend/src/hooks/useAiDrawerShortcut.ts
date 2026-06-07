@@ -1,11 +1,10 @@
 import { useEffect } from "react";
-import { isModKeyPressed } from "../lib/platform";
 import { useAiStore } from "../stores/aiStore";
+import { getShortcutKeys, matchesShortcut } from "../stores/shortcutsStore";
 
 export function isAiDrawerShortcut(e: KeyboardEvent): boolean {
   if (e.type !== "keydown") return false;
-  if (!isModKeyPressed(e) || e.shiftKey || e.altKey) return false;
-  return e.code === "KeyL" || e.key === "l" || e.key === "L";
+  return matchesShortcut(e, getShortcutKeys("toggle-ai"));
 }
 
 /** 处理 Cmd/Ctrl+L，返回是否已消费该按键 */

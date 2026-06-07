@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Button } from "../../components/ui/Button";
 import type { DockerComposeProject } from "../../ipc/bindings";
 import type { DockerComposeAction } from "../../ipc/bindings";
 
@@ -31,7 +32,7 @@ export function DockerComposeDrawer({ project, onClose, onAction }: DockerCompos
             <div className="docker-drawer-eyebrow">Compose</div>
             <h2 title={project.name}>{project.name}</h2>
           </div>
-          <button className="btn-icon" onClick={onClose} title="关闭">×</button>
+          <Button variant="icon" onClick={onClose} title="关闭">×</Button>
         </header>
         <div className="docker-drawer-body">
           <section className="docker-drawer-section">
@@ -89,34 +90,38 @@ export function DockerComposeDrawer({ project, onClose, onAction }: DockerCompos
           )}
         </div>
         <footer className="docker-drawer-footer">
-          <button
-            className="btn btn-primary btn-sm"
+          <Button
+            variant="primary"
+            size="sm"
             disabled={busy !== null}
             onClick={() => void run("Up")}
           >
             {busy === "Up" ? "启动中…" : "Up"}
-          </button>
-          <button
-            className="btn btn-secondary btn-sm"
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
             disabled={busy !== null}
             onClick={() => void run("Restart")}
           >
             {busy === "Restart" ? "重启中…" : "Restart"}
-          </button>
-          <button
-            className="btn btn-secondary btn-sm"
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
             disabled={busy !== null}
             onClick={() => void run("Pull")}
           >
             {busy === "Pull" ? "拉取中…" : "Pull"}
-          </button>
-          <button
-            className="btn btn-danger btn-sm"
+          </Button>
+          <Button
+            variant="danger"
+            size="sm"
             disabled={busy !== null}
             onClick={() => void run("Down")}
           >
             {busy === "Down" ? "停止中…" : "Down"}
-          </button>
+          </Button>
         </footer>
       </aside>
     </>

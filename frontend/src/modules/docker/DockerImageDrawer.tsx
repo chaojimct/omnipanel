@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Button } from "../../components/ui/Button";
 import type {
   DockerImageDetail,
   DockerImageHistoryLayer,
@@ -93,7 +94,7 @@ export function DockerImageDrawer({
             <div className="docker-drawer-eyebrow">镜像</div>
             <h2 title={repoTag}>{repoTag}</h2>
           </div>
-          <button className="btn-icon" onClick={onClose} title="关闭">×</button>
+          <Button variant="icon" onClick={onClose} title="关闭">×</Button>
         </header>
         <div className="docker-drawer-body">
           {loading && <div className="docker-empty">加载中…</div>}
@@ -188,17 +189,19 @@ export function DockerImageDrawer({
           )}
         </div>
         <footer className="docker-drawer-footer">
-          <button
-            className="btn btn-secondary btn-sm"
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={async () => {
               const r = await onPrune();
               if (r.ok) onClose();
             }}
           >
             清理悬空
-          </button>
-          <button
-            className="btn btn-danger btn-sm"
+          </Button>
+          <Button
+            variant="danger"
+            size="sm"
             disabled={!detail}
             onClick={async () => {
               if (!detail) return;
@@ -215,7 +218,7 @@ export function DockerImageDrawer({
             }}
           >
             删除
-          </button>
+          </Button>
         </footer>
       </aside>
       {confirm && (
@@ -234,8 +237,8 @@ function ConfirmModal({ confirm, onCancel }: { confirm: ConfirmState; onCancel: 
         <p className="text-sm">{confirm.message}</p>
         {confirm.detail && <p className="text-muted text-xs">{confirm.detail}</p>}
         <div className="flex gap-2" style={{ marginTop: 16, justifyContent: "flex-end" }}>
-          <button className="btn btn-secondary btn-sm" onClick={onCancel}>取消</button>
-          <button className="btn btn-danger btn-sm" onClick={confirm.onConfirm}>{confirm.confirmLabel}</button>
+          <Button variant="secondary" size="sm" onClick={onCancel}>取消</Button>
+          <Button variant="danger" size="sm" onClick={confirm.onConfirm}>{confirm.confirmLabel}</Button>
         </div>
       </div>
     </>

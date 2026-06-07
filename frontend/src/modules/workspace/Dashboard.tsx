@@ -3,6 +3,7 @@ import { workspaceResources, type ResourceType, type WorkspaceResource } from ".
 import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { useActionStore } from "../../stores/actionStore";
 import { useI18n } from "../../i18n";
+import { Button } from "../../components/ui/Button";
 
 const RESOURCE_ICON: Record<ResourceType, { bg: string; color: string; path: string }> = {
   terminal: {
@@ -139,7 +140,7 @@ export function Dashboard() {
                         <span>{resource.subtitle}</span>
                       </div>
                     </div>
-                    <button type="button" className="btn btn-primary btn-sm">{t("dashboard.open")}</button>
+                    <Button variant="primary" size="sm">{t("dashboard.open")}</Button>
                   </div>
                 ))}
               </div>

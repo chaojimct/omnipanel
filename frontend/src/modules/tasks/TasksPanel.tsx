@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useActionStore, type WorkspaceAction } from "../../stores/actionStore";
 import { useTopbarTabs } from "../../hooks/useTopbarTabs";
 import { useI18n } from "../../i18n";
+import { Button } from "../../components/ui/Button";
 
 type TaskTab = "active" | "drafts" | "history";
 
@@ -133,12 +134,12 @@ export function TasksPanel() {
                 <div className="draft-actions">
                   {action.status === "blocked" && (
                     <>
-                      <button type="button" className="btn btn-primary btn-sm" onClick={() => confirmAction(action.id)}>
+                      <Button variant="primary" size="sm" onClick={() => confirmAction(action.id)}>
                         {t("common.execute")}
-                      </button>
-                      <button type="button" className="btn btn-ghost btn-sm" onClick={() => cancelAction(action.id)}>
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={() => cancelAction(action.id)}>
                         {t("common.cancel")}
-                      </button>
+                      </Button>
                     </>
                   )}
                 </div>
@@ -186,9 +187,9 @@ export function TasksPanel() {
           </div>
           {historyActions.length > 0 && (
             <div style={{ marginTop: "var(--sp-3)" }}>
-              <button type="button" className="btn btn-ghost btn-sm" onClick={clearCompleted}>
+              <Button variant="ghost" size="sm" onClick={clearCompleted}>
                 {t("tasks.actions.clearCompleted")}
-              </button>
+              </Button>
             </div>
           )}
         </div>

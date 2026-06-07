@@ -7,6 +7,7 @@ import {
   type ColumnSizingState,
 } from "@tanstack/react-table";
 
+import { Button } from "../../components/ui/Button";
 import { type DbColumnMeta } from "./api";
 
 export type TableDataGridProps = {
@@ -184,29 +185,29 @@ export function TableDataGrid({ columns, rows, totalRows, page, pageSize, loadin
           )}
         </div>
         <div className="db-pagination-controls">
-          <button
-            type="button"
-            className="btn btn-ghost btn-sm"
+          <Button
+            variant="ghost"
+            size="sm"
             disabled={page <= 0 || loading}
             onClick={() => onPageChange(page - 1)}
             title="Previous page"
           >
             ‹
-          </button>
+          </Button>
           {totalPages > 0 && (
             <span className="db-pagination-pages">
               {page + 1} / {totalPages}
             </span>
           )}
-          <button
-            type="button"
-            className="btn btn-ghost btn-sm"
+          <Button
+            variant="ghost"
+            size="sm"
             disabled={page >= totalPages - 1 || loading}
             onClick={() => onPageChange(page + 1)}
             title="Next page"
           >
             ›
-          </button>
+          </Button>
         </div>
       </div>
       <table className="db-data-table">

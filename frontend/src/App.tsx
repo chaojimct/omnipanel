@@ -8,6 +8,7 @@ import { NotificationDrawer } from "./components/shell/NotificationDrawer";
 import { AiDrawer } from "./components/ai/AiDrawer";
 import { DangerConfirmDialog } from "./components/terminal/DangerConfirmDialog";
 import { QuickInputHost } from "./components/ui/QuickInputHost";
+import { Button } from "./components/ui/Button";
 import { WindowResize } from "./components/shell/WindowResize";
 import { Dashboard } from "./modules/workspace/Dashboard";
 import { TerminalPanel } from "./modules/terminal/TerminalPanel";
@@ -43,9 +44,8 @@ function TopbarPageActions() {
 
   if (path === "/database") {
     return (
-      <button
-        type="button"
-        className="btn-icon"
+      <Button
+        variant="icon"
         title={t("database.toolbox.open")}
         aria-label={t("database.toolbox.open")}
         onClick={() => useDbToolboxStore.getState().setOpen(true)}
@@ -56,15 +56,15 @@ function TopbarPageActions() {
           <path d="M9 13h6" />
           <path d="M12 4V2" />
         </svg>
-      </button>
+      </Button>
     );
   }
 
   if (path === "/ssh") {
     return (
-      <button
-        type="button"
-        className="btn btn-primary btn-sm"
+      <Button
+        variant="primary"
+        size="sm"
         onClick={() => {
           if (activeResource?.type === "ssh") {
             openSshTerminalSession(activeResource.id);
@@ -75,34 +75,34 @@ function TopbarPageActions() {
           <path d="M12 5v14M5 12h14" />
         </svg>
         {t("ssh.connect")}
-      </button>
+      </Button>
     );
   }
 
   if (path === "/tasks") {
     return (
-      <button type="button" className="btn btn-ghost btn-sm" onClick={() => useActionStore.getState().clearCompleted()}>
+      <Button variant="ghost" size="sm" onClick={() => useActionStore.getState().clearCompleted()}>
         {t("tasks.actions.clearCompleted")}
-      </button>
+      </Button>
     );
   }
 
   if (path === "/protocol") {
     return (
       <>
-        <button type="button" className="btn-icon" title={t("protocol.actions.newRequest")}>
+        <Button variant="icon" title={t("protocol.actions.newRequest")}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M12 5v14M5 12h14" />
           </svg>
-        </button>
-        <button type="button" className="btn-icon" title={t("protocol.actions.importCurl")}>
+        </Button>
+        <Button variant="icon" title={t("protocol.actions.importCurl")}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
             <path d="M7 10l5 5 5-5" />
             <path d="M12 15V3" />
           </svg>
-        </button>
-        <button type="button" className="btn btn-primary btn-sm">{t("protocol.actions.newTab")}</button>
+        </Button>
+        <Button variant="primary" size="sm">{t("protocol.actions.newTab")}</Button>
       </>
     );
   }

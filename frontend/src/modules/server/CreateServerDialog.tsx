@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Modal } from "../../components/ui/Modal";
+import { Button } from "../../components/ui/Button";
 import { useI18n } from "../../i18n";
 import { createBtPanelClient } from "../../lib/btpanel";
 import { createOnePanelClient } from "../../lib/onepanel";
@@ -115,11 +116,11 @@ export function CreateServerDialog({ open, editServer, onClose, onCreate, onUpda
       <div className="modal-dialog">
         <div className="modal-header">
           <h3>{isEdit ? t("server.edit.title") : t("server.create.title")}</h3>
-          <button type="button" className="btn btn-ghost btn-icon" onClick={onClose}>
+          <Button type="button" variant="icon" onClick={onClose}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M18 6L6 18M6 6l12 12" />
             </svg>
-          </button>
+          </Button>
         </div>
         <div className="modal-body">
           <div className="form-group">
@@ -173,9 +174,9 @@ export function CreateServerDialog({ open, editServer, onClose, onCreate, onUpda
           </div>
         </div>
         <div className="modal-footer">
-          <button type="button" className="btn btn-secondary" onClick={onClose} disabled={testing}>
+          <Button type="button" variant="secondary" onClick={onClose} disabled={testing}>
             {t("common.cancel")}
-          </button>
+          </Button>
           {status ? (
             <span
               className={`modal-footer-status modal-footer-status--${status.kind}`}
@@ -186,22 +187,22 @@ export function CreateServerDialog({ open, editServer, onClose, onCreate, onUpda
           ) : (
             <div className="modal-footer-spacer" />
           )}
-          <button
+          <Button
             type="button"
-            className="btn btn-ghost"
+            variant="ghost"
             disabled={testing || !address.trim() || !key.trim()}
             onClick={() => void handleTest()}
           >
             {testing ? t("server.create.testing") : t("server.create.test")}
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
-            className="btn btn-primary"
+            variant="primary"
             disabled={testing || !name.trim() || !address.trim() || !key.trim()}
             onClick={handleSubmit}
           >
             {isEdit ? t("common.save") : t("server.create.confirm")}
-          </button>
+          </Button>
         </div>
       </div>
     </Modal>

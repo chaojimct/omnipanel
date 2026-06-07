@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useI18n } from "../../i18n";
+import { Button } from "../ui/Button";
 
 type Tone = "danger" | "warn" | "success" | "accent";
 type IconToken = "alert" | "server" | "activity" | "check" | "boxes" | "clipboard" | "zap";
@@ -130,11 +131,11 @@ export function NotificationDrawer() {
             <path d="M13.73 21a2 2 0 01-3.46 0" />
           </svg>
           <h3>{t("notifications.title")}</h3>
-          <button className="btn btn-ghost btn-sm" onClick={() => setIsOpen(false)} title={t("notifications.close")}>
+          <Button variant="ghost" size="sm" onClick={() => setIsOpen(false)} title={t("notifications.close")}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
               <path d="M18 6L6 18M6 6l12 12" />
             </svg>
-          </button>
+          </Button>
         </div>
         <div className="notif-drawer-body">
           {NOTIF_GROUPS.map((group) => (

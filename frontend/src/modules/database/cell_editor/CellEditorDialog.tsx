@@ -1,5 +1,6 @@
 import { useState, useCallback, useMemo, useEffect } from "react";
 import { Modal } from "../../../components/ui/Modal";
+import { Button } from "../../../components/ui/Button";
 import {
   detectCellEditorKind,
   formatCellValue,
@@ -112,12 +113,12 @@ export function CellEditorDialog({
         </div>
         <div className="modal-footer">
           <div className="modal-footer-spacer" />
-          <button type="button" className="btn btn-secondary" onClick={onCancel}>
+          <Button type="button" variant="secondary" onClick={onCancel}>
             {t("common.cancel")}
-          </button>
-          <button type="button" className="btn btn-primary" onClick={handleSave}>
+          </Button>
+          <Button type="button" variant="primary" onClick={handleSave}>
             {t("common.confirm")}
-          </button>
+          </Button>
         </div>
       </div>
     </Modal>

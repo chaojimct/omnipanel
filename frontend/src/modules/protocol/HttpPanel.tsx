@@ -1,6 +1,7 @@
 import { useState, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useI18n } from "../../i18n";
+import { Button } from "../../components/ui/Button";
 
 interface KVPair {
   key: string;
@@ -147,10 +148,10 @@ export function HttpPanel() {
           value={url}
           onChange={(e) => setUrl(e.target.value)}
         />
-        <button className="btn btn-primary" onClick={handleSend} disabled={sending}>
+        <Button variant="primary" onClick={handleSend} disabled={sending}>
           {sending ? t("protocol.common.sending") : t("protocol.common.send")}
-        </button>
-        <button className="btn btn-secondary">{t("protocol.common.save")}</button>
+        </Button>
+        <Button variant="secondary">{t("protocol.common.save")}</Button>
       </div>
 
       {/* Request tabs */}
@@ -194,9 +195,9 @@ export function HttpPanel() {
               </div>
             ))}
           </div>
-          <button className="btn btn-ghost btn-sm" onClick={() => addKv(params, setParams)}>
+          <Button variant="ghost" size="sm" onClick={() => addKv(params, setParams)}>
             + {t("protocol.common.addParam")}
-          </button>
+          </Button>
         </div>
       )}
 
@@ -228,9 +229,9 @@ export function HttpPanel() {
               </div>
             ))}
           </div>
-          <button className="btn btn-ghost btn-sm" onClick={() => addKv(headers, setHeaders)}>
+          <Button variant="ghost" size="sm" onClick={() => addKv(headers, setHeaders)}>
             + {t("protocol.common.addHeader")}
-          </button>
+          </Button>
         </div>
       )}
 

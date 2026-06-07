@@ -1,5 +1,6 @@
 import { getProfile } from "../data/hostProfiles";
 import type { SshManagerContext } from "../hooks/useSshManager";
+import { Button } from "../../../components/ui/Button";
 
 type Props = Pick<
   SshManagerContext,
@@ -16,8 +17,9 @@ export function TunnelsModuleView({ sshResources, triggerTunnelAction }: Props) 
             为常用数据库、缓存和内部服务建立安全转发
           </div>
         </div>
-        <button
-          className="btn btn-primary btn-sm"
+        <Button
+          variant="primary"
+          size="sm"
           style={{ marginLeft: "auto" }}
           onClick={() =>
             triggerTunnelAction(
@@ -28,7 +30,7 @@ export function TunnelsModuleView({ sshResources, triggerTunnelAction }: Props) 
           }
         >
           + New Tunnel
-        </button>
+        </Button>
       </div>
       <div className="ssh-detail-body ssh-workbench-grid">
         <div className="panel">

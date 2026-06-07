@@ -1,6 +1,7 @@
 import { useEffect, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useI18n } from "../../i18n";
+import { Button } from "./Button";
 
 export interface SubWindowProps {
   open: boolean;
@@ -60,9 +61,10 @@ export function SubWindow({
           <h2 id="subwindow-title" className="subwindow-title">
             {title}
           </h2>
-          <button
+          <Button
             type="button"
-            className="btn-icon subwindow-close"
+            variant="icon"
+            className="subwindow-close"
             title={closeLabel}
             aria-label={closeLabel}
             onClick={onClose}
@@ -77,7 +79,7 @@ export function SubWindow({
             >
               <path d="M4 4l8 8M12 4l-8 8" />
             </svg>
-          </button>
+          </Button>
         </div>
         <div className="subwindow-body">{children}</div>
       </div>

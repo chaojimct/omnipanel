@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useI18n } from "../../i18n";
 import { Modal } from "./Modal";
+import { Button } from "./Button";
 
 export interface QuickInputDialogProps {
   open: boolean;
@@ -57,11 +58,11 @@ export function QuickInputDialog({
             <h3>{title}</h3>
             {subtitle && <p className="quick-input-subtitle">{subtitle}</p>}
           </div>
-          <button className="btn-icon" type="button" onClick={onCancel}>
+          <Button variant="icon" type="button" onClick={onCancel}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
               <path d="M18 6L6 18M6 6l12 12" />
             </svg>
-          </button>
+          </Button>
         </div>
 
         <div className="modal-body">

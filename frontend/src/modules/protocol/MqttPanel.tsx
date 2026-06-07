@@ -2,6 +2,7 @@ import { useState, useRef, useCallback } from "react";
 import { invoke, Channel } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useI18n } from "../../i18n";
+import { Button } from "../../components/ui/Button";
 
 type MqttQos = 0 | 1 | 2;
 type MqttStatus = "disconnected" | "connecting" | "connected";
@@ -171,8 +172,8 @@ export function MqttPanel() {
           style={{ width: "140px" }}
           disabled={status === "connected"}
         />
-        <button
-          className={`btn ${status === "connected" ? "btn-danger" : "btn-primary"}`}
+        <Button
+          variant={status === "connected" ? "danger" : "primary"}
           onClick={handleConnect}
         >
           {status === "connected"
@@ -180,7 +181,7 @@ export function MqttPanel() {
             : status === "connecting"
               ? "…"
               : t("protocol.common.connect")}
-        </button>
+        </Button>
       </div>
 
       {/* Status bar */}
@@ -234,13 +235,14 @@ export function MqttPanel() {
             <option value={1}>QoS 1</option>
             <option value={2}>QoS 2</option>
           </select>
-          <button
-            className="btn btn-ghost btn-sm"
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={handleSubscribe}
             disabled={status !== "connected"}
           >
             {t("protocol.mqtt.subscribe")}
-          </button>
+          </Button>
         </div>
         <div className="mqtt-topics">
           {subscriptions.map((sub, i) => (
@@ -302,13 +304,14 @@ export function MqttPanel() {
           style={{ flex: 1 }}
           disabled={status !== "connected"}
         />
-        <button
-          className="btn btn-primary btn-sm"
+        <Button
+          variant="primary"
+          size="sm"
           onClick={handlePublish}
           disabled={status !== "connected"}
         >
           {t("protocol.mqtt.publish")}
-        </button>
+        </Button>
       </div>
     </div>
   );

@@ -5,6 +5,29 @@ export type Locale = "zh-CN" | "en-US";
 export type UiDensity = "compact" | "standard" | "comfortable";
 export type Theme = "system" | "light" | "dark";
 
+/** 强调色预设：影响全局 --accent / --accent-hover / --accent-active / --accent-soft 变量 */
+export type AccentColor = "blue" | "green" | "orange" | "red" | "purple";
+
+export interface AccentPalette {
+  id: AccentColor;
+  /** UI 中显示的色块 */
+  swatch: string;
+  accent: string;
+  accentHover: string;
+  accentActive: string;
+  accentSoft: string;
+}
+
+export const ACCENT_PRESETS: Record<AccentColor, AccentPalette> = {
+  blue:   { id: "blue",   swatch: "#007aff", accent: "#007aff", accentHover: "#0056b3", accentActive: "#004085", accentSoft: "rgba(0, 122, 255, 0.12)" },
+  green:  { id: "green",  swatch: "#30d158", accent: "#30d158", accentHover: "#27ae44", accentActive: "#1f8a36", accentSoft: "rgba(48, 209, 88, 0.12)" },
+  orange: { id: "orange", swatch: "#ff9f0a", accent: "#ff9f0a", accentHover: "#e08a00", accentActive: "#b37000", accentSoft: "rgba(255, 159, 10, 0.12)" },
+  red:    { id: "red",    swatch: "#ff3b30", accent: "#ff3b30", accentHover: "#e02e23", accentActive: "#b3241c", accentSoft: "rgba(255, 59, 48, 0.12)" },
+  purple: { id: "purple", swatch: "#bf5af2", accent: "#bf5af2", accentHover: "#a13ed4", accentActive: "#8030a8", accentSoft: "rgba(191, 90, 242, 0.12)" },
+};
+
+export const ACCENT_ORDER: AccentColor[] = ["blue", "green", "orange", "red", "purple"];
+
 /** 界面全局缩放（百分比），适用于 Tauri WebView（html zoom） */
 export const UI_SCALE = {
   min: 80,
@@ -18,11 +41,13 @@ interface SettingsState {
   uiDensity: UiDensity;
   uiScale: number;
   theme: Theme;
+  accentColor: AccentColor;
   resolved: "light" | "dark";
   setLocale: (locale: Locale) => void;
   setUiDensity: (density: UiDensity) => void;
   setUiScale: (percent: number) => void;
   setTheme: (theme: Theme) => void;
+  setAccentColor: (color: AccentColor) => void;
 }
 
 export function clampUiScale(percent: number): number {
@@ -39,6 +64,21 @@ function applyDocumentUiScale(percent: number) {
 
 function applyDocumentLocale(locale: Locale) {
   document.documentElement.lang = locale;
+}
+
+function applyDocumentAccentColor(color: AccentColor) {
+  const palette = ACCENT_PRESETS[color];
+  const root = document.documentElement;
+  root.style.setProperty("--accent", palette.accent);
+  root.style.setProperty("--accent-hover", palette.accentHover);
+  root.style.setProperty("--accent-active", palette.accentActive);
+  root.style.setProperty("--accent-soft", palette.accentSoft);
+  // 同步 Tailwind 别名
+  root.style.setProperty("--color-accent", palette.accent);
+  root.style.setProperty("--color-accent-hover", palette.accentHover);
+  root.style.setProperty("--color-accent-active", palette.accentActive);
+  root.style.setProperty("--color-accent-soft", palette.accentSoft);
+  root.setAttribute("data-accent", color);
 }
 
 function getSystemTheme(): "light" | "dark" {
@@ -62,6 +102,7 @@ export const useSettingsStore = create<SettingsState>()(
       uiDensity: "standard",
       uiScale: UI_SCALE.default,
       theme: "system",
+      accentColor: "blue",
       resolved: resolveTheme("system"),
       setLocale: (locale) => {
         applyDocumentLocale(locale);
@@ -77,6 +118,10 @@ export const useSettingsStore = create<SettingsState>()(
         const resolved = applyDocumentTheme(theme);
         set({ theme, resolved });
       },
+      setAccentColor: (accentColor) => {
+        applyDocumentAccentColor(accentColor);
+        set({ accentColor });
+      },
     }),
     {
       name: "omnipanel-settings",
@@ -86,10 +131,12 @@ export const useSettingsStore = create<SettingsState>()(
         uiDensity: state.uiDensity,
         uiScale: state.uiScale,
         theme: state.theme,
+        accentColor: state.accentColor,
       }),
       onRehydrateStorage: () => (state) => {
         applyDocumentLocale(state?.locale ?? "zh-CN");
         applyDocumentUiScale(state?.uiScale ?? UI_SCALE.default);
+        applyDocumentAccentColor(state?.accentColor ?? "blue");
         const resolved = applyDocumentTheme(state?.theme ?? "system");
         useSettingsStore.setState({ resolved });
       },
@@ -99,12 +146,14 @@ export const useSettingsStore = create<SettingsState>()(
 
 applyDocumentLocale(useSettingsStore.getState().locale);
 applyDocumentUiScale(useSettingsStore.getState().uiScale);
+applyDocumentAccentColor(useSettingsStore.getState().accentColor);
 
 /** 应用启动时调用：应用当前语言与主题，并监听系统主题变化。 */
 export function initSettings() {
   const state = useSettingsStore.getState();
   applyDocumentLocale(state.locale);
   applyDocumentUiScale(state.uiScale);
+  applyDocumentAccentColor(state.accentColor);
   applyDocumentTheme(state.theme);
 
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {

@@ -1,6 +1,7 @@
 import { useSshOverview } from "../../hooks/useSshOverview";
 import { formatBytes } from "../../../../stores/sshStatsStore";
 import { useI18n } from "../../../../i18n";
+import { Button } from "../../../../components/ui/Button";
 import { useState } from "react";
 import type { SshProcessInfo } from "../../../../ipc/bindings";
 import type { SshManagerContext } from "../../hooks/useSshManager";
@@ -245,9 +246,9 @@ export function OverviewDetailTab({
       <div className="ssh-ov ssh-ov--error">
         <div className="ssh-ov-loading">
           <p className="ssh-ov-error-text">{error ?? t("ssh.overview.loadError")}</p>
-          <button type="button" className="btn btn-secondary btn-sm" onClick={() => refresh()}>
+          <Button variant="secondary" size="sm" onClick={() => refresh()}>
             {t("ssh.overview.retry")}
-          </button>
+          </Button>
         </div>
       </div>
     );

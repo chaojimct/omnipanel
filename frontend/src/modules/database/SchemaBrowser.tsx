@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useI18n } from "../../i18n";
+import { Button } from "../../components/ui/Button";
 import {
   type DbConnectionConfig,
   connectionMatchesGroup,
@@ -662,29 +663,29 @@ export function SchemaBrowser({
     <div className="schema-panel">
       <div className="schema-header">
         <h3>{t("database.sidebar.title")}</h3>
-        <button
-          className="btn-icon"
+        <Button
+          variant="icon"
           title={t("database.sidebar.createConnection")}
           onClick={onCreateConnection}
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
             <path d="M12 5v14M5 12h14" />
           </svg>
-        </button>
-        <button className="btn-icon" title={t("database.sidebar.refresh")} onClick={() => void loadConnections()}>
+        </Button>
+        <Button variant="icon" title={t("database.sidebar.refresh")} onClick={() => void loadConnections()}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
             <path d="M23 4v6h-6M1 20v-6h6" />
             <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" />
           </svg>
-        </button>
+        </Button>
         {onNewQuery && (
-          <button className="btn-icon" title={t("database.sidebar.newQuery")} onClick={onNewQuery}>
+          <Button variant="icon" title={t("database.sidebar.newQuery")} onClick={onNewQuery}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
               <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
               <path d="M14 2v6h6" />
               <path d="M8 13h8M8 17h5" />
             </svg>
-          </button>
+          </Button>
         )}
       </div>
       <div className="schema-search">

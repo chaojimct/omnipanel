@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Modal } from "../../components/ui/Modal";
+import { Button } from "../../components/ui/Button";
 import type { DockerNetworkSummary, DockerCreateNetworkRequest } from "../../ipc/bindings";
 import type { DockerActionResult } from "./useDockerWorkspace";
 
@@ -38,14 +39,15 @@ export function DockerNetworksTab({ networks, canManage, onRefresh, onCreate, on
       <div className="docker-filters">
         <span className="text-muted text-sm">{networks.length} 个网络</span>
         <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
-          <button className="btn btn-secondary btn-sm" onClick={onRefresh}>刷新</button>
-          <button
-            className="btn btn-primary btn-sm"
+          <Button variant="secondary" size="sm" onClick={onRefresh}>刷新</Button>
+          <Button
+            variant="primary"
+            size="sm"
             disabled={!canManage}
             onClick={() => setShowCreate(true)}
           >
             新建网络
-          </button>
+          </Button>
         </div>
       </div>
       <div className="list-header network-row">
@@ -71,8 +73,9 @@ export function DockerNetworksTab({ networks, canManage, onRefresh, onCreate, on
               <div className="text-sm">{n.internal ? "是" : "否"}</div>
               <div className="text-sm text-muted">{formatTimestamp(n.createdAt)}</div>
               <div className="container-actions" onClick={(e) => e.stopPropagation()}>
-                <button
-                  className="btn-icon text-danger"
+                <Button
+                  variant="icon"
+                  className="text-danger"
                   title="删除网络"
                   disabled={!canManage || n.name === "bridge" || n.name === "host" || n.name === "none"}
                   onClick={() => {
@@ -88,7 +91,7 @@ export function DockerNetworksTab({ networks, canManage, onRefresh, onCreate, on
                   }}
                 >
                   ×
-                </button>
+                </Button>
               </div>
             </div>
           ))
@@ -98,7 +101,7 @@ export function DockerNetworksTab({ networks, canManage, onRefresh, onCreate, on
         <div className="modal-dialog" onClick={(e) => e.stopPropagation()}>
           <div className="modal-header">
             <h3>新建网络</h3>
-            <button className="btn-icon" onClick={() => setShowCreate(false)} title="关闭">×</button>
+            <Button variant="icon" onClick={() => setShowCreate(false)} title="关闭">×</Button>
           </div>
           <div className="modal-body">
             <div className="form-field">
@@ -123,9 +126,9 @@ export function DockerNetworksTab({ networks, canManage, onRefresh, onCreate, on
             </div>
           </div>
           <div className="modal-footer">
-            <button className="btn btn-secondary" onClick={() => setShowCreate(false)}>取消</button>
-            <button
-              className="btn btn-primary"
+            <Button variant="secondary" onClick={() => setShowCreate(false)}>取消</Button>
+            <Button
+              variant="primary"
               disabled={!name.trim()}
               onClick={async () => {
                 const r = await onCreate({
@@ -142,7 +145,7 @@ export function DockerNetworksTab({ networks, canManage, onRefresh, onCreate, on
               }}
             >
               创建
-            </button>
+            </Button>
           </div>
         </div>
       </Modal>
@@ -162,8 +165,8 @@ function ConfirmModal({ confirm, onCancel }: { confirm: ConfirmState; onCancel: 
         <p className="text-sm">{confirm.message}</p>
         {confirm.detail && <p className="text-muted text-xs">{confirm.detail}</p>}
         <div className="flex gap-2" style={{ marginTop: 16, justifyContent: "flex-end" }}>
-          <button className="btn btn-secondary btn-sm" onClick={onCancel}>取消</button>
-          <button className="btn btn-danger btn-sm" onClick={confirm.onConfirm}>{confirm.confirmLabel}</button>
+          <Button variant="secondary" size="sm" onClick={onCancel}>取消</Button>
+          <Button variant="danger" size="sm" onClick={confirm.onConfirm}>{confirm.confirmLabel}</Button>
         </div>
       </div>
     </>

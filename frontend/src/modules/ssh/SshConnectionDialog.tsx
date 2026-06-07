@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useI18n } from "../../i18n";
 import { Modal } from "../../components/ui/Modal";
+import { Button } from "../../components/ui/Button";
 import { useConnectionStore } from "../../stores/connectionStore";
 import { collectSshGroupSuggestions, sanitizeSshGroupInput } from "../../lib/sshGroups";
 import type { Connection } from "../../ipc/bindings";
@@ -145,11 +146,11 @@ export function SshConnectionDialog({ open, onClose, onSaved, editConnection }: 
       <div className="modal-dialog" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h3>{title}</h3>
-          <button className="btn-icon" onClick={onClose}>
+          <Button variant="icon" onClick={onClose}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
               <path d="M18 6L6 18M6 6l12 12" />
             </svg>
-          </button>
+          </Button>
         </div>
 
         <div className="modal-body">
@@ -224,9 +225,9 @@ export function SshConnectionDialog({ open, onClose, onSaved, editConnection }: 
         </div>
 
         <div className="modal-footer">
-          <button className="btn btn-secondary" onClick={onClose} disabled={saving}>{t("ssh.dialog.cancel")}</button>
+          <Button variant="secondary" onClick={onClose} disabled={saving}>{t("ssh.dialog.cancel")}</Button>
           {error ? <span className="modal-footer-status modal-footer-status--error">{error}</span> : <div className="modal-footer-spacer" />}
-          <button className="btn btn-primary" onClick={() => void handleSave()} disabled={saving}>{saving ? t("ssh.dialog.saving") : t("ssh.dialog.save")}</button>
+          <Button variant="primary" onClick={() => void handleSave()} disabled={saving}>{saving ? t("ssh.dialog.saving") : t("ssh.dialog.save")}</Button>
         </div>
       </div>
     </Modal>

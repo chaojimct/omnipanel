@@ -2,12 +2,28 @@ import { useState, useEffect, type ReactNode } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { useAiStore } from "../../stores/aiStore";
 import {
+  useAiModelsStore,
+  maskApiKey,
+  type AiModelConfig,
+} from "../../stores/aiModelsStore";
+import {
   useSettingsStore,
   LOCALE_OPTIONS,
   UI_SCALE,
+  ACCENT_PRESETS,
+  ACCENT_ORDER,
   clampUiScale,
   type Locale,
 } from "../../stores/settingsStore";
+import {
+  SHORTCUT_DEFS,
+  useShortcutsStore,
+  getShortcutKeys,
+} from "../../stores/shortcutsStore";
+import { SidebarWorkspace } from "../../components/ui/SidebarWorkspace";
+import { ShortcutRecorder } from "../../components/settings/ShortcutRecorder";
+import { AddModelDialog } from "../../components/settings/AddModelDialog";
+import { Button } from "../../components/ui/Button";
 import { useI18n } from "../../i18n";
 import { commands } from "../../ipc/bindings";
 import type { UpdateInfo } from "../../ipc/bindings";
@@ -197,6 +213,215 @@ function UiScaleControl({
   );
 }
 
+function KeybindingsSection() {
+  const { t } = useI18n();
+  const overrides = useShortcutsStore((s) => s.overrides);
+  const resetAll = useShortcutsStore((s) => s.resetAll);
+  const hasOverrides = Object.keys(overrides).length > 0;
+
+  return (
+    <div className="settings-panel active">
+      <div className="settings-section">
+        <div className="settings-section-header">
+          <div>
+            <h2>{t("settings.keybindings.title")}</h2>
+            <p className="section-desc">{t("settings.keybindings.description")}</p>
+          </div>
+          {hasOverrides && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={resetAll}
+            >
+              {t("settings.keybindings.resetAll")}
+            </Button>
+          )}
+        </div>
+
+        {SHORTCUT_DEFS.map((def) => {
+          const current = getShortcutKeys(def.id);
+          const label = t(def.labelKey);
+          const isCustomized = def.id in overrides;
+          return (
+            <div key={def.id} className="setting-row">
+              <div className="setting-label">
+                <h4>
+                  {label}
+                  {isCustomized && <span className="keybind-modified-dot" aria-hidden />}
+                </h4>
+              </div>
+              <ShortcutRecorder
+                id={def.id}
+                value={current}
+                disabled={def.nonRecordable}
+              />
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function AiModelsSection() {
+  const { t } = useI18n();
+  const models = useAiModelsStore((s) => s.models);
+  const removeModel = useAiModelsStore((s) => s.removeModel);
+  const currentProvider = useAiStore((s) => s.currentProvider);
+  const currentModel = useAiStore((s) => s.currentModel);
+  const setCurrentProvider = useAiStore((s) => s.setCurrentProvider);
+
+  const [showAdd, setShowAdd] = useState(false);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+
+  const handleSelect = (m: AiModelConfig) => {
+    setCurrentProvider(m.apiStandard, m.id);
+  };
+
+  return (
+    <div className="settings-panel active">
+      <div className="settings-section">
+        <div className="settings-section-header">
+          <div>
+            <h2>{t("settings.aiModels.title")}</h2>
+            <p className="section-desc">{t("settings.aiModels.description")}</p>
+          </div>
+          <Button
+            variant="primary"
+            size="sm"
+            className="ai-models-add-btn"
+            onClick={() => setShowAdd(true)}
+            title={t("settings.aiModels.add.title")}
+            aria-label={t("settings.aiModels.add.title")}
+          >
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              width="14"
+              height="14"
+            >
+              <path d="M12 5v14M5 12h14" />
+            </svg>
+            <span>{t("settings.aiModels.add.title")}</span>
+          </Button>
+        </div>
+
+        {models.length === 0 ? (
+          <div className="ai-models-empty">
+            <div className="ai-models-empty-icon">🤖</div>
+            <div className="ai-models-empty-title">{t("settings.aiModels.empty.title")}</div>
+            <div className="ai-models-empty-desc">{t("settings.aiModels.empty.desc")}</div>
+            <Button
+              variant="secondary"
+              size="sm"
+              style={{ marginTop: "var(--sp-3)" }}
+              onClick={() => setShowAdd(true)}
+            >
+              {t("settings.aiModels.empty.cta")}
+            </Button>
+          </div>
+        ) : (
+          <ul className="ai-models-list">
+            {models.map((m) => {
+              const isActive = currentProvider === m.apiStandard && currentModel === m.id;
+              const isConfirmingDelete = confirmDeleteId === m.id;
+              return (
+                <li
+                  key={m.id}
+                  className={`ai-model-row${isActive ? " active" : ""}`}
+                >
+                  <div className="ai-model-row-main">
+                    <div className="ai-model-row-title">
+                      <span className="ai-model-row-name">{m.name}</span>
+                      <span className={`ai-model-row-standard ai-model-row-standard-${m.apiStandard}`}>
+                        {m.apiStandard === "openai" ? "OpenAI" : "Anthropic"}
+                      </span>
+                    </div>
+                    <div className="ai-model-row-meta">
+                      <span className="ai-model-row-baseurl" title={m.baseUrl}>
+                        {m.baseUrl}
+                      </span>
+                      <span className="ai-model-row-sep">·</span>
+                      <span className="ai-model-row-key" title={m.apiKey}>
+                        {maskApiKey(m.apiKey)}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="ai-model-row-actions">
+                    {isActive ? (
+                      <span className="badge badge-success">
+                        {t("settings.aiModels.activeBadge")}
+                      </span>
+                    ) : (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleSelect(m)}
+                      >
+                        {t("settings.aiModels.useBtn")}
+                      </Button>
+                    )}
+
+                    {isConfirmingDelete ? (
+                      <>
+                        <Button
+                          variant="danger"
+                          size="sm"
+                          onClick={() => {
+                            if (isActive) {
+                              setCurrentProvider("openai", "gpt-4o");
+                            }
+                            removeModel(m.id);
+                            setConfirmDeleteId(null);
+                          }}
+                        >
+                          {t("settings.aiModels.confirmDelete")}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setConfirmDeleteId(null)}
+                        >
+                          {t("settings.aiModels.cancelDelete")}
+                        </Button>
+                      </>
+                    ) : (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="ai-model-row-delete"
+                        title={t("settings.aiModels.deleteBtn")}
+                        aria-label={t("settings.aiModels.deleteBtn")}
+                        onClick={() => setConfirmDeleteId(m.id)}
+                      >
+                        <svg
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          width="14"
+                          height="14"
+                        >
+                          <path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />
+                        </svg>
+                      </Button>
+                    )}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+
+      <AddModelDialog open={showAdd} onClose={() => setShowAdd(false)} />
+    </div>
+  );
+}
+
 export function SettingsPanel() {
   const { t } = useI18n();
   const [activeSection, setActiveSection] = useState<Section>("general");
@@ -211,15 +436,11 @@ export function SettingsPanel() {
   const [telemetry, setTelemetry] = useState(false);
 
   // Appearance settings state
-  const { theme, setTheme } = useSettingsStore();
+  const { theme, setTheme, accentColor, setAccentColor } = useSettingsStore();
   const [uiDensity, setUiDensity] = useState("标准");
   const [sidebarPos, setSidebarPos] = useState("左侧");
 
-  // AI settings — connected to aiStore
-  const currentProvider = useAiStore((s) => s.currentProvider);
-  const setCurrentProvider = useAiStore((s) => s.setCurrentProvider);
-  const [streamResponses, setStreamResponses] = useState(true);
-  const [preferLocal, setPreferLocal] = useState(true);
+  // AI settings are managed by the new AiModelsSection component.
 
   // Security settings state
   const [credentialStorage, setCredentialStorage] = useState("系统钥匙串");
@@ -306,20 +527,24 @@ export function SettingsPanel() {
   }, []);
 
   return (
-    <div className="settings-workspace">
-      <div className="settings-nav">
-        {NAV_ITEMS.map((item) => (
-          <div
-            key={item.id}
-            className={`settings-nav-item ${activeSection === item.id ? "active" : ""}`}
-            onClick={() => setActiveSection(item.id)}
-          >
-            {item.icon}
-            {item.label}
-          </div>
-        ))}
-      </div>
-
+    <SidebarWorkspace
+      preset="settings"
+      className="settings-workspace"
+      sidebar={
+        <div className="settings-nav">
+          {NAV_ITEMS.map((item) => (
+            <div
+              key={item.id}
+              className={`settings-nav-item ${activeSection === item.id ? "active" : ""}`}
+              onClick={() => setActiveSection(item.id)}
+            >
+              {item.icon}
+              {item.label}
+            </div>
+          ))}
+        </div>
+      }
+    >
       <div className="settings-main">
         {/* General */}
         {activeSection === "general" && (
@@ -407,20 +632,22 @@ export function SettingsPanel() {
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: "var(--sp-2)", alignItems: "flex-end" }}>
                   <div style={{ display: "flex", gap: "var(--sp-2)" }}>
-                    <button
-                      className="btn btn-secondary btn-sm"
+                    <Button
+                      variant="secondary"
+                      size="sm"
                       onClick={checkUpdateFn}
                       disabled={checking || updating}
                     >
                       {checking ? t("settings.update.checking") : t("settings.update.checkBtn")}
-                    </button>
+                    </Button>
                     {updateInfo?.available && !updating && (
-                      <button
-                        className="btn btn-primary btn-sm"
+                      <Button
+                        variant="primary"
+                        size="sm"
                         onClick={installUpdateFn}
                       >
                         {t("settings.update.installBtn")}
-                      </button>
+                      </Button>
                     )}
                   </div>
                   {updating && downloadPercent != null && (
@@ -472,20 +699,23 @@ export function SettingsPanel() {
                   <h4>强调色</h4>
                   <p>用于高亮和主要操作的颜色</p>
                 </div>
-                <div style={{ display: "flex", gap: "var(--sp-2)" }}>
-                  {["var(--accent)", "#30d158", "#ff9f0a", "#ff3b30", "#bf5af2"].map((color) => (
-                    <div
-                      key={color}
-                      style={{
-                        width: 24,
-                        height: 24,
-                        borderRadius: "50%",
-                        background: color,
-                        cursor: "pointer",
-                        border: `2px solid ${color === "var(--accent)" ? "var(--fg)" : "transparent"}`,
-                      }}
-                    />
-                  ))}
+                <div className="accent-picker">
+                  {ACCENT_ORDER.map((id) => {
+                    const palette = ACCENT_PRESETS[id];
+                    const selected = accentColor === id;
+                    return (
+                      <button
+                        key={id}
+                        type="button"
+                        className={`accent-swatch${selected ? " selected" : ""}`}
+                        style={{ background: palette.swatch }}
+                        title={t(`settings.appearance.accent.${id}`)}
+                        aria-label={t(`settings.appearance.accent.${id}`)}
+                        aria-pressed={selected}
+                        onClick={() => setAccentColor(id)}
+                      />
+                    );
+                  })}
                 </div>
               </div>
               <div className="setting-row">
@@ -507,112 +737,10 @@ export function SettingsPanel() {
         )}
 
         {/* Keybindings */}
-        {activeSection === "keybindings" && (
-          <div className="settings-panel active">
-            <div className="settings-section">
-              <h2>快捷键</h2>
-              <p className="section-desc">主要操作的键盘快捷方式</p>
-              {[
-                ["新建终端标签", "Ctrl", "T"],
-                ["关闭标签", "Ctrl", "W"],
-                ["切换标签", "Ctrl", "Tab"],
-                ["命令面板", "Ctrl", "K"],
-                ["切换 AI 面板", "Ctrl", "L"],
-                ["垂直分屏", "Ctrl", "\\"],
-                ["水平分屏", "Ctrl", "Shift", "\\"],
-                ["搜索终端", "Ctrl", "F"],
-                ["新建 SSH 连接", "Ctrl", "N"],
-                ["设置", "Ctrl", ","],
-                ["切换到第 N 个标签", "Ctrl", "1-9"],
-              ].map(([label, ...keys]) => (
-                <div key={label} className="setting-row">
-                  <div className="setting-label">
-                    <h4>{label}</h4>
-                  </div>
-                  <div className="keybind">
-                    {keys.map((k, i) => (
-                      <span key={i}>
-                        {i > 0 && " + "}
-                        <kbd>{k}</kbd>
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+        {activeSection === "keybindings" && <KeybindingsSection />}
 
         {/* AI Models */}
-        {activeSection === "ai" && (
-          <div className="settings-panel active">
-            <div className="settings-section">
-              <h2>AI 模型</h2>
-              <p className="section-desc">配置 AI 提供商和模型偏好</p>
-
-              <h3 style={{ fontSize: 13, fontWeight: 600, marginBottom: "var(--sp-3)" }}>
-                云端 API 提供商
-              </h3>
-              {[
-                { id: "anthropic", icon: "C", name: "Claude API", desc: "Anthropic Claude · claude-sonnet-4-6", color: "var(--accent-soft)", textColor: "var(--accent)", provider: "anthropic", model: "claude-sonnet-4-6" },
-                { id: "openai", icon: "G", name: "OpenAI API", desc: "GPT-4o · gpt-4o-2024-08-06", color: "var(--success-soft)", textColor: "var(--success)", provider: "openai", model: "gpt-4o" },
-                { id: "deepseek", icon: "D", name: "DeepSeek API", desc: "DeepSeek Coder · deepseek-coder-v2", color: "var(--warn-soft)", textColor: "var(--warn)", provider: "deepseek", model: "deepseek-coder-v2" },
-              ].map((p) => (
-                <div key={p.id} className="provider-card">
-                  <div className="provider-icon" style={{ background: p.color, color: p.textColor }}>
-                    {p.icon}
-                  </div>
-                  <div className="provider-info">
-                    <div className="provider-name">{p.name}</div>
-                    <div className="provider-desc">{p.desc}</div>
-                  </div>
-                  <span className={`badge ${currentProvider === p.provider ? "badge-success" : "badge-muted"}`}>
-                    {currentProvider === p.provider ? "使用中" : "未启用"}
-                  </span>
-                  <button
-                    className="btn btn-ghost btn-sm"
-                    onClick={() => setCurrentProvider(p.provider, p.model)}
-                  >
-                    {currentProvider === p.provider ? "已选择" : "选择"}
-                  </button>
-                </div>
-              ))}
-
-              <h3 style={{ fontSize: 13, fontWeight: 600, margin: "var(--sp-4) 0 var(--sp-3)" }}>
-                本地模型
-              </h3>
-              <div className="provider-card">
-                <div className="provider-icon" style={{ background: "var(--surface)", color: "var(--fg-2)" }}>O</div>
-                <div className="provider-info">
-                  <div className="provider-name">Ollama</div>
-                  <div className="provider-desc">localhost:11434 · codellama:34b</div>
-                </div>
-                <span className="badge badge-success">已连接</span>
-                <button
-                  className="btn btn-ghost btn-sm"
-                  onClick={() => setCurrentProvider("ollama", "codellama:34b")}
-                >
-                  {currentProvider === "ollama" ? "已选择" : "选择"}
-                </button>
-              </div>
-
-              <div className="setting-row" style={{ marginTop: "var(--sp-4)" }}>
-                <div className="setting-label">
-                  <h4>流式响应</h4>
-                  <p>生成过程中实时显示 AI 回复</p>
-                </div>
-                <Toggle value={streamResponses} onChange={setStreamResponses} />
-              </div>
-              <div className="setting-row">
-                <div className="setting-label">
-                  <h4>敏感数据优先本地模型</h4>
-                  <p>连接生产环境时优先使用本地模型</p>
-                </div>
-                <Toggle value={preferLocal} onChange={setPreferLocal} />
-              </div>
-            </div>
-          </div>
-        )}
+        {activeSection === "ai" && <AiModelsSection />}
 
         {/* Security */}
         {activeSection === "security" && (
@@ -746,54 +874,55 @@ export function SettingsPanel() {
                   <h4>Export all data</h4>
                   <p>Export connections, settings, history, and workflows to a file</p>
                 </div>
-                <button className="btn btn-secondary btn-sm">Export</button>
+                <Button variant="secondary" size="sm">Export</Button>
               </div>
               <div className="setting-row">
                 <div className="setting-label">
                   <h4>Import data</h4>
                   <p>Import from OmniPanel export, Xshell, WindTerm, or OpenSSH config</p>
                 </div>
-                <button className="btn btn-secondary btn-sm">Import</button>
+                <Button variant="secondary" size="sm">Import</Button>
               </div>
               <div className="setting-row">
                 <div className="setting-label">
                   <h4>Clear command history</h4>
                   <p>Remove all saved terminal command history</p>
                 </div>
-                <button className="btn btn-danger btn-sm">Clear</button>
+                <Button variant="danger" size="sm">Clear</Button>
               </div>
               <div className="setting-row">
                 <div className="setting-label">
                   <h4>Clear AI conversation history</h4>
                   <p>Remove all saved AI chat history</p>
                 </div>
-                <button
-                  className="btn btn-danger btn-sm"
+                <Button
+                  variant="danger"
+                  size="sm"
                   onClick={() => {
                     useAiStore.setState({ conversations: [], activeConversationId: null });
                   }}
                 >
                   Clear
-                </button>
+                </Button>
               </div>
               <div className="setting-row">
                 <div className="setting-label">
                   <h4>Clear SQL history</h4>
                   <p>Remove all saved SQL query history</p>
                 </div>
-                <button className="btn btn-danger btn-sm">Clear</button>
+                <Button variant="danger" size="sm">Clear</Button>
               </div>
               <div className="setting-row">
                 <div className="setting-label">
                   <h4>Reset all settings</h4>
                   <p>Restore all settings to factory defaults</p>
                 </div>
-                <button className="btn btn-danger btn-sm">Reset</button>
+                <Button variant="danger" size="sm">Reset</Button>
               </div>
             </div>
           </div>
         )}
       </div>
-    </div>
+    </SidebarWorkspace>
   );
 }

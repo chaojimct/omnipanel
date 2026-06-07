@@ -1,5 +1,6 @@
 import type { DangerCheckResult, DangerLevel } from "../../lib/commandGuard";
 import { Modal } from "../ui/Modal";
+import { Button } from "../ui/Button";
 
 interface Props {
   command: string;
@@ -53,18 +54,12 @@ export function DangerConfirmDialog({ command, result, onConfirm, onCancel }: Pr
 
         {/* Actions */}
         <div className="flex items-center justify-end gap-2 px-4 py-3 border-t border-border">
-          <button
-            onClick={onCancel}
-            className="px-3 py-1.5 text-xs text-fg-2 hover:text-fg bg-surface hover:bg-surface-hover border border-border rounded-md transition-colors"
-          >
+          <Button variant="secondary" size="sm" onClick={onCancel}>
             取消
-          </button>
-          <button
-            onClick={onConfirm}
-            className="px-3 py-1.5 text-xs text-white bg-danger hover:bg-danger/80 rounded-md transition-colors"
-          >
+          </Button>
+          <Button variant="danger" size="sm" onClick={onConfirm}>
             确认执行
-          </button>
+          </Button>
         </div>
       </div>
     </Modal>

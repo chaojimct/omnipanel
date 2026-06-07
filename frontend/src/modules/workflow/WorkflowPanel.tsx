@@ -1,6 +1,7 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { useActionStore } from "../../stores/actionStore";
 import { useI18n } from "../../i18n";
+import { Button } from "../../components/ui/Button";
 
 type WorkflowSection = "scripts" | "templates" | "deploy" | "patrol" | "data" | "history";
 type RiskTone = "success" | "warn" | "danger" | "accent";
@@ -305,13 +306,14 @@ export function WorkflowPanel() {
                       <h3>{name}</h3>
                       <span className={badgeClass(flow.riskTone)}>{t(`workflow.risk.${flow.riskKey}`)}</span>
                       <span className="text-muted text-sm">{t(`workflow.demo.flows.${flow.id}.meta`)}</span>
-                      <button
-                        className="btn btn-primary btn-sm"
+                      <Button
+                        variant="primary"
+                        size="sm"
                         style={{ marginLeft: "auto" }}
                         onClick={() => runAction(name, `${name} · ${t("workflow.panels.deploy.runDesc")}`, `workflow run ${flow.id}`)}
                       >
                         {t("workflow.panels.deploy.run")}
-                      </button>
+                      </Button>
                     </div>
                     {flow.steps.map((stepId, index) => {
                       const statusKey = flow.stepStatus[index];
@@ -417,8 +419,9 @@ export function WorkflowPanel() {
                   <h3>{t("workflow.panels.patrol.dailyTitle")}</h3>
                   <span className="badge badge-success">{t("workflow.risk.readonly")}</span>
                   <span className="text-muted text-sm">{t("workflow.panels.patrol.schedule")}</span>
-                  <button
-                    className="btn btn-primary btn-sm"
+                  <Button
+                    variant="primary"
+                    size="sm"
                     style={{ marginLeft: "auto" }}
                     onClick={() =>
                       runAction(
@@ -429,7 +432,7 @@ export function WorkflowPanel() {
                     }
                   >
                     {t("workflow.panels.patrol.runNow")}
-                  </button>
+                  </Button>
                 </div>
                 {PATROL_STEP_KEYS.map((stepKey, index, list) => (
                   <div key={stepKey}>

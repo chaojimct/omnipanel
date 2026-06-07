@@ -4,7 +4,7 @@ import { DockLayout } from "./DockLayout";
 import { DockPanel } from "./DockPanel";
 import { DockHandle } from "./DockHandle";
 
-export type DockRailPreset = "default" | "schema" | "host" | "server";
+export type DockRailPreset = "default" | "schema" | "host" | "server" | "settings" | "ai";
 
 type RailSize = PanelProps["minSize"];
 
@@ -13,6 +13,8 @@ const RAIL_PRESETS: Record<DockRailPreset, { defaultSize: RailSize; minSize: Rai
   schema: { defaultSize: 280, minSize: 280, maxSize: "100%" },
   host: { defaultSize: 280, minSize: 240, maxSize: 420 },
   server: { defaultSize: 220, minSize: 200, maxSize: 360 },
+  settings: { defaultSize: 200, minSize: 180, maxSize: 280 },
+  ai: { defaultSize: 240, minSize: 200, maxSize: 360 },
 };
 
 interface DockWorkspaceProps {

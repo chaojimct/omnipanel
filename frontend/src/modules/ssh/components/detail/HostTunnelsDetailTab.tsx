@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useI18n } from "../../../../i18n";
+import { Button } from "../../../../components/ui/Button";
 
 type TunnelEntry = {
   id: string;
@@ -48,9 +49,9 @@ export function HostTunnelsDetailTab() {
     <div className="tunnel-panel">
       <div className="tunnel-header">
         <span className="tunnel-label">{t("ssh.tunnels.label")}</span>
-        <button className="btn btn-icon" onClick={() => setShowCreate(!showCreate)} title={t("ssh.tunnels.create")}>
+        <Button variant="icon" onClick={() => setShowCreate(!showCreate)} title={t("ssh.tunnels.create")}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
-        </button>
+        </Button>
       </div>
       {showCreate && (
         <div className="tunnel-create">
@@ -58,7 +59,7 @@ export function HostTunnelsDetailTab() {
           <input className="input input-sm" placeholder="Local port" value={localPort} onChange={(e) => setLocalPort(e.target.value)} />
           <input className="input input-sm" placeholder="Remote address" value={remoteAddr} onChange={(e) => setRemoteAddr(e.target.value)} />
           <input className="input input-sm" placeholder="Remote port" value={remotePort} onChange={(e) => setRemotePort(e.target.value)} />
-          <button className="btn btn-primary btn-sm" onClick={handleCreate}>{t("ssh.tunnels.create")}</button>
+          <Button variant="primary" size="sm" onClick={handleCreate}>{t("ssh.tunnels.create")}</Button>
         </div>
       )}
       <div className="tunnel-list">

@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useI18n } from "../../i18n";
 import { ContextMenu, type ContextMenuItem } from "../ui/ContextMenu";
+import { Button } from "../ui/Button";
 import type { ServerEntry } from "../../modules/server/CreateServerDialog";
 import type { ServerConnectionGroup } from "../../stores/serverGroupStore";
 
@@ -74,26 +75,28 @@ export function ServerSidebar({
             </option>
           ))}
         </select>
-        <button
+        <Button
           type="button"
-          className="btn btn-ghost btn-icon server-sidebar-group-add"
+          variant="icon"
+          className="server-sidebar-group-add"
           title={t("server.groups.new")}
           onClick={onCreateGroup}
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M12 5v14M5 12h14" />
           </svg>
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
-          className="btn btn-ghost btn-icon server-sidebar-add"
+          variant="icon"
+          className="server-sidebar-add"
           title={t("server.sidebar.addServer")}
           onClick={onCreateServer}
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M12 5v14M5 12h14" />
           </svg>
-        </button>
+        </Button>
       </div>
       <div className="server-sidebar-subheader">
         <span>{t("server.sidebar.title")}</span>

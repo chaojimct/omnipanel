@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { LogViewer } from "../../components/ui/LogViewer";
 import { SubWindow } from "../../components/ui/SubWindow";
+import { Button } from "../../components/ui/Button";
 import { useI18n } from "../../i18n";
 import type { ServerEntry } from "./CreateServerDialog";
 import { formatAppPorts } from "./appCard";
@@ -113,14 +114,14 @@ function LogsTab({
       error={error}
       onClear={clear}
       toolbar={
-        <button
-          type="button"
-          className="btn btn-ghost btn-sm"
+        <Button
+          variant="ghost"
+          size="sm"
           disabled={loading}
           onClick={() => void refresh()}
         >
           {loading ? t("server.apps.loading") : t("server.refresh")}
-        </button>
+        </Button>
       }
     />
   );

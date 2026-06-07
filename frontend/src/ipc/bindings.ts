@@ -177,15 +177,35 @@ export const commands = {
 	installUpdate: () => typedError<null, string>(__TAURI_INVOKE("install_update")),
 	/**  列出知识条目（可选按 kind / tag 过滤）。 */
 	knowledgeList: (kind: string | null, tag: string | null) => typedError<KnowledgeEntry[], OmniError_Serialize>(__TAURI_INVOKE("knowledge_list", { kind, tag })),
-	/**  全文搜索知识条目（FTS5）。 */
-	knowledgeSearch: (query: string, kind: string | null) => typedError<KnowledgeSearchResult[], OmniError_Serialize>(__TAURI_INVOKE("knowledge_search", { query, kind })),
-	/**  获取所有已使用的标签。 */
-	knowledgeTags: () => typedError<string[], OmniError_Serialize>(__TAURI_INVOKE("knowledge_tags")),
+	/**  按 id 获取单条知识。 */
+	knowledgeGet: (id: string) => typedError<{
+	id: string,
+	/**  "snippet" | "case" | "ai" */
+	kind: string,
+	title: string,
+	/**  Markdown 正文 */
+	content: string,
+	tags: string[],
+	/**  "safe" | "readonly" | "medium" | "dangerous" */
+	riskLevel: string,
+	source: string,
+	/**  "dev" | "staging" | "production" */
+	envTag: string,
+	/**  代码语言（snippet 时有意义） */
+	language: string,
+	usageCount: number | null,
+	createdAt?: number | null,
+	updatedAt?: number | null,
+} | null, OmniError_Serialize>(__TAURI_INVOKE("knowledge_get", { id })),
 	/**  保存（新建或更新）知识条目。 */
-	knowledgeSave: (entry: KnowledgeEntry) => typedError<KnowledgeEntry, OmniError_Serialize>(__TAURI_INVOKE("knowledge_save", { entry })),
+	knowledgeSave: (entry: KnowledgeEntry) => typedError<null, OmniError_Serialize>(__TAURI_INVOKE("knowledge_save", { entry })),
 	/**  删除知识条目。 */
 	knowledgeDelete: (id: string) => typedError<null, OmniError_Serialize>(__TAURI_INVOKE("knowledge_delete", { id })),
-	/**  递增知识条目使用次数。 */
+	/**  FTS5 全文搜索（可选按 kind 过滤）。 */
+	knowledgeSearch: (query: string, kind: string | null) => typedError<KnowledgeSearchResult[], OmniError_Serialize>(__TAURI_INVOKE("knowledge_search", { query, kind })),
+	/**  列出所有不重复的 tag。 */
+	knowledgeTags: () => typedError<string[], OmniError_Serialize>(__TAURI_INVOKE("knowledge_tags")),
+	/**  递增使用次数。 */
 	knowledgeIncrementUsage: (id: string) => typedError<null, OmniError_Serialize>(__TAURI_INVOKE("knowledge_increment_usage", { id })),
 };
 
@@ -666,6 +686,33 @@ export type HostSystemStats = {
 	timestamp: number | null,
 };
 
+/**  知识条目模型。 */
+export type KnowledgeEntry = {
+	id: string,
+	/**  "snippet" | "case" | "ai" */
+	kind: string,
+	title: string,
+	/**  Markdown 正文 */
+	content: string,
+	tags: string[],
+	/**  "safe" | "readonly" | "medium" | "dangerous" */
+	riskLevel: string,
+	source: string,
+	/**  "dev" | "staging" | "production" */
+	envTag: string,
+	/**  代码语言（snippet 时有意义） */
+	language: string,
+	usageCount: number | null,
+	createdAt?: number | null,
+	updatedAt?: number | null,
+};
+
+/**  FTS5 搜索结果：原文 + snippet 摘要。 */
+export type KnowledgeSearchResult = {
+	entry: KnowledgeEntry,
+	snippet: string,
+};
+
 export type MemoryStats = {
 	total: number | null,
 	used: number | null,
@@ -769,26 +816,6 @@ export type SshProcessInfo = {
 	start: string,
 	time: string,
 	command: string,
-};
-
-export type KnowledgeEntry = {
-	id: string,
-	kind: string,
-	title: string,
-	content: string,
-	tags: string[],
-	riskLevel: string,
-	source: string | null,
-	envTag: string | null,
-	language: string | null,
-	usageCount: number,
-	createdAt: string,
-	updatedAt: string,
-};
-
-export type KnowledgeSearchResult = {
-	entry: KnowledgeEntry,
-	snippet: string,
 };
 
 export type UpdateInfo = {

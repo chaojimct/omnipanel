@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { DockLayout, DockHandle, DockPanel } from "../../components/dock";
 import { SidebarWorkspace } from "../../components/ui/SidebarWorkspace";
+import { Button } from "../../components/ui/Button";
 import { SchemaBrowser, type SchemaTableSelection } from "./SchemaBrowser";
 import { ConnectionDialog } from "./ConnectionDialog";
 import { TableDataGrid } from "./TableDataGrid";
@@ -835,8 +836,9 @@ export function DatabasePanel() {
           {schemaLoading && (
             <span className="sql-toolbar-meta">{t("common.loading")}</span>
           )}
-          <button
-            className="btn btn-primary btn-sm"
+          <Button
+            variant="primary"
+            size="sm"
             style={{ marginLeft: "auto" }}
             onClick={() => void runQuery()}
             disabled={
@@ -844,7 +846,7 @@ export function DatabasePanel() {
             }
           >
             {tabState.running ? t("database.running") : t("database.runSql")}
-          </button>
+          </Button>
         </div>
         <SqlEditor
           key={tab.id}
@@ -865,9 +867,8 @@ export function DatabasePanel() {
         <div className="results-header">
           <h3>{isPreviewTab ? tab.label : t("database.results.preview")}</h3>
           {isPreviewTab && canRefresh && (
-            <button
-              type="button"
-              className="btn-icon"
+            <Button
+              variant="icon"
               style={{ marginLeft: "var(--sp-2)" }}
               title="Refresh"
               disabled={preview!.loading}
@@ -877,7 +878,7 @@ export function DatabasePanel() {
                 <path d="M23 4v6h-6M1 20v-6h6" />
                 <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" />
               </svg>
-            </button>
+            </Button>
           )}
           {isPreviewTab && preview?.data && !preview.loading && canRefresh && (
             <span className="results-meta" style={{ marginLeft: "var(--sp-2)" }}>
@@ -897,9 +898,8 @@ export function DatabasePanel() {
             </span>
           )}
           {mode === "sql" && hasSqlQueryOutput && (
-            <button
-              type="button"
-              className="btn-icon"
+            <Button
+              variant="icon"
               style={{ marginLeft: "auto" }}
               title={t("database.results.close")}
               aria-label={t("database.results.close")}
@@ -915,7 +915,7 @@ export function DatabasePanel() {
               >
                 <path d="M4 4l8 8M12 4l-8 8" />
               </svg>
-            </button>
+            </Button>
           )}
         </div>
         {tabState.error ? (

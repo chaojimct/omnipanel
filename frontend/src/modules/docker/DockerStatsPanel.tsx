@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { commands } from "../../ipc/bindings";
+import { Button } from "../../components/ui/Button";
 
 interface ContainerStats {
   containerId: string;
@@ -99,11 +100,11 @@ export function DockerStatsPanel({ connectionId, containerId, containerName, onC
             <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} />
             启用
           </label>
-          <button className="btn-icon" onClick={onClose} title="关闭">
+          <Button variant="icon" onClick={onClose} title="关闭">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
               <path d="M18 6L6 18M6 6l12 12" />
             </svg>
-          </button>
+          </Button>
         </div>
       </div>
       {error && <div className="docker-stats-error text-sm text-danger">{error}</div>}

@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback } from "react";
 import { invoke, Channel } from "@tauri-apps/api/core";
 import { useI18n } from "../../i18n";
+import { Button } from "../../components/ui/Button";
 
 type SerialStatus = "disconnected" | "connecting" | "connected";
 type Encoding = "UTF-8" | "ASCII" | "HEX";
@@ -261,8 +262,8 @@ export function SerialPanel() {
         <div className="serial-field">
           <label>{" "}</label>
           <div style={{ display: "flex", gap: "var(--sp-1)" }}>
-            <button
-              className={`btn ${status === "connected" ? "btn-danger" : "btn-primary"}`}
+            <Button
+              variant={status === "connected" ? "danger" : "primary"}
               style={{ flex: 1 }}
               onClick={handleConnect}
             >
@@ -271,10 +272,10 @@ export function SerialPanel() {
                 : status === "connecting"
                   ? "…"
                   : t("protocol.common.connect")}
-            </button>
-            <button className="btn btn-ghost" onClick={handleScanPorts} title={t("protocol.serial.scanPorts")}>
+            </Button>
+            <Button variant="ghost" onClick={handleScanPorts} title={t("protocol.serial.scanPorts")}>
               &#x21bb;
-            </button>
+            </Button>
           </div>
         </div>
       </div>
@@ -385,13 +386,14 @@ export function SerialPanel() {
               onKeyDown={(e) => e.key === "Enter" && handleSend()}
               disabled={status !== "connected"}
             />
-            <button
-              className="btn btn-primary btn-sm"
+            <Button
+              variant="primary"
+              size="sm"
               onClick={handleSend}
               disabled={status !== "connected"}
             >
               {t("protocol.common.send")}
-            </button>
+            </Button>
           </div>
         </div>
         <div className="serial-panel">
@@ -411,14 +413,15 @@ export function SerialPanel() {
           <div className="serial-panel-input">
             <div style={{ display: "flex", gap: "var(--sp-1)", flexWrap: "wrap" }}>
               {["AT", "AT+RST", "AT+GMR", "AT+CWLAP"].map((cmd) => (
-                <button
+                <Button
                   key={cmd}
-                  className="btn btn-ghost btn-sm"
+                  variant="ghost"
+                  size="sm"
                   onClick={() => handleQuickCmd(cmd)}
                   disabled={status !== "connected"}
                 >
                   {cmd}
-                </button>
+                </Button>
               ))}
             </div>
           </div>
@@ -458,9 +461,9 @@ export function SerialPanel() {
           onChange={(e) => setPeriodicCmd(e.target.value)}
           style={{ flex: 1, fontSize: "11px" }}
         />
-        <button className="btn btn-ghost btn-sm" onClick={togglePeriodic}>
+        <Button variant="ghost" size="sm" onClick={togglePeriodic}>
           {periodicEnabled ? t("protocol.serial.stop") : t("protocol.serial.start")}
-        </button>
+        </Button>
       </div>
     </div>
   );

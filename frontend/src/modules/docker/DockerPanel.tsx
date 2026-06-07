@@ -21,6 +21,7 @@ import { DockerNetworkDrawer } from "./DockerNetworkDrawer";
 import { DockerVolumeDrawer } from "./DockerVolumeDrawer";
 import { DockerComposeDrawer } from "./DockerComposeDrawer";
 import { DockerFileEditor } from "./DockerFileEditor";
+import { Button } from "../../components/ui/Button";
 import type { DockerComposeAction } from "../../ipc/bindings";
 import type {
   DockerContainerDetail,
@@ -317,9 +318,9 @@ export function DockerPanel() {
                 <span className="text-muted text-xs">Engine {selectedConnection.engineVersion}</span>
               )}
             </div>
-            <button className="btn btn-secondary btn-sm" style={{ marginLeft: "auto" }} onClick={refresh} disabled={dataLoading}>
+            <Button variant="secondary" size="sm" style={{ marginLeft: "auto" }} onClick={refresh} disabled={dataLoading}>
               {dataLoading ? "刷新中…" : "刷新"}
-            </button>
+            </Button>
           </div>
         )}
 
@@ -328,15 +329,15 @@ export function DockerPanel() {
         ) : connections.length === 0 ? (
           <div className="docker-empty">
             <div className="docker-empty-title">暂无 Docker 连接</div>
-            <button className="btn btn-primary btn-sm" style={{ marginTop: 12 }} onClick={() => setShowAddConn(true)}>
+            <Button variant="primary" size="sm" style={{ marginTop: 12 }} onClick={() => setShowAddConn(true)}>
               添加 Docker 连接
-            </button>
+            </Button>
           </div>
         ) : isOffline ? (
           <div className="docker-empty">
             <div className="docker-empty-title">Docker 未安装或未启动</div>
             <div className="text-muted text-sm">{probe?.warningMessage ?? error ?? "无法连接到 Docker Engine"}</div>
-            <button className="btn btn-secondary btn-sm" style={{ marginTop: 12 }} onClick={refresh}>重试</button>
+            <Button variant="secondary" size="sm" style={{ marginTop: 12 }} onClick={refresh}>重试</Button>
           </div>
         ) : (
           <>
@@ -436,31 +437,31 @@ export function DockerPanel() {
                         </div>
                         <div className="text-sm text-muted">{container.networks.join(", ") || "-"}</div>
                         <div className="container-actions" onClick={(e) => e.stopPropagation()}>
-                          <button
-                            className="btn-icon"
+                          <Button
+                            variant="icon"
                             title="资源监控"
                             disabled={!container.running || !probe?.capabilities?.canManageContainers}
                             onClick={() => setStatsContainer({ id: container.id, name: container.name })}
                           >
                             📊
-                          </button>
+                          </Button>
                           {container.running ? (
                             <>
-                              <button className="btn-icon" title="重启" onClick={() => runContainerAction(container, "restart", "重启")}>
+                              <Button variant="icon" title="重启" onClick={() => runContainerAction(container, "restart", "重启")}>
                                 <RestartIcon />
-                              </button>
-                              <button className="btn-icon" title="停止" onClick={() => runContainerAction(container, "stop", "停止")}>
+                              </Button>
+                              <Button variant="icon" title="停止" onClick={() => runContainerAction(container, "stop", "停止")}>
                                 <StopIcon />
-                              </button>
+                              </Button>
                             </>
                           ) : (
                             <>
-                              <button className="btn-icon" title="启动" onClick={() => runContainerAction(container, "start", "启动")}>
+                              <Button variant="icon" title="启动" onClick={() => runContainerAction(container, "start", "启动")}>
                                 <PlayIcon />
-                              </button>
-                              <button className="btn-icon text-danger" title="删除" onClick={() => confirmContainerRemove(container)}>
+                              </Button>
+                              <Button variant="icon" className="text-danger" title="删除" onClick={() => confirmContainerRemove(container)}>
                                 <TrashIcon />
-                              </button>
+                              </Button>
                             </>
                           )}
                         </div>
@@ -490,9 +491,9 @@ export function DockerPanel() {
                       }}
                       onMessage={(msg) => showToast(msg)}
                     />
-                    <button className="btn btn-secondary btn-sm" onClick={confirmPrune}>
+                    <Button variant="secondary" size="sm" onClick={confirmPrune}>
                       清理悬空
-                    </button>
+                    </Button>
                   </div>
                 </div>
                 <div className="list-header image-row">
@@ -520,8 +521,8 @@ export function DockerPanel() {
                       <div className="text-sm">{formatBytes(img.sizeBytes)}</div>
                       <div className="text-sm text-muted">{formatTimestamp(img.createdAt)}</div>
                       <div className="container-actions" onClick={(e) => e.stopPropagation()}>
-                        <button
-                          className="btn-icon"
+                        <Button
+                          variant="icon"
                           title="推送"
                           disabled={!probe?.capabilities?.canManageImages || img.dangling}
                           onClick={async () => {
@@ -531,9 +532,9 @@ export function DockerPanel() {
                           }}
                         >
                           ↑
-                        </button>
-                        <button
-                          className="btn-icon"
+                        </Button>
+                        <Button
+                          variant="icon"
                           title="打 tag"
                           disabled={!probe?.capabilities?.canManageImages}
                           onClick={async () => {
@@ -544,14 +545,15 @@ export function DockerPanel() {
                           }}
                         >
                             ⎘
-                          </button>
-                        <button
-                          className="btn-icon text-danger"
+                          </Button>
+                        <Button
+                          variant="icon"
+                          className="text-danger"
                           title="删除镜像"
                           onClick={() => confirmImageRemove(img.id, `${img.repository}:${img.tag}`)}
                         >
                           <TrashIcon />
-                        </button>
+                        </Button>
                       </div>
                     </div>
                   ))
@@ -575,8 +577,9 @@ export function DockerPanel() {
                         </span>
                         {proj.workingDir && <span className="text-muted text-xs">{proj.workingDir}</span>}
                         <div style={{ marginLeft: "auto", display: "flex", gap: 6 }} onClick={(e) => e.stopPropagation()}>
-                          <button
-                            className="btn btn-secondary btn-sm"
+                          <Button
+                            variant="secondary"
+                            size="sm"
                             disabled={!probe?.capabilities?.canCompose}
                             onClick={async () => {
                               const r = await composeAction("up", proj.name);
@@ -584,9 +587,10 @@ export function DockerPanel() {
                             }}
                           >
                             Up
-                          </button>
-                          <button
-                            className="btn btn-secondary btn-sm"
+                          </Button>
+                          <Button
+                            variant="secondary"
+                            size="sm"
                             disabled={!probe?.capabilities?.canCompose}
                             onClick={async () => {
                               const r = await composeAction("down", proj.name);
@@ -594,9 +598,10 @@ export function DockerPanel() {
                             }}
                           >
                             Down
-                          </button>
-                          <button
-                            className="btn btn-secondary btn-sm"
+                          </Button>
+                          <Button
+                            variant="secondary"
+                            size="sm"
                             disabled={!probe?.capabilities?.canCompose}
                             onClick={async () => {
                               const r = await composeAction("restart", proj.name);
@@ -604,9 +609,10 @@ export function DockerPanel() {
                             }}
                           >
                             Restart
-                          </button>
-                          <button
-                            className="btn btn-secondary btn-sm"
+                          </Button>
+                          <Button
+                            variant="secondary"
+                            size="sm"
                             disabled={!probe?.capabilities?.canCompose}
                             onClick={async () => {
                               const r = await composeAction("pull", proj.name);
@@ -614,7 +620,7 @@ export function DockerPanel() {
                             }}
                           >
                             Pull
-                          </button>
+                          </Button>
                         </div>
                       </div>
                       <div className="compose-services">
@@ -968,9 +974,9 @@ function ContainerDrawer({
                   {detail.summary.running ? "运行中" : "已停止"}
                 </span>
               )}
-              <button className="btn-icon" onClick={onClose} title="关闭">
+              <Button variant="icon" onClick={onClose} title="关闭">
                 <CloseIcon />
-              </button>
+              </Button>
             </div>
 
             <div className="drawer-subtabs">
@@ -1077,9 +1083,9 @@ function ContainerDrawer({
                       <span className="v">{hostLabel ?? "—"}</span>
                     </div>
                     <div className="flex gap-2" style={{ flexWrap: "wrap", marginTop: "var(--sp-2)" }}>
-                      <button className="btn btn-secondary btn-sm" onClick={() => onNavigate("/ssh")}>打开 SSH</button>
-                      <button className="btn btn-secondary btn-sm" onClick={() => onNavigate("/server")}>查看服务器</button>
-                      <button className="btn btn-secondary btn-sm" onClick={() => onSendToAi(detail)}>发送给 AI 分析</button>
+                      <Button variant="secondary" size="sm" onClick={() => onNavigate("/ssh")}>打开 SSH</Button>
+                      <Button variant="secondary" size="sm" onClick={() => onNavigate("/server")}>查看服务器</Button>
+                      <Button variant="secondary" size="sm" onClick={() => onSendToAi(detail)}>发送给 AI 分析</Button>
                     </div>
                   </div>
                 </>
@@ -1104,13 +1110,13 @@ function ContainerDrawer({
                 <div className="flex gap-2" style={{ marginTop: "var(--sp-4)" }}>
                   {detail.summary.running ? (
                     <>
-                      <button className="btn btn-secondary btn-sm" onClick={() => onAction(detail.summary, "restart", "重启")}>重启</button>
-                      <button className="btn btn-secondary btn-sm" onClick={() => onAction(detail.summary, "stop", "停止")}>停止</button>
+                      <Button variant="secondary" size="sm" onClick={() => onAction(detail.summary, "restart", "重启")}>重启</Button>
+                      <Button variant="secondary" size="sm" onClick={() => onAction(detail.summary, "stop", "停止")}>停止</Button>
                     </>
                   ) : (
-                    <button className="btn btn-secondary btn-sm" onClick={() => onAction(detail.summary, "start", "启动")}>启动</button>
+                    <Button variant="secondary" size="sm" onClick={() => onAction(detail.summary, "start", "启动")}>启动</Button>
                   )}
-                  <button className="btn btn-danger btn-sm" style={{ marginLeft: "auto" }} onClick={() => onRemove(detail.summary)}>删除</button>
+                  <Button variant="danger" size="sm" style={{ marginLeft: "auto" }} onClick={() => onRemove(detail.summary)}>删除</Button>
                 </div>
               )}
             </div>
@@ -1167,8 +1173,8 @@ function ConfirmModal({ confirm, onCancel }: { confirm: ConfirmState; onCancel: 
         <p className="text-sm">{confirm.message}</p>
         {confirm.detail && <p className="text-muted text-xs">{confirm.detail}</p>}
         <div className="flex gap-2" style={{ marginTop: 16, justifyContent: "flex-end" }}>
-          <button className="btn btn-secondary btn-sm" onClick={onCancel}>取消</button>
-          <button className="btn btn-danger btn-sm" onClick={confirm.onConfirm}>{confirm.confirmLabel}</button>
+          <Button variant="secondary" size="sm" onClick={onCancel}>取消</Button>
+          <Button variant="danger" size="sm" onClick={confirm.onConfirm}>{confirm.confirmLabel}</Button>
         </div>
       </div>
     </>

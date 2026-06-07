@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useAiStore } from "../../stores/aiStore";
@@ -6,12 +6,13 @@ import { useTerminalStore } from "../../stores/terminalStore";
 import { useActionStore } from "../../stores/actionStore";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { getResourceById } from "../../lib/resourceRegistry";
-import type { AiMessage, ToolCallState } from "../../stores/aiStore";
+import type { AiConversation, AiMessage, ToolCallState } from "../../stores/aiStore";
 import { IconRobot } from "../ui/Icons";
 import { SubWindow } from "../ui/SubWindow";
+import { SidebarWorkspace } from "../ui/SidebarWorkspace";
 import { CommandSuggestion, isShellLanguage } from "./CommandSuggestion";
 import { useI18n } from "../../i18n";
-import { formatModShortcut } from "../../lib/platform";
+import { formatShortcut, useShortcutsStore } from "../../stores/shortcutsStore";
 
 function extractText(node: unknown): string {
   if (typeof node === "string") return node;
@@ -165,9 +166,21 @@ function MessageBubble({ msg }: { msg: AiMessage }) {
   );
 }
 
-// ─── Conversation Switcher ───
+// ─── Session List (sidebar) ───
 
-function ConversationSwitcher() {
+function formatRelativeShort(ts: number): string {
+  const diff = Date.now() - ts;
+  const min = Math.floor(diff / 60000);
+  if (min < 1) return "刚刚";
+  if (min < 60) return `${min}m`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr}h`;
+  const day = Math.floor(hr / 24);
+  if (day < 7) return `${day}d`;
+  return new Date(ts).toLocaleDateString();
+}
+
+function AiSessionList() {
   const { t } = useI18n();
   const conversations = useAiStore((s) => s.conversations);
   const activeId = useAiStore((s) => s.activeConversationId);
@@ -175,64 +188,105 @@ function ConversationSwitcher() {
   const createConversation = useAiStore((s) => s.createConversation);
   const deleteConversation = useAiStore((s) => s.deleteConversation);
 
-  const [showList, setShowList] = useState(false);
-
-  const active = conversations.find((c) => c.id === activeId);
+  const handleCreate = () => {
+    createConversation();
+  };
 
   return (
-    <div className="ai-conversation-switcher">
-      <div className="ai-conversation-switcher-bar">
+    <aside className="ai-session-list">
+      <div className="ai-session-list-header">
+        <span className="ai-session-list-title">{t("ai.sessionList.title")}</span>
         <button
-          className="ai-conversation-trigger"
-          onClick={() => setShowList(!showList)}
-        >
-          <span className="truncate">{active?.title || t("ai.noConversation")}</span>
-          <span className="text-muted">{showList ? "▾" : "▸"}</span>
-        </button>
-        <button
-          className="ai-conversation-add"
+          type="button"
+          className="ai-session-list-add"
           title={t("ai.newConversation")}
-          onClick={() => createConversation()}
+          aria-label={t("ai.newConversation")}
+          onClick={handleCreate}
         >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+          >
             <path d="M12 5v14M5 12h14" />
           </svg>
         </button>
       </div>
 
-      {showList && (
-        <div className="ai-conversation-list">
-          {conversations.length === 0 ? (
-            <div className="px-3 py-2 text-xs text-muted">{t("ai.noConversation")}</div>
-          ) : (
-            conversations.map((c) => (
-              <div
-                key={c.id}
-                className={`ai-conversation-row ${c.id === activeId ? "active" : ""}`}
-                onClick={() => {
-                  setActive(c.id);
-                  setShowList(false);
-                }}
-              >
-                <span className="flex-1 truncate">{c.title}</span>
-                <span className="text-muted text-[10px]">
-                  {new Date(c.updatedAt).toLocaleDateString()}
-                </span>
-                <button
-                  className="w-4 h-4 flex items-center justify-center text-muted hover:text-danger"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    deleteConversation(c.id);
-                  }}
-                  title="删除"
-                >
-                  &times;
-                </button>
-              </div>
-            ))
-          )}
-        </div>
-      )}
+      <div className="ai-session-list-body">
+        {conversations.length === 0 ? (
+          <div className="ai-session-list-empty">{t("ai.noConversation")}</div>
+        ) : (
+          conversations.map((c) => (
+            <SessionRow
+              key={c.id}
+              conv={c}
+              active={c.id === activeId}
+              onSelect={() => setActive(c.id)}
+              onDelete={() => deleteConversation(c.id)}
+              deleteTitle={t("ai.sessionList.delete")}
+              emptyLabel={t("ai.sessionList.empty")}
+            />
+          ))
+        )}
+      </div>
+    </aside>
+  );
+}
+
+function SessionRow({
+  conv,
+  active,
+  onSelect,
+  onDelete,
+  deleteTitle,
+  emptyLabel,
+}: {
+  conv: AiConversation;
+  active: boolean;
+  onSelect: () => void;
+  onDelete: () => void;
+  deleteTitle: string;
+  emptyLabel: string;
+}) {
+  return (
+    <div
+      className={`ai-session-row ${active ? "active" : ""}`}
+      onClick={onSelect}
+      title={conv.title}
+    >
+      <div className="ai-session-row-main">
+        <span className="ai-session-row-title">{conv.title}</span>
+        <span className="ai-session-row-meta">
+          {conv.messages.length > 0 ? `${conv.messages.length} msgs` : emptyLabel}
+          <span className="ai-session-row-dot">·</span>
+          {formatRelativeShort(conv.updatedAt)}
+        </span>
+      </div>
+      <button
+        type="button"
+        className="ai-session-row-delete"
+        title={deleteTitle}
+        aria-label={deleteTitle}
+        onClick={(e) => {
+          e.stopPropagation();
+          onDelete();
+        }}
+      >
+        <svg
+          width="12"
+          height="12"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+        >
+          <path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />
+        </svg>
+      </button>
     </div>
   );
 }
@@ -425,11 +479,14 @@ function AiPanelBody() {
   const activeResource = getResourceById(activeResourceId);
   const environment = activeResource?.environment ?? "unknown";
   const recentActions = actions.slice(0, 3);
+  const aiKeysOverride = useShortcutsStore((s) => s.overrides["toggle-ai"]);
+  const aiShortcutLabel = useMemo(
+    () => formatShortcut(aiKeysOverride ?? ["Mod", "`"]),
+    [aiKeysOverride]
+  );
 
   return (
-    <>
-      <ConversationSwitcher />
-
+    <div className="ai-chat-pane">
       <div className="ai-context-strip">
         <div className="ai-context-row">
           <span className="ai-context-label">{t("ai.currentContext")}</span>
@@ -526,11 +583,11 @@ function AiPanelBody() {
         <div className="ai-input-hint-row">
           <span className="text-[10px] text-meta">Shift+Enter 换行</span>
           <span className="text-[10px] text-meta">
-            {t("ai.toggleHint", { shortcut: formatModShortcut("L") })}
+            {t("ai.toggleHint", { shortcut: aiShortcutLabel })}
           </span>
         </div>
       </div>
-    </>
+    </div>
   );
 }
 
@@ -541,19 +598,30 @@ export function AiDrawer() {
   const drawerOpen = useAiStore((s) => s.drawerOpen);
   const closeDrawer = useAiStore((s) => s.closeDrawer);
   const currentModel = useAiStore((s) => s.currentModel);
+  const activeConversation = useAiStore((s) =>
+    s.conversations.find((c) => c.id === s.activeConversationId) ?? null
+  );
+
+  const title = activeConversation
+    ? `${t("ai.title")} · ${activeConversation.title}`
+    : `${t("ai.title")} · ${currentModel}`;
 
   return (
     <SubWindow
       open={drawerOpen}
-      title={`${t("ai.title")} · ${currentModel}`}
+      title={title}
       onClose={closeDrawer}
       className="ai-subwindow"
       widthRatio={0.82}
       heightRatio={0.85}
     >
-      <div className="ai-subwindow-content">
+      <SidebarWorkspace
+        preset="ai"
+        className="ai-subwindow-content"
+        sidebar={<AiSessionList />}
+      >
         <AiPanelBody />
-      </div>
+      </SidebarWorkspace>
     </SubWindow>
   );
 }

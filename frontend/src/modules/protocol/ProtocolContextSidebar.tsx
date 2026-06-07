@@ -1,4 +1,5 @@
 import { useI18n } from "../../i18n";
+import { Button } from "../../components/ui/Button";
 
 export type ProtocolKind = "http" | "ws" | "mqtt" | "serial";
 
@@ -89,9 +90,9 @@ export function ProtocolContextSidebar({ protocol }: Props) {
             </span>
           ))}
         </div>
-        <button type="button" className="btn btn-ghost btn-sm proto-sidebar-action">
+        <Button variant="ghost" size="sm" className="proto-sidebar-action">
           {t("protocol.sidebar.addTopic")}
-        </button>
+        </Button>
       </aside>
     );
   }

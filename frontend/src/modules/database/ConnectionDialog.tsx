@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useI18n } from "../../i18n";
 import { Modal } from "../../components/ui/Modal";
+import { Button } from "../../components/ui/Button";
 import type { DbConnectionGroup } from "../../stores/dbGroupStore";
 import {
   type ConnectionFormData,
@@ -154,11 +155,11 @@ export function ConnectionDialog({
       <div className="modal-dialog" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h3>{t("database.dialog.title")}</h3>
-          <button className="btn-icon" onClick={onClose}>
+          <Button variant="icon" onClick={onClose}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
               <path d="M18 6L6 18M6 6l12 12" />
             </svg>
-          </button>
+          </Button>
         </div>
 
         <div className="modal-body">
@@ -296,9 +297,9 @@ export function ConnectionDialog({
         </div>
 
         <div className="modal-footer">
-          <button className="btn btn-secondary" onClick={onClose} disabled={busy}>
+          <Button variant="secondary" onClick={onClose} disabled={busy}>
             {t("database.dialog.cancel")}
-          </button>
+          </Button>
           {status ? (
             <span
               className={`modal-footer-status modal-footer-status--${status.kind}`}
@@ -309,12 +310,12 @@ export function ConnectionDialog({
           ) : (
             <div className="modal-footer-spacer" />
           )}
-          <button className="btn btn-ghost" onClick={() => void handleTest()} disabled={busy}>
+          <Button variant="ghost" onClick={() => void handleTest()} disabled={busy}>
             {testing ? t("database.dialog.testing") : t("database.dialog.test")}
-          </button>
-          <button className="btn btn-primary" onClick={() => void handleSave()} disabled={busy}>
+          </Button>
+          <Button variant="primary" onClick={() => void handleSave()} disabled={busy}>
             {saving ? t("database.dialog.saving") : t("database.dialog.save")}
-          </button>
+          </Button>
         </div>
       </div>
     </Modal>

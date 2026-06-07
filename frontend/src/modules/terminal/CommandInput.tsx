@@ -1,5 +1,6 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from "react";
 import { useI18n } from "../../i18n";
+import { Button } from "../../components/ui/Button";
 
 const CMD_INPUT_LINE_HEIGHT_PX = 24;
 const CMD_INPUT_MAX_HEIGHT_PX = 100;
@@ -74,8 +75,9 @@ export const CommandInput = forwardRef<CommandInputHandle, { onSend: (cmd: strin
           rows={1}
           spellCheck={false}
         />
-        <button
-          className="btn-icon term-cmd-send"
+        <Button
+          variant="icon"
+          className="term-cmd-send"
           onClick={submit}
           title={t("terminal.command.send")}
           type="button"
@@ -91,7 +93,7 @@ export const CommandInput = forwardRef<CommandInputHandle, { onSend: (cmd: strin
             <path d="M22 2L11 13" />
             <path d="M22 2L15 22L11 13L2 9L22 2Z" />
           </svg>
-        </button>
+        </Button>
       </div>
     );
   },

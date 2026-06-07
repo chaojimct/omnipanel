@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Modal } from "../../components/ui/Modal";
+import { Button } from "../../components/ui/Button";
 import Editor from "@monaco-editor/react";
 
 /* eslint-disable react-hooks/set-state-in-effect -- controlled form state reset */
@@ -57,7 +58,7 @@ export function DockerFileEditor({ open, filePath, initialContent, onClose, onSa
       <div className="modal-dialog docker-file-editor" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h3 title={filePath}>编辑文件 · {filePath}</h3>
-          <button className="btn-icon" onClick={onClose} disabled={saving} title="关闭">×</button>
+          <Button variant="icon" onClick={onClose} disabled={saving} title="关闭">×</Button>
         </div>
         <div className="modal-body">
           <div className="docker-file-editor-meta">
@@ -92,14 +93,14 @@ export function DockerFileEditor({ open, filePath, initialContent, onClose, onSa
           {message && <div className="text-success text-sm" style={{ marginTop: 8 }}>{message}</div>}
         </div>
         <div className="modal-footer">
-          <button className="btn btn-secondary" onClick={onClose} disabled={saving}>关闭</button>
-          <button
-            className="btn btn-primary"
+          <Button variant="secondary" onClick={onClose} disabled={saving}>关闭</Button>
+          <Button
+            variant="primary"
             onClick={handleSave}
             disabled={saving || !dirty || tooLarge}
           >
             {saving ? "保存中…" : "保存"}
-          </button>
+          </Button>
         </div>
       </div>
     </Modal>

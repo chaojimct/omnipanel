@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Modal } from "../../components/ui/Modal";
+import { Button } from "../../components/ui/Button";
 import type { DockerImageProgress } from "./useDockerWorkspace";
 
 interface ImageActionBarProps {
@@ -57,21 +58,21 @@ export function ImageActionBar({ canManage, onPull, onBuild, onMessage }: ImageA
 
   return (
     <>
-      <button className="btn btn-secondary btn-sm" disabled={!canManage} onClick={() => setDlg("pull")}>
+      <Button variant="secondary" size="sm" disabled={!canManage} onClick={() => setDlg("pull")}>
         拉取镜像
-      </button>
-      <button className="btn btn-secondary btn-sm" disabled={!canManage} onClick={() => setDlg("build")}>
+      </Button>
+      <Button variant="secondary" size="sm" disabled={!canManage} onClick={() => setDlg("build")}>
         构建镜像
-      </button>
+      </Button>
       <Modal open={!!dlg} onClose={close}>
         <div className="modal-dialog" onClick={(e) => e.stopPropagation()}>
           <div className="modal-header">
             <h3>{dlg === "pull" ? "拉取镜像" : "构建镜像"}</h3>
-            <button className="btn-icon" onClick={close} title="关闭">
+            <Button variant="icon" onClick={close} title="关闭">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
                 <path d="M18 6L6 18M6 6l12 12" />
               </svg>
-            </button>
+            </Button>
           </div>
           <div className="modal-body">
             {dlg === "pull" && (
@@ -132,11 +133,11 @@ export function ImageActionBar({ canManage, onPull, onBuild, onMessage }: ImageA
             )}
           </div>
           <div className="modal-footer">
-            <button className="btn btn-secondary" onClick={close} disabled={busy}>
+            <Button variant="secondary" onClick={close} disabled={busy}>
               取消
-            </button>
-            <button
-              className="btn btn-primary"
+            </Button>
+            <Button
+              variant="primary"
               disabled={busy}
               onClick={() => {
                 if (dlg === "pull") void handlePull();
@@ -144,7 +145,7 @@ export function ImageActionBar({ canManage, onPull, onBuild, onMessage }: ImageA
               }}
             >
               {busy ? "执行中…" : "执行"}
-            </button>
+            </Button>
           </div>
         </div>
       </Modal>

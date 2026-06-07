@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Modal } from "../../components/ui/Modal";
+import { Button } from "../../components/ui/Button";
 import type { DockerVolumeSummary, DockerCreateVolumeRequest } from "../../ipc/bindings";
 import type { DockerActionResult } from "./useDockerWorkspace";
 
@@ -40,9 +41,10 @@ export function DockerVolumesTab({ volumes, canManage, onRefresh, onCreate, onRe
       <div className="docker-filters">
         <span className="text-muted text-sm">{volumes.length} 个卷</span>
         <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
-          <button className="btn btn-secondary btn-sm" onClick={onRefresh}>刷新</button>
-          <button
-            className="btn btn-secondary btn-sm"
+          <Button variant="secondary" size="sm" onClick={onRefresh}>刷新</Button>
+          <Button
+            variant="secondary"
+            size="sm"
             disabled={!canManage}
             onClick={async () => {
               setConfirm({
@@ -57,14 +59,15 @@ export function DockerVolumesTab({ volumes, canManage, onRefresh, onCreate, onRe
             }}
           >
             清理
-          </button>
-          <button
-            className="btn btn-primary btn-sm"
+          </Button>
+          <Button
+            variant="primary"
+            size="sm"
             disabled={!canManage}
             onClick={() => setShowCreate(true)}
           >
             新建卷
-          </button>
+          </Button>
         </div>
       </div>
       <div className="list-header volume-row">
@@ -90,8 +93,9 @@ export function DockerVolumesTab({ volumes, canManage, onRefresh, onCreate, onRe
               <div className="text-sm">{formatBytes(v.sizeBytes)}</div>
               <div className="text-sm">{v.inUse ? <span className="badge badge-success">使用中</span> : <span className="badge badge-muted">空闲</span>}</div>
               <div className="container-actions" onClick={(e) => e.stopPropagation()}>
-                <button
-                  className="btn-icon text-danger"
+                <Button
+                  variant="icon"
+                  className="text-danger"
                   title="删除卷"
                   disabled={!canManage}
                   onClick={() => {
@@ -107,7 +111,7 @@ export function DockerVolumesTab({ volumes, canManage, onRefresh, onCreate, onRe
                 }}
               >
                 ×
-              </button>
+              </Button>
             </div>
           </div>
         ))
@@ -117,7 +121,7 @@ export function DockerVolumesTab({ volumes, canManage, onRefresh, onCreate, onRe
         <div className="modal-dialog" onClick={(e) => e.stopPropagation()}>
           <div className="modal-header">
             <h3>新建卷</h3>
-            <button className="btn-icon" onClick={() => setShowCreate(false)} title="关闭">×</button>
+            <Button variant="icon" onClick={() => setShowCreate(false)} title="关闭">×</Button>
           </div>
           <div className="modal-body">
             <div className="form-field">
@@ -130,9 +134,9 @@ export function DockerVolumesTab({ volumes, canManage, onRefresh, onCreate, onRe
             </div>
           </div>
           <div className="modal-footer">
-            <button className="btn btn-secondary" onClick={() => setShowCreate(false)}>取消</button>
-            <button
-              className="btn btn-primary"
+            <Button variant="secondary" onClick={() => setShowCreate(false)}>取消</Button>
+            <Button
+              variant="primary"
               disabled={!name.trim()}
               onClick={async () => {
                 const r = await onCreate({
@@ -147,7 +151,7 @@ export function DockerVolumesTab({ volumes, canManage, onRefresh, onCreate, onRe
               }}
             >
               创建
-            </button>
+            </Button>
           </div>
         </div>
       </Modal>
@@ -167,8 +171,8 @@ function ConfirmModal({ confirm, onCancel }: { confirm: ConfirmState; onCancel: 
         <p className="text-sm">{confirm.message}</p>
         {confirm.detail && <p className="text-muted text-xs">{confirm.detail}</p>}
         <div className="flex gap-2" style={{ marginTop: 16, justifyContent: "flex-end" }}>
-          <button className="btn btn-secondary btn-sm" onClick={onCancel}>取消</button>
-          <button className="btn btn-danger btn-sm" onClick={confirm.onConfirm}>{confirm.confirmLabel}</button>
+          <Button variant="secondary" size="sm" onClick={onCancel}>取消</Button>
+          <Button variant="danger" size="sm" onClick={confirm.onConfirm}>{confirm.confirmLabel}</Button>
         </div>
       </div>
     </>

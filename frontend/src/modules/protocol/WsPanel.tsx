@@ -2,6 +2,7 @@ import { useState, useRef, useCallback } from "react";
 import { invoke, Channel } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useI18n } from "../../i18n";
+import { Button } from "../../components/ui/Button";
 
 type WsStatus = "disconnected" | "connecting" | "connected";
 type WsMsgFormat = "JSON" | "Text" | "Binary";
@@ -117,8 +118,8 @@ export function WsPanel() {
           style={{ flex: 1 }}
           disabled={status === "connected"}
         />
-        <button
-          className={`btn ${status === "connected" ? "btn-danger" : "btn-primary"}`}
+        <Button
+          variant={status === "connected" ? "danger" : "primary"}
           onClick={handleConnect}
         >
           {status === "connected"
@@ -126,7 +127,7 @@ export function WsPanel() {
             : status === "connecting"
               ? "…"
               : t("protocol.common.connect")}
-        </button>
+        </Button>
       </div>
 
       {/* Status bar */}
@@ -189,13 +190,14 @@ export function WsPanel() {
           onKeyDown={(e) => e.key === "Enter" && handleSend()}
           disabled={status !== "connected"}
         />
-        <button
-          className="btn btn-primary btn-sm"
+        <Button
+          variant="primary"
+          size="sm"
           onClick={handleSend}
           disabled={status !== "connected"}
         >
           {t("protocol.common.send")}
-        </button>
+        </Button>
       </div>
     </div>
   );

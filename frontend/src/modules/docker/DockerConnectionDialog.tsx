@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Modal } from "../../components/ui/Modal";
+import { Button } from "../../components/ui/Button";
 import { useConnectionStore } from "../../stores/connectionStore";
 import { sanitizeSshGroupInput } from "../../lib/sshGroups";
 import type { Connection } from "../../ipc/bindings";
@@ -273,11 +274,11 @@ export function DockerConnectionDialog({
       <div className="modal-dialog" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h3>{isEdit ? "编辑 Docker 连接" : "添加 Docker 连接"}</h3>
-          <button className="btn-icon" onClick={onClose} title="关闭">
+          <Button variant="icon" onClick={onClose} title="关闭">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
               <path d="M18 6L6 18M6 6l12 12" />
             </svg>
-          </button>
+          </Button>
         </div>
 
         <div className="modal-body">
@@ -595,17 +596,17 @@ export function DockerConnectionDialog({
         </div>
 
         <div className="modal-footer">
-          <button className="btn btn-secondary" onClick={onClose} disabled={saving}>
+          <Button variant="secondary" onClick={onClose} disabled={saving}>
             取消
-          </button>
+          </Button>
           {error ? (
             <span className="modal-footer-status modal-footer-status--error">{error}</span>
           ) : (
             <div className="modal-footer-spacer" />
           )}
-          <button className="btn btn-primary" onClick={() => void handleSave()} disabled={saving}>
+          <Button variant="primary" onClick={() => void handleSave()} disabled={saving}>
             {saving ? "保存中…" : "保存"}
-          </button>
+          </Button>
         </div>
       </div>
     </Modal>

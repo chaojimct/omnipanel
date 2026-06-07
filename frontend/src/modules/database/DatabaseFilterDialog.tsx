@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useI18n } from "../../i18n";
 import { Modal } from "../../components/ui/Modal";
+import { Button } from "../../components/ui/Button";
 
 export interface SchemaFilterState {
   orderedNames: string[];
@@ -82,11 +83,11 @@ export function SchemaFilterDialog({
       <div className="modal-dialog db-filter-dialog" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h3>{title}</h3>
-          <button className="btn-icon" onClick={onClose}>
+          <Button variant="icon" onClick={onClose}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
               <path d="M18 6L6 18M6 6l12 12" />
             </svg>
-          </button>
+          </Button>
         </div>
 
         <div className="modal-body">
@@ -94,12 +95,12 @@ export function SchemaFilterDialog({
             <span className="db-filter-count">
               {t("database.filter.selectedCount", { count: visible.size, total: ordered.length })}
             </span>
-            <button className="btn btn-ghost btn-sm" type="button" onClick={selectAll}>
+            <Button variant="ghost" size="sm" type="button" onClick={selectAll}>
               {t("database.filter.selectAll")}
-            </button>
-            <button className="btn btn-ghost btn-sm" type="button" onClick={deselectAll}>
+            </Button>
+            <Button variant="ghost" size="sm" type="button" onClick={deselectAll}>
               {t("database.filter.deselectAll")}
-            </button>
+            </Button>
           </div>
 
           <div className="db-filter-list">
@@ -142,13 +143,13 @@ export function SchemaFilterDialog({
         </div>
 
         <div className="modal-footer">
-          <button className="btn btn-secondary" type="button" onClick={onClose}>
+          <Button variant="secondary" type="button" onClick={onClose}>
             {t("common.cancel")}
-          </button>
+          </Button>
           <div style={{ flex: 1 }} />
-          <button className="btn btn-primary" type="button" onClick={handleApply}>
+          <Button variant="primary" type="button" onClick={handleApply}>
             {t("database.filter.apply")}
-          </button>
+          </Button>
         </div>
       </div>
     </Modal>

@@ -21,6 +21,7 @@ pub struct KnowledgeEntry {
     pub env_tag: String,
     /// 代码语言（snippet 时有意义）
     pub language: String,
+    #[specta(type = f64)]
     pub usage_count: i64,
     #[serde(default)]
     #[specta(type = f64)]
@@ -36,6 +37,13 @@ pub struct KnowledgeEntry {
 pub struct KnowledgeSearchResult {
     pub entry: KnowledgeEntry,
     pub snippet: String,
+}
+
+fn map_search_row(row: &rusqlite::Row) -> rusqlite::Result<(KnowledgeEntry, String)> {
+    Ok((
+        Storage::row_to_entry(row)?,
+        row.get::<_, String>(12)?,
+    ))
 }
 
 impl Storage {
@@ -159,21 +167,11 @@ impl Storage {
 
         let mut stmt = self.conn().prepare(sql).map_err(map_sqlite)?;
         let rows = if let Some(k) = kind {
-            stmt.query_map(rusqlite::params![fts_query, k], |row| {
-                Ok((
-                    Self::row_to_entry(row)?,
-                    row.get::<_, String>(12)?,
-                ))
-            })
-            .map_err(map_sqlite)?
+            stmt.query_map(rusqlite::params![fts_query, k], map_search_row)
+                .map_err(map_sqlite)?
         } else {
-            stmt.query_map([fts_query], |row| {
-                Ok((
-                    Self::row_to_entry(row)?,
-                    row.get::<_, String>(12)?,
-                ))
-            })
-            .map_err(map_sqlite)?
+            stmt.query_map([fts_query], map_search_row)
+                .map_err(map_sqlite)?
         };
 
         let mut results = Vec::new();

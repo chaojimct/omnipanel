@@ -1,5 +1,6 @@
 import { SSH_KEYS } from "../data/sshKeys";
 import type { SshManagerContext } from "../hooks/useSshManager";
+import { Button } from "../../../components/ui/Button";
 
 type Props = Pick<
   SshManagerContext,
@@ -21,8 +22,9 @@ export function KeysModuleView({
             统一管理密钥、用途、覆盖主机与风险范围
           </div>
         </div>
-        <button
-          className="btn btn-primary btn-sm"
+        <Button
+          variant="primary"
+          size="sm"
           style={{ marginLeft: "auto" }}
           onClick={() =>
             triggerKeyAction(
@@ -33,7 +35,7 @@ export function KeysModuleView({
           }
         >
           + Import Key
-        </button>
+        </Button>
       </div>
       <div className="ssh-detail-body ssh-workbench-grid">
         <div className="panel">

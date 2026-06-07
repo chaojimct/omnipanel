@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useHostOnlineStatus } from "../../../../stores/sshConnectionStore";
+import { Button } from "../../../../components/ui/Button";
 
 type SftpEntry = { name: string; isDir: boolean; size: number };
 
@@ -112,10 +113,10 @@ export function SftpDetailTab({ activeResource }: Props) {
   return (
     <div className="sftp-panel">
       <div className="sftp-toolbar">
-        <button className="btn btn-secondary btn-sm" onClick={navigateUp} disabled={path === "/"} title="上级目录">
+        <Button variant="secondary" size="sm" onClick={navigateUp} disabled={path === "/"} title="上级目录">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14"><path d="M15 18l-6-6 6-6" /></svg>
-        </button>
-        <button className="btn btn-secondary btn-sm" onClick={() => setShowMkdir(true)} title="新建文件夹">+ 目录</button>
+        </Button>
+        <Button variant="secondary" size="sm" onClick={() => setShowMkdir(true)} title="新建文件夹">+ 目录</Button>
         <div className="sftp-path">
           <button className="sftp-path-seg" onClick={() => loadDir("/")}>/</button>
           {pathParts.map((seg, i) => {
@@ -132,8 +133,8 @@ export function SftpDetailTab({ activeResource }: Props) {
       {showMkdir && (
         <div className="sftp-mkdir-bar">
           <input className="input input-sm" value={mkdirName} onChange={(e) => setMkdirName(e.target.value)} placeholder="文件夹名称" />
-          <button className="btn btn-primary btn-sm" onClick={handleMkdir}>创建</button>
-          <button className="btn btn-secondary btn-sm" onClick={() => { setShowMkdir(false); setMkdirName(""); }}>取消</button>
+          <Button variant="primary" size="sm" onClick={handleMkdir}>创建</Button>
+          <Button variant="secondary" size="sm" onClick={() => { setShowMkdir(false); setMkdirName(""); }}>取消</Button>
         </div>
       )}
       {error && <div className="sftp-error">{error}</div>}

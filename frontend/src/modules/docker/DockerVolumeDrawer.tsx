@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Button } from "../../components/ui/Button";
 import type { DockerVolumeDetail } from "../../ipc/bindings";
 
 interface ConfirmState {
@@ -74,7 +75,7 @@ export function DockerVolumeDrawer({ name, onClose, inspectVolume, onRemove }: D
             <div className="docker-drawer-eyebrow">卷</div>
             <h2 title={name}>{name}</h2>
           </div>
-          <button className="btn-icon" onClick={onClose} title="关闭">×</button>
+          <Button variant="icon" onClick={onClose} title="关闭">×</Button>
         </header>
         <div className="docker-drawer-body">
           {loading && <div className="docker-empty">加载中…</div>}
@@ -118,8 +119,9 @@ export function DockerVolumeDrawer({ name, onClose, inspectVolume, onRemove }: D
           )}
         </div>
         <footer className="docker-drawer-footer">
-          <button
-            className="btn btn-danger btn-sm"
+          <Button
+            variant="danger"
+            size="sm"
             disabled={!detail}
             onClick={async () => {
               if (!detail) return;
@@ -136,7 +138,7 @@ export function DockerVolumeDrawer({ name, onClose, inspectVolume, onRemove }: D
             }}
           >
             删除卷
-          </button>
+          </Button>
         </footer>
       </aside>
       {confirm && (
@@ -155,8 +157,8 @@ function ConfirmModal({ confirm, onCancel }: { confirm: ConfirmState; onCancel: 
         <p className="text-sm">{confirm.message}</p>
         {confirm.detail && <p className="text-muted text-xs">{confirm.detail}</p>}
         <div className="flex gap-2" style={{ marginTop: 16, justifyContent: "flex-end" }}>
-          <button className="btn btn-secondary btn-sm" onClick={onCancel}>取消</button>
-          <button className="btn btn-danger btn-sm" onClick={confirm.onConfirm}>{confirm.confirmLabel}</button>
+          <Button variant="secondary" size="sm" onClick={onCancel}>取消</Button>
+          <Button variant="danger" size="sm" onClick={confirm.onConfirm}>{confirm.confirmLabel}</Button>
         </div>
       </div>
     </>

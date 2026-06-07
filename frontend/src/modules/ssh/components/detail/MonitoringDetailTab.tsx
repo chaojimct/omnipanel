@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useSshStats, type HostSystemStats } from "../../../../stores/sshStatsStore";
 import { useSshMonitoring } from "../../hooks/useSshMonitoring";
 import { useI18n } from "../../../../i18n";
+import { Button } from "../../../../components/ui/Button";
 
 type Props = {
   activeResource: { id: string } | null;
@@ -214,9 +215,9 @@ export function MonitoringDetailTab({ activeResource }: Props) {
     return (
       <div className="monitor-panel monitor-panel--error">
         <p className="ssh-ov-error-text">{error ?? t("ssh.monitoring.loadError")}</p>
-        <button type="button" className="btn btn-secondary btn-sm" onClick={() => refresh()}>
+        <Button variant="secondary" size="sm" onClick={() => refresh()}>
           {t("ssh.overview.retry")}
-        </button>
+        </Button>
       </div>
     );
   }

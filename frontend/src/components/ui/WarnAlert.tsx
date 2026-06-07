@@ -1,4 +1,5 @@
 import { Modal } from "./Modal";
+import { Button } from "./Button";
 
 const WARN_ICON = (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="20" height="20" aria-hidden>
@@ -68,13 +69,13 @@ export function WarnAlert({
         </div>
         <div className="warn-alert-footer">
           {!alertOnly && (
-            <button type="button" className="btn btn-secondary" onClick={onClose}>
+            <Button type="button" variant="secondary" onClick={onClose}>
               {cancelLabel}
-            </button>
+            </Button>
           )}
-          <button type="button" className="btn btn-warn" onClick={handleConfirm}>
+          <Button type="button" variant="warn" onClick={handleConfirm}>
             {confirmLabel}
-          </button>
+          </Button>
         </div>
       </div>
     </Modal>
