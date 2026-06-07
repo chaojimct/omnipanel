@@ -25,6 +25,7 @@ use crate::{
     DockerKeyValue, DockerLogLine, DockerNetworkContainer, DockerNetworkDetail,
     DockerNetworkSubnet, DockerNetworkSummary, DockerOverview, DockerProbe, DockerPruneResult,
     DockerPruneVolumesResult, DockerPullResult, DockerVolumeDetail, DockerVolumeSummary,
+    DockerServiceSummary, DockerCreateServiceRequest, DockerNodeSummary, DockerStackSummary,
     model::DockerCapabilities, model::DockerConnectionStatus,
 };
 
@@ -966,6 +967,58 @@ impl DockerAdapter for OnePanelAdapter {
         _data: Vec<u8>,
     ) -> OmniResult<()> {
         Err(not_supported("写入容器内文件"))
+    }
+
+    async fn swarm_init(&self, _listen_addr: Option<&str>, _advertise_addr: Option<&str>) -> OmniResult<String> {
+        Err(not_supported("Swarm 初始化"))
+    }
+    async fn swarm_join(&self, _remote_addrs: Vec<String>, _token: &str, _listen_addr: Option<&str>) -> OmniResult<()> {
+        Err(not_supported("Swarm 加入"))
+    }
+    async fn swarm_leave(&self, _force: bool) -> OmniResult<()> {
+        Err(not_supported("Swarm 离开"))
+    }
+    async fn swarm_inspect(&self) -> OmniResult<serde_json::Value> {
+        Err(not_supported("Swarm 查看"))
+    }
+    async fn service_list(&self) -> OmniResult<Vec<DockerServiceSummary>> {
+        Err(not_supported("Swarm 服务管理"))
+    }
+    async fn service_create(&self, _req: &DockerCreateServiceRequest) -> OmniResult<String> {
+        Err(not_supported("Swarm 服务管理"))
+    }
+    async fn service_update(&self, _id: &str, _replicas: Option<u64>, _image: Option<&str>) -> OmniResult<()> {
+        Err(not_supported("Swarm 服务管理"))
+    }
+    async fn service_remove(&self, _id: &str) -> OmniResult<()> {
+        Err(not_supported("Swarm 服务管理"))
+    }
+    async fn service_logs(&self, _id: &str, _tail: Option<&str>) -> OmniResult<String> {
+        Err(not_supported("Swarm 服务管理"))
+    }
+    async fn node_list(&self) -> OmniResult<Vec<DockerNodeSummary>> {
+        Err(not_supported("Swarm 节点管理"))
+    }
+    async fn node_inspect(&self, _id: &str) -> OmniResult<serde_json::Value> {
+        Err(not_supported("Swarm 节点管理"))
+    }
+    async fn node_update(&self, _id: &str, _availability: Option<&str>, _labels: Option<Vec<DockerKeyValue>>) -> OmniResult<()> {
+        Err(not_supported("Swarm 节点管理"))
+    }
+    async fn node_remove(&self, _id: &str, _force: bool) -> OmniResult<()> {
+        Err(not_supported("Swarm 节点管理"))
+    }
+    async fn stack_deploy(&self, _name: &str, _compose_content: &str, _env: Option<Vec<String>>) -> OmniResult<()> {
+        Err(not_supported("Stack 管理"))
+    }
+    async fn stack_list(&self) -> OmniResult<Vec<DockerStackSummary>> {
+        Err(not_supported("Stack 管理"))
+    }
+    async fn stack_remove(&self, _name: &str) -> OmniResult<()> {
+        Err(not_supported("Stack 管理"))
+    }
+    async fn stack_services(&self, _name: &str) -> OmniResult<Vec<DockerServiceSummary>> {
+        Err(not_supported("Stack 管理"))
     }
 }
 

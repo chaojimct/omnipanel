@@ -178,6 +178,59 @@ impl DockerAdapter for SshDockerAdapter {
     ) -> OmniResult<()> {
         write_container_file(&*self.session.lock().await, container_id, path, data).await
     }
+
+    // ── Swarm ──
+    async fn swarm_init(&self, listen_addr: Option<&str>, advertise_addr: Option<&str>) -> OmniResult<String> {
+        swarm_init(&*self.session.lock().await, listen_addr, advertise_addr).await
+    }
+    async fn swarm_join(&self, remote_addrs: Vec<String>, token: &str, listen_addr: Option<&str>) -> OmniResult<()> {
+        swarm_join(&*self.session.lock().await, remote_addrs, token, listen_addr).await
+    }
+    async fn swarm_leave(&self, force: bool) -> OmniResult<()> {
+        swarm_leave(&*self.session.lock().await, force).await
+    }
+    async fn swarm_inspect(&self) -> OmniResult<serde_json::Value> {
+        swarm_inspect(&*self.session.lock().await).await
+    }
+    async fn service_list(&self) -> OmniResult<Vec<DockerServiceSummary>> {
+        service_list(&*self.session.lock().await).await
+    }
+    async fn service_create(&self, req: &DockerCreateServiceRequest) -> OmniResult<String> {
+        service_create(&*self.session.lock().await, req).await
+    }
+    async fn service_update(&self, id: &str, replicas: Option<u64>, image: Option<&str>) -> OmniResult<()> {
+        service_update(&*self.session.lock().await, id, replicas, image).await
+    }
+    async fn service_remove(&self, id: &str) -> OmniResult<()> {
+        service_remove(&*self.session.lock().await, id).await
+    }
+    async fn service_logs(&self, id: &str, tail: Option<&str>) -> OmniResult<String> {
+        service_logs(&*self.session.lock().await, id, tail).await
+    }
+    async fn node_list(&self) -> OmniResult<Vec<DockerNodeSummary>> {
+        node_list(&*self.session.lock().await).await
+    }
+    async fn node_inspect(&self, id: &str) -> OmniResult<serde_json::Value> {
+        node_inspect(&*self.session.lock().await, id).await
+    }
+    async fn node_update(&self, id: &str, availability: Option<&str>, labels: Option<Vec<DockerKeyValue>>) -> OmniResult<()> {
+        node_update(&*self.session.lock().await, id, availability, labels).await
+    }
+    async fn node_remove(&self, id: &str, force: bool) -> OmniResult<()> {
+        node_remove(&*self.session.lock().await, id, force).await
+    }
+    async fn stack_deploy(&self, name: &str, compose_content: &str, env: Option<Vec<String>>) -> OmniResult<()> {
+        stack_deploy(&*self.session.lock().await, name, compose_content, env).await
+    }
+    async fn stack_list(&self) -> OmniResult<Vec<DockerStackSummary>> {
+        stack_list(&*self.session.lock().await).await
+    }
+    async fn stack_remove(&self, name: &str) -> OmniResult<()> {
+        stack_remove(&*self.session.lock().await, name).await
+    }
+    async fn stack_services(&self, name: &str) -> OmniResult<Vec<DockerServiceSummary>> {
+        stack_services(&*self.session.lock().await, name).await
+    }
 }
 
 /// 探测远端 Docker 可用性与版本。
@@ -1790,4 +1843,225 @@ pub async fn write_container_file(
         .await;
     out?.ok_or_err("写入容器内文件失败")?;
     Ok(())
+}
+
+
+// ── Swarm (docker swarm / service / node / stack) ────────────────────────
+
+pub async fn swarm_init(
+    session: &SshSession,
+    listen_addr: Option<&str>,
+    advertise_addr: Option<&str>,
+) -> OmniResult<String> {
+    let listen = listen_addr.unwrap_or("0.0.0.0:2377");
+    let mut cmd = format!("docker swarm init --listen-addr {}", shell_quote(listen));
+    if let Some(adv) = advertise_addr {
+        cmd.push_str(&format!(" --advertise-addr {}", shell_quote(adv)));
+    }
+    let out = session.exec_capture(&cmd).await?;
+    let out = out.ok_or_err("初始化 Swarm 失败")?;
+    Ok(out.stdout.trim().to_string())
+}
+
+pub async fn swarm_join(
+    session: &SshSession,
+    remote_addrs: Vec<String>,
+    token: &str,
+    listen_addr: Option<&str>,
+) -> OmniResult<()> {
+    let listen = listen_addr.unwrap_or("0.0.0.0:2377");
+    let addrs = remote_addrs.join(",");
+    let cmd = format!(
+        "docker swarm join --listen-addr {} --token {} {}",
+        shell_quote(listen), shell_quote(token), shell_quote(&addrs)
+    );
+    let out = session.exec_capture(&cmd).await?;
+    let _out = out.ok_or_err("加入 Swarm 失败")?;
+    Ok(())
+}
+
+pub async fn swarm_leave(session: &SshSession, force: bool) -> OmniResult<()> {
+    let cmd = if force { "docker swarm leave --force" } else { "docker swarm leave" };
+    let out = session.exec_capture(cmd).await?;
+    let _out = out.ok_or_err("离开 Swarm 失败")?;
+    Ok(())
+}
+
+pub async fn swarm_inspect(session: &SshSession) -> OmniResult<serde_json::Value> {
+    let out = session.exec_capture("docker info --format '{{json .Swarm}}'").await?;
+    let out = out.ok_or_err("查看 Swarm 信息失败")?;
+    serde_json::from_str(&out.stdout).map_err(|e| OmniError::new(ErrorCode::Internal, "解析 Swarm 信息失败").with_cause(e.to_string()))
+}
+
+pub async fn service_list(session: &SshSession) -> OmniResult<Vec<DockerServiceSummary>> {
+    let fmt = "{{.ID}}\t{{.Name}}\t{{.Image}}\t{{.Mode}}\t{{.Replicas}}\t{{.Ports}}\t{{.CreatedAt}}\t{{.UpdatedAt}}";
+    let out = session.exec_capture(&format!("docker service ls --format '{}'", fmt)).await?;
+    let out = out.ok_or_err("列出服务失败")?;
+    let mut services = Vec::new();
+    for line in out.stdout.lines() {
+        let parts: Vec<&str> = line.split('\t').collect();
+        if parts.len() >= 8 {
+            let replicas_str = parts[4].split('/').next().unwrap_or("0");
+            services.push(DockerServiceSummary {
+                id: parts[0].to_string(),
+                name: parts[1].to_string(),
+                image: parts[2].to_string(),
+                mode: parts[3].to_string(),
+                replicas: replicas_str.parse::<u64>().unwrap_or(0),
+                running_replicas: replicas_str.parse::<u64>().unwrap_or(0),
+                ports: parts[5].split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect(),
+                created_at: parts[6].to_string(),
+                updated_at: parts[7].to_string(),
+            });
+        }
+    }
+    Ok(services)
+}
+
+pub async fn service_create(session: &SshSession, req: &DockerCreateServiceRequest) -> OmniResult<String> {
+    let mut cmd = format!("docker service create --name {} --replicas {}", shell_quote(&req.name), req.replicas);
+    for port in &req.ports { cmd.push_str(&format!(" -p {}", shell_quote(port))); }
+    for env in &req.env { cmd.push_str(&format!(" -e {}", shell_quote(env))); }
+    for net in &req.networks { cmd.push_str(&format!(" --network {}", shell_quote(net))); }
+    if let Some(c) = &req.command { cmd.push_str(&format!(" -- {}", shell_quote(c))); }
+    cmd.push(' ');
+    cmd.push_str(&shell_quote(&req.image));
+    let out = session.exec_capture(&cmd).await?;
+    let out = out.ok_or_err("创建服务失败")?;
+    Ok(out.stdout.trim().to_string())
+}
+
+pub async fn service_update(session: &SshSession, id: &str, replicas: Option<u64>, image: Option<&str>) -> OmniResult<()> {
+    let mut cmd = String::from("docker service update");
+    if let Some(r) = replicas { cmd.push_str(&format!(" --replicas {}", r)); }
+    if let Some(img) = image { cmd.push_str(&format!(" --image {}", shell_quote(img))); }
+    cmd.push(' ');
+    cmd.push_str(&shell_quote(id));
+    let out = session.exec_capture(&cmd).await?;
+    let _out = out.ok_or_err("更新服务失败")?;
+    Ok(())
+}
+
+pub async fn service_remove(session: &SshSession, id: &str) -> OmniResult<()> {
+    let out = session.exec_capture(&format!("docker service rm {}", shell_quote(id))).await?;
+    let _out = out.ok_or_err("删除服务失败")?;
+    Ok(())
+}
+
+pub async fn service_logs(session: &SshSession, id: &str, tail: Option<&str>) -> OmniResult<String> {
+    let tail_val = tail.unwrap_or("200");
+    let cmd = format!("docker service logs --tail {} {}", shell_quote(tail_val), shell_quote(id));
+    let out = session.exec_capture(&cmd).await?;
+    let out = out.ok_or_err("服务日志获取失败")?;
+    Ok(out.stdout)
+}
+
+pub async fn node_list(session: &SshSession) -> OmniResult<Vec<DockerNodeSummary>> {
+    let fmt = "{{.ID}}\t{{.Hostname}}\t{{.Status}}\t{{.Availability}}\t{{.EngineVersion}}\t{{.ManagerStatus}}";
+    let out = session.exec_capture(&format!("docker node ls --format '{}'", fmt)).await?;
+    let out = out.ok_or_err("列出节点失败")?;
+    let mut nodes = Vec::new();
+    for line in out.stdout.lines() {
+        let parts: Vec<&str> = line.split('\t').collect();
+        if parts.len() >= 6 {
+            let role = if parts[5].contains("Leader") || parts[5].contains("Reachable") { "manager" } else { "worker" };
+            nodes.push(DockerNodeSummary {
+                id: parts[0].to_string(),
+                hostname: parts[1].to_string(),
+                status: parts[2].to_string(),
+                availability: parts[3].to_string(),
+                role: role.to_string(),
+                engine_version: parts[4].to_string(),
+                addr: String::new(),
+                labels: Vec::new(),
+            });
+        }
+    }
+    Ok(nodes)
+}
+
+pub async fn node_inspect(session: &SshSession, id: &str) -> OmniResult<serde_json::Value> {
+    let out = session.exec_capture(&format!("docker node inspect {}", shell_quote(id))).await?;
+    let out = out.ok_or_err("查看节点失败")?;
+    serde_json::from_str(&out.stdout).map_err(|e| OmniError::new(ErrorCode::Internal, "解析节点信息失败").with_cause(e.to_string()))
+}
+
+pub async fn node_update(session: &SshSession, id: &str, availability: Option<&str>, labels: Option<Vec<DockerKeyValue>>) -> OmniResult<()> {
+    let mut cmd = String::from("docker node update");
+    if let Some(avail) = availability { cmd.push_str(&format!(" --availability {}", shell_quote(avail))); }
+    if let Some(lbls) = labels {
+        for l in lbls { cmd.push_str(&format!(" --label-add {}={}", shell_quote(&l.key), shell_quote(&l.value))); }
+    }
+    cmd.push(' ');
+    cmd.push_str(&shell_quote(id));
+    let out = session.exec_capture(&cmd).await?;
+    let _out = out.ok_or_err("更新节点失败")?;
+    Ok(())
+}
+
+pub async fn node_remove(session: &SshSession, id: &str, force: bool) -> OmniResult<()> {
+    let cmd = if force { format!("docker node rm --force {}", shell_quote(id)) } else { format!("docker node rm {}", shell_quote(id)) };
+    let out = session.exec_capture(&cmd).await?;
+    let _out = out.ok_or_err("删除节点失败")?;
+    Ok(())
+}
+
+pub async fn stack_deploy(session: &SshSession, name: &str, compose_content: &str, _env: Option<Vec<String>>) -> OmniResult<()> {
+    let remote_path = format!("/tmp/omnipanel-stack-{}.yml", uuid_like());
+    session.sftp_upload(&remote_path, compose_content.as_bytes()).await.map_err(|e| e.with_cause("上传 compose 文件失败"))?;
+    let cmd = format!("docker stack deploy -c {} {}", shell_quote(&remote_path), shell_quote(name));
+    let out = session.exec_capture(&cmd).await;
+    let _ = session.exec_capture(&format!("rm -f {}", shell_quote(&remote_path))).await;
+    let _out = out?.ok_or_err("部署 Stack 失败")?;
+    Ok(())
+}
+
+pub async fn stack_list(session: &SshSession) -> OmniResult<Vec<DockerStackSummary>> {
+    let fmt = "{{.Name}}\t{{.Services}}\t{{.Orchestrator}}\t{{.Namespace}}";
+    let out = session.exec_capture(&format!("docker stack ls --format '{}'", fmt)).await?;
+    let out = out.ok_or_err("列出 Stack 失败")?;
+    let mut stacks = Vec::new();
+    for line in out.stdout.lines() {
+        let parts: Vec<&str> = line.split('\t').collect();
+        if parts.len() >= 4 {
+            stacks.push(DockerStackSummary {
+                name: parts[0].to_string(),
+                services: parts[1].parse::<u32>().unwrap_or(0),
+                orchestrator: parts[2].to_string(),
+                namespace: parts[3].to_string(),
+            });
+        }
+    }
+    Ok(stacks)
+}
+
+pub async fn stack_remove(session: &SshSession, name: &str) -> OmniResult<()> {
+    let out = session.exec_capture(&format!("docker stack rm {}", shell_quote(name))).await?;
+    let _out = out.ok_or_err("删除 Stack 失败")?;
+    Ok(())
+}
+
+pub async fn stack_services(session: &SshSession, name: &str) -> OmniResult<Vec<DockerServiceSummary>> {
+    let fmt = "{{.ID}}\t{{.Name}}\t{{.Image}}\t{{.Mode}}\t{{.Replicas}}\t{{.Ports}}\t{{.CreatedAt}}\t{{.UpdatedAt}}";
+    let out = session.exec_capture(&format!("docker stack services {} --format '{}'", shell_quote(name), fmt)).await?;
+    let out = out.ok_or_err("列出 Stack 服务失败")?;
+    let mut services = Vec::new();
+    for line in out.stdout.lines() {
+        let parts: Vec<&str> = line.split('\t').collect();
+        if parts.len() >= 8 {
+            let replicas_str = parts[4].split('/').next().unwrap_or("0");
+            services.push(DockerServiceSummary {
+                id: parts[0].to_string(),
+                name: parts[1].to_string(),
+                image: parts[2].to_string(),
+                mode: parts[3].to_string(),
+                replicas: replicas_str.parse::<u64>().unwrap_or(0),
+                running_replicas: replicas_str.parse::<u64>().unwrap_or(0),
+                ports: parts[5].split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect(),
+                created_at: parts[6].to_string(),
+                updated_at: parts[7].to_string(),
+            });
+        }
+    }
+    Ok(services)
 }

@@ -4,6 +4,7 @@ use std::sync::Arc;
 use tauri::AppHandle;
 use tokio::sync::Mutex;
 
+use crate::protocol::grpc::GrpcSession;
 use crate::protocol::mqtt::MqttSession;
 use crate::protocol::serial::SerialSession;
 use crate::protocol::ws::WsSession;
@@ -23,6 +24,7 @@ pub struct AppState {
     pub serial_sessions: Arc<Mutex<HashMap<String, SerialSession>>>,
     pub ws_sessions: Arc<Mutex<HashMap<String, WsSession>>>,
     pub mqtt_sessions: Arc<Mutex<HashMap<String, MqttSession>>>,
+    pub grpc_sessions: Arc<Mutex<HashMap<String, GrpcSession>>>,
     pub terminal_sessions: Arc<Mutex<HashMap<String, Terminal>>>,
     pub app_handle: AppHandle,
     pub ai_registry: Arc<Mutex<AiProviderRegistry>>,
@@ -51,6 +53,10 @@ pub struct AppState {
     pub docker_exec_sessions: Arc<Mutex<HashMap<String, omnipanel_docker::DockerExecSession>>>,
     /// 活跃 SSH 隧道（按 tunnelId 索引）。
     pub ssh_tunnels: Arc<Mutex<HashMap<String, SshTunnelInfo>>>,
+    /// 正在运行的工作流执行（按 executionId 索引，AtomicBool 为 cancel flag）。
+    pub running_workflows: Arc<Mutex<HashMap<String, Arc<std::sync::atomic::AtomicBool>>>>,
+    /// 正在运行的任务后台句柄（按 taskId 索引），用于 task_stop 取消。
+    pub running_tasks: Arc<Mutex<HashMap<String, tokio::task::JoinHandle<()>>>>,
 }
 
 impl AppState {
@@ -73,6 +79,7 @@ impl AppState {
             serial_sessions: Arc::new(Mutex::new(HashMap::new())),
             ws_sessions: Arc::new(Mutex::new(HashMap::new())),
             mqtt_sessions: Arc::new(Mutex::new(HashMap::new())),
+            grpc_sessions: Arc::new(Mutex::new(HashMap::new())),
             terminal_sessions: Arc::new(Mutex::new(HashMap::new())),
             app_handle,
             ai_registry: Arc::new(Mutex::new(AiProviderRegistry::new())),
@@ -90,6 +97,8 @@ impl AppState {
             docker_stats_streams: Arc::new(Mutex::new(HashMap::new())),
             docker_exec_sessions: Arc::new(Mutex::new(HashMap::new())),
             ssh_tunnels: Arc::new(Mutex::new(HashMap::new())),
+            running_workflows: Arc::new(Mutex::new(HashMap::new())),
+            running_tasks: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 }

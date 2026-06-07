@@ -52,6 +52,7 @@ futures-util = "0.3"
 hex = "0.4"
 url = "2"
 base64 = "0.22"
+urlencoding = "2"
 
 # Terminal
 portable-pty = "0.8"

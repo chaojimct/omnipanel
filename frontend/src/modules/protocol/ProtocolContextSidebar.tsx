@@ -1,7 +1,7 @@
 import { useI18n } from "../../i18n";
 import { Button } from "../../components/ui/Button";
 
-export type ProtocolKind = "http" | "ws" | "mqtt" | "serial";
+export type ProtocolKind = "http" | "ws" | "mqtt" | "serial" | "grpc";
 
 const HTTP_HISTORY = [
   { method: "GET", url: "/api/users", status: "200", time: "12ms" },
