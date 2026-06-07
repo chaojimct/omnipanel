@@ -12,6 +12,7 @@ import { SubWindow } from "../ui/SubWindow";
 import { CommandSuggestion, isShellLanguage } from "./CommandSuggestion";
 import { useI18n } from "../../i18n";
 import { formatModShortcut } from "../../lib/platform";
+import { KnowledgeReferences } from "./KnowledgeReferences";
 
 function extractText(node: unknown): string {
   if (typeof node === "string") return node;
@@ -160,6 +161,13 @@ function MessageBubble({ msg }: { msg: AiMessage }) {
             ))}
           </div>
         )}
+
+        {/* Knowledge References: extract search_knowledge results */}
+        {msg.toolCalls
+          ?.filter((tc) => tc.name === "search_knowledge" && tc.result && tc.status === "completed")
+          .map((tc) => (
+            <KnowledgeReferences key={`ref-${tc.id}`} result={tc.result!} />
+          ))}
       </div>
     </div>
   );

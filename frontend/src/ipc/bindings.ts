@@ -188,6 +188,26 @@ export const commands = {
 	knowledgeDelete: (id: string) => typedError<null, OmniError_Serialize>(__TAURI_INVOKE("knowledge_delete", { id })),
 	/**  递增知识条目使用次数。 */
 	knowledgeIncrementUsage: (id: string) => typedError<null, OmniError_Serialize>(__TAURI_INVOKE("knowledge_increment_usage", { id })),
+	/**  列出任务，可选按状态过滤。 */
+	taskList: (statusFilter: string | null, limit: number) => typedError<Task[], OmniError_Serialize>(__TAURI_INVOKE("task_list", { statusFilter, limit })),
+	/**  获取单个任务。 */
+	taskGet: (id: string) => typedError<Task, OmniError_Serialize>(__TAURI_INVOKE("task_get", { id })),
+	/**  创建或更新任务。 */
+	taskSave: (req: SaveTaskRequest) => typedError<Task, OmniError_Serialize>(__TAURI_INVOKE("task_save", { req })),
+	/**  更新任务状态。 */
+	taskUpdateStatus: (id: string, status: TaskStatus) => typedError<null, OmniError_Serialize>(__TAURI_INVOKE("task_update_status", { id, status })),
+	/**  删除任务。 */
+	taskDelete: (id: string) => typedError<null, OmniError_Serialize>(__TAURI_INVOKE("task_delete", { id })),
+	/**  列出所有工作流（不含步骤）。 */
+	workflowList: () => typedError<Workflow[], OmniError_Serialize>(__TAURI_INVOKE("workflow_list")),
+	/**  获取工作流详情（含步骤）。 */
+	workflowGet: (id: string) => typedError<WorkflowDetail, OmniError_Serialize>(__TAURI_INVOKE("workflow_get", { id })),
+	/**  创建或更新工作流。 */
+	workflowSave: (req: SaveWorkflowRequest) => typedError<WorkflowDetail, OmniError_Serialize>(__TAURI_INVOKE("workflow_save", { req })),
+	/**  删除工作流。 */
+	workflowDelete: (id: string) => typedError<null, OmniError_Serialize>(__TAURI_INVOKE("workflow_delete", { id })),
+	/**  获取工作流执行历史。 */
+	workflowExecutions: (workflowId: string, limit: number) => typedError<WorkflowExecution[], OmniError_Serialize>(__TAURI_INVOKE("workflow_executions", { workflowId, limit })),
 };
 
 /* Types */
@@ -790,6 +810,133 @@ export type KnowledgeEntry = {
 export type KnowledgeSearchResult = {
 	entry: KnowledgeEntry,
 	snippet: string,
+};
+
+/**  任务类型。 */
+export type TaskType = "terminal" | "sql" | "docker" | "server" | "ssh" | "ai" | "workflow";
+
+/**  任务状态。 */
+export type TaskStatus = "draft" | "blocked" | "confirmed" | "running" | "completed" | "failed" | "cancelled";
+
+/**  任务风险等级。 */
+export type TaskRisk = "low" | "medium" | "high" | "critical";
+
+/**  任务来源。 */
+export type TaskSource = "user" | "ai" | "system";
+
+/**  工作流类型。 */
+export type WorkflowType = "script" | "template" | "deploy" | "patrol" | "data_flow";
+
+/**  风险等级。 */
+export type WfRiskLevel = "low" | "medium" | "high" | "critical" | "read_only";
+
+/**  步骤类型。 */
+export type StepType = "shell" | "sql" | "docker" | "workflow";
+
+/**  步骤状态。 */
+export type StepStatus = "ready" | "pending" | "running" | "passed" | "failed" | "skipped";
+
+/**  执行状态。 */
+export type ExecutionStatus = "running" | "completed" | "failed" | "cancelled";
+
+/**  工作流摘要（列表用）。 */
+export type Workflow = {
+	id: string,
+	name: string,
+	description: string,
+	workflow_type: WorkflowType,
+	risk_level: WfRiskLevel,
+	target: string,
+	env_tag: string,
+	created_at: number,
+	updated_at: number,
+};
+
+/**  工作流步骤。 */
+export type WorkflowStep = {
+	id: string,
+	workflow_id: string,
+	name: string,
+	description: string,
+	step_type: StepType,
+	command: string,
+	step_order: number,
+	status: StepStatus,
+};
+
+/**  工作流详情（含步骤）。 */
+export type WorkflowDetail = {
+	workflow: Workflow,
+	steps: WorkflowStep[],
+};
+
+/**  工作流执行记录。 */
+export type WorkflowExecution = {
+	id: string,
+	workflow_id: string,
+	status: ExecutionStatus,
+	triggered_by: string,
+	started_at: number,
+	finished_at: number | null,
+	duration_ms: number | null,
+	output: string,
+};
+
+/**  保存步骤请求。 */
+export type SaveStepRequest = {
+	id?: string | null,
+	name: string,
+	description: string,
+	step_type: StepType,
+	command: string,
+	step_order: number,
+};
+
+/**  保存工作流请求。 */
+export type SaveWorkflowRequest = {
+	id?: string | null,
+	name: string,
+	description: string,
+	workflow_type: WorkflowType,
+	risk_level: WfRiskLevel,
+	target: string,
+	env_tag: string,
+	steps: SaveStepRequest[],
+};
+
+/**  持久化的工作区任务。 */
+export type Task = {
+	id: string,
+	task_type: TaskType,
+	title: string,
+	description: string,
+	resource_id: string,
+	resource_name: string,
+	env_tag: string,
+	command: string,
+	risk: TaskRisk,
+	status: TaskStatus,
+	source: TaskSource,
+	output: string,
+	created_at: number,
+	updated_at: number,
+	started_at: number | null,
+	finished_at: number | null,
+};
+
+/**  创建/更新任务请求。 */
+export type SaveTaskRequest = {
+	id?: string | null,
+	task_type: TaskType,
+	title: string,
+	description: string,
+	resource_id: string,
+	resource_name: string,
+	env_tag: string,
+	command: string,
+	risk: TaskRisk,
+	status: TaskStatus,
+	source: TaskSource,
 };
 
 export type UpdateInfo = {

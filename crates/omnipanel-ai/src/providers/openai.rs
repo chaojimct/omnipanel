@@ -8,7 +8,7 @@ use tokio_stream::StreamExt;
 
 use crate::ir::{StopReason, StreamEvent};
 use crate::provider::AiProvider;
-use crate::types::{ChatMessage, ChatRequest, ChatResponse, ModelInfo, Role, Usage};
+use crate::types::{ChatMessage, ChatRequest, ChatResponse, ModelInfo, Role, ToolDef, Usage};
 
 /// OpenAI-compatible provider. Works with:
 /// - OpenAI API (api.openai.com)
@@ -44,6 +44,8 @@ struct OpenAiRequest {
     temperature: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     max_tokens: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tools: Option<Vec<serde_json::Value>>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -136,6 +138,13 @@ fn convert_messages(messages: &[ChatMessage]) -> Vec<OpenAiMessage> {
         .collect()
 }
 
+fn convert_tools(tools: &[ToolDef]) -> Vec<serde_json::Value> {
+    tools
+        .iter()
+        .map(|t| serde_json::to_value(t).unwrap_or_default())
+        .collect()
+}
+
 #[async_trait]
 impl AiProvider for OpenAiProvider {
     fn name(&self) -> &str {
@@ -153,6 +162,7 @@ impl AiProvider for OpenAiProvider {
             stream: Some(false),
             temperature: request.temperature,
             max_tokens: request.max_tokens,
+            tools: request.tools.as_ref().map(|t| convert_tools(t)),
         };
 
         let resp = self
@@ -206,6 +216,7 @@ impl AiProvider for OpenAiProvider {
             stream: Some(true),
             temperature: request.temperature,
             max_tokens: request.max_tokens,
+            tools: request.tools.as_ref().map(|t| convert_tools(t)),
         };
 
         let resp = self
