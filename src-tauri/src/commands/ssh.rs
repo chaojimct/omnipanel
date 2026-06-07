@@ -444,6 +444,7 @@ pub struct SshTunnelInfo {
     pub remote_host: String,
     pub remote_port: u16,
     pub status: String,
+    #[specta(type = f64)]
     pub started_at: u64,
 }
 
@@ -578,7 +579,7 @@ pub async fn ssh_list_keys() -> Result<Vec<SshKeyInfo>, OmniError> {
     }
 
     let mut keys = Vec::new();
-    let private_names = ["id_rsa", "id_ed25519", "id_ecdsa", "id_dsa"];
+    let _private_names = ["id_rsa", "id_ed25519", "id_ecdsa", "id_dsa"];
     let mut found_any = false;
 
     for entry in std::fs::read_dir(&ssh_dir)

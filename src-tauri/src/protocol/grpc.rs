@@ -54,12 +54,14 @@ pub struct GrpcCallResponse {
     #[specta(type = Vec<(String, String)>)]
     pub headers: HashMap<String, String>,
     /// 耗时(ms)
+    #[specta(type = f64)]
     pub duration_ms: u64,
 }
 
 /// 服务信息（反射结果）。
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
+#[allow(dead_code)]
 pub struct GrpcServiceInfo {
     pub name: String,
     pub methods: Vec<GrpcMethodInfo>,
@@ -68,6 +70,7 @@ pub struct GrpcServiceInfo {
 /// 方法信息。
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
+#[allow(dead_code)]
 pub struct GrpcMethodInfo {
     pub name: String,
     pub full_path: String,
@@ -178,4 +181,5 @@ impl GrpcSession {
 }
 
 /// gRPC 会话管理器（线程安全的会话池）。
+#[allow(dead_code)]
 pub type GrpcSessionMap = Arc<Mutex<HashMap<String, GrpcSession>>>;

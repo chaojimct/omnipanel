@@ -1240,8 +1240,9 @@ pub async fn docker_service_create(state: State<'_, AppState>, connection_id: St
 
 #[tauri::command]
 #[specta::specta]
-pub async fn docker_service_update(state: State<'_, AppState>, connection_id: String, service_id: String, replicas: Option<u64>, image: Option<String>) -> Result<(), OmniError> {
-    resolve_adapter(&state, &connection_id).await?.service_update(&service_id, replicas, image.as_deref()).await
+pub async fn docker_service_update(state: State<'_, AppState>, connection_id: String, service_id: String, replicas: Option<f64>, image: Option<String>) -> Result<(), OmniError> {
+    let replicas_u64 = replicas.map(|r| r as u64);
+    resolve_adapter(&state, &connection_id).await?.service_update(&service_id, replicas_u64, image.as_deref()).await
 }
 
 #[tauri::command]

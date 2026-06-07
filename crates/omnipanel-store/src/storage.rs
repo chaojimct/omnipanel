@@ -145,6 +145,7 @@ const MIGRATIONS: &[&str] = &[
 #[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct AuditEntry {
     /// Unix 毫秒时间戳
+    #[specta(type = f64)]
     pub ts: i64,
     /// 动作类型（如 terminal.exec / ssh.connect / db.query）
     pub action: String,

@@ -230,7 +230,7 @@ async fn execute_workflow_steps(
     app_handle: &tauri::AppHandle,
     detail: &WorkflowDetail,
     execution_id: &str,
-    started_at: i64,
+    _started_at: i64,
     cancel_flag: &Arc<AtomicBool>,
 ) -> Result<String, OmniError> {
     let mut previous_output = String::new();

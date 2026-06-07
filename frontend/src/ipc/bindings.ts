@@ -134,6 +134,35 @@ export const commands = {
 	/**  停止一个 stats 流。 */
 	dockerStopStatsStream: (streamId: string) => typedError<null, OmniError_Serialize>(__TAURI_INVOKE("docker_stop_stats_stream", { streamId })),
 	/**
+	 *  Probe a remote SSH host for Docker daemon availability.
+	 *  Returns Docker version info if found, or an error if Docker is not installed/running.
+	 */
+	dockerProbeSshDocker: (sshConnectionId: string) => typedError<DockerAutoDetectResult, OmniError_Serialize>(__TAURI_INVOKE("docker_probe_ssh_docker", { sshConnectionId })),
+	/**
+	 *  List SSH connections available for Docker binding.
+	 *  Returns connections that are in "connected" state in the SSH pool.
+	 */
+	dockerListSshHosts: () => typedError<SshHostInfo[], OmniError_Serialize>(__TAURI_INVOKE("docker_list_ssh_hosts")),
+	/**  创建容器。返回新容器 ID。 */
+	dockerCreateContainer: (connectionId: string, request: DockerCreateContainerRequest) => typedError<string, OmniError_Serialize>(__TAURI_INVOKE("docker_create_container", { connectionId, request })),
+	dockerSwarmInit: (connectionId: string, listenAddr: string | null, advertiseAddr: string | null) => typedError<string, OmniError_Serialize>(__TAURI_INVOKE("docker_swarm_init", { connectionId, listenAddr, advertiseAddr })),
+	dockerSwarmJoin: (connectionId: string, remoteAddrs: string[], token: string, listenAddr: string | null) => typedError<null, OmniError_Serialize>(__TAURI_INVOKE("docker_swarm_join", { connectionId, remoteAddrs, token, listenAddr })),
+	dockerSwarmLeave: (connectionId: string, force: boolean) => typedError<null, OmniError_Serialize>(__TAURI_INVOKE("docker_swarm_leave", { connectionId, force })),
+	dockerSwarmInspect: (connectionId: string) => typedError<string, OmniError_Serialize>(__TAURI_INVOKE("docker_swarm_inspect", { connectionId })),
+	dockerServiceList: (connectionId: string) => typedError<DockerServiceSummary[], OmniError_Serialize>(__TAURI_INVOKE("docker_service_list", { connectionId })),
+	dockerServiceCreate: (connectionId: string, request: DockerCreateServiceRequest) => typedError<string, OmniError_Serialize>(__TAURI_INVOKE("docker_service_create", { connectionId, request })),
+	dockerServiceUpdate: (connectionId: string, serviceId: string, replicas: number | null, image: string | null) => typedError<null, OmniError_Serialize>(__TAURI_INVOKE("docker_service_update", { connectionId, serviceId, replicas, image })),
+	dockerServiceRemove: (connectionId: string, serviceId: string) => typedError<null, OmniError_Serialize>(__TAURI_INVOKE("docker_service_remove", { connectionId, serviceId })),
+	dockerServiceLogs: (connectionId: string, serviceId: string, tail: string | null) => typedError<string, OmniError_Serialize>(__TAURI_INVOKE("docker_service_logs", { connectionId, serviceId, tail })),
+	dockerNodeList: (connectionId: string) => typedError<DockerNodeSummary[], OmniError_Serialize>(__TAURI_INVOKE("docker_node_list", { connectionId })),
+	dockerNodeInspect: (connectionId: string, nodeId: string) => typedError<string, OmniError_Serialize>(__TAURI_INVOKE("docker_node_inspect", { connectionId, nodeId })),
+	dockerNodeUpdate: (connectionId: string, nodeId: string, availability: string | null, labels: DockerKeyValue[] | null) => typedError<null, OmniError_Serialize>(__TAURI_INVOKE("docker_node_update", { connectionId, nodeId, availability, labels })),
+	dockerNodeRemove: (connectionId: string, nodeId: string, force: boolean) => typedError<null, OmniError_Serialize>(__TAURI_INVOKE("docker_node_remove", { connectionId, nodeId, force })),
+	dockerStackDeploy: (connectionId: string, name: string, composeContent: string, env: string[] | null) => typedError<null, OmniError_Serialize>(__TAURI_INVOKE("docker_stack_deploy", { connectionId, name, composeContent, env })),
+	dockerStackList: (connectionId: string) => typedError<DockerStackSummary[], OmniError_Serialize>(__TAURI_INVOKE("docker_stack_list", { connectionId })),
+	dockerStackRemove: (connectionId: string, name: string) => typedError<null, OmniError_Serialize>(__TAURI_INVOKE("docker_stack_remove", { connectionId, name })),
+	dockerStackServices: (connectionId: string, name: string) => typedError<DockerServiceSummary[], OmniError_Serialize>(__TAURI_INVOKE("docker_stack_services", { connectionId, name })),
+	/**
 	 *  执行一个动作：按 kind 分发到执行引擎，过程通过 `action-progress` 事件流式回流，
 	 *  完成后写入审计日志，返回退出码（0 成功）。
 	 */
@@ -177,8 +206,26 @@ export const commands = {
 	installUpdate: () => typedError<null, string>(__TAURI_INVOKE("install_update")),
 	/**  列出知识条目（可选按 kind / tag 过滤）。 */
 	knowledgeList: (kind: string | null, tag: string | null) => typedError<KnowledgeEntry[], OmniError_Serialize>(__TAURI_INVOKE("knowledge_list", { kind, tag })),
-	/**  获取单个知识条目。 */
-	knowledgeGet: (id: string) => typedError<KnowledgeEntry | null, OmniError_Serialize>(__TAURI_INVOKE("knowledge_get", { id })),
+	/**  按 id 获取单条知识。 */
+	knowledgeGet: (id: string) => typedError<{
+	id: string,
+	/**  "snippet" | "case" | "ai" */
+	kind: string,
+	title: string,
+	/**  Markdown 正文 */
+	content: string,
+	tags: string[],
+	/**  "safe" | "readonly" | "medium" | "dangerous" */
+	riskLevel: string,
+	source: string,
+	/**  "dev" | "staging" | "production" */
+	envTag: string,
+	/**  代码语言（snippet 时有意义） */
+	language: string,
+	usageCount: number | null,
+	createdAt?: number | null,
+	updatedAt?: number | null,
+} | null, OmniError_Serialize>(__TAURI_INVOKE("knowledge_get", { id })),
 	/**  保存（新建或更新）知识条目。 */
 	knowledgeSave: (entry: KnowledgeEntry) => typedError<null, OmniError_Serialize>(__TAURI_INVOKE("knowledge_save", { entry })),
 	/**  删除知识条目。 */
@@ -189,26 +236,25 @@ export const commands = {
 	knowledgeTags: () => typedError<string[], OmniError_Serialize>(__TAURI_INVOKE("knowledge_tags")),
 	/**  递增使用次数。 */
 	knowledgeIncrementUsage: (id: string) => typedError<null, OmniError_Serialize>(__TAURI_INVOKE("knowledge_increment_usage", { id })),
-	/**  创建容器。 */
-	dockerCreateContainer: (connectionId: string, request: DockerCreateContainerRequest) => typedError<string, OmniError_Serialize>(__TAURI_INVOKE("docker_create_container", { connectionId, request })),
-	/**  创建 SSH 隧道。 */
-	sshCreateTunnel: (connectionId: string, tunnelType: string, localPort: number, remoteHost: string, remotePort: number) => typedError<SshTunnelInfo, OmniError_Serialize>(__TAURI_INVOKE("ssh_create_tunnel", { connectionId, tunnelType, localPort, remoteHost, remotePort })),
-	/**  关闭 SSH 隧道。 */
-	sshCloseTunnel: (tunnelId: string) => typedError<null, OmniError_Serialize>(__TAURI_INVOKE("ssh_close_tunnel", { tunnelId })),
-	/**  列出 SSH 隧道。 */
-	sshListTunnels: () => typedError<SshTunnelInfo[], OmniError_Serialize>(__TAURI_INVOKE("ssh_list_tunnels")),
-	/**  列出 SSH 密钥。 */
-	sshListKeys: () => typedError<SshKeyInfo[], OmniError_Serialize>(__TAURI_INVOKE("ssh_list_keys")),
-	/**  生成 SSH 密钥。 */
-	sshGenerateKey: (keyType: string, bits: number | null, comment: string, passphrase: string) => typedError<SshKeyInfo, OmniError_Serialize>(__TAURI_INVOKE("ssh_generate_key", { keyType, bits, comment, passphrase })),
-	/**  导入 SSH 密钥。 */
-	sshImportKey: (name: string, privateKey: string) => typedError<SshKeyInfo, OmniError_Serialize>(__TAURI_INVOKE("ssh_import_key", { name, privateKey })),
-	/**  删除 SSH 密钥。 */
-	sshDeleteKey: (name: string) => typedError<null, OmniError_Serialize>(__TAURI_INVOKE("ssh_delete_key", { name })),
-	/**  SFTP 重命名文件。 */
-	sftpRename: (id: string, oldPath: string, newPath: string) => typedError<null, OmniError_Serialize>(__TAURI_INVOKE("sftp_rename", { id, oldPath, newPath })),
-	/**  SFTP 修改文件权限。 */
-	sftpChmod: (id: string, path: string, mode: number) => typedError<null, OmniError_Serialize>(__TAURI_INVOKE("sftp_chmod", { id, path, mode })),
+	/**  列出所有工作流。 */
+	workflowList: () => typedError<Workflow[], OmniError_Serialize>(__TAURI_INVOKE("workflow_list")),
+	/**  按 id 获取工作流详情（含步骤）。 */
+	workflowGet: (id: string) => typedError<WorkflowDetail, OmniError_Serialize>(__TAURI_INVOKE("workflow_get", { id })),
+	/**  创建或更新工作流。 */
+	workflowSave: (req: SaveWorkflowRequest) => typedError<WorkflowDetail, OmniError_Serialize>(__TAURI_INVOKE("workflow_save", { req })),
+	/**  删除工作流（级联删除步骤和执行记录）。 */
+	workflowDelete: (id: string) => typedError<null, OmniError_Serialize>(__TAURI_INVOKE("workflow_delete", { id })),
+	/**  获取工作流执行历史。 */
+	workflowExecutions: (workflowId: string, limit: number) => typedError<WorkflowExecution[], OmniError_Serialize>(__TAURI_INVOKE("workflow_executions", { workflowId, limit })),
+	/**
+	 *  Start executing a workflow. Returns the execution ID immediately.
+	 *  Steps execute sequentially in a background task.
+	 */
+	workflowRun: (id: string) => typedError<WorkflowExecution, OmniError_Serialize>(__TAURI_INVOKE("workflow_run", { id })),
+	/**  Cancel a running workflow execution. */
+	workflowStop: (executionId: string) => typedError<null, OmniError_Serialize>(__TAURI_INVOKE("workflow_stop", { executionId })),
+	/**  Get execution detail with step results. */
+	workflowGetExecution: (executionId: string) => typedError<WorkflowExecutionDetail, OmniError_Serialize>(__TAURI_INVOKE("workflow_get_execution", { executionId })),
 	/**  列出任务，可选按状态过滤。 */
 	taskList: (statusFilter: string | null, limit: number) => typedError<Task[], OmniError_Serialize>(__TAURI_INVOKE("task_list", { statusFilter, limit })),
 	/**  获取单个任务。 */
@@ -219,16 +265,22 @@ export const commands = {
 	taskUpdateStatus: (id: string, status: TaskStatus) => typedError<null, OmniError_Serialize>(__TAURI_INVOKE("task_update_status", { id, status })),
 	/**  删除任务。 */
 	taskDelete: (id: string) => typedError<null, OmniError_Serialize>(__TAURI_INVOKE("task_delete", { id })),
-	/**  列出所有工作流（不含步骤）。 */
-	workflowList: () => typedError<Workflow[], OmniError_Serialize>(__TAURI_INVOKE("workflow_list")),
-	/**  获取工作流详情（含步骤）。 */
-	workflowGet: (id: string) => typedError<WorkflowDetail, OmniError_Serialize>(__TAURI_INVOKE("workflow_get", { id })),
-	/**  创建或更新工作流。 */
-	workflowSave: (req: SaveWorkflowRequest) => typedError<WorkflowDetail, OmniError_Serialize>(__TAURI_INVOKE("workflow_save", { req })),
-	/**  删除工作流。 */
-	workflowDelete: (id: string) => typedError<null, OmniError_Serialize>(__TAURI_INVOKE("workflow_delete", { id })),
-	/**  获取工作流执行历史。 */
-	workflowExecutions: (workflowId: string, limit: number) => typedError<WorkflowExecution[], OmniError_Serialize>(__TAURI_INVOKE("workflow_executions", { workflowId, limit })),
+	/**
+	 *  执行一个任务：从存储加载 → 分发到执行引擎 → 流式回流输出 → 更新状态。
+	 * 
+	 *  任务在后台异步执行，函数立即返回。执行过程中通过以下事件通知前端：
+	 *  - `task-output`   — 流式 stdout/stderr 输出（payload: `{ taskId, stream, chunk }`）
+	 *  - `task-status`   — 状态变更（payload: `{ taskId, status }`）
+	 */
+	taskRun: (id: string) => typedError<null, OmniError_Serialize>(__TAURI_INVOKE("task_run", { id })),
+	/**  停止一个正在运行的任务。异步任务将被中止，任务状态标记为 cancelled。 */
+	taskStop: (id: string) => typedError<null, OmniError_Serialize>(__TAURI_INVOKE("task_stop", { id })),
+	/**  获取任务执行输出。 */
+	taskGetOutput: (id: string) => typedError<Task, OmniError_Serialize>(__TAURI_INVOKE("task_get_output", { id })),
+	grpcConnect: (config: GrpcConnectionConfig) => typedError<string, string>(__TAURI_INVOKE("grpc_connect", { config })),
+	grpcCall: (connectionId: string, request: GrpcCallRequest) => typedError<GrpcCallResponse, string>(__TAURI_INVOKE("grpc_call", { connectionId, request })),
+	grpcListConnections: () => typedError<string[], string>(__TAURI_INVOKE("grpc_list_connections")),
+	grpcClose: (connectionId: string) => typedError<null, string>(__TAURI_INVOKE("grpc_close", { connectionId })),
 };
 
 /* Types */
@@ -308,6 +360,16 @@ export type DiskStats = {
 	total: number | null,
 	used: number | null,
 	available: number | null,
+};
+
+/**  Docker auto-detection result. */
+export type DockerAutoDetectResult = {
+	available: boolean,
+	version: string | null,
+	os: string | null,
+	containers: number,
+	images: number,
+	error: string | null,
 };
 
 /**  镜像构建的输入上下文。 */
@@ -439,12 +501,46 @@ export type DockerContainerSummary = {
 	createdAt: number | null,
 };
 
+/**  创建容器请求。 */
+export type DockerCreateContainerRequest = {
+	/**  镜像名称（含 tag）。 */
+	image: string,
+	/**  容器名称，留空则 Docker 自动生成。 */
+	name: string | null,
+	/**  端口映射：host_port:container_port/tcp|udp。 */
+	ports: string[],
+	/**  卷挂载：host_path:container_path[:ro]。 */
+	volumes: string[],
+	/**  环境变量：KEY=VALUE。 */
+	env: string[],
+	/**  连接的网络名。 */
+	network: string | null,
+	/**  启动命令覆盖。 */
+	cmd: string[] | null,
+	/**  重启策略：no|always|on-failure|unless-stopped。 */
+	restartPolicy: string | null,
+	/**  自动删除容器（退出后自动 rm）。 */
+	autoRemove: boolean,
+};
+
 /**  创建网络请求。 */
 export type DockerCreateNetworkRequest = {
 	name: string,
 	driver: string | null,
 	internal: boolean,
 	subnet: string | null,
+};
+
+/**  创建服务请求。 */
+export type DockerCreateServiceRequest = {
+	name: string,
+	image: string,
+	replicas: number | null,
+	ports: string[],
+	env: string[],
+	networks: string[],
+	command: string | null,
+	constraints: string[],
 };
 
 /**  创建卷请求。 */
@@ -590,6 +686,18 @@ export type DockerNetworkSummary = {
 	createdAt: number | null,
 };
 
+/**  Docker 节点信息。 */
+export type DockerNodeSummary = {
+	id: string,
+	hostname: string,
+	status: string,
+	availability: string,
+	role: string,
+	engineVersion: string,
+	addr: string,
+	labels: DockerKeyValue[],
+};
+
 /**  总览页数据。 */
 export type DockerOverview = {
 	capabilities: DockerCapabilities,
@@ -640,6 +748,27 @@ export type DockerResourceSummary = {
 	containersRunning: number,
 	containersStopped: number,
 	images: number,
+};
+
+/**  Docker 服务摘要。 */
+export type DockerServiceSummary = {
+	id: string,
+	name: string,
+	image: string,
+	mode: string,
+	replicas: number | null,
+	runningReplicas: number | null,
+	ports: string[],
+	createdAt: string,
+	updatedAt: string,
+};
+
+/**  Docker Stack 信息。 */
+export type DockerStackSummary = {
+	name: string,
+	services: number,
+	orchestrator: string,
+	namespace: string,
 };
 
 /**  卷详情。 */
@@ -695,6 +824,42 @@ export type ErrorCode =
 /**  IO 错误 */
 "io";
 
+export type ExecutionStatus = "running" | "completed" | "failed" | "cancelled";
+
+/**  gRPC 调用请求。 */
+export type GrpcCallRequest = {
+	/**  完整方法名，如 `mypackage.MyService/MyMethod` */
+	method: string,
+	/**  请求 JSON（将序列化为 protobuf） */
+	requestJson: string,
+	/**  自定义 metadata */
+	metadata?: ([string, string])[],
+};
+
+/**  gRPC 调用响应。 */
+export type GrpcCallResponse = {
+	/**  响应 JSON */
+	responseJson: string,
+	/**  HTTP 状态码 */
+	statusCode: number,
+	/**  gRPC 状态 */
+	grpcStatus: number,
+	/**  响应 metadata */
+	headers: ([string, string])[],
+	/**  耗时(ms) */
+	durationMs: number | null,
+};
+
+/**  gRPC 连接配置。 */
+export type GrpcConnectionConfig = {
+	/**  服务器地址，如 `http://localhost:50051` */
+	endpoint: string,
+	/**  自定义 metadata（header） */
+	metadata?: ([string, string])[],
+	/**  是否使用 TLS */
+	useTls?: boolean,
+};
+
 export type HostSystemStats = {
 	hostId: string,
 	hostName: string,
@@ -706,6 +871,33 @@ export type HostSystemStats = {
 	network: NetworkStats,
 	osInfo: string,
 	timestamp: number | null,
+};
+
+/**  知识条目模型。 */
+export type KnowledgeEntry = {
+	id: string,
+	/**  "snippet" | "case" | "ai" */
+	kind: string,
+	title: string,
+	/**  Markdown 正文 */
+	content: string,
+	tags: string[],
+	/**  "safe" | "readonly" | "medium" | "dangerous" */
+	riskLevel: string,
+	source: string,
+	/**  "dev" | "staging" | "production" */
+	envTag: string,
+	/**  代码语言（snippet 时有意义） */
+	language: string,
+	usageCount: number | null,
+	createdAt?: number | null,
+	updatedAt?: number | null,
+};
+
+/**  FTS5 搜索结果：原文 + snippet 摘要。 */
+export type KnowledgeSearchResult = {
+	entry: KnowledgeEntry,
+	snippet: string,
 };
 
 export type MemoryStats = {
@@ -740,6 +932,42 @@ export type OmniError_Serialize = {
 	message: string,
 	/**  可选的底层原因（调试用，可能含技术细节） */
 	cause?: string | null,
+};
+
+export type RiskLevel = "low" | "medium" | "high" | "critical" | "read_only";
+
+export type SaveStepRequest = {
+	id: string | null,
+	name: string,
+	description: string,
+	step_type: StepType,
+	command: string,
+	step_order: number,
+};
+
+export type SaveTaskRequest = {
+	id: string | null,
+	task_type: TaskType,
+	title: string,
+	description: string,
+	resource_id: string,
+	resource_name: string,
+	env_tag: string,
+	command: string,
+	risk: TaskRisk,
+	status: TaskStatus,
+	source: TaskSource,
+};
+
+export type SaveWorkflowRequest = {
+	id: string | null,
+	name: string,
+	description: string,
+	workflow_type: WorkflowType,
+	risk_level: RiskLevel,
+	target: string,
+	env_tag: string,
+	steps: SaveStepRequest[],
 };
 
 /**  单个连接或库下的过滤项（与前端 `SchemaFilterState` 对应，可见项为列表）。 */
@@ -793,6 +1021,15 @@ export type SshConfigSyncResult = {
 	failures: SshConfigSyncFailure[],
 };
 
+/**  SSH host info for Docker connection binding. */
+export type SshHostInfo = {
+	connectionId: string,
+	name: string,
+	host: string,
+	port: number,
+	user: string,
+};
+
 /**  概览页一次加载的完整数据（系统指标 + 进程列表）。 */
 export type SshHostOverview = {
 	stats: HostSystemStats,
@@ -813,119 +1050,11 @@ export type SshProcessInfo = {
 	command: string,
 };
 
-export type KnowledgeEntry = {
-	id: string,
-	kind: string,
-	title: string,
-	content: string,
-	tags: string[],
-	riskLevel: string,
-	source: string | null,
-	envTag: string | null,
-	language: string | null,
-	usageCount: number,
-	createdAt: string,
-	updatedAt: string,
-};
-
-export type KnowledgeSearchResult = {
-	entry: KnowledgeEntry,
-	snippet: string,
-};
-
-/**  任务类型。 */
-export type TaskType = "terminal" | "sql" | "docker" | "server" | "ssh" | "ai" | "workflow";
-
-/**  任务状态。 */
-export type TaskStatus = "draft" | "blocked" | "confirmed" | "running" | "completed" | "failed" | "cancelled";
-
-/**  任务风险等级。 */
-export type TaskRisk = "low" | "medium" | "high" | "critical";
-
-/**  任务来源。 */
-export type TaskSource = "user" | "ai" | "system";
-
-/**  工作流类型。 */
-export type WorkflowType = "script" | "template" | "deploy" | "patrol" | "data_flow";
-
-/**  风险等级。 */
-export type WfRiskLevel = "low" | "medium" | "high" | "critical" | "read_only";
-
-/**  步骤类型。 */
-export type StepType = "shell" | "sql" | "docker" | "workflow";
-
-/**  步骤状态。 */
 export type StepStatus = "ready" | "pending" | "running" | "passed" | "failed" | "skipped";
 
-/**  执行状态。 */
-export type ExecutionStatus = "running" | "completed" | "failed" | "cancelled";
+export type StepType = "shell" | "sql" | "docker" | "workflow";
 
-/**  工作流摘要（列表用）。 */
-export type Workflow = {
-	id: string,
-	name: string,
-	description: string,
-	workflow_type: WorkflowType,
-	risk_level: WfRiskLevel,
-	target: string,
-	env_tag: string,
-	created_at: number,
-	updated_at: number,
-};
-
-/**  工作流步骤。 */
-export type WorkflowStep = {
-	id: string,
-	workflow_id: string,
-	name: string,
-	description: string,
-	step_type: StepType,
-	command: string,
-	step_order: number,
-	status: StepStatus,
-};
-
-/**  工作流详情（含步骤）。 */
-export type WorkflowDetail = {
-	workflow: Workflow,
-	steps: WorkflowStep[],
-};
-
-/**  工作流执行记录。 */
-export type WorkflowExecution = {
-	id: string,
-	workflow_id: string,
-	status: ExecutionStatus,
-	triggered_by: string,
-	started_at: number,
-	finished_at: number | null,
-	duration_ms: number | null,
-	output: string,
-};
-
-/**  保存步骤请求。 */
-export type SaveStepRequest = {
-	id?: string | null,
-	name: string,
-	description: string,
-	step_type: StepType,
-	command: string,
-	step_order: number,
-};
-
-/**  保存工作流请求。 */
-export type SaveWorkflowRequest = {
-	id?: string | null,
-	name: string,
-	description: string,
-	workflow_type: WorkflowType,
-	risk_level: WfRiskLevel,
-	target: string,
-	env_tag: string,
-	steps: SaveStepRequest[],
-};
-
-/**  持久化的工作区任务。 */
+/**  Persisted workspace task/action. */
 export type Task = {
 	id: string,
 	task_type: TaskType,
@@ -939,61 +1068,19 @@ export type Task = {
 	status: TaskStatus,
 	source: TaskSource,
 	output: string,
-	created_at: number,
-	updated_at: number,
+	created_at: number | null,
+	updated_at: number | null,
 	started_at: number | null,
 	finished_at: number | null,
 };
 
-/**  创建/更新任务请求。 */
-export type SaveTaskRequest = {
-	id?: string | null,
-	task_type: TaskType,
-	title: string,
-	description: string,
-	resource_id: string,
-	resource_name: string,
-	env_tag: string,
-	command: string,
-	risk: TaskRisk,
-	status: TaskStatus,
-	source: TaskSource,
-};
+export type TaskRisk = "low" | "medium" | "high" | "critical";
 
-/**  创建容器请求。 */
-export type DockerCreateContainerRequest = {
-	image: string,
-	name?: string,
-	ports: string[],
-	volumes: string[],
-	env: string[],
-	network?: string,
-	cmd?: string[],
-	restartPolicy?: string,
-	autoRemove: boolean,
-};
+export type TaskSource = "user" | "ai" | "system";
 
-/**  SSH 隧道信息。 */
-export type SshTunnelInfo = {
-	id: string,
-	connectionId: string,
-	tunnelType: "local" | "remote" | "dynamic",
-	localPort: number,
-	remoteHost: string,
-	remotePort: number,
-	status: string,
-	startedAt: number,
-};
+export type TaskStatus = "draft" | "blocked" | "confirmed" | "running" | "completed" | "failed" | "cancelled";
 
-/**  SSH 密钥信息。 */
-export type SshKeyInfo = {
-	name: string,
-	keyType: string,
-	path: string,
-	fingerprint: string,
-	comment: string,
-};
-
+export type TaskType = "terminal" | "sql" | "docker" | "server" | "ssh" | "ai" | "workflow";
 
 export type UpdateInfo = {
 	available: boolean,
@@ -1001,6 +1088,67 @@ export type UpdateInfo = {
 	body: string,
 	current_version: string,
 };
+
+export type Workflow = {
+	id: string,
+	name: string,
+	description: string,
+	workflow_type: WorkflowType,
+	risk_level: RiskLevel,
+	target: string,
+	env_tag: string,
+	created_at: number | null,
+	updated_at: number | null,
+};
+
+export type WorkflowDetail = {
+	workflow: Workflow,
+	steps: WorkflowStep[],
+};
+
+export type WorkflowExecution = {
+	id: string,
+	workflow_id: string,
+	status: ExecutionStatus,
+	triggered_by: string,
+	started_at: number | null,
+	finished_at: number | null,
+	duration_ms: number | null,
+	output: string,
+};
+
+export type WorkflowExecutionDetail = {
+	execution: WorkflowExecution,
+	steps: WorkflowExecutionStep[],
+};
+
+export type WorkflowExecutionStep = {
+	id: string,
+	execution_id: string,
+	step_id: string,
+	step_order: number,
+	name: string,
+	step_type: StepType,
+	command: string,
+	status: StepStatus,
+	output: string,
+	error: string,
+	started_at: number | null,
+	finished_at: number | null,
+};
+
+export type WorkflowStep = {
+	id: string,
+	workflow_id: string,
+	name: string,
+	description: string,
+	step_type: StepType,
+	command: string,
+	step_order: number,
+	status: StepStatus,
+};
+
+export type WorkflowType = "script" | "template" | "deploy" | "patrol" | "data_flow";
 
 /* Tauri Specta runtime */
 async function typedError<T, E>(result: Promise<T>): Promise<{ status: "ok"; data: T } | { status: "error"; error: E }> {

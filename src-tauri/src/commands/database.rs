@@ -91,6 +91,7 @@ pub struct DbIntrospectResult {
 pub struct TableRowCount {
     pub name: String,
     /// 统计成功时为行数；单表失败时为 `null`（如视图、权限不足）。
+    #[specta(type = Option<f64>)]
     pub count: Option<i64>,
 }
 
@@ -658,7 +659,7 @@ async fn introspect_pg_schema(
 
 async fn introspect_pg_table(
     connection: &DbConnectionConfig,
-    db_name: &str,
+    _db_name: &str,
     table_name: &str,
 ) -> Result<DbTableSchema, String> {
     let pool = pg_pool(connection).await?;

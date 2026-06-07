@@ -672,7 +672,9 @@ pub struct DockerServiceSummary {
     pub name: String,
     pub image: String,
     pub mode: String,
+    #[specta(type = f64)]
     pub replicas: u64,
+    #[specta(type = f64)]
     pub running_replicas: u64,
     pub ports: Vec<String>,
     pub created_at: String,
@@ -685,6 +687,7 @@ pub struct DockerServiceSummary {
 pub struct DockerCreateServiceRequest {
     pub name: String,
     pub image: String,
+    #[specta(type = f64)]
     pub replicas: u64,
     pub ports: Vec<String>,
     pub env: Vec<String>,

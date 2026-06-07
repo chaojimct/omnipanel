@@ -80,7 +80,9 @@ pub struct Workflow {
     pub risk_level: RiskLevel,
     pub target: String,
     pub env_tag: String,
+    #[specta(type = f64)]
     pub created_at: i64,
+    #[specta(type = f64)]
     pub updated_at: i64,
 }
 
@@ -108,8 +110,11 @@ pub struct WorkflowExecution {
     pub workflow_id: String,
     pub status: ExecutionStatus,
     pub triggered_by: String,
+    #[specta(type = f64)]
     pub started_at: i64,
+    #[specta(type = Option<f64>)]
     pub finished_at: Option<i64>,
+    #[specta(type = Option<f64>)]
     pub duration_ms: Option<i64>,
     pub output: String,
 }
@@ -150,7 +155,9 @@ pub struct WorkflowExecutionStep {
     pub status: StepStatus,
     pub output: String,
     pub error: String,
+    #[specta(type = Option<f64>)]
     pub started_at: Option<i64>,
+    #[specta(type = Option<f64>)]
     pub finished_at: Option<i64>,
 }
 

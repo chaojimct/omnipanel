@@ -78,9 +78,13 @@ pub struct Task {
     pub status: TaskStatus,
     pub source: TaskSource,
     pub output: String,
+    #[specta(type = f64)]
     pub created_at: i64,
+    #[specta(type = f64)]
     pub updated_at: i64,
+    #[specta(type = Option<f64>)]
     pub started_at: Option<i64>,
+    #[specta(type = Option<f64>)]
     pub finished_at: Option<i64>,
 }
 
