@@ -648,3 +648,72 @@ pub struct DockerBuildContext {
     pub build_args: Vec<String>,
     pub use_build_kit: bool,
 }
+
+/// Docker Swarm 信息。
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct DockerSwarmInfo {
+    pub id: String,
+    pub created_at: String,
+    pub updated_at: String,
+    pub listen_addr: String,
+    pub advertise_addr: String,
+    pub default_addr_pool: Vec<String>,
+    pub subnet_size: u32,
+    pub node_count: u32,
+    pub manager_count: u32,
+}
+
+/// Docker 服务摘要。
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct DockerServiceSummary {
+    pub id: String,
+    pub name: String,
+    pub image: String,
+    pub mode: String,
+    pub replicas: u64,
+    pub running_replicas: u64,
+    pub ports: Vec<String>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+/// 创建服务请求。
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct DockerCreateServiceRequest {
+    pub name: String,
+    pub image: String,
+    pub replicas: u64,
+    pub ports: Vec<String>,
+    pub env: Vec<String>,
+    pub networks: Vec<String>,
+    pub command: Option<String>,
+    pub constraints: Vec<String>,
+}
+
+/// Docker 节点信息。
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct DockerNodeSummary {
+    pub id: String,
+    pub hostname: String,
+    pub status: String,
+    pub availability: String,
+    pub role: String,
+    pub engine_version: String,
+    pub addr: String,
+    pub labels: Vec<DockerKeyValue>,
+}
+
+/// Docker Stack 信息。
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct DockerStackSummary {
+    pub name: String,
+    pub services: u32,
+    pub orchestrator: String,
+    pub namespace: String,
+}
+

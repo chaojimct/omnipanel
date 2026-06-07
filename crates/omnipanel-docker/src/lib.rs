@@ -173,6 +173,42 @@ pub trait DockerAdapter: Send + Sync {
         path: &str,
         data: Vec<u8>,
     ) -> OmniResult<()>;
+
+    // ── Swarm ────────────────────────────────────────────────────────────────
+    /// 初始化 Docker Swarm。
+    async fn swarm_init(&self, listen_addr: Option<&str>, advertise_addr: Option<&str>) -> OmniResult<String>;
+    /// 加入已有的 Swarm 集群。
+    async fn swarm_join(&self, remote_addrs: Vec<String>, token: &str, listen_addr: Option<&str>) -> OmniResult<()>;
+    /// 离开 Swarm。
+    async fn swarm_leave(&self, force: bool) -> OmniResult<()>;
+    /// 查看 Swarm 信息。
+    async fn swarm_inspect(&self) -> OmniResult<serde_json::Value>;
+    /// 列出 Swarm 服务。
+    async fn service_list(&self) -> OmniResult<Vec<DockerServiceSummary>>;
+    /// 创建 Swarm 服务。
+    async fn service_create(&self, req: &DockerCreateServiceRequest) -> OmniResult<String>;
+    /// 更新 Swarm 服务。
+    async fn service_update(&self, id: &str, replicas: Option<u64>, image: Option<&str>) -> OmniResult<()>;
+    /// 删除 Swarm 服务。
+    async fn service_remove(&self, id: &str) -> OmniResult<()>;
+    /// Swarm 服务日志。
+    async fn service_logs(&self, id: &str, tail: Option<&str>) -> OmniResult<String>;
+    /// 列出 Swarm 节点。
+    async fn node_list(&self) -> OmniResult<Vec<DockerNodeSummary>>;
+    /// 查看 Swarm 节点。
+    async fn node_inspect(&self, id: &str) -> OmniResult<serde_json::Value>;
+    /// 更新 Swarm 节点。
+    async fn node_update(&self, id: &str, availability: Option<&str>, labels: Option<Vec<DockerKeyValue>>) -> OmniResult<()>;
+    /// 删除 Swarm 节点。
+    async fn node_remove(&self, id: &str, force: bool) -> OmniResult<()>;
+    /// 部署 Stack（从 compose 文件）。
+    async fn stack_deploy(&self, name: &str, compose_content: &str, env: Option<Vec<String>>) -> OmniResult<()>;
+    /// 列出 Stack。
+    async fn stack_list(&self) -> OmniResult<Vec<DockerStackSummary>>;
+    /// 删除 Stack。
+    async fn stack_remove(&self, name: &str) -> OmniResult<()>;
+    /// 列出 Stack 中的服务。
+    async fn stack_services(&self, name: &str) -> OmniResult<Vec<DockerServiceSummary>>;
 }
 
 /// 取容器 id 短格式（前 12 位）。

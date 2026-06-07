@@ -1535,9 +1535,219 @@ impl DockerAdapter for LocalDockerAdapter {
 
         Ok(aggregate_compose(rows))
     }
+
+    // ── Swarm ──
+    async fn swarm_init(&self, listen_addr: Option<&str>, advertise_addr: Option<&str>) -> OmniResult<String> {
+        let req = bollard::models::SwarmInitRequest {
+            listen_addr: Some(listen_addr.unwrap_or("0.0.0.0:2377").to_string()),
+            advertise_addr: advertise_addr.map(|s| s.to_string()),
+            ..Default::default()
+        };
+        let id = self.docker.init_swarm(req).await.map_err(map_bollard)?;
+        Ok(id)
+    }
+    async fn swarm_join(&self, remote_addrs: Vec<String>, token: &str, listen_addr: Option<&str>) -> OmniResult<()> {
+        let req = bollard::models::SwarmJoinRequest {
+            listen_addr: Some(listen_addr.unwrap_or("0.0.0.0:2377").to_string()),
+            remote_addrs: Some(remote_addrs),
+            join_token: Some(token.to_string()),
+            ..Default::default()
+        };
+        self.docker.join_swarm(req).await.map_err(map_bollard)?;
+        Ok(())
+    }
+    async fn swarm_leave(&self, force: bool) -> OmniResult<()> {
+        use bollard::query_parameters::LeaveSwarmOptionsBuilder;
+        let opts = LeaveSwarmOptionsBuilder::default().force(force).build();
+        self.docker.leave_swarm(Some(opts)).await.map_err(map_bollard)?;
+        Ok(())
+    }
+    async fn swarm_inspect(&self) -> OmniResult<serde_json::Value> {
+        let swarm = self.docker.inspect_swarm().await.map_err(map_bollard)?;
+        serde_json::to_value(&swarm).map_err(|e| OmniError::new(ErrorCode::Internal, "序列化 Swarm 信息失败").with_cause(e.to_string()))
+    }
+    async fn service_list(&self) -> OmniResult<Vec<DockerServiceSummary>> {
+        let services = self.docker.list_services(None).await.map_err(map_bollard)?;
+        Ok(services.into_iter().map(|s| {
+            let spec = s.spec.unwrap_or_default();
+            let replicas = spec.mode.as_ref()
+                .and_then(|m| m.replicated.as_ref())
+                .and_then(|r| r.replicas)
+                .unwrap_or(1) as u64;
+            let mode_str = if spec.mode.as_ref().and_then(|m| m.global.as_ref()).is_some() {
+                "global".to_string()
+            } else {
+                format!("replicated/{}", replicas)
+            };
+            DockerServiceSummary {
+                id: s.id.unwrap_or_default(),
+                name: spec.name.unwrap_or_default(),
+                image: spec.task_template.as_ref()
+                    .and_then(|t| t.container_spec.as_ref())
+                    .and_then(|c| c.image.clone())
+                    .unwrap_or_default(),
+                mode: mode_str,
+                replicas,
+                running_replicas: replicas,
+                ports: Vec::new(),
+                created_at: String::new(),
+                updated_at: String::new(),
+            }
+        }).collect())
+    }
+    async fn service_create(&self, req: &DockerCreateServiceRequest) -> OmniResult<String> {
+        let ports: Vec<bollard::models::EndpointPortConfig> = req.ports.iter().filter_map(|p| {
+            let parts: Vec<&str> = p.split(':').collect();
+            if parts.len() >= 2 {
+                let host_port: i64 = parts[0].parse().ok()?;
+                let cp: Vec<&str> = parts[1].split('/').collect();
+                let container_port: i64 = cp[0].parse().ok()?;
+                let protocol = if cp.len() > 1 { cp[1].to_string() } else { "tcp".to_string() };
+                let proto = match protocol.as_str() {
+                    "udp" => Some(bollard::models::EndpointPortConfigProtocolEnum::UDP),
+                    _ => Some(bollard::models::EndpointPortConfigProtocolEnum::TCP),
+                };
+                Some(bollard::models::EndpointPortConfig {
+                    target_port: Some(container_port),
+                    published_port: Some(host_port),
+                    protocol: proto,
+                    publish_mode: Some(bollard::models::EndpointPortConfigPublishModeEnum::INGRESS),
+                    ..Default::default()
+                })
+            } else { None }
+        }).collect();
+        let endpoint_spec = if ports.is_empty() { None } else {
+            Some(bollard::models::EndpointSpec { ports: Some(ports), ..Default::default() })
+        };
+        let spec = bollard::models::ServiceSpec {
+            name: Some(req.name.clone()),
+            task_template: Some(bollard::models::TaskSpec {
+                container_spec: Some(bollard::models::TaskSpecContainerSpec {
+                    image: Some(req.image.clone()),
+                    command: req.command.as_ref().map(|c| vec![c.clone()]),
+                    env: Some(req.env.clone()),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }),
+            mode: Some(bollard::models::ServiceSpecMode {
+                replicated: Some(bollard::models::ServiceSpecModeReplicated { replicas: Some(req.replicas as i64) }),
+                ..Default::default()
+            }),
+            endpoint_spec,
+            ..Default::default()
+        };
+        let resp = self.docker.create_service(spec, None).await.map_err(map_bollard)?;
+        Ok(resp.id.unwrap_or_else(|| "created".to_string()))
+    }
+    async fn service_update(&self, id: &str, replicas: Option<u64>, image: Option<&str>) -> OmniResult<()> {
+        let current = self.docker.inspect_service(id, None).await.map_err(map_bollard)?;
+        let version = current.version.and_then(|v| v.index).unwrap_or(0);
+        let mut spec = current.spec.unwrap_or_default();
+        if let Some(r) = replicas {
+            spec.mode = Some(bollard::models::ServiceSpecMode {
+                replicated: Some(bollard::models::ServiceSpecModeReplicated { replicas: Some(r as i64) }),
+                ..Default::default()
+            });
+        }
+        if let Some(img) = image {
+            if let Some(ref mut ts) = spec.task_template {
+                if let Some(ref mut cs) = ts.container_spec {
+                    cs.image = Some(img.to_string());
+                }
+            }
+        }
+        use bollard::query_parameters::UpdateServiceOptionsBuilder;
+        let opts = UpdateServiceOptionsBuilder::default().version(version as i32).build();
+        self.docker.update_service(id, spec, opts, None).await.map_err(map_bollard)?;
+        Ok(())
+    }
+    async fn service_remove(&self, id: &str) -> OmniResult<()> {
+        self.docker.delete_service(id).await.map_err(map_bollard)?;
+        Ok(())
+    }
+    async fn service_logs(&self, id: &str, tail: Option<&str>) -> OmniResult<String> {
+        use bollard::query_parameters::LogsOptionsBuilder;
+        use futures::StreamExt;
+        let opts = LogsOptionsBuilder::default()
+            .stdout(true).stderr(true)
+            .tail(tail.unwrap_or("200"))
+            .build();
+        let mut stream = self.docker.service_logs(id, Some(opts));
+        let mut output = String::new();
+        while let Some(Ok(log)) = stream.next().await {
+            let bytes = match log {
+                bollard::container::LogOutput::StdOut { message } | bollard::container::LogOutput::StdErr { message }
+                | bollard::container::LogOutput::StdIn { message } | bollard::container::LogOutput::Console { message } => message,
+            };
+            output.push_str(&String::from_utf8_lossy(&bytes));
+        }
+        Ok(output)
+    }
+    async fn node_list(&self) -> OmniResult<Vec<DockerNodeSummary>> {
+        let nodes = self.docker.list_nodes(None).await.map_err(map_bollard)?;
+        Ok(nodes.into_iter().map(|n| {
+            let desc = n.description.unwrap_or_default();
+            let status = n.status.unwrap_or_default();
+            let spec = n.spec.unwrap_or_default();
+            DockerNodeSummary {
+                id: n.id.unwrap_or_default(),
+                hostname: desc.hostname.unwrap_or_default(),
+                status: status.state.map(|s| format!("{:?}", s)).unwrap_or_else(|| "unknown".into()),
+                availability: spec.availability.map(|a| format!("{:?}", a)).unwrap_or_else(|| "unknown".into()),
+                role: spec.role.map(|r| format!("{:?}", r)).unwrap_or_else(|| "worker".into()),
+                engine_version: desc.engine.unwrap_or_default().engine_version.unwrap_or_default(),
+                addr: status.addr.unwrap_or_default(),
+                labels: spec.labels.unwrap_or_default().into_iter().map(|(k, v)| DockerKeyValue { key: k, value: v }).collect(),
+            }
+        }).collect())
+    }
+    async fn node_inspect(&self, id: &str) -> OmniResult<serde_json::Value> {
+        let node = self.docker.inspect_node(id).await.map_err(map_bollard)?;
+        serde_json::to_value(&node).map_err(|e| OmniError::new(ErrorCode::Internal, "序列化节点信息失败").with_cause(e.to_string()))
+    }
+    async fn node_update(&self, id: &str, availability: Option<&str>, labels: Option<Vec<DockerKeyValue>>) -> OmniResult<()> {
+        let current = self.docker.inspect_node(id).await.map_err(map_bollard)?;
+        let version = current.version.and_then(|v| v.index).unwrap_or(0);
+        let mut spec = current.spec.unwrap_or_default();
+        if let Some(avail) = availability {
+            spec.availability = match avail {
+                "active" => Some(bollard::models::NodeSpecAvailabilityEnum::ACTIVE),
+                "pause" => Some(bollard::models::NodeSpecAvailabilityEnum::PAUSE),
+                "drain" => Some(bollard::models::NodeSpecAvailabilityEnum::DRAIN),
+                _ => spec.availability,
+            };
+        }
+        if let Some(lbls) = labels {
+            let mut m = spec.labels.unwrap_or_default();
+            for l in lbls { m.insert(l.key, l.value); }
+            spec.labels = Some(m);
+        }
+        use bollard::query_parameters::UpdateNodeOptionsBuilder;
+        let opts = UpdateNodeOptionsBuilder::default().version(version as i64).build();
+        self.docker.update_node(id, spec, opts).await.map_err(map_bollard)?;
+        Ok(())
+    }
+    async fn node_remove(&self, id: &str, force: bool) -> OmniResult<()> {
+        use bollard::query_parameters::DeleteNodeOptionsBuilder;
+        let opts = DeleteNodeOptionsBuilder::default().force(force).build();
+        self.docker.delete_node(id, Some(opts)).await.map_err(map_bollard)?;
+        Ok(())
+    }
+    async fn stack_deploy(&self, _n: &str, _c: &str, _e: Option<Vec<String>>) -> OmniResult<()> {
+        Err(OmniError::new(ErrorCode::InvalidInput, "Stack deploy 需要 docker CLI，请通过 SSH 连接使用"))
+    }
+    async fn stack_list(&self) -> OmniResult<Vec<DockerStackSummary>> {
+        Err(OmniError::new(ErrorCode::InvalidInput, "Stack 操作需要 docker CLI，请通过 SSH 连接使用"))
+    }
+    async fn stack_remove(&self, _n: &str) -> OmniResult<()> {
+        Err(OmniError::new(ErrorCode::InvalidInput, "Stack 操作需要 docker CLI，请通过 SSH 连接使用"))
+    }
+    async fn stack_services(&self, _n: &str) -> OmniResult<Vec<DockerServiceSummary>> {
+        Err(OmniError::new(ErrorCode::InvalidInput, "Stack 操作需要 docker CLI，请通过 SSH 连接使用"))
+    }
 }
 
-/// 提取 `LogOutput` 的原始字节（用于 tty exec，不区分 stdout/stderr）。
 fn exec_log_bytes(log: &LogOutput) -> Vec<u8> {
     match log {
         LogOutput::StdErr { message }
