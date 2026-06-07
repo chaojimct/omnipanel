@@ -37,6 +37,9 @@ pub struct KnowledgeEntry {
 pub struct KnowledgeSearchResult {
     pub entry: KnowledgeEntry,
     pub snippet: String,
+    /// 关键词相关性评分（0-100），分数越高越相关。
+    #[specta(type = f64)]
+    pub score: i64,
 }
 
 fn map_search_row(row: &rusqlite::Row) -> rusqlite::Result<(KnowledgeEntry, String)> {
@@ -166,19 +169,75 @@ impl Storage {
         };
 
         let mut stmt = self.conn().prepare(sql).map_err(map_sqlite)?;
-        let rows = if let Some(k) = kind {
-            stmt.query_map(rusqlite::params![fts_query, k], map_search_row)
-                .map_err(map_sqlite)?
-        } else {
-            stmt.query_map([fts_query], map_search_row)
-                .map_err(map_sqlite)?
-        };
-
         let mut results = Vec::new();
-        for row in rows {
-            let (entry, snippet) = row.map_err(map_sqlite)?;
-            results.push(KnowledgeSearchResult { entry, snippet });
+        if let Some(k) = kind {
+            let rows = stmt.query_map(rusqlite::params![fts_query, k], |row| {
+                Ok(KnowledgeSearchResult {
+                    entry: Self::row_to_entry(row)?,
+                    snippet: row.get::<_, String>(12)?,
+                    score: 0, // 占位，稍后计算
+                })
+            }).map_err(map_sqlite)?;
+            for row in rows {
+                results.push(row.map_err(map_sqlite)?);
+            }
+        } else {
+            let rows = stmt.query_map([fts_query], |row| {
+                Ok(KnowledgeSearchResult {
+                    entry: Self::row_to_entry(row)?,
+                    snippet: row.get::<_, String>(12)?,
+                    score: 0, // 占位，稍后计算
+                })
+            }).map_err(map_sqlite)?;
+            for row in rows {
+                results.push(row.map_err(map_sqlite)?);
+            }
         }
+
+        // ── 关键词相关性评分 ──────────────────────────────────
+        let keywords: Vec<String> = query
+            .split_whitespace()
+            .map(|w| w.to_lowercase())
+            .collect();
+
+        for result in &mut results {
+            let title_lower = result.entry.title.to_lowercase();
+            let content_lower = result.entry.content.to_lowercase();
+            let mut s: i64 = 0;
+
+            for kw in &keywords {
+                // title 完全匹配（忽略大小写）
+                if title_lower == *kw {
+                    s += 10;
+                }
+                // title 包含关键词
+                if title_lower.contains(kw.as_str()) {
+                    s += 5;
+                }
+                // content 包含关键词
+                if content_lower.contains(kw.as_str()) {
+                    s += 3;
+                }
+                // tags 匹配
+                if result
+                    .entry
+                    .tags
+                    .iter()
+                    .any(|t| t.to_lowercase() == *kw)
+                {
+                    s += 2;
+                }
+            }
+
+            // 热度加分：usage_count，上限 5
+            s += std::cmp::min(result.entry.usage_count, 5);
+
+            result.score = s;
+        }
+
+        // 按分数降序排列
+        results.sort_by(|a, b| b.score.cmp(&a.score));
+
         Ok(results)
     }
 

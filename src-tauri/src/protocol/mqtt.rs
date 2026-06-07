@@ -15,6 +15,13 @@ pub struct MqttConfig {
     pub keep_alive_secs: Option<u64>,
     pub clean_session: Option<bool>,
     pub use_tls: Option<bool>,
+    pub tls_ca_path: Option<String>,
+    pub tls_client_cert: Option<String>,
+    pub tls_client_key: Option<String>,
+    pub will_topic: Option<String>,
+    pub will_payload: Option<String>,
+    pub will_qos: Option<u8>,
+    pub will_retain: Option<bool>,
 }
 
 /// MQTT subscription request.
@@ -85,6 +92,50 @@ impl MqttSession {
 
         if let (Some(user), Some(pass)) = (&config.username, &config.password) {
             mqttoptions.set_credentials(user, pass);
+        }
+
+        // TLS configuration
+        if config.use_tls.unwrap_or(false) {
+            if let (Some(ca_path), Some(cert_path), Some(key_path)) =
+                (&config.tls_ca_path, &config.tls_client_cert, &config.tls_client_key)
+            {
+                let ca = std::fs::read(ca_path)
+                    .map_err(|e| format!("Failed to read CA cert: {e}"))?;
+                let client_cert = std::fs::read(cert_path)
+                    .map_err(|e| format!("Failed to read client cert: {e}"))?;
+                let client_key = std::fs::read(key_path)
+                    .map_err(|e| format!("Failed to read client key: {e}"))?;
+                let tls_config = rumqttc::TlsConfiguration::Simple {
+                    ca,
+                    alpn: None,
+                    client_auth: Some((client_cert, client_key)),
+                };
+                mqttoptions.set_transport(rumqttc::Transport::tls_with_config(tls_config));
+            } else if let Some(ca_path) = &config.tls_ca_path {
+                // CA-only TLS (server verification, no client cert)
+                let ca = std::fs::read(ca_path)
+                    .map_err(|e| format!("Failed to read CA cert: {e}"))?;
+                let tls_config = rumqttc::TlsConfiguration::Simple {
+                    ca,
+                    alpn: None,
+                    client_auth: None,
+                };
+                mqttoptions.set_transport(rumqttc::Transport::tls_with_config(tls_config));
+            }
+            // else: use_tls=true but no cert paths → basic TLS with default roots
+        }
+
+        // Last Will and Testament
+        if let Some(topic) = &config.will_topic {
+            let payload = config.will_payload.clone().unwrap_or_default();
+            let qos = match config.will_qos.unwrap_or(0) {
+                0 => rumqttc::QoS::AtMostOnce,
+                1 => rumqttc::QoS::AtLeastOnce,
+                2 => rumqttc::QoS::ExactlyOnce,
+                _ => rumqttc::QoS::AtMostOnce,
+            };
+            let retain = config.will_retain.unwrap_or(false);
+            mqttoptions.set_last_will(rumqttc::LastWill::new(topic, payload, qos, retain));
         }
 
         let (client, mut eventloop) = rumqttc::AsyncClient::new(mqttoptions, 100);

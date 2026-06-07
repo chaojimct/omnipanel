@@ -269,6 +269,7 @@ export const zhCN = {
       workflow: "工作流",
       knowledge: "知识库",
       tasks: "任务中心",
+      editor: "文件编辑器",
       settings: "设置",
       ai: "AI 助手",
     },
@@ -349,6 +350,7 @@ export const zhCN = {
     workflow: "工作流",
     knowledge: "知识库",
     tasks: "任务中心",
+    editor: "文件编辑器",
     settings: "设置",
     default: "OmniPanel",
   },
@@ -1026,7 +1028,7 @@ export const zhCN = {
     },
   },
   protocol: {
-    tabs: { http: "HTTP / REST", ws: "WebSocket", mqtt: "MQTT", serial: "串口" },
+    tabs: { http: "HTTP / REST", ws: "WebSocket", mqtt: "MQTT", serial: "串口", grpc: "gRPC", sniffer: "抓包", modbus: "Modbus" },
     sidebar: {
       history: "请求历史",
       endpoints: "连接端点",

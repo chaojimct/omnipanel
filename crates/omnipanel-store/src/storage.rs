@@ -137,6 +137,41 @@ const MIGRATIONS: &[&str] = &[
         finished_at INTEGER
     );
     CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
+    CREATE TABLE IF NOT EXISTS http_requests (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        method TEXT NOT NULL DEFAULT 'GET',
+        url TEXT NOT NULL,
+        headers TEXT NOT NULL DEFAULT '{}',
+        body TEXT NOT NULL DEFAULT '',
+        auth_type TEXT NOT NULL DEFAULT 'none',
+        auth_value TEXT NOT NULL DEFAULT '',
+        collection_id TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_http_requests_collection ON http_requests(collection_id);
+
+    CREATE TABLE IF NOT EXISTS http_history (
+        id TEXT PRIMARY KEY,
+        method TEXT NOT NULL,
+        url TEXT NOT NULL,
+        status_code INTEGER,
+        response_time_ms INTEGER,
+        request_size INTEGER,
+        response_size INTEGER,
+        created_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_http_history_created ON http_history(created_at);
+
+    CREATE TABLE IF NOT EXISTS http_collections (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+    );
+
     CREATE INDEX IF NOT EXISTS idx_tasks_updated ON tasks(updated_at);
     "#,
 ];
