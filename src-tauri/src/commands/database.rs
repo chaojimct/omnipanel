@@ -9,6 +9,7 @@ pub use omnipanel_store::{
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
 use sqlx::mysql::{MySqlPool, MySqlPoolOptions, MySqlRow};
+use sqlx::postgres::{PgPool, PgPoolOptions};
 use tauri::State;
 
 use crate::state::AppState;
@@ -120,6 +121,21 @@ async fn mysql_pool(connection: &DbConnectionConfig) -> Result<MySqlPool, String
         .map_err(|e| format!("MySQL 连接失败: {e}"))
 }
 
+async fn pg_pool(connection: &DbConnectionConfig) -> Result<PgPool, String> {
+    let p = to_params(connection);
+    let opts = sqlx::postgres::PgConnectOptions::new()
+        .host(&p.host)
+        .port(p.port)
+        .username(&p.user)
+        .password(&p.password)
+        .database(&p.database);
+    PgPoolOptions::new()
+        .max_connections(1)
+        .connect_with(opts)
+        .await
+        .map_err(|e| format!("PostgreSQL 连接失败: {e}"))
+}
+
 fn with_schema(c: &DbConnectionConfig, schema: Option<String>) -> DbParams {
     let mut params = to_params(c);
     if let Some(s) = schema.filter(|name| !name.trim().is_empty()) {
@@ -220,6 +236,8 @@ pub async fn db_introspect_schema(
 
     match connection.db_type.to_lowercase().as_str() {
         "mysql" | "mariadb" => introspect_mysql_schema(&connection, &db_name).await,
+        "postgresql" | "postgres" => introspect_pg_schema(&connection, &db_name).await,
+        "sqlite" => introspect_sqlite_schema(&connection).await,
         _ => {
             let params = with_schema(&connection, Some(db_name.clone()));
             let driver = omnipanel_db::connect(&params).await.map_err(err_msg)?;
@@ -258,6 +276,8 @@ pub async fn db_introspect_table(
 
     match connection.db_type.to_lowercase().as_str() {
         "mysql" | "mariadb" => introspect_mysql_table(&connection, &db_name, table.trim()).await,
+        "postgresql" | "postgres" => introspect_pg_table(&connection, &db_name, table.trim()).await,
+        "sqlite" => introspect_sqlite_table(&connection, table.trim()).await,
         _ => Ok(DbTableSchema {
             name: table,
             columns: Vec::new(),
@@ -541,4 +561,319 @@ fn to_table_info(name: String, result: QueryResult) -> TableInfo {
         rows,
         columns: result.columns,
     }
+}
+// ─── PostgreSQL Introspection ────────────────────────────────────────────
+
+async fn introspect_pg_schema(
+    connection: &DbConnectionConfig,
+    db_name: &str,
+) -> Result<DbIntrospectResult, String> {
+    let pool = pg_pool(connection).await?;
+
+    let col_rows = sqlx::query(
+        "SELECT c.table_name, c.column_name, c.data_type, \
+         CASE WHEN pk.column_name IS NOT NULL THEN true ELSE false END AS is_pk \
+         FROM information_schema.columns c \
+         LEFT JOIN ( \
+             SELECT ku.column_name, ku.table_name \
+             FROM information_schema.table_constraints tc \
+             JOIN information_schema.key_column_usage ku ON tc.constraint_name = ku.constraint_name \
+             WHERE tc.constraint_type = 'PRIMARY KEY' AND tc.table_schema = 'public' \
+         ) pk ON c.table_name = pk.table_name AND c.column_name = pk.column_name \
+         WHERE c.table_schema = 'public' \
+         ORDER BY c.table_name, c.ordinal_position",
+    )
+    .fetch_all(&pool)
+    .await
+    .map_err(|e| format!("PG columns query failed: {e}"))?;
+
+    let idx_rows = sqlx::query(
+        "SELECT t.relname AS table_name, i.relname AS index_name, \
+         a.attname AS column_name, ix.indisunique AS is_unique \
+         FROM pg_class t \
+         JOIN pg_index ix ON t.oid = ix.indrelid \
+         JOIN pg_class i ON i.oid = ix.indexrelid \
+         JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = ANY(ix.indkey) \
+         JOIN pg_namespace n ON n.oid = t.relnamespace \
+         WHERE n.nspname = 'public' AND NOT ix.indisprimary \
+         ORDER BY t.relname, i.relname, a.attnum",
+    )
+    .fetch_all(&pool)
+    .await
+    .map_err(|e| format!("PG indexes query failed: {e}"))?;
+    pool.close().await;
+
+    let mut tables: Vec<DbTableSchema> = Vec::new();
+    for row in &col_rows {
+        let table_name: String = row.try_get(0).unwrap_or_default();
+        let column_name: String = row.try_get(1).unwrap_or_default();
+        let data_type: String = row.try_get(2).unwrap_or_default();
+        let is_pk: bool = row.try_get(3).unwrap_or(false);
+
+        if let Some(table) = tables.iter_mut().find(|t| t.name == table_name) {
+            table.columns.push(DbColumnMeta {
+                name: column_name,
+                column_type: data_type,
+                is_pk,
+                is_fk: false,
+            });
+        } else {
+            tables.push(DbTableSchema {
+                name: table_name,
+                columns: vec![DbColumnMeta {
+                    name: column_name,
+                    column_type: data_type,
+                    is_pk,
+                    is_fk: false,
+                }],
+                indexes: Vec::new(),
+            });
+        }
+    }
+
+    for row in &idx_rows {
+        let table_name: String = row.try_get(0).unwrap_or_default();
+        let index_name: String = row.try_get(1).unwrap_or_default();
+        let column_name: String = row.try_get(2).unwrap_or_default();
+        let is_unique: bool = row.try_get(3).unwrap_or(false);
+
+        if let Some(table) = tables.iter_mut().find(|t| t.name == table_name) {
+            if let Some(index) = table.indexes.iter_mut().find(|i| i.name == index_name) {
+                index.columns.push(column_name);
+            } else {
+                table.indexes.push(DbIndexMeta {
+                    name: index_name,
+                    columns: vec![column_name],
+                    unique: is_unique,
+                });
+            }
+        }
+    }
+
+    Ok(DbIntrospectResult {
+        database: db_name.to_string(),
+        tables,
+    })
+}
+
+async fn introspect_pg_table(
+    connection: &DbConnectionConfig,
+    db_name: &str,
+    table_name: &str,
+) -> Result<DbTableSchema, String> {
+    let pool = pg_pool(connection).await?;
+
+    let col_rows = sqlx::query(
+        "SELECT c.column_name, c.data_type, \
+         CASE WHEN pk.column_name IS NOT NULL THEN true ELSE false END AS is_pk \
+         FROM information_schema.columns c \
+         LEFT JOIN ( \
+             SELECT ku.column_name, ku.table_name \
+             FROM information_schema.table_constraints tc \
+             JOIN information_schema.key_column_usage ku ON tc.constraint_name = ku.constraint_name \
+             WHERE tc.constraint_type = 'PRIMARY KEY' AND tc.table_schema = 'public' \
+         ) pk ON c.table_name = pk.table_name AND c.column_name = pk.column_name \
+         WHERE c.table_schema = 'public' AND c.table_name = $1 \
+         ORDER BY c.ordinal_position",
+    )
+    .bind(table_name)
+    .fetch_all(&pool)
+    .await
+    .map_err(|e| format!("PG columns query failed: {e}"))?;
+
+    let idx_rows = sqlx::query(
+        "SELECT i.relname AS index_name, a.attname AS column_name, ix.indisunique AS is_unique \
+         FROM pg_class t \
+         JOIN pg_index ix ON t.oid = ix.indrelid \
+         JOIN pg_class i ON i.oid = ix.indexrelid \
+         JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = ANY(ix.indkey) \
+         JOIN pg_namespace n ON n.oid = t.relnamespace \
+         WHERE n.nspname = 'public' AND t.relname = $1 AND NOT ix.indisprimary \
+         ORDER BY i.relname, a.attnum",
+    )
+    .bind(table_name)
+    .fetch_all(&pool)
+    .await
+    .map_err(|e| format!("PG indexes query failed: {e}"))?;
+    pool.close().await;
+
+    let columns: Vec<DbColumnMeta> = col_rows
+        .iter()
+        .map(|row| DbColumnMeta {
+            name: row.try_get(0).unwrap_or_default(),
+            column_type: row.try_get(1).unwrap_or_default(),
+            is_pk: row.try_get(2).unwrap_or(false),
+            is_fk: false,
+        })
+        .collect();
+
+    let mut indexes: Vec<DbIndexMeta> = Vec::new();
+    for row in &idx_rows {
+        let index_name: String = row.try_get(0).unwrap_or_default();
+        let column_name: String = row.try_get(1).unwrap_or_default();
+        let is_unique: bool = row.try_get(2).unwrap_or(false);
+
+        if let Some(idx) = indexes.iter_mut().find(|i| i.name == index_name) {
+            idx.columns.push(column_name);
+        } else {
+            indexes.push(DbIndexMeta {
+                name: index_name,
+                columns: vec![column_name],
+                unique: is_unique,
+            });
+        }
+    }
+
+    Ok(DbTableSchema {
+        name: table_name.to_string(),
+        columns,
+        indexes,
+    })
+}
+
+// ─── SQLite Introspection ───────────────────────────────────────────────
+
+fn introspect_sqlite_schema_inner(
+    connection: &DbConnectionConfig,
+) -> Result<DbIntrospectResult, String> {
+    let path = connection.database.trim();
+    if path.is_empty() {
+        return Err("SQLite database path is empty".into());
+    }
+    let conn = rusqlite::Connection::open(path)
+        .map_err(|e| format!("SQLite open failed: {e}"))?;
+
+    let table_names: Vec<String> = {
+        let mut stmt = conn
+            .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
+            .map_err(|e| format!("SQLite prepare failed: {e}"))?;
+        let rows = stmt
+            .query_map([], |row| row.get(0))
+            .map_err(|e| format!("SQLite query failed: {e}"))?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|e| format!("SQLite collect failed: {e}"))?
+    };
+
+    let mut tables: Vec<DbTableSchema> = Vec::new();
+    for tname in &table_names {
+        let columns = sqlite_pragma_columns(&conn, tname)?;
+        let indexes = sqlite_pragma_indexes(&conn, tname)?;
+        tables.push(DbTableSchema {
+            name: tname.clone(),
+            columns,
+            indexes,
+        });
+    }
+
+    Ok(DbIntrospectResult {
+        database: path.to_string(),
+        tables,
+    })
+}
+
+fn introspect_sqlite_table_inner(
+    connection: &DbConnectionConfig,
+    table_name: &str,
+) -> Result<DbTableSchema, String> {
+    let path = connection.database.trim();
+    if path.is_empty() {
+        return Err("SQLite database path is empty".into());
+    }
+    let conn = rusqlite::Connection::open(path)
+        .map_err(|e| format!("SQLite open failed: {e}"))?;
+
+    let columns = sqlite_pragma_columns(&conn, table_name)?;
+    let indexes = sqlite_pragma_indexes(&conn, table_name)?;
+
+    Ok(DbTableSchema {
+        name: table_name.to_string(),
+        columns,
+        indexes,
+    })
+}
+
+fn sqlite_pragma_columns(
+    conn: &rusqlite::Connection,
+    table: &str,
+) -> Result<Vec<DbColumnMeta>, String> {
+    let sql = format!("PRAGMA table_info('{}')", table.replace('\'', "''"));
+    let mut stmt = conn
+        .prepare(&sql)
+        .map_err(|e| format!("PRAGMA table_info failed: {e}"))?;
+    let rows = stmt
+        .query_map([], |row| {
+            Ok(DbColumnMeta {
+                name: row.get::<_, String>(1)?,
+                column_type: row.get::<_, String>(2)?,
+                is_pk: row.get::<_, i32>(5)? > 0,
+                is_fk: false,
+            })
+        })
+        .map_err(|e| format!("PRAGMA table_info query failed: {e}"))?;
+    let mut out = Vec::new();
+    for r in rows {
+        out.push(r.map_err(|e| format!("row error: {e}"))?);
+    }
+    Ok(out)
+}
+
+fn sqlite_pragma_indexes(
+    conn: &rusqlite::Connection,
+    table: &str,
+) -> Result<Vec<DbIndexMeta>, String> {
+    let sql = format!("PRAGMA index_list('{}')", table.replace('\'', "''"));
+    let mut stmt = conn
+        .prepare(&sql)
+        .map_err(|e| format!("PRAGMA index_list failed: {e}"))?;
+    let idx_rows = stmt
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, String>(1)?, // index name
+                row.get::<_, i32>(2)? != 0, // unique
+            ))
+        })
+        .map_err(|e| format!("PRAGMA index_list query failed: {e}"))?;
+
+    let mut indexes = Vec::new();
+    for r in idx_rows {
+        let (idx_name, unique) = r.map_err(|e| format!("row error: {e}"))?;
+        let col_sql = format!("PRAGMA index_info('{}')", idx_name.replace('\'', "''"));
+        let mut col_stmt = conn
+            .prepare(&col_sql)
+            .map_err(|e| format!("PRAGMA index_info failed: {e}"))?;
+        let cols: Vec<String> = col_stmt
+            .query_map([], |row| row.get(2))
+            .map_err(|e| format!("PRAGMA index_info query failed: {e}"))?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| format!("collect error: {e}"))?;
+
+        if !cols.is_empty() {
+            indexes.push(DbIndexMeta {
+                name: idx_name,
+                columns: cols,
+                unique,
+            });
+        }
+    }
+    Ok(indexes)
+}
+
+async fn introspect_sqlite_schema(
+    connection: &DbConnectionConfig,
+) -> Result<DbIntrospectResult, String> {
+    let conn = connection.clone();
+    tokio::task::spawn_blocking(move || introspect_sqlite_schema_inner(&conn))
+        .await
+        .map_err(|e| format!("SQLite task failed: {e}"))?
+}
+
+async fn introspect_sqlite_table(
+    connection: &DbConnectionConfig,
+    table_name: &str,
+) -> Result<DbTableSchema, String> {
+    let conn = connection.clone();
+    let tname = table_name.to_string();
+    tokio::task::spawn_blocking(move || introspect_sqlite_table_inner(&conn, &tname))
+        .await
+        .map_err(|e| format!("SQLite task failed: {e}"))?
 }

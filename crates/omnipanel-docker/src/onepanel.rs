@@ -20,7 +20,7 @@ use crate::{
     ContainerFilter, DockerAdapter, DockerBuildContext, DockerBuildResult, DockerComposeAction,
     DockerComposeProject, DockerComposeRequest, DockerComposeResult,
     DockerContainerAction, DockerContainerDetail, DockerContainerStats, DockerContainerSummary,
-    DockerCreateNetworkRequest, DockerCreateVolumeRequest, DockerFileEntry,
+    DockerCreateContainerRequest, DockerCreateNetworkRequest, DockerCreateVolumeRequest, DockerFileEntry,
     DockerImageDetail, DockerImageHistoryLayer, DockerImageProgress, DockerImageSummary,
     DockerKeyValue, DockerLogLine, DockerNetworkContainer, DockerNetworkDetail,
     DockerNetworkSubnet, DockerNetworkSummary, DockerOverview, DockerProbe, DockerPruneResult,
@@ -482,6 +482,10 @@ impl DockerAdapter for OnePanelAdapter {
             .await
             .map(|_: serde_json::Value| ())
             .map_err(|e| e.with_cause(format!("1Panel {} 失败", op)))
+    }
+
+    async fn create_container(&self, _req: &DockerCreateContainerRequest) -> OmniResult<String> {
+        Err(OmniError::not_found("1Panel 暂不支持直接创建容器，请通过 Compose 或面板操作"))
     }
 
     async fn container_logs(

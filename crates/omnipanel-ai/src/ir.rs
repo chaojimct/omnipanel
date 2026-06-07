@@ -20,6 +20,8 @@ pub enum StreamEvent {
     ToolCallUpdate {
         id: String,
         status: ToolStatus,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        result: Option<String>,
     },
     Usage {
         input_tokens: u32,

@@ -43,7 +43,7 @@ pub fn translate_session_update(update: &SessionUpdate) -> Vec<StreamEvent> {
                 .and_then(|v| v.as_str())
                 .map(parse_tool_status)
                 .unwrap_or(ToolStatus::Running);
-            vec![StreamEvent::ToolCallUpdate { id, status }]
+            vec![StreamEvent::ToolCallUpdate { id, status, result: None }]
         }
         SessionUpdate::Plan { content } => {
             let text = extract_text(content);

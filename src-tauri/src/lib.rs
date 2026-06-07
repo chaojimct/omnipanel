@@ -81,6 +81,9 @@ fn export_ipc_bindings() {
         commands::docker::docker_build_image,
         commands::docker::docker_stream_stats,
         commands::docker::docker_stop_stats_stream,
+        commands::docker::docker_probe_ssh_docker,
+        commands::docker::docker_list_ssh_hosts,
+        commands::docker::docker_create_container,
         commands::exec::execute_action,
         commands::ssh::ssh_connect,
         commands::ssh::ssh_write,
@@ -107,6 +110,18 @@ fn export_ipc_bindings() {
         commands::knowledge::knowledge_search,
         commands::knowledge::knowledge_tags,
         commands::knowledge::knowledge_increment_usage,
+        // Workflow（工作流）
+        commands::workflow::workflow_list,
+        commands::workflow::workflow_get,
+        commands::workflow::workflow_save,
+        commands::workflow::workflow_delete,
+        commands::workflow::workflow_executions,
+        // Task（任务）
+        commands::task::task_list,
+        commands::task::task_get,
+        commands::task::task_save,
+        commands::task::task_update_status,
+        commands::task::task_delete,
     ]);
 
     // 用 CARGO_MANIFEST_DIR 拼绝对路径，避免 cwd 在不同入口（cargo test/run）下不一致。
@@ -282,6 +297,9 @@ pub fn run() {
             commands::docker::docker_list_container_dir,
             commands::docker::docker_read_container_file,
             commands::docker::docker_write_container_file,
+            commands::docker::docker_probe_ssh_docker,
+            commands::docker::docker_list_ssh_hosts,
+            commands::docker::docker_create_container,
             // Execution engine（动作执行引擎）
             commands::exec::execute_action,
             // SSH
@@ -298,6 +316,15 @@ pub fn run() {
             commands::ssh::ssh_sync_config_hosts,
             commands::ssh::ssh_connect_config_host,
             commands::ssh::ssh_process_list,
+            commands::ssh::sftp_rename,
+            commands::ssh::sftp_chmod,
+            commands::ssh::ssh_create_tunnel,
+            commands::ssh::ssh_close_tunnel,
+            commands::ssh::ssh_list_tunnels,
+            commands::ssh::ssh_list_keys,
+            commands::ssh::ssh_generate_key,
+            commands::ssh::ssh_import_key,
+            commands::ssh::ssh_delete_key,
             commands::ssh::ssh_pool_load_overview,
             commands::ssh::ssh_pool_release,
             commands::ssh::ssh_pool_fetch_stats,
@@ -315,6 +342,18 @@ pub fn run() {
             commands::knowledge::knowledge_search,
             commands::knowledge::knowledge_tags,
             commands::knowledge::knowledge_increment_usage,
+            // Workflow（工作流）
+            commands::workflow::workflow_list,
+            commands::workflow::workflow_get,
+            commands::workflow::workflow_save,
+            commands::workflow::workflow_delete,
+            commands::workflow::workflow_executions,
+            // Task（任务）
+            commands::task::task_list,
+            commands::task::task_get,
+            commands::task::task_save,
+            commands::task::task_update_status,
+            commands::task::task_delete,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

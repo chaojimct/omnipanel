@@ -51,6 +51,9 @@ impl DockerAdapter for SshDockerAdapter {
     async fn container_action(&self, id: &str, action: DockerContainerAction) -> OmniResult<()> {
         container_action(&*self.session.lock().await, id, action).await
     }
+    async fn create_container(&self, req: &DockerCreateContainerRequest) -> OmniResult<String> {
+        create_container(&*self.session.lock().await, req).await
+    }
     async fn container_logs(&self, id: &str, tail: i64) -> OmniResult<Vec<DockerLogLine>> {
         container_logs(&*self.session.lock().await, id, tail).await
     }
@@ -288,6 +291,51 @@ pub async fn container_action(
         .await?
         .ok_or_err("远端容器操作失败")?;
     Ok(())
+}
+
+/// 远端创建容器（通过 SSH exec 调用 docker create）。
+pub async fn create_container(
+    session: &SshSession,
+    req: &DockerCreateContainerRequest,
+) -> OmniResult<String> {
+    let mut cmd = vec!["docker create".to_string()];
+    if let Some(ref name) = req.name {
+        cmd.push(format!("--name {}", shell_quote(name)));
+    }
+    for port in &req.ports {
+        cmd.push(format!("-p {}", shell_quote(port)));
+    }
+    for vol in &req.volumes {
+        cmd.push(format!("-v {}", shell_quote(vol)));
+    }
+    for env in &req.env {
+        cmd.push(format!("-e {}", shell_quote(env)));
+    }
+    if let Some(ref net) = req.network {
+        cmd.push(format!("--network {}", shell_quote(net)));
+    }
+    if let Some(ref policy) = req.restart_policy {
+        cmd.push(format!("--restart {}", shell_quote(policy)));
+    }
+    if req.auto_remove {
+        cmd.push("--rm".to_string());
+    }
+    cmd.push(shell_quote(&req.image));
+    if let Some(ref args) = req.cmd {
+        for arg in args {
+            cmd.push(shell_quote(arg));
+        }
+    }
+    let full_cmd = cmd.join(" ");
+    let out = session.exec_capture(&full_cmd).await?;
+    if out.exit_code != 0 {
+        return Err(docker_cli_error("创建容器失败", &out.stderr));
+    }
+    let id = out.stdout.trim().to_string();
+    if id.is_empty() {
+        return Err(docker_cli_error("创建容器失败：无输出 ID", &out.stderr));
+    }
+    Ok(id)
 }
 
 /// 远端容器日志（一次性 tail）。

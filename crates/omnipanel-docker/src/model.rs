@@ -76,13 +76,12 @@ impl DockerCapabilities {
         }
     }
 
-    /// SSH 宿主机 adapter 能力子集：日志流式通过 `docker logs -f` 实现；
-    /// 容器内交互终端（docker exec -it）需 PTY 通道，尚未实现。
+    /// SSH 宿主机 adapter：完整功能，exec_pty 已支持 docker exec -it。
     pub fn ssh_engine() -> Self {
         Self {
             can_overview: true,
             can_stream_logs: true,
-            can_container_exec: false,
+            can_container_exec: true,
             can_inspect: true,
             can_manage_containers: true,
             can_manage_images: true,
@@ -577,6 +576,30 @@ pub struct DockerCreateVolumeRequest {
     pub name: String,
     pub driver: Option<String>,
     pub labels: Vec<(String, String)>,
+}
+
+/// 创建容器请求。
+#[derive(Debug, Clone, Default, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct DockerCreateContainerRequest {
+    /// 镜像名称（含 tag）。
+    pub image: String,
+    /// 容器名称，留空则 Docker 自动生成。
+    pub name: Option<String>,
+    /// 端口映射：host_port:container_port/tcp|udp。
+    pub ports: Vec<String>,
+    /// 卷挂载：host_path:container_path[:ro]。
+    pub volumes: Vec<String>,
+    /// 环境变量：KEY=VALUE。
+    pub env: Vec<String>,
+    /// 连接的网络名。
+    pub network: Option<String>,
+    /// 启动命令覆盖。
+    pub cmd: Option<Vec<String>>,
+    /// 重启策略：no|always|on-failure|unless-stopped。
+    pub restart_policy: Option<String>,
+    /// 自动删除容器（退出后自动 rm）。
+    pub auto_remove: bool,
 }
 
 /// 卷详情。
