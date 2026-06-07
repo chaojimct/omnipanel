@@ -4,6 +4,7 @@ use std::sync::Arc;
 use tauri::AppHandle;
 use tokio::sync::Mutex;
 
+use crate::protocol::grpc::GrpcSession;
 use crate::protocol::mqtt::MqttSession;
 use crate::protocol::serial::SerialSession;
 use crate::protocol::ws::WsSession;
@@ -23,6 +24,7 @@ pub struct AppState {
     pub serial_sessions: Arc<Mutex<HashMap<String, SerialSession>>>,
     pub ws_sessions: Arc<Mutex<HashMap<String, WsSession>>>,
     pub mqtt_sessions: Arc<Mutex<HashMap<String, MqttSession>>>,
+    pub grpc_sessions: Arc<Mutex<HashMap<String, GrpcSession>>>,
     pub terminal_sessions: Arc<Mutex<HashMap<String, Terminal>>>,
     pub app_handle: AppHandle,
     pub ai_registry: Arc<Mutex<AiProviderRegistry>>,
@@ -77,6 +79,7 @@ impl AppState {
             serial_sessions: Arc::new(Mutex::new(HashMap::new())),
             ws_sessions: Arc::new(Mutex::new(HashMap::new())),
             mqtt_sessions: Arc::new(Mutex::new(HashMap::new())),
+            grpc_sessions: Arc::new(Mutex::new(HashMap::new())),
             terminal_sessions: Arc::new(Mutex::new(HashMap::new())),
             app_handle,
             ai_registry: Arc::new(Mutex::new(AiProviderRegistry::new())),

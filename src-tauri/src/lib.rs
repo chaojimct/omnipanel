@@ -145,6 +145,11 @@ fn export_ipc_bindings() {
         commands::task::task_run,
         commands::task::task_stop,
         commands::task::task_get_output,
+        // Protocol Lab — gRPC
+        commands::grpc::grpc_connect,
+        commands::grpc::grpc_call,
+        commands::grpc::grpc_reflect,
+        commands::grpc::grpc_close,
     ]);
 
     // 用 CARGO_MANIFEST_DIR 拼绝对路径，避免 cwd 在不同入口（cargo test/run）下不一致。
@@ -399,6 +404,11 @@ pub fn run() {
             commands::task::task_run,
             commands::task::task_stop,
             commands::task::task_get_output,
+            // Protocol Lab — gRPC
+            commands::grpc::grpc_connect,
+            commands::grpc::grpc_call,
+            commands::grpc::grpc_reflect,
+            commands::grpc::grpc_close,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

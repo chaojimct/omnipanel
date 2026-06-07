@@ -23,12 +23,13 @@ import { DockerComposeDrawer } from "./DockerComposeDrawer";
 import { DockerFileEditor } from "./DockerFileEditor";
 import type { DockerComposeAction } from "../../ipc/bindings";
 import { CreateContainerDialog } from "./CreateContainerDialog";
+import { SwarmPanel } from "./SwarmPanel";
 import type {
   DockerContainerDetail,
   DockerContainerSummary,
 } from "../../ipc/bindings";
 
-type WorkspaceTab = "containers" | "images" | "compose" | "networks" | "volumes" | "files";
+type WorkspaceTab = "containers" | "images" | "compose" | "networks" | "volumes" | "files" | "swarm";
 
 interface ConfirmState {
   title: string;
@@ -435,6 +436,7 @@ export function DockerPanel() {
                   { key: "networks", label: "网络" },
                   { key: "volumes", label: "卷" },
                   { key: "files", label: "文件" },
+                  { key: "swarm", label: "Swarm" },
                 ] as const
               ).map(({ key, label }) => (
                 <button key={key} type="button" className={`subtab${tab === key ? " active" : ""}`} onClick={() => setTab(key)}>
@@ -797,6 +799,10 @@ export function DockerPanel() {
                   }
                 }}
               />
+            )}
+
+            {tab === "swarm" && selectedConnectionId && (
+              <SwarmPanel connectionId={selectedConnectionId} />
             )}
             </div>
           </>
