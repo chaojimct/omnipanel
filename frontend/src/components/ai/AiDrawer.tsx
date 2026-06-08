@@ -189,7 +189,7 @@ function formatRelativeShort(ts: number): string {
   return new Date(ts).toLocaleDateString();
 }
 
-function AiSessionList() {
+export function AiSessionList({ rail = "left" }: { rail?: "left" | "right" }) {
   const { t } = useI18n();
   const conversations = useAiStore((s) => s.conversations);
   const activeId = useAiStore((s) => s.activeConversationId);
@@ -202,7 +202,9 @@ function AiSessionList() {
   };
 
   return (
-    <aside className="ai-session-list">
+    <aside
+      className={`ai-session-list${rail === "right" ? " ai-session-list--right" : ""}`}
+    >
       <div className="ai-session-list-header">
         <span className="ai-session-list-title">{t("ai.sessionList.title")}</span>
         <button
@@ -481,7 +483,7 @@ function useAiChat() {
   };
 }
 
-function AiPanelBody() {
+export function AiPanelBody() {
   const { t } = useI18n();
   const {
     input,

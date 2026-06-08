@@ -1,6 +1,7 @@
 import { useEffect, useState, type ComponentType } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { SplashScreen } from "./components/shell/SplashScreen";
-import { initSettings } from "./stores/settingsStore";
+import { initSettings, useSettingsStore } from "./stores/settingsStore";
 import { initConnections } from "./stores/connectionStore";
 import { initActionListener } from "./stores/actionStore";
 
@@ -40,6 +41,12 @@ export function Bootstrap() {
 
       advance(1);
       initSettings();
+
+      // Sync persisted proxy config to backend
+      const proxy = useSettingsStore.getState().proxy;
+      if (proxy.enabled) {
+        invoke("set_proxy_config", { config: proxy }).catch(() => {});
+      }
 
       advance(2);
       initConnections();

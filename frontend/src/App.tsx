@@ -1,12 +1,13 @@
 import { BrowserRouter, Routes, Route, useLocation, useNavigate } from "react-router-dom";
 import { useServerViewStore } from "./stores/serverViewStore";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Sidebar } from "./components/shell/Sidebar";
 import { Topbar } from "./components/shell/Topbar";
 import { StatusBar } from "./components/shell/StatusBar";
 import { CommandPalette } from "./components/shell/CommandPalette";
 import { NotificationDrawer } from "./components/shell/NotificationDrawer";
 import { AiDrawer } from "./components/ai/AiDrawer";
+import { AiDockView } from "./components/ai/AiDockView";
 import { DangerConfirmDialog } from "./components/terminal/DangerConfirmDialog";
 import { QuickInputHost } from "./components/ui/QuickInputHost";
 import { Button } from "./components/ui/Button";
@@ -21,9 +22,8 @@ import { ProtocolPanel } from "./modules/protocol/ProtocolPanel";
 import { WorkflowPanel } from "./modules/workflow/WorkflowPanel";
 import { KnowledgePanel } from "./modules/knowledge/KnowledgePanel";
 import { TasksPanel } from "./modules/tasks/TasksPanel";
-import { FileEditorPanel } from "./modules/editor/FileEditorPanel";
 import { SettingsPanel } from "./modules/settings/SettingsPanel";
-import { AiAgentPanel } from "./modules/ai";
+import { useAiStore } from "./stores/aiStore";
 import { useAiDrawerShortcut } from "./hooks/useAiDrawerShortcut";
 import { useWorkspaceStore } from "./stores/workspaceStore";
 import { useActionStore, getPendingRiskAction } from "./stores/actionStore";
@@ -33,6 +33,7 @@ import { getResourceById } from "./lib/resourceRegistry";
 import { openSshTerminalSession } from "./lib/terminalSession";
 import type { DangerCheckResult } from "./lib/commandGuard";
 import { getRouteTitle, useI18n } from "./i18n";
+import { useSettingsStore, AI_DOCK_WIDTH_MIN } from "./stores/settingsStore";
 
 function TopbarPageActions() {
   const { t } = useI18n();
@@ -127,6 +128,8 @@ function AppShell() {
   const isTerminal = location.pathname === "/terminal";
   const [otherRoutesMounted, setOtherRoutesMounted] = useState(!isTerminal);
   const [terminalMounted, setTerminalMounted] = useState(isTerminal);
+  const aiDisplayMode = useSettingsStore((s) => s.aiDisplayMode);
+  const drawerOpen = useAiStore((s) => s.drawerOpen);
   const setActivePath = useWorkspaceStore((state) => state.setActivePath);
   const confirmAction = useActionStore((state) => state.confirmAction);
   const cancelAction = useActionStore((state) => state.cancelAction);
@@ -175,42 +178,93 @@ function AppShell() {
       }
     : null;
 
+  const aiDockWidth = useSettingsStore((s) => s.aiDockWidth);
+  const setAiDockWidth = useSettingsStore((s) => s.setAiDockWidth);
+  const dockWidth = aiDisplayMode === "dockview" && drawerOpen ? `${aiDockWidth}px` : "0px";
+  const dockOpen = aiDisplayMode === "dockview" && drawerOpen;
+  const dragging = useRef(false);
+
+  const handleResizeMouseDown = useCallback(() => {
+    dragging.current = true;
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+  }, []);
+
+  const handleResizeMouseMove = useCallback(
+    (e: MouseEvent) => {
+      if (!dragging.current) return;
+      const vw = window.innerWidth;
+      const maxWidth = Math.round(vw * 0.5);
+      const newWidth = Math.max(AI_DOCK_WIDTH_MIN, Math.min(maxWidth, vw - e.clientX));
+      setAiDockWidth(newWidth);
+    },
+    [setAiDockWidth]
+  );
+
+  const handleResizeMouseUp = useCallback(() => {
+    if (!dragging.current) return;
+    dragging.current = false;
+    document.body.style.cursor = "";
+    document.body.style.userSelect = "";
+  }, []);
+
+  useEffect(() => {
+    window.addEventListener("mousemove", handleResizeMouseMove);
+    window.addEventListener("mouseup", handleResizeMouseUp);
+    return () => {
+      window.removeEventListener("mousemove", handleResizeMouseMove);
+      window.removeEventListener("mouseup", handleResizeMouseUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+  }, [handleResizeMouseMove, handleResizeMouseUp]);
+
   return (
     <div className="app">
       <Sidebar />
-      <div className="main-content">
+      <div
+        className="workspace"
+        style={{ "--ai-dock-w": dockWidth } as React.CSSProperties}
+      >
         <Topbar title={title}>
           <TopbarPageActions />
         </Topbar>
-        <div className="content-area">
-          <div className="content-routes">
-            <div className={`route-panel${isTerminal ? " route-panel--active" : ""}`}>
-              {terminalMounted && <TerminalPanel />}
-            </div>
-            <div className={`route-panel${!isTerminal ? " route-panel--active" : ""}`}>
-              {otherRoutesMounted && (
-                <Routes>
-                  <Route path="/" element={<Dashboard />} />
-                  <Route path="/terminal" element={null} />
-                  <Route path="/ssh" element={<SshRedirect />} />
-                  <Route path="/database" element={<DatabasePanel />} />
-                  <Route path="/docker" element={<DockerPanel />} />
-                  <Route path="/server" element={<ServerPanel />} />
-                  <Route path="/protocol" element={<ProtocolPanel />} />
-                  <Route path="/workflow" element={<WorkflowPanel />} />
-                  <Route path="/knowledge" element={<KnowledgePanel />} />
-                  <Route path="/tasks" element={<TasksPanel />} />
-                  <Route path="/ai-agent" element={<AiAgentPanel />} />
-                  <Route path="/settings" element={<SettingsPanel />} />
-                  <Route path="/editor" element={<FileEditorPanel />} />
-                </Routes>
-              )}
+        <div className="workspace-body">
+          <div className="content-area">
+            <div className="content-routes">
+              <div className={`route-panel${isTerminal ? " route-panel--active" : ""}`}>
+                {terminalMounted && <TerminalPanel />}
+              </div>
+              <div className={`route-panel${!isTerminal ? " route-panel--active" : ""}`}>
+                {otherRoutesMounted && (
+                  <Routes>
+                    <Route path="/" element={<Dashboard />} />
+                    <Route path="/terminal" element={null} />
+                    <Route path="/ssh" element={<SshRedirect />} />
+                    <Route path="/database" element={<DatabasePanel />} />
+                    <Route path="/docker" element={<DockerPanel />} />
+                    <Route path="/server" element={<ServerPanel />} />
+                    <Route path="/protocol" element={<ProtocolPanel />} />
+                    <Route path="/workflow" element={<WorkflowPanel />} />
+                    <Route path="/knowledge" element={<KnowledgePanel />} />
+                    <Route path="/tasks" element={<TasksPanel />} />
+                    <Route path="/settings" element={<SettingsPanel />} />
+                  </Routes>
+                )}
+              </div>
             </div>
           </div>
+          {dockOpen && (
+            <div
+              className="ai-dockview-resize-handle"
+              onMouseDown={handleResizeMouseDown}
+            />
+          )}
+          {aiDisplayMode === "dockview" ? <AiDockView /> : null}
         </div>
         <StatusBar />
       </div>
-      <AiDrawer />
+      {aiDisplayMode !== "dockview" ? <AiDrawer /> : null}
       <CommandPalette />
       <NotificationDrawer />
       <WindowResize />

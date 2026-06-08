@@ -150,10 +150,6 @@ fn export_ipc_bindings() {
         commands::grpc::grpc_call,
         commands::grpc::grpc_list_connections,
         commands::grpc::grpc_close,
-        // File Editor
-        commands::editor::editor_open_file,
-        commands::editor::editor_save_file,
-        commands::editor::editor_list_recent,
         // Protocol Lab — HTTP history & collections
         commands::protocol::http_save_request,
         commands::protocol::http_list_requests,
@@ -181,6 +177,8 @@ fn export_ipc_bindings() {
         commands::protocol::modbus_write_multiple_coils,
         commands::protocol::modbus_write_multiple_registers,
         commands::protocol::modbus_disconnect,
+        commands::proxy::set_proxy_config,
+        commands::proxy::get_proxy_config,
     ]);
 
     // 用 CARGO_MANIFEST_DIR 拼绝对路径，避免 cwd 在不同入口（cargo test/run）下不一致。
@@ -482,10 +480,9 @@ pub fn run() {
             commands::grpc::grpc_call,
             commands::grpc::grpc_list_connections,
             commands::grpc::grpc_close,
-            // File Editor
-            commands::editor::editor_open_file,
-            commands::editor::editor_save_file,
-            commands::editor::editor_list_recent,
+            // Proxy
+            commands::proxy::set_proxy_config,
+            commands::proxy::get_proxy_config,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

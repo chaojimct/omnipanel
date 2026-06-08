@@ -315,7 +315,8 @@ async fn execute_tool(state: &AppState, name: &str, arguments: &str) -> (String,
                 return ("Error: url parameter is required".to_string(), false);
             }
 
-            let client = reqwest::Client::new();
+            let proxy_config = state.proxy_config.lock().await.clone();
+            let client = crate::commands::proxy::build_proxy_client(&proxy_config);
             let mut req = match method.to_uppercase().as_str() {
                 "GET" => client.get(url),
                 "POST" => client.post(url),
@@ -638,7 +639,9 @@ pub async fn ai_add_custom_provider(
     let api_key = api_key.unwrap_or_else(|| "sk-none".to_string());
     let models = models.unwrap_or_else(|| Vec::new());
 
-    let provider = OpenAiProvider::new(&name, &api_key, &base_url, models);
+    let proxy_config = state.proxy_config.lock().await.clone();
+    let client = crate::commands::proxy::build_proxy_client(&proxy_config);
+    let provider = OpenAiProvider::with_client(&name, &api_key, &base_url, models, Some(client));
     let mut registry = state.ai_registry.lock().await;
     registry.register(Box::new(provider));
     Ok(())

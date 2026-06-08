@@ -206,6 +206,80 @@ export function parseModelNames(
   return { ok: true, names };
 }
 
+/** 模型选择 ID 分隔符（providerId + modelName） */
+const MODEL_SELECTION_SEP = "::";
+
+/** 构建对话中使用的模型选择 ID */
+export function buildModelSelectionId(
+  providerId: string,
+  modelName: string
+): string {
+  return `${providerId}${MODEL_SELECTION_SEP}${modelName}`;
+}
+
+/** 解析模型选择 ID */
+export function parseModelSelectionId(
+  selectionId: string
+): { providerId: string; modelName: string } | null {
+  const sep = selectionId.indexOf(MODEL_SELECTION_SEP);
+  if (sep <= 0) return null;
+  const providerId = selectionId.slice(0, sep);
+  const modelName = selectionId.slice(sep + MODEL_SELECTION_SEP.length);
+  if (!providerId || !modelName) return null;
+  return { providerId, modelName };
+}
+
+/** 根据选择 ID 解析出 LangChain 所需的模型配置 */
+export function resolveModelSelection(
+  providers: AiModelProvider[],
+  selectionId: string
+): {
+  apiStandard: ApiStandard;
+  name: string;
+  baseUrl: string;
+  apiKey: string;
+} | null {
+  const parsed = parseModelSelectionId(selectionId);
+  if (!parsed) return null;
+  const provider = providers.find((p) => p.id === parsed.providerId);
+  if (!provider) return null;
+  if (!provider.modelNames.includes(parsed.modelName)) return null;
+  return {
+    apiStandard: provider.apiStandard,
+    name: parsed.modelName,
+    baseUrl: provider.baseUrl,
+    apiKey: provider.apiKey,
+  };
+}
+
+/** 列出所有可选择的模型（扁平化提供商下的多个模型名） */
+export function listModelSelections(
+  providers: AiModelProvider[]
+): { id: string; label: string }[] {
+  const items: { id: string; label: string }[] = [];
+  for (const provider of providers) {
+    for (const modelName of provider.modelNames) {
+      const standard =
+        provider.apiStandard === "anthropic" ? "Anthropic" : "OpenAI";
+      items.push({
+        id: buildModelSelectionId(provider.id, modelName),
+        label: `${provider.providerName} / ${modelName} (${standard})`,
+      });
+    }
+  }
+  return items;
+}
+
+/** 返回第一个可用模型选择 ID，无则 null */
+export function firstModelSelectionId(
+  providers: AiModelProvider[]
+): string | null {
+  const first = providers[0];
+  const modelName = first?.modelNames[0];
+  if (!first || !modelName) return null;
+  return buildModelSelectionId(first.id, modelName);
+}
+
 /** 查找全局重复的模型名称 */
 export function findModelNameConflict(
   providers: AiModelProvider[],

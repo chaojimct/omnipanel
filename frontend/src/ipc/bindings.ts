@@ -281,12 +281,6 @@ export const commands = {
 	grpcCall: (connectionId: string, request: GrpcCallRequest) => typedError<GrpcCallResponse, string>(__TAURI_INVOKE("grpc_call", { connectionId, request })),
 	grpcListConnections: () => typedError<string[], string>(__TAURI_INVOKE("grpc_list_connections")),
 	grpcClose: (connectionId: string) => typedError<null, string>(__TAURI_INVOKE("grpc_close", { connectionId })),
-	/**  Open and read a file */
-	editorOpenFile: (path: string) => typedError<FileContent, string>(__TAURI_INVOKE("editor_open_file", { path })),
-	/**  Save content to a file */
-	editorSaveFile: (path: string, content: string) => typedError<null, string>(__TAURI_INVOKE("editor_save_file", { path, content })),
-	/**  List recently opened files (from storage) */
-	editorListRecent: () => typedError<RecentFile[], string>(__TAURI_INVOKE("editor_list_recent")),
 	httpSaveRequest: (req: SavedHttpRequest) => typedError<null, string>(__TAURI_INVOKE("http_save_request", { req })),
 	httpListRequests: (collectionId: string | null) => typedError<SavedHttpRequest[], string>(__TAURI_INVOKE("http_list_requests", { collectionId })),
 	httpDeleteRequest: (id: string) => typedError<null, string>(__TAURI_INVOKE("http_delete_request", { id })),
@@ -311,6 +305,10 @@ export const commands = {
 	modbusWriteMultipleCoils: (id: string, addr: number, values: boolean[]) => typedError<null, string>(__TAURI_INVOKE("modbus_write_multiple_coils", { id, addr, values })),
 	modbusWriteMultipleRegisters: (id: string, addr: number, values: number[]) => typedError<null, string>(__TAURI_INVOKE("modbus_write_multiple_registers", { id, addr, values })),
 	modbusDisconnect: (id: string) => typedError<null, string>(__TAURI_INVOKE("modbus_disconnect", { id })),
+	/**  Set the proxy configuration from frontend settings. */
+	setProxyConfig: (config: ProxyConfig) => typedError<null, string>(__TAURI_INVOKE("set_proxy_config", { config })),
+	/**  Get the current proxy configuration (for backend use). */
+	getProxyConfig: () => typedError<ProxyConfig, string>(__TAURI_INVOKE("get_proxy_config")),
 };
 
 /* Types */
@@ -866,14 +864,6 @@ export type ErrorCode =
 
 export type ExecutionStatus = "running" | "completed" | "failed" | "cancelled";
 
-export type FileContent = {
-	path: string,
-	content: string,
-	language: string,
-	size: number | null,
-	modified: string | null,
-};
-
 /**  gRPC 调用请求。 */
 export type GrpcCallRequest = {
 	/**  完整方法名，如 `mypackage.MyService/MyMethod` */
@@ -1020,10 +1010,14 @@ export type OmniError_Serialize = {
 	cause?: string | null,
 };
 
-export type RecentFile = {
-	path: string,
-	name: string,
-	openedAt: number | null,
+/**  Proxy 配置，从前端设置同步到后端。 */
+export type ProxyConfig = {
+	enabled: boolean,
+	protocol: string,
+	host: string,
+	port: number,
+	username: string,
+	password: string,
 };
 
 export type RiskLevel = "low" | "medium" | "high" | "critical" | "read_only";

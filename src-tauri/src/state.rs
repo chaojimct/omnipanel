@@ -15,6 +15,17 @@ use omnipanel_exec::{ExecutionEngine, ShellExecutor};
 use omnipanel_ssh::SshSession;
 use omnipanel_store::{DatabaseConnectionStore, Storage};
 
+/// Proxy 配置，从前端设置同步到后端。
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize, specta::Type)]
+pub struct ProxyConfig {
+    pub enabled: bool,
+    pub protocol: String,
+    pub host: String,
+    pub port: u16,
+    pub username: String,
+    pub password: String,
+}
+
 use omnipanel_ai::provider::AiProviderRegistry;
 
 use crate::background::SshPool;
@@ -61,6 +72,8 @@ pub struct AppState {
     pub running_workflows: Arc<Mutex<HashMap<String, Arc<std::sync::atomic::AtomicBool>>>>,
     /// 正在运行的任务后台句柄（按 taskId 索引），用于 task_stop 取消。
     pub running_tasks: Arc<Mutex<HashMap<String, tokio::task::JoinHandle<()>>>>,
+    /// 网络代理配置（由前端通用设置同步而来）。
+    pub proxy_config: Arc<Mutex<ProxyConfig>>,
 }
 
 impl AppState {
@@ -105,6 +118,7 @@ impl AppState {
             ssh_tunnels: Arc::new(Mutex::new(HashMap::new())),
             running_workflows: Arc::new(Mutex::new(HashMap::new())),
             running_tasks: Arc::new(Mutex::new(HashMap::new())),
+            proxy_config: Arc::new(Mutex::new(ProxyConfig::default())),
         }
     }
 }

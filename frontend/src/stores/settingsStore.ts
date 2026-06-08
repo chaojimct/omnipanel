@@ -36,18 +36,49 @@ export const UI_SCALE = {
   step: 5,
 } as const;
 
+export type ProxyProtocol = "http" | "https" | "socks5";
+
+export interface ProxyConfig {
+  enabled: boolean;
+  protocol: ProxyProtocol;
+  host: string;
+  port: number;
+  username: string;
+  password: string;
+}
+
+export const DEFAULT_PROXY: ProxyConfig = {
+  enabled: false,
+  protocol: "http",
+  host: "",
+  port: 8080,
+  username: "",
+  password: "",
+};
+
+export type AiDisplayMode = "subwindow" | "dockview";
+
+export const AI_DOCK_WIDTH_MIN = 300;
+export const AI_DOCK_WIDTH_DEFAULT = 480;
+
 interface SettingsState {
   locale: Locale;
   uiDensity: UiDensity;
   uiScale: number;
   theme: Theme;
   accentColor: AccentColor;
+  proxy: ProxyConfig;
+  aiDisplayMode: AiDisplayMode;
+  aiDockWidth: number;
   resolved: "light" | "dark";
   setLocale: (locale: Locale) => void;
   setUiDensity: (density: UiDensity) => void;
   setUiScale: (percent: number) => void;
   setTheme: (theme: Theme) => void;
   setAccentColor: (color: AccentColor) => void;
+  setProxy: (proxy: ProxyConfig) => void;
+  setAiDisplayMode: (mode: AiDisplayMode) => void;
+  setAiDockWidth: (width: number) => void;
 }
 
 export function clampUiScale(percent: number): number {
@@ -103,6 +134,9 @@ export const useSettingsStore = create<SettingsState>()(
       uiScale: UI_SCALE.default,
       theme: "system",
       accentColor: "blue",
+      proxy: { ...DEFAULT_PROXY },
+      aiDisplayMode: "subwindow",
+      aiDockWidth: AI_DOCK_WIDTH_DEFAULT,
       resolved: resolveTheme("system"),
       setLocale: (locale) => {
         applyDocumentLocale(locale);
@@ -122,6 +156,9 @@ export const useSettingsStore = create<SettingsState>()(
         applyDocumentAccentColor(accentColor);
         set({ accentColor });
       },
+      setProxy: (proxy) => set({ proxy }),
+      setAiDisplayMode: (aiDisplayMode) => set({ aiDisplayMode }),
+      setAiDockWidth: (aiDockWidth) => set({ aiDockWidth }),
     }),
     {
       name: "omnipanel-settings",
@@ -132,6 +169,9 @@ export const useSettingsStore = create<SettingsState>()(
         uiScale: state.uiScale,
         theme: state.theme,
         accentColor: state.accentColor,
+        proxy: state.proxy,
+        aiDisplayMode: state.aiDisplayMode,
+        aiDockWidth: state.aiDockWidth,
       }),
       onRehydrateStorage: () => (state) => {
         applyDocumentLocale(state?.locale ?? "zh-CN");

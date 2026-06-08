@@ -22,6 +22,15 @@ pub struct AnthropicProvider {
 
 impl AnthropicProvider {
     pub fn new(api_key: &str, base_url: Option<&str>, models: Vec<ModelInfo>) -> Self {
+        Self::with_client(api_key, base_url, models, None)
+    }
+
+    pub fn with_client(
+        api_key: &str,
+        base_url: Option<&str>,
+        models: Vec<ModelInfo>,
+        client: Option<Client>,
+    ) -> Self {
         Self {
             api_key: api_key.to_string(),
             base_url: base_url
@@ -29,7 +38,7 @@ impl AnthropicProvider {
                 .trim_end_matches('/')
                 .to_string(),
             models,
-            client: Client::new(),
+            client: client.unwrap_or_else(Client::new),
         }
     }
 }

@@ -14,6 +14,9 @@ import {
   ACCENT_ORDER,
   clampUiScale,
   type Locale,
+  type ProxyConfig,
+  type ProxyProtocol,
+  type AiDisplayMode,
 } from "../../stores/settingsStore";
 import {
   SHORTCUT_DEFS,
@@ -26,6 +29,7 @@ import { AddModelDialog } from "../../components/settings/AddModelDialog";
 import { Button } from "../../components/ui/Button";
 import { useI18n } from "../../i18n";
 import { commands } from "../../ipc/bindings";
+import { invoke } from "@tauri-apps/api/core";
 import type { UpdateInfo } from "../../ipc/bindings";
 
 type Section = "general" | "appearance" | "keybindings" | "ai" | "security" | "terminal" | "data";
@@ -265,6 +269,8 @@ function KeybindingsSection() {
 
 function AiModelsSection() {
   const { t } = useI18n();
+  const aiDisplayMode = useSettingsStore((s) => s.aiDisplayMode);
+  const setAiDisplayMode = useSettingsStore((s) => s.setAiDisplayMode);
   const providers = useAiModelsStore((s) => s.providers);
   const removeProvider = useAiModelsStore((s) => s.removeProvider);
 
@@ -482,6 +488,26 @@ function AiModelsSection() {
         onClose={closeDialog}
         editProvider={editingProvider}
       />
+
+      <div className="settings-section-divider" />
+
+      <div className="settings-section">
+        <h2>{t("settings.aiDisplay.label")}</h2>
+        <p className="section-desc">{t("settings.aiDisplay.desc")}</p>
+        <div className="setting-row">
+          <div className="setting-label">
+            <h4>{t("settings.aiDisplay.label")}</h4>
+          </div>
+          <select
+            className="setting-select"
+            value={aiDisplayMode}
+            onChange={(e) => setAiDisplayMode(e.target.value as AiDisplayMode)}
+          >
+            <option value="subwindow">{t("settings.aiDisplay.subwindow")}</option>
+            <option value="dockview">{t("settings.aiDisplay.dockview")}</option>
+          </select>
+        </div>
+      </div>
     </div>
   );
 }
@@ -498,6 +524,10 @@ export function SettingsPanel() {
   const [restoreSession, setRestoreSession] = useState(true);
   const [checkUpdates, setCheckUpdates] = useState(true);
   const [telemetry, setTelemetry] = useState(false);
+
+  // Proxy settings state
+  const proxy = useSettingsStore((s) => s.proxy);
+  const setProxy = useSettingsStore((s) => s.setProxy);
 
   // Appearance settings state
   const { theme, setTheme, accentColor, setAccentColor } = useSettingsStore();
@@ -589,6 +619,13 @@ export function SettingsPanel() {
       checkUpdateFn();
     }
   }, []);
+
+  // Sync proxy config to backend on change
+  useEffect(() => {
+    invoke("set_proxy_config", { config: proxy }).catch((e) => {
+      console.warn("Failed to sync proxy config to backend:", e);
+    });
+  }, [proxy]);
 
   return (
     <SidebarWorkspace
@@ -733,6 +770,92 @@ export function SettingsPanel() {
                 </div>
                 <Toggle value={telemetry} onChange={setTelemetry} />
               </div>
+
+              {/* Proxy */}
+              <div className="settings-section-divider" />
+              <div className="setting-row">
+                <div className="setting-label">
+                  <h4>{t("settings.proxy.label")}</h4>
+                  <p>{t("settings.proxy.desc")}</p>
+                </div>
+                <Toggle value={proxy.enabled} onChange={(v) => setProxy({ ...proxy, enabled: v })} />
+              </div>
+              {proxy.enabled && (
+                <>
+                  <div className="setting-row">
+                    <div className="setting-label">
+                      <h4>{t("settings.proxy.protocol")}</h4>
+                    </div>
+                    <select
+                      className="setting-select"
+                      value={proxy.protocol}
+                      onChange={(e) => setProxy({ ...proxy, protocol: e.target.value as ProxyProtocol })}
+                    >
+                      <option value="http">HTTP</option>
+                      <option value="https">HTTPS</option>
+                      <option value="socks5">SOCKS5</option>
+                    </select>
+                  </div>
+                  <div className="setting-row" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--sp-3)" }}>
+                    <div>
+                      <div className="setting-label">
+                        <h4>{t("settings.proxy.host")}</h4>
+                      </div>
+                      <input
+                        className="setting-input"
+                        type="text"
+                        placeholder={t("settings.proxy.hostPlaceholder")}
+                        value={proxy.host}
+                        onChange={(e) => setProxy({ ...proxy, host: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <div className="setting-label">
+                        <h4>{t("settings.proxy.port")}</h4>
+                      </div>
+                      <input
+                        className="setting-input"
+                        type="number"
+                        min={1}
+                        max={65535}
+                        value={proxy.port}
+                        onChange={(e) => setProxy({ ...proxy, port: parseInt(e.target.value, 10) || 0 })}
+                      />
+                    </div>
+                  </div>
+                  <div className="setting-row">
+                    <div className="setting-label">
+                      <h4>{t("settings.proxy.auth")}</h4>
+                    </div>
+                  </div>
+                  <div className="setting-row" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--sp-3)" }}>
+                    <div>
+                      <div className="setting-label">
+                        <h4>{t("settings.proxy.username")}</h4>
+                      </div>
+                      <input
+                        className="setting-input"
+                        type="text"
+                        placeholder={t("settings.proxy.usernamePlaceholder")}
+                        value={proxy.username}
+                        onChange={(e) => setProxy({ ...proxy, username: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <div className="setting-label">
+                        <h4>{t("settings.proxy.password")}</h4>
+                      </div>
+                      <input
+                        className="setting-input"
+                        type="password"
+                        placeholder={t("settings.proxy.passwordPlaceholder")}
+                        value={proxy.password}
+                        onChange={(e) => setProxy({ ...proxy, password: e.target.value })}
+                      />
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         )}

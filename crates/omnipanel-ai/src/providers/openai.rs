@@ -24,12 +24,22 @@ pub struct OpenAiProvider {
 
 impl OpenAiProvider {
     pub fn new(name: &str, api_key: &str, base_url: &str, models: Vec<ModelInfo>) -> Self {
+        Self::with_client(name, api_key, base_url, models, None)
+    }
+
+    pub fn with_client(
+        name: &str,
+        api_key: &str,
+        base_url: &str,
+        models: Vec<ModelInfo>,
+        client: Option<Client>,
+    ) -> Self {
         Self {
             name: name.to_string(),
             api_key: api_key.to_string(),
             base_url: base_url.trim_end_matches('/').to_string(),
             models,
-            client: Client::new(),
+            client: client.unwrap_or_else(Client::new),
         }
     }
 }

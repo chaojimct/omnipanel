@@ -34,20 +34,31 @@ impl OllamaProvider {
 
     /// Create an Ollama provider with manually specified models.
     pub fn new(models: Vec<ModelInfo>) -> Self {
+        Self::with_client(models, None)
+    }
+
+    /// Create an Ollama provider with a pre-configured reqwest Client.
+    pub fn with_client(models: Vec<ModelInfo>, client: Option<Client>) -> Self {
         Self {
-            inner: OpenAiProvider::new(
+            inner: OpenAiProvider::with_client(
                 "ollama",
                 "ollama",
                 Self::DEFAULT_BASE_URL,
                 models,
+                client,
             ),
         }
     }
 
     /// Create an Ollama provider with a custom base URL.
     pub fn with_base_url(base_url: &str, models: Vec<ModelInfo>) -> Self {
+        Self::with_base_url_client(base_url, models, None)
+    }
+
+    /// Create an Ollama provider with a custom base URL and pre-configured client.
+    pub fn with_base_url_client(base_url: &str, models: Vec<ModelInfo>, client: Option<Client>) -> Self {
         Self {
-            inner: OpenAiProvider::new("ollama", "ollama", base_url, models),
+            inner: OpenAiProvider::with_client("ollama", "ollama", base_url, models, client),
         }
     }
 

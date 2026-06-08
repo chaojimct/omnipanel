@@ -29,9 +29,11 @@ interface DockWorkspaceProps {
   /** 像素；传字符串（如 `"100%"`）时原样交给 Panel */
   leftMaxPx?: number | string;
   leftPreset?: DockRailPreset;
+  rightPreset?: DockRailPreset;
   rightSizePx?: number;
   rightMinPx?: number;
-  rightMaxPx?: number;
+  /** 像素；传字符串（如 `"100%"`）时原样交给 Panel */
+  rightMaxPx?: number | string;
   bottomSizePx?: number;
   bottomMinPx?: number;
   bottomMaxPx?: number;
@@ -47,9 +49,10 @@ export function DockWorkspace({
   leftSizePx,
   leftMinPx,
   leftMaxPx,
-  rightSizePx = 340,
-  rightMinPx = 280,
-  rightMaxPx = 520,
+  rightPreset = "default",
+  rightSizePx,
+  rightMinPx,
+  rightMaxPx,
   bottomSizePx = 220,
   bottomMinPx = 160,
   bottomMaxPx = 420,
@@ -59,6 +62,11 @@ export function DockWorkspace({
   const leftDefault = leftSizePx ?? rail.defaultSize;
   const leftMin = leftMinPx ?? rail.minSize;
   const leftMax = leftMaxPx ?? rail.maxSize;
+
+  const rightRail = RAIL_PRESETS[rightPreset];
+  const rightDefault = rightSizePx ?? rightRail.defaultSize;
+  const rightMin = rightMinPx ?? rightRail.minSize;
+  const rightMax = rightMaxPx ?? rightRail.maxSize;
 
   const mainContent = bottom ? (
     <DockLayout direction="vertical">
@@ -106,14 +114,14 @@ export function DockWorkspace({
           <>
             <DockHandle />
             <DockPanel
-              defaultSize={rightSizePx}
-              minSize={rightMinPx}
-              maxSize={rightMaxPx}
+              defaultSize={rightDefault}
+              minSize={rightMin}
+              maxSize={rightMax}
               collapsible
               collapsedSize={0}
               className="dock-panel-right"
             >
-              {right}
+              <div className="dock-rail-shell">{right}</div>
             </DockPanel>
           </>
         )}
