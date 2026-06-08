@@ -273,6 +273,7 @@ export const enUS: TranslationDict = {
       workflow: "Workflow",
       knowledge: "Knowledge",
       tasks: "Tasks",
+      aiAgent: "AI Agent",
       settings: "Settings",
       ai: "AI Assistant",
     },
