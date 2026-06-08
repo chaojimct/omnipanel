@@ -2,14 +2,12 @@ import {
   useCallback,
   useEffect,
   useId,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
   type CSSProperties,
   type KeyboardEvent,
 } from "react";
-import { createPortal } from "react-dom";
 import { rankByFuzzy } from "../../lib/fuzzyMatch";
 import { useI18n } from "../../i18n";
 
@@ -27,15 +25,12 @@ export interface SelectProps {
   onChange: (value: string) => void;
   options: SelectOptionsInput;
   placeholder?: string;
-  /** 启用搜索；默认选项数 > searchThreshold 时自动开启 */
   searchable?: boolean;
   searchThreshold?: number;
   disabled?: boolean;
   size?: "sm" | "md";
   className?: string;
   style?: CSSProperties;
-  /** 下拉列表最小宽度与触发器一致 */
-  matchTriggerWidth?: boolean;
   emptyText?: string;
   searchPlaceholder?: string;
   "aria-label"?: string;
@@ -80,7 +75,6 @@ export function Select({
   size = "md",
   className,
   style,
-  matchTriggerWidth = true,
   emptyText,
   searchPlaceholder,
   "aria-label": ariaLabel,
@@ -96,9 +90,7 @@ export function Select({
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [highlightIndex, setHighlightIndex] = useState(0);
-  const [panelStyle, setPanelStyle] = useState<CSSProperties>({
-    visibility: "hidden",
-  });
+  const [dropUp, setDropUp] = useState(false);
 
   const options = useMemo(() => normalizeOptions(optionsInput), [optionsInput]);
   const enableSearch =
@@ -143,58 +135,22 @@ export function Select({
     [close, onChange],
   );
 
-  const updatePanelPosition = useCallback(() => {
+  // Determine if dropdown should open upward
+  const updateDropDirection = useCallback(() => {
     const trigger = triggerRef.current;
-    const panel = panelRef.current;
-    if (!trigger || !panel) return;
-
+    if (!trigger) return;
     const rect = trigger.getBoundingClientRect();
-    const panelRect = panel.getBoundingClientRect();
-    const gap = 4;
-    const padding = 8;
-    const viewportH = window.innerHeight;
-    const viewportW = window.innerWidth;
-
-    let top = rect.bottom + gap;
-    if (top + panelRect.height > viewportH - padding) {
-      const above = rect.top - gap - panelRect.height;
-      if (above >= padding) top = above;
-    }
-
-    let left = rect.left;
-    const width = matchTriggerWidth
-      ? Math.max(rect.width, 160)
-      : Math.max(panelRect.width, 160);
-    if (left + width > viewportW - padding) {
-      left = Math.max(padding, viewportW - padding - width);
-    }
-
-    setPanelStyle({
-      position: "fixed",
-      top,
-      left,
-      width: matchTriggerWidth ? width : undefined,
-      minWidth: matchTriggerWidth ? undefined : width,
-      visibility: "visible",
-      zIndex: 1200,
-    });
-  }, [matchTriggerWidth]);
-
-  useLayoutEffect(() => {
-    if (!open) return;
-    updatePanelPosition();
-  }, [open, filteredOptions.length, enableSearch, updatePanelPosition]);
+    const spaceBelow = window.innerHeight - rect.bottom;
+    setDropUp(spaceBelow < 240 && rect.top > spaceBelow);
+  }, []);
 
   useEffect(() => {
     if (!open) return;
-    const onScroll = () => updatePanelPosition();
-    window.addEventListener("resize", updatePanelPosition);
-    window.addEventListener("scroll", onScroll, true);
-    return () => {
-      window.removeEventListener("resize", updatePanelPosition);
-      window.removeEventListener("scroll", onScroll, true);
-    };
-  }, [open, updatePanelPosition]);
+    updateDropDirection();
+    const onResize = () => updateDropDirection();
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [open, updateDropDirection]);
 
   useEffect(() => {
     if (!open) return;
@@ -218,6 +174,19 @@ export function Select({
       setHighlightIndex(Math.max(0, selectableOptions.length - 1));
     }
   }, [highlightIndex, selectableOptions.length]);
+
+  // Close on outside click
+  useEffect(() => {
+    if (!open) return;
+    const onPointerDown = (e: PointerEvent) => {
+      const root = rootRef.current;
+      if (root && !root.contains(e.target as Node)) {
+        close();
+      }
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, [open, close]);
 
   const handleTriggerKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
     if (disabled) return;
@@ -261,99 +230,6 @@ export function Select({
     .filter(Boolean)
     .join(" ");
 
-  const panel = open
-    ? createPortal(
-        <>
-          <div className="omni-select-backdrop" onMouseDown={close} />
-          <div
-            ref={panelRef}
-            className="omni-select-panel"
-            style={panelStyle}
-            role="listbox"
-            id={listboxId}
-            tabIndex={-1}
-            onKeyDown={handlePanelKeyDown}
-          >
-            {enableSearch && (
-              <div className="omni-select-search">
-                <input
-                  ref={searchRef}
-                  type="text"
-                  className="omni-select-search-input"
-                  value={query}
-                  placeholder={
-                    searchPlaceholder ?? t("ui.select.searchPlaceholder")
-                  }
-                  onChange={(e) => {
-                    setQuery(e.target.value);
-                    setHighlightIndex(0);
-                  }}
-                  onKeyDown={handlePanelKeyDown}
-                />
-              </div>
-            )}
-            <div className="omni-select-options">
-              {filteredOptions.length === 0 ? (
-                <div className="omni-select-empty">
-                  {emptyText ?? t("ui.select.noResults")}
-                </div>
-              ) : (
-                filteredOptions.map((opt) => {
-                  const selectableIndex = selectableOptions.findIndex(
-                    (item) => item.value === opt.value,
-                  );
-                  const highlighted =
-                    !opt.disabled && selectableIndex === highlightIndex;
-                  return (
-                    <button
-                      key={`${opt.value}::${opt.label}`}
-                      type="button"
-                      role="option"
-                      aria-selected={opt.value === value}
-                      disabled={opt.disabled}
-                      className={[
-                        "omni-select-option",
-                        opt.value === value ? "is-selected" : "",
-                        highlighted ? "is-highlighted" : "",
-                        opt.disabled ? "is-disabled" : "",
-                      ]
-                        .filter(Boolean)
-                        .join(" ")}
-                      onMouseEnter={() => {
-                        if (!opt.disabled && selectableIndex >= 0) {
-                          setHighlightIndex(selectableIndex);
-                        }
-                      }}
-                      onMouseDown={(e) => e.preventDefault()}
-                      onClick={() => selectOption(opt)}
-                    >
-                      <span className="omni-select-option-label">{opt.label}</span>
-                      {opt.subtitle ? (
-                        <span className="omni-select-option-sub">{opt.subtitle}</span>
-                      ) : null}
-                      {opt.value === value ? (
-                        <svg
-                          className="omni-select-option-check"
-                          viewBox="0 0 16 16"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          aria-hidden
-                        >
-                          <path d="M3.5 8.5l3 3 6-7" />
-                        </svg>
-                      ) : null}
-                    </button>
-                  );
-                })
-              )}
-            </div>
-          </div>
-        </>,
-        document.body,
-      )
-    : null;
-
   return (
     <div ref={rootRef} className={rootClass} style={style} title={title}>
       <button
@@ -374,7 +250,91 @@ export function Select({
         <span className="omni-select-value">{displayLabel}</span>
         <ChevronIcon />
       </button>
-      {panel}
+      {open && (
+        <div
+          ref={panelRef}
+          className={`omni-select-panel${dropUp ? " omni-select-panel--up" : ""}`}
+          role="listbox"
+          id={listboxId}
+          tabIndex={-1}
+          onKeyDown={handlePanelKeyDown}
+        >
+          {enableSearch && (
+            <div className="omni-select-search">
+              <input
+                ref={searchRef}
+                type="text"
+                className="omni-select-search-input"
+                value={query}
+                placeholder={
+                  searchPlaceholder ?? t("ui.select.searchPlaceholder")
+                }
+                onChange={(e) => {
+                  setQuery(e.target.value);
+                  setHighlightIndex(0);
+                }}
+                onKeyDown={handlePanelKeyDown}
+              />
+            </div>
+          )}
+          <div className="omni-select-options">
+            {filteredOptions.length === 0 ? (
+              <div className="omni-select-empty">
+                {emptyText ?? t("ui.select.noResults")}
+              </div>
+            ) : (
+              filteredOptions.map((opt) => {
+                const selectableIndex = selectableOptions.findIndex(
+                  (item) => item.value === opt.value,
+                );
+                const highlighted =
+                  !opt.disabled && selectableIndex === highlightIndex;
+                return (
+                  <button
+                    key={`${opt.value}::${opt.label}`}
+                    type="button"
+                    role="option"
+                    aria-selected={opt.value === value}
+                    disabled={opt.disabled}
+                    className={[
+                      "omni-select-option",
+                      opt.value === value ? "is-selected" : "",
+                      highlighted ? "is-highlighted" : "",
+                      opt.disabled ? "is-disabled" : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" ")}
+                    onMouseEnter={() => {
+                      if (!opt.disabled && selectableIndex >= 0) {
+                        setHighlightIndex(selectableIndex);
+                      }
+                    }}
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => selectOption(opt)}
+                  >
+                    <span className="omni-select-option-label">{opt.label}</span>
+                    {opt.subtitle ? (
+                      <span className="omni-select-option-sub">{opt.subtitle}</span>
+                    ) : null}
+                    {opt.value === value ? (
+                      <svg
+                        className="omni-select-option-check"
+                        viewBox="0 0 16 16"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        aria-hidden
+                      >
+                        <path d="M3.5 8.5l3 3 6-7" />
+                      </svg>
+                    ) : null}
+                  </button>
+                );
+              })
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
