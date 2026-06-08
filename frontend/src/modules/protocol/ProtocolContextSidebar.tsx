@@ -1,7 +1,7 @@
 import { useI18n } from "../../i18n";
 import { Button } from "../../components/ui/Button";
 
-export type ProtocolKind = "http" | "ws" | "mqtt" | "serial" | "grpc";
+export type ProtocolKind = "http" | "ws" | "mqtt" | "serial" | "grpc" | "sniffer" | "modbus";
 
 const HTTP_HISTORY = [
   { method: "GET", url: "/api/users", status: "200", time: "12ms" },
@@ -93,6 +93,31 @@ export function ProtocolContextSidebar({ protocol }: Props) {
         <Button variant="ghost" size="sm" className="proto-sidebar-action">
           {t("protocol.sidebar.addTopic")}
         </Button>
+      </aside>
+    );
+  }
+
+  if (protocol === "sniffer") {
+    return (
+      <aside className="proto-sidebar">
+        <div className="proto-section-title">Capture Filters</div>
+        {[
+          { label: "All Traffic", filter: "" },
+          { label: "HTTP (tcp/80)", filter: "tcp port 80" },
+          { label: "HTTPS (tcp/443)", filter: "tcp port 443" },
+          { label: "DNS (udp/53)", filter: "udp port 53" },
+          { label: "SSH (tcp/22)", filter: "tcp port 22" },
+          { label: "ICMP Only", filter: "icmp" },
+        ].map((item) => (
+          <button key={item.filter} type="button" className="proto-context-item">
+            <span className="proto-context-body">
+              <span className="proto-context-title">{item.label}</span>
+              <span className="proto-context-meta">
+                {item.filter || "(no filter)"}
+              </span>
+            </span>
+          </button>
+        ))}
       </aside>
     );
   }

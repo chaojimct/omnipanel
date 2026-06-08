@@ -1050,6 +1050,49 @@ export type SshProcessInfo = {
 	command: string,
 };
 
+export type KnowledgeEntry = {
+	id: string,
+	kind: string,
+	title: string,
+	content: string,
+	tags: string[],
+	riskLevel: string,
+	source: string | null,
+	envTag: string | null,
+	language: string | null,
+	usageCount: number,
+	createdAt: string,
+	updatedAt: string,
+};
+
+export type KnowledgeSearchResult = {
+	entry: KnowledgeEntry,
+	snippet: string,
+	score: number,
+};
+
+/**  任务类型。 */
+export type TaskType = "terminal" | "sql" | "docker" | "server" | "ssh" | "ai" | "workflow";
+
+/**  任务状态。 */
+export type TaskStatus = "draft" | "blocked" | "confirmed" | "running" | "completed" | "failed" | "cancelled";
+
+/**  任务风险等级。 */
+export type TaskRisk = "low" | "medium" | "high" | "critical";
+
+/**  任务来源。 */
+export type TaskSource = "user" | "ai" | "system";
+
+/**  工作流类型。 */
+export type WorkflowType = "script" | "template" | "deploy" | "patrol" | "data_flow";
+
+/**  风险等级。 */
+export type WfRiskLevel = "low" | "medium" | "high" | "critical" | "read_only";
+
+/**  步骤类型。 */
+export type StepType = "shell" | "sql" | "docker" | "workflow";
+
+/**  步骤状态。 */
 export type StepStatus = "ready" | "pending" | "running" | "passed" | "failed" | "skipped";
 
 export type StepType = "shell" | "sql" | "docker" | "workflow";

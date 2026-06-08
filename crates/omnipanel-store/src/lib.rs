@@ -3,6 +3,7 @@
 
 mod connection;
 mod database;
+mod http;
 mod knowledge;
 mod paths;
 mod schema_filters;
@@ -12,6 +13,7 @@ mod vault;
 mod workflow;
 
 pub use connection::{Connection, ConnectionKind};
+pub use http::{HttpCollection, HttpHistoryEntry, SavedHttpRequest};
 pub use database::{
     DatabaseConnectionStore, DbConnectionConfig, load_database_connections,
     save_database_connections,

@@ -26,9 +26,10 @@ interface KnowledgeCardProps {
   entry: KnowledgeEntry;
   selected: boolean;
   onClick: () => void;
+  score?: number;
 }
 
-export function KnowledgeCard({ entry, selected, onClick }: KnowledgeCardProps) {
+export function KnowledgeCard({ entry, selected, onClick, score }: KnowledgeCardProps) {
   const { t } = useI18n();
 
   return (
@@ -59,6 +60,14 @@ export function KnowledgeCard({ entry, selected, onClick }: KnowledgeCardProps) 
         <span>{t("knowledge.meta.used", { count: entry.usageCount })}</span>
         <span>·</span>
         <span>{relativeTime(entry.updatedAt)}</span>
+        {score != null && score > 0 && (
+          <>
+            <span>·</span>
+            <span className="knowledge-card-score" title="相关性评分">
+              ⚡ {score}
+            </span>
+          </>
+        )}
       </div>
     </div>
   );
