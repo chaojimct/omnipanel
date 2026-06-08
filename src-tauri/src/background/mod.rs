@@ -5,11 +5,11 @@ use std::sync::Arc;
 use omnipanel_store::Storage;
 pub use ssh_pool::{HostSystemStats, SshHostOverview, SshPool};
 
-/// Background scheduler — SSH 端口可达性探测与周期复检。
+/// Background scheduler — SSH 连接池初始化。
 pub struct BackgroundScheduler;
 
 impl BackgroundScheduler {
-    /// 启动 SSH 端口探测与后台复检循环。
+    /// 启动 SSH 连接池（从存储加载配置，不做列表端口扫描）。
     pub fn start(
         pool: Arc<SshPool>,
         storage: Arc<tokio::sync::Mutex<Storage>>,

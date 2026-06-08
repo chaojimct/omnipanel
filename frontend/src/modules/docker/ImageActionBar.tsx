@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { Modal } from "../../components/ui/Modal";
 import { Button } from "../../components/ui/Button";
+import { FormDialog } from "../../components/ui/FormDialog";
 import type { DockerImageProgress } from "./useDockerWorkspace";
 
 interface ImageActionBarProps {
@@ -64,17 +64,21 @@ export function ImageActionBar({ canManage, onPull, onBuild, onMessage }: ImageA
       <Button variant="secondary" size="sm" disabled={!canManage} onClick={() => setDlg("build")}>
         构建镜像
       </Button>
-      <Modal open={!!dlg} onClose={close}>
-        <div className="modal-dialog" onClick={(e) => e.stopPropagation()}>
-          <div className="modal-header">
-            <h3>{dlg === "pull" ? "拉取镜像" : "构建镜像"}</h3>
-            <Button variant="icon" onClick={close} title="关闭">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
-                <path d="M18 6L6 18M6 6l12 12" />
-              </svg>
-            </Button>
-          </div>
-          <div className="modal-body">
+      <FormDialog
+        open={!!dlg}
+        onClose={close}
+        title={dlg === "pull" ? "拉取镜像" : "构建镜像"}
+        onCancel={close}
+        cancelDisabled={busy}
+        primaryAction={{
+          label: busy ? "执行中…" : "执行",
+          disabled: busy,
+          onClick: () => {
+            if (dlg === "pull") void handlePull();
+            else if (dlg === "build") void handleBuild();
+          },
+        }}
+      >
             {dlg === "pull" && (
               <div className="form-field">
                 <label className="form-label">镜像名</label>
@@ -131,24 +135,7 @@ export function ImageActionBar({ canManage, onPull, onBuild, onMessage }: ImageA
                 ))}
               </div>
             )}
-          </div>
-          <div className="modal-footer">
-            <Button variant="secondary" onClick={close} disabled={busy}>
-              取消
-            </Button>
-            <Button
-              variant="primary"
-              disabled={busy}
-              onClick={() => {
-                if (dlg === "pull") void handlePull();
-                else if (dlg === "build") void handleBuild();
-              }}
-            >
-              {busy ? "执行中…" : "执行"}
-            </Button>
-          </div>
-        </div>
-      </Modal>
+      </FormDialog>
     </>
   );
 }

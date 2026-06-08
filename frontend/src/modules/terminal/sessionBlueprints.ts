@@ -38,7 +38,7 @@ const SESSION_BLUEPRINTS: Record<string, SessionBlueprint> = {
       "systemctl status nginx --no-pager",
     ],
     relatedModules: [
-      { label: "SSH 总览", path: "/ssh", resourceId: "prod-web-01" },
+      { label: "SSH 总览", path: "/server", resourceId: "prod-web-01" },
       { label: "Docker 容器", path: "/docker", resourceId: "docker-prod-web" },
       { label: "Workflow 发布", path: "/workflow" },
     ],
@@ -59,7 +59,7 @@ const SESSION_BLUEPRINTS: Record<string, SessionBlueprint> = {
       "systemctl reload nginx",
     ],
     relatedModules: [
-      { label: "SSH 总览", path: "/ssh", resourceId: "prod-web-02" },
+      { label: "SSH 总览", path: "/server", resourceId: "prod-web-02" },
       { label: "Docker 容器", path: "/docker", resourceId: "docker-prod-web" },
       { label: "Workflow 发布", path: "/workflow" },
     ],
@@ -80,7 +80,7 @@ const SESSION_BLUEPRINTS: Record<string, SessionBlueprint> = {
       "htop",
     ],
     relatedModules: [
-      { label: "SSH 总览", path: "/ssh", resourceId: "staging-bastion" },
+      { label: "SSH 总览", path: "/server", resourceId: "staging-bastion" },
       { label: "服务器监控", path: "/server", resourceId: "staging-api" },
       { label: "Workflow 巡检", path: "/workflow" },
     ],

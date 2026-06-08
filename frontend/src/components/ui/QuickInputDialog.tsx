@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { useI18n } from "../../i18n";
-import { Modal } from "./Modal";
-import { Button } from "./Button";
+import { FormDialog } from "./FormDialog";
 
 export interface QuickInputDialogProps {
   open: boolean;
@@ -36,10 +35,6 @@ export function QuickInputDialog({
     setError(null);
   }, [open, defaultValue]);
 
-  if (!open) {
-    return null;
-  }
-
   const submit = () => {
     const trimmed = value.trim();
     const validationError = validate?.(trimmed) ?? (trimmed ? null : t("quickInput.required"));
@@ -51,47 +46,40 @@ export function QuickInputDialog({
   };
 
   return (
-    <Modal open={open} onClose={onCancel}>
-      <div className="modal-dialog quick-input-dialog" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <div className="quick-input-heading">
-            <h3>{title}</h3>
-            {subtitle && <p className="quick-input-subtitle">{subtitle}</p>}
-          </div>
-          <Button variant="icon" type="button" onClick={onCancel}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
-              <path d="M18 6L6 18M6 6l12 12" />
-            </svg>
-          </Button>
-        </div>
-
-        <div className="modal-body">
-          <input
-            className="input"
-            autoFocus
-            placeholder={placeholder}
-            value={value}
-            onChange={(e) => {
-              setValue(e.target.value);
-              setError(null);
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                submit();
-              }
-              if (e.key === "Escape") {
-                e.preventDefault();
-                onCancel();
-              }
-            }}
-            style={{ width: "100%" }}
-          />
-          {error && (
-            <div style={{ fontSize: "12px", color: "var(--color-danger, #ff3b30)" }}>{error}</div>
-          )}
-        </div>
-      </div>
-    </Modal>
+    <FormDialog
+      open={open}
+      onClose={onCancel}
+      title={title}
+      subtitle={subtitle}
+      size="sm"
+      className="quick-input-dialog"
+      onCancel={onCancel}
+      primaryAction={{ label: t("common.confirm"), onClick: submit }}
+    >
+      <input
+        className="input"
+        autoFocus
+        placeholder={placeholder}
+        value={value}
+        onChange={(e) => {
+          setValue(e.target.value);
+          setError(null);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            submit();
+          }
+          if (e.key === "Escape") {
+            e.preventDefault();
+            onCancel();
+          }
+        }}
+        style={{ width: "100%" }}
+      />
+      {error && (
+        <div style={{ fontSize: "12px", color: "var(--color-danger, #ff3b30)" }}>{error}</div>
+      )}
+    </FormDialog>
   );
 }

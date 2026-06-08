@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { Modal } from "../../components/ui/Modal";
 import { Button } from "../../components/ui/Button";
+import { FormDialog } from "../../components/ui/FormDialog";
 import type { DockerVolumeSummary, DockerCreateVolumeRequest } from "../../ipc/bindings";
 import type { DockerActionResult } from "./useDockerWorkspace";
 
@@ -117,44 +117,38 @@ export function DockerVolumesTab({ volumes, canManage, onRefresh, onCreate, onRe
         ))
       )}
 
-      <Modal open={showCreate} onClose={() => setShowCreate(false)}>
-        <div className="modal-dialog" onClick={(e) => e.stopPropagation()}>
-          <div className="modal-header">
-            <h3>新建卷</h3>
-            <Button variant="icon" onClick={() => setShowCreate(false)} title="关闭">×</Button>
-          </div>
-          <div className="modal-body">
-            <div className="form-field">
-              <label className="form-label">名称</label>
-              <input className="input" value={name} onChange={(e) => setName(e.target.value)} style={{ width: "100%" }} />
-            </div>
-            <div className="form-field">
-              <label className="form-label">驱动</label>
-              <input className="input" value={driver} onChange={(e) => setDriver(e.target.value)} style={{ width: "100%" }} />
-            </div>
-          </div>
-          <div className="modal-footer">
-            <Button variant="secondary" onClick={() => setShowCreate(false)}>取消</Button>
-            <Button
-              variant="primary"
-              disabled={!name.trim()}
-              onClick={async () => {
-                const r = await onCreate({
-                  name: name.trim(),
-                  driver: driver.trim() || null,
-                  labels: [],
-                });
-                if (r.ok) {
-                  setShowCreate(false);
-                  setName("");
-                }
-              }}
-            >
-              创建
-            </Button>
-          </div>
+      <FormDialog
+        open={showCreate}
+        onClose={() => setShowCreate(false)}
+        title="新建卷"
+        onCancel={() => setShowCreate(false)}
+        primaryAction={{
+          label: "创建",
+          disabled: !name.trim(),
+          onClick: () => {
+            void (async () => {
+              const r = await onCreate({
+                name: name.trim(),
+                driver: driver.trim() || null,
+                labels: [],
+              });
+              if (r.ok) {
+                setShowCreate(false);
+                setName("");
+              }
+            })();
+          },
+        }}
+      >
+        <div className="form-field">
+          <label className="form-label">名称</label>
+          <input className="input" value={name} onChange={(e) => setName(e.target.value)} style={{ width: "100%" }} />
         </div>
-      </Modal>
+        <div className="form-field">
+          <label className="form-label">驱动</label>
+          <input className="input" value={driver} onChange={(e) => setDriver(e.target.value)} style={{ width: "100%" }} />
+        </div>
+      </FormDialog>
       {confirm && (
         <ConfirmModal confirm={confirm} onCancel={() => setConfirm(null)} />
       )}

@@ -37,7 +37,7 @@ export interface TopbarTabOptions {
   mode?: TopbarTabMode;
   showAddTab?: boolean;
   addTabTitle?: string;
-  /** 为 false 时清除顶栏标签（用于保活但隐藏的面板） */
+  /** 为 false 时不注册顶栏标签，也不清除已有标签（用于嵌入子模块） */
   enabled?: boolean;
 }
 

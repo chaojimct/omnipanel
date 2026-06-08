@@ -138,12 +138,21 @@
   border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border));
   border-radius: var(--r-full);
 }
-.workspace-empty-page__hint {
+.workspace-empty-page__hint,
+.workspace-empty-page__prompt {
   margin: var(--sp-2) 0 0;
   font-size: 12px;
   color: var(--meta);
   max-width: 24rem;
   line-height: 1.5;
+}
+.workspace-empty-page__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+  margin-top: var(--sp-1);
 }
 .empty-state.compact {
   flex: 1;
@@ -880,7 +889,8 @@
   /* ══════════════════════════════════════════════════════════════════════
      SSH Manager (ssh.html)
      ══════════════════════════════════════════════════════════════════════ */
-  .ssh-layout { display: flex; flex: 1; min-height: 0; overflow: hidden; }
+  .ssh-layout { display: flex; flex: 1; min-height: 0; overflow: hidden; flex-direction: column; }
+  .ssh-layout--embedded { height: 100%; }
   .host-list-panel { width: 100%; min-width: 0; height: 100%; display: flex; flex-direction: column; flex-shrink: 0; background: var(--bg-deeper); overflow: hidden; }
   .host-list-header { padding: var(--sp-3) var(--sp-4); border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: var(--sp-2); }
   .host-list-header h3 { font-size: 13px; font-weight: 600; flex: 1; }
@@ -934,6 +944,19 @@
   .host-item .host-row-1 { display: flex; align-items: center; gap: var(--sp-2); }
   .host-item .host-name { font-size: 12px; font-weight: 500; color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .host-item .host-row-2 { font-size: 11px; color: var(--meta); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .host-panel-badge {
+    flex-shrink: 0;
+    padding: 2px 8px;
+    border-radius: var(--r-sm);
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--accent);
+    background: var(--accent-soft);
+    border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent);
+    line-height: 1.4;
+    align-self: center;
+    margin-right: var(--sp-2);
+  }
   .host-status { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
   .host-status--online { background: var(--success); box-shadow: 0 0 0 2px var(--success-soft); }
   .host-status--offline { background: var(--muted); }
@@ -1192,6 +1215,11 @@
   /* Modal dialog */
   .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 200; display: flex; align-items: center; justify-content: center; }
   .modal-dialog { width: 520px; max-width: 90vw; max-height: 85vh; background: var(--bg); border: 1px solid var(--border); border-radius: var(--r-lg); display: flex; flex-direction: column; box-shadow: 0 24px 64px rgba(0,0,0,0.4); }
+  .form-dialog__heading { flex: 1; min-width: 0; }
+  .form-dialog--sm { width: 480px; }
+  .form-dialog--md { width: 520px; }
+  .form-dialog--lg { width: 640px; }
+  .form-dialog--xl { width: 800px; max-width: 92vw; }
 
   /* ─── SubWindow（居中子窗口，内容由调用方填充） ───────────────────── */
   .subwindow-overlay {
@@ -1428,6 +1456,25 @@
   .form-input { width: 100%; padding: 6px 10px; font-size: 13px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-sm); color: var(--fg); outline: none; box-sizing: border-box; }
   .form-input:focus { border-color: var(--accent); }
   .form-hint { margin: var(--sp-1) 0 0; font-size: 11px; color: var(--meta); line-height: 1.4; }
+  .form-radio-group { display: flex; flex-wrap: wrap; gap: var(--sp-4); padding-top: 2px; }
+  .form-radio-option { display: inline-flex; align-items: center; gap: var(--sp-2); font-size: 13px; color: var(--fg-2); cursor: pointer; user-select: none; }
+  .form-radio-option input[type="radio"] { width: 14px; height: 14px; margin: 0; accent-color: var(--accent); cursor: pointer; }
+  .form-radio-option:has(input:checked) { color: var(--fg); font-weight: 500; }
+  .form-section-title { font-size: 12px; font-weight: 600; color: var(--fg-2); margin: 0 0 var(--sp-3); }
+  .form-section-divider { height: 1px; background: var(--border); margin: var(--sp-4) 0; }
+  .secret-input { position: relative; display: flex; align-items: stretch; width: 100%; }
+  .secret-input .input { padding-right: 72px; }
+  .secret-input__actions {
+    position: absolute;
+    right: 4px;
+    top: 50%;
+    transform: translateY(-50%);
+    display: flex;
+    align-items: center;
+    gap: 2px;
+  }
+  .secret-input textarea + .secret-input__actions { top: var(--sp-2); transform: none; }
+  .secret-input__field--masked { -webkit-text-security: disc; }
   .form-row { display: flex; gap: var(--sp-3); }
   .form-check { display: flex; align-items: center; gap: var(--sp-2); font-size: 12px; color: var(--fg-2); cursor: pointer; }
   .form-check input[type="checkbox"] { accent-color: var(--accent); }
@@ -2071,7 +2118,7 @@
   .server-main { flex: 1; height: 100%; display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; }
   .server-content { flex: 1; overflow-y: auto; padding: var(--sp-4); }
   .server-apps { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
-  .server-apps-toolbar { display: flex; align-items: center; gap: var(--sp-2); padding: 0 var(--sp-6); margin-bottom: var(--sp-2); flex-shrink: 0; }
+  .server-apps-toolbar { display: flex; align-items: center; gap: var(--sp-2); padding: 0 var(--sp-6); margin-top: var(--sp-4); margin-bottom: var(--sp-2); flex-shrink: 0; }
   .server-apps-title { font-size: 12px; font-weight: 600; color: var(--fg-2); }
   .server-apps-error { margin: 0 var(--sp-6) var(--sp-3); padding: var(--sp-3) var(--sp-4); border-radius: var(--r-md); background: var(--danger-soft); color: var(--danger); font-size: 12px; }
   .server-apps-body { flex: 1; min-height: 0; overflow-y: auto; padding: 0 var(--sp-6) var(--sp-4); }
@@ -2104,7 +2151,7 @@
   .server-app-subwindow__body--logs { overflow: hidden; padding: var(--sp-3) var(--sp-4); }
   .server-app-subwindow__detail { flex: 1; min-height: 0; }
   .server-app-subwindow__logs { flex: 1; min-height: 0; }
-  .server-header { display: flex; align-items: center; justify-content: space-between; padding: var(--sp-4) var(--sp-6) var(--sp-3); gap: var(--sp-4); flex-shrink: 0; border-bottom: 1px solid var(--border); }
+  .server-header { display: flex; align-items: center; justify-content: space-between; padding: var(--sp-4) var(--sp-6) var(--sp-3); gap: var(--sp-4); flex-shrink: 0; }
   .server-header strong { display: block; font-size: 14px; }
   .server-header span { display: block; font-size: 11px; color: var(--meta); margin-top: 2px; }
   .monitor-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--sp-3); margin-bottom: var(--sp-4); }
@@ -2592,8 +2639,7 @@
   .ai-model-row-delete:hover { color: var(--danger); background: color-mix(in oklch, var(--danger) 12%, transparent); }
 
   /* Add Model dialog */
-  .add-model-dialog { width: 480px; }
-  .modal-subtitle { font-size: 11px; color: var(--muted); margin-top: 4px; }
+  .modal-subtitle { font-size: 11px; color: var(--muted); margin-top: 4px; line-height: 1.45; }
   .add-model-body { gap: var(--sp-3); padding: var(--sp-5); }
   .form-field-hint { font-size: 11px; color: var(--muted); }
   .form-field-hint-warn { color: var(--warn, #ff9f0a); }

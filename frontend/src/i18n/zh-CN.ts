@@ -253,6 +253,10 @@ export const zhCN = {
     rows: "行",
     readonly: "只读结果",
     editable: "可编辑",
+    copy: "复制",
+    copied: "已复制",
+    showSecret: "显示",
+    hideSecret: "隐藏",
   },
   quickInput: {
     required: "请输入内容",
@@ -701,6 +705,9 @@ export const zhCN = {
     },
   },
   docker: {
+    empty: {
+      localEngine: "无法连接本地 Docker Engine。请启动 Docker Desktop 或本机 Docker 服务后重试。",
+    },
     toolbar: {
       hint: "容器、日志、Compose 与服务器上下文统一管理。",
     },
@@ -766,6 +773,10 @@ export const zhCN = {
     edit: {
       title: "编辑服务器",
     },
+    dialog: {
+      sshSection: "SSH 连接",
+      panelSection: "面板配置",
+    },
     create: {
       title: "创建服务器",
       name: "名称",
@@ -785,10 +796,14 @@ export const zhCN = {
       bt: "宝塔",
       "1panel": "1Panel",
     },
+    hostList: {
+      panelConfigured: "已配置面板",
+    },
     empty: {
       title: "暂无服务器",
       description: '点击"+"按钮或下方按钮添加服务器。',
-      selectServer: "在左侧选择服务器，或在顶栏点击「+」打开服务器标签页。",
+      selectServer: "在左侧选择一台主机以查看已安装应用。",
+      noPanelConfig: "该主机尚未配置面板，请在主机菜单中编辑并填写面板信息。",
     },
     placeholder: "{name} 已就绪。服务器管理功能即将上线。",
     apps: {
@@ -825,6 +840,8 @@ export const zhCN = {
       },
     },
     tabs: {
+      panel: "面板",
+      terminal: "终端",
       openServer: "打开服务器",
       monitor: "监控",
       processes: "进程",

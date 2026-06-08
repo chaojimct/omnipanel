@@ -257,6 +257,10 @@ export const enUS: TranslationDict = {
     rows: "rows",
     readonly: "Read-only result",
     editable: "Editable",
+    copy: "Copy",
+    copied: "Copied",
+    showSecret: "Show",
+    hideSecret: "Hide",
   },
   quickInput: {
     required: "Please enter a value",
@@ -698,6 +702,9 @@ export const enUS: TranslationDict = {
     },
   },
   docker: {
+    empty: {
+      localEngine: "Cannot connect to the local Docker Engine. Start Docker Desktop or the local Docker service, then retry.",
+    },
     toolbar: {
       hint: "Containers, logs, Compose and server context in one place.",
     },
@@ -763,6 +770,10 @@ export const enUS: TranslationDict = {
     edit: {
       title: "Edit Server",
     },
+    dialog: {
+      sshSection: "SSH Connection",
+      panelSection: "Panel Configuration",
+    },
     create: {
       title: "Create Server",
       name: "Name",
@@ -782,10 +793,14 @@ export const enUS: TranslationDict = {
       bt: "aaPanel",
       "1panel": "1Panel",
     },
+    hostList: {
+      panelConfigured: "Panel configured",
+    },
     empty: {
       title: "No Servers",
       description: 'Click the "+" button or the button below to add a server.',
-      selectServer: "Select a server in the sidebar, or use the top bar “+” to open a server tab.",
+      selectServer: "Select a host on the left to view installed apps.",
+      noPanelConfig: "This host has no panel configured. Edit the host and fill in panel settings.",
     },
     placeholder: "{name} is ready. Server management features coming soon.",
     apps: {
@@ -822,6 +837,8 @@ export const enUS: TranslationDict = {
       },
     },
     tabs: {
+      panel: "Panel",
+      terminal: "Terminal",
       openServer: "Open Server",
       monitor: "Monitoring",
       processes: "Processes",

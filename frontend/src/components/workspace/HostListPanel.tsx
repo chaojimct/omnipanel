@@ -11,12 +11,16 @@ import {
 } from "../../lib/sshGroups";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { useI18n } from "../../i18n";
-import { useHostOnlineStatus } from "../../stores/sshConnectionStore";
 import { useSshStats } from "../../stores/sshStatsStore";
 import { syncFromOpenSshConfig, useConnectionStore } from "../../stores/connectionStore";
 import { ContextMenu, type ContextMenuItem } from "../ui/ContextMenu";
 import { WarnAlert } from "../ui/WarnAlert";
-import { SshConnectionDialog } from "../../modules/ssh/SshConnectionDialog";
+import { ServerConnectionDialog } from "../../modules/server/panel/ServerConnectionDialog";
+import {
+  findPanelForSsh,
+  getLinkedConnectionIds,
+  parsePanelConfig,
+} from "../../modules/server/panel/serverConnection";
 import type { Connection } from "../../ipc/bindings";
 
 const HOST_ICON = (
@@ -32,30 +36,23 @@ interface HostListPanelProps {
   onConnect?: (hostId: string) => void;
 }
 
-const SSH_PATH = "/ssh";
+const SSH_PATH = "/server";
 
-function HostStatusDot({ resourceId }: { resourceId: string }) {
-  const status = useHostOnlineStatus(resourceId);
-
-  const cls =
-    status === "online"
-      ? "host-status host-status--online"
-      : status === "connecting"
-        ? "host-status host-status--connecting"
-        : status === "error"
-          ? "host-status host-status--error"
-          : "host-status host-status--unknown";
-
-  const title =
-    status === "online"
-      ? "SSH 端口可达"
-      : status === "connecting"
-        ? "正在探测"
-        : status === "error"
-          ? "SSH 端口不可达"
-          : "未知";
-
-  return <span className={cls} title={title} />;
+function HostPanelBadge({ sshId }: { sshId: string }) {
+  const { t } = useI18n();
+  const connections = useConnectionStore((s) => s.connections);
+  const panel = findPanelForSsh(connections, sshId);
+  if (!panel) return null;
+  const serviceType = parsePanelConfig(panel).serviceType;
+  const label =
+    serviceType === "1panel"
+      ? t("server.serviceType.1panel")
+      : t("server.serviceType.bt");
+  return (
+    <span className="host-panel-badge" title={t("server.hostList.panelConfigured")}>
+      {label}
+    </span>
+  );
 }
 
 function HostOsInfo({ resourceId }: { resourceId: string }) {
@@ -239,7 +236,10 @@ export function HostListPanel({ resources, onConnect }: HostListPanelProps) {
     if (!window.confirm(t("ssh.dialog.confirmDelete", { name: host.name }))) return;
     setDeleting(true);
     try {
-      await removeConn(host.id);
+      const ids = getLinkedConnectionIds(connections, host.id);
+      for (const id of ids) {
+        await removeConn(id);
+      }
     } catch { /* ignore */ }
     setDeleting(false);
   };
@@ -449,7 +449,7 @@ export function HostListPanel({ resources, onConnect }: HostListPanelProps) {
                       <div className="host-row-2">{host.subtitle}</div>
                     </div>
                   </button>
-                  <HostStatusDot resourceId={host.id} />
+                  <HostPanelBadge sshId={host.id} />
                 </div>
               ))}
             </HostGroupSection>
@@ -475,14 +475,11 @@ export function HostListPanel({ resources, onConnect }: HostListPanelProps) {
         onClose={() => setSyncWarnOpen(false)}
       />
 
-      <SshConnectionDialog
+      <ServerConnectionDialog
         open={showDialog}
         onClose={() => { setShowDialog(false); setEditConnection(undefined); }}
-        onSaved={() => {
-          useConnectionStore.getState().refresh();
-          useConnectionStore.getState().refresh();
-        }}
-        editConnection={editConnection}
+        onSaved={() => useConnectionStore.getState().refresh()}
+        editSshConnection={editConnection}
       />
     </div>
   );

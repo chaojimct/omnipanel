@@ -1,6 +1,5 @@
 import { useState, useCallback, useMemo, useEffect } from "react";
-import { Modal } from "../../../components/ui/Modal";
-import { Button } from "../../../components/ui/Button";
+import { FormDialog } from "../../../components/ui/FormDialog";
 import {
   detectCellEditorKind,
   formatCellValue,
@@ -97,30 +96,27 @@ export function CellEditorDialog({
   };
 
   return (
-    <Modal open={open} onClose={onCancel}>
-      <div className="modal-dialog cell-editor-dialog" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <h3>{t("database.cellEditor.title")}</h3>
-        </div>
+    <FormDialog
+      open={open}
+      onClose={onCancel}
+      title={t("database.cellEditor.title")}
+      className="cell-editor-dialog"
+      showCloseButton={false}
+      beforeBody={
         <div className="cell-editor-meta">
           <span className="cell-editor-col-name">{columnName}</span>
           <span className="cell-editor-col-type">{columnType}</span>
           <span className="cell-editor-kind-badge">{LABEL_MAP[editorKind]}</span>
           {isNull && <span className="cell-editor-kind-badge cell-editor-kind-badge--null">NULL</span>}
         </div>
-        <div className="modal-body">
-          {renderEditor()}
-        </div>
-        <div className="modal-footer">
-          <div className="modal-footer-spacer" />
-          <Button type="button" variant="secondary" onClick={onCancel}>
-            {t("common.cancel")}
-          </Button>
-          <Button type="button" variant="primary" onClick={handleSave}>
-            {t("common.confirm")}
-          </Button>
-        </div>
-      </div>
-    </Modal>
+      }
+      onCancel={onCancel}
+      primaryAction={{
+        label: t("common.confirm"),
+        onClick: handleSave,
+      }}
+    >
+      {renderEditor()}
+    </FormDialog>
   );
 }

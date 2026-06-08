@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { useI18n } from "../../i18n";
-import { Modal } from "../../components/ui/Modal";
-import { Button } from "../../components/ui/Button";
+import { FormDialog } from "../../components/ui/FormDialog";
 import type { DbConnectionGroup } from "../../stores/dbGroupStore";
 import {
   type ConnectionFormData,
@@ -66,8 +65,6 @@ export function ConnectionDialog({
     setTesting(false);
     setSaving(false);
   }, [open, defaultGroup]);
-
-  if (!open) return null;
 
   const update = <K extends keyof ConnectionFormData>(key: K, value: ConnectionFormData[K]) => {
     setStatus(null);
@@ -151,18 +148,27 @@ export function ConnectionDialog({
   const busy = testing || saving;
 
   return (
-    <Modal open={open} onClose={onClose}>
-      <div className="modal-dialog" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <h3>{t("database.dialog.title")}</h3>
-          <Button variant="icon" onClick={onClose}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
-              <path d="M18 6L6 18M6 6l12 12" />
-            </svg>
-          </Button>
-        </div>
-
-        <div className="modal-body">
+    <FormDialog
+      open={open}
+      onClose={onClose}
+      title={t("database.dialog.title")}
+      onCancel={onClose}
+      cancelDisabled={busy}
+      status={status}
+      actions={[
+        {
+          label: testing ? t("database.dialog.testing") : t("database.dialog.test"),
+          variant: "ghost",
+          disabled: busy,
+          onClick: () => void handleTest(),
+        },
+      ]}
+      primaryAction={{
+        label: saving ? t("database.dialog.saving") : t("database.dialog.save"),
+        disabled: busy,
+        onClick: () => void handleSave(),
+      }}
+    >
           <div className="form-field">
             <label className="form-label">{t("database.dialog.engine")}</label>
             <div className="engine-grid">
@@ -294,30 +300,6 @@ export function ConnectionDialog({
             </div>
           )}
 
-        </div>
-
-        <div className="modal-footer">
-          <Button variant="secondary" onClick={onClose} disabled={busy}>
-            {t("database.dialog.cancel")}
-          </Button>
-          {status ? (
-            <span
-              className={`modal-footer-status modal-footer-status--${status.kind}`}
-              title={status.message}
-            >
-              {status.message}
-            </span>
-          ) : (
-            <div className="modal-footer-spacer" />
-          )}
-          <Button variant="ghost" onClick={() => void handleTest()} disabled={busy}>
-            {testing ? t("database.dialog.testing") : t("database.dialog.test")}
-          </Button>
-          <Button variant="primary" onClick={() => void handleSave()} disabled={busy}>
-            {saving ? t("database.dialog.saving") : t("database.dialog.save")}
-          </Button>
-        </div>
-      </div>
-    </Modal>
+    </FormDialog>
   );
 }

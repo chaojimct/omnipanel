@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useActionStore } from "../../stores/actionStore";
+import { useServerViewStore } from "../../stores/serverViewStore";
 import { useAiStore } from "../../stores/aiStore";
 import { useTopbarTabs } from "../../hooks/useTopbarTabs";
 import { useI18n } from "../../i18n";
@@ -22,6 +23,7 @@ import { DockerVolumeDrawer } from "./DockerVolumeDrawer";
 import { DockerComposeDrawer } from "./DockerComposeDrawer";
 import { DockerFileEditor } from "./DockerFileEditor";
 import { Button } from "../../components/ui/Button";
+import { WorkspaceEmptyPage } from "../../components/ui/WorkspaceEmptyPage";
 import type { DockerComposeAction } from "../../ipc/bindings";
 import { CreateContainerDialog } from "./CreateContainerDialog";
 import { SwarmPanel } from "./SwarmPanel";
@@ -298,6 +300,12 @@ export function DockerPanel() {
   };
 
   const isOffline = probe?.status === "offline";
+  const isLocalEngine = selectedConnection?.source === "local-engine";
+  const showLocalEngineWelcome =
+    isLocalEngine &&
+    !connectionsLoading &&
+    !dataLoading &&
+    (isOffline || Boolean(error));
 
   const toggleContainerSelect = (id: string) => {
     setSelectedContainers((prev) => {
@@ -402,6 +410,15 @@ export function DockerPanel() {
               添加 Docker 连接
             </Button>
           </div>
+        ) : showLocalEngineWelcome ? (
+          <WorkspaceEmptyPage
+            prompt={t("docker.empty.localEngine")}
+            actions={
+              <Button variant="secondary" size="sm" onClick={refresh}>
+                {t("common.refresh")}
+              </Button>
+            }
+          />
         ) : isOffline ? (
           <div className="docker-empty">
             <div className="docker-empty-title">Docker 未安装或未启动</div>
@@ -1198,7 +1215,10 @@ function ContainerDrawer({
                       <span className="v">{hostLabel ?? "—"}</span>
                     </div>
                     <div className="flex gap-2" style={{ flexWrap: "wrap", marginTop: "var(--sp-2)" }}>
-                      <Button variant="secondary" size="sm" onClick={() => onNavigate("/ssh")}>打开 SSH</Button>
+                      <Button variant="secondary" size="sm" onClick={() => {
+                        useServerViewStore.getState().setViewTab("terminal");
+                        onNavigate("/server");
+                      }}>打开 SSH</Button>
                       <Button variant="secondary" size="sm" onClick={() => onNavigate("/server")}>查看服务器</Button>
                       <Button variant="secondary" size="sm" onClick={() => onSendToAi(detail)}>发送给 AI 分析</Button>
                     </div>

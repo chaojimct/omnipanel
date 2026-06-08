@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import Editor from "@monaco-editor/react";
 import { useKnowledgeStore } from "../../stores/knowledgeStore";
 import { useI18n } from "../../i18n";
+import { FormDialog } from "../../components/ui/FormDialog";
 import type { KnowledgeEntry } from "../../ipc/bindings";
 
 interface CreateEntryDialogProps {
@@ -22,7 +23,6 @@ export function CreateEntryDialog({ open, onClose }: CreateEntryDialogProps) {
   const [language, setLanguage] = useState("");
   const [saving, setSaving] = useState(false);
 
-  // Reset form when dialog opens
   useEffect(() => {
     if (open) {
       setTitle("");
@@ -36,21 +36,6 @@ export function CreateEntryDialog({ open, onClose }: CreateEntryDialogProps) {
     }
   }, [open]);
 
-  // Close on Escape
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        onClose();
-      }
-    };
-    document.addEventListener("keydown", handler);
-    return () => document.removeEventListener("keydown", handler);
-  }, [open, onClose]);
-
-  if (!open) return null;
-
   const handleSubmit = async () => {
     if (!title.trim()) return;
     setSaving(true);
@@ -62,7 +47,7 @@ export function CreateEntryDialog({ open, onClose }: CreateEntryDialogProps) {
       content,
       tags: tags
         .split(",")
-        .map((t) => t.trim())
+        .map((item) => item.trim())
         .filter(Boolean),
       riskLevel,
       source: source || null,
@@ -79,113 +64,108 @@ export function CreateEntryDialog({ open, onClose }: CreateEntryDialogProps) {
     }
   };
 
-  const handleOverlayClick = (e: React.MouseEvent) => {
-    if (e.target === e.currentTarget) {
-      onClose();
-    }
-  };
-
   return (
-    <div className="knowledge-dialog" onClick={handleOverlayClick}>
-      <div className="knowledge-dialog-panel">
-        <div className="knowledge-dialog-header">
-          <h3>{t("knowledge.create")}</h3>
-          <button className="knowledge-dialog-close" onClick={onClose}>
-            ✕
-          </button>
+    <FormDialog
+      open={open}
+      onClose={onClose}
+      title={t("knowledge.create")}
+      size="lg"
+      bodyClassName="knowledge-dialog-body"
+      onCancel={onClose}
+      cancelDisabled={saving}
+      primaryAction={{
+        label: saving ? "…" : t("knowledge.save"),
+        disabled: saving || !title.trim(),
+        onClick: () => void handleSubmit(),
+      }}
+    >
+      <div className="form-field">
+        <label className="form-label">{t("knowledge.title")} *</label>
+        <input
+          className="input"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          placeholder={t("knowledge.title")}
+          autoFocus
+          style={{ width: "100%" }}
+        />
+      </div>
+      <div className="form-row">
+        <div className="form-field" style={{ flex: 1 }}>
+          <label className="form-label">{t("knowledge.type")}</label>
+          <select className="input" value={kind} onChange={(e) => setKind(e.target.value)} style={{ width: "100%" }}>
+            <option value="snippet">{t("knowledge.types.snippet")}</option>
+            <option value="case">{t("knowledge.types.case")}</option>
+            <option value="ai">{t("knowledge.types.ai")}</option>
+          </select>
         </div>
-        <div className="knowledge-dialog-body">
-          <div className="knowledge-field">
-            <label>{t("knowledge.title")} *</label>
-            <input
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder={t("knowledge.title")}
-              autoFocus
-            />
-          </div>
-          <div className="knowledge-field-row">
-            <div className="knowledge-field">
-              <label>{t("knowledge.type")}</label>
-              <select value={kind} onChange={(e) => setKind(e.target.value)}>
-                <option value="snippet">{t("knowledge.types.snippet")}</option>
-                <option value="case">{t("knowledge.types.case")}</option>
-                <option value="ai">{t("knowledge.types.ai")}</option>
-              </select>
-            </div>
-            <div className="knowledge-field">
-              <label>{t("knowledge.riskLevel")}</label>
-              <select
-                value={riskLevel}
-                onChange={(e) => setRiskLevel(e.target.value)}
-              >
-                <option value="safe">{t("knowledge.risks.safe")}</option>
-                <option value="readonly">{t("knowledge.risks.readonly")}</option>
-                <option value="medium">{t("knowledge.risks.medium")}</option>
-                <option value="dangerous">{t("knowledge.risks.dangerous")}</option>
-              </select>
-            </div>
-          </div>
-          <div className="knowledge-field">
-            <label>{t("knowledge.content")}</label>
-            <div className="knowledge-editor-shell">
-              <Editor
-                height="240px"
-                language="markdown"
-                theme="vs-dark"
-                value={content}
-                onChange={(v) => setContent(v ?? "")}
-                options={{
-                  minimap: { enabled: false },
-                  fontSize: 13,
-                  lineNumbers: "on",
-                  wordWrap: "on",
-                  scrollBeyondLastLine: false,
-                  padding: { top: 8, bottom: 8 },
-                }}
-              />
-            </div>
-          </div>
-          <div className="knowledge-field-row">
-            <div className="knowledge-field">
-              <label>{t("knowledge.source")}</label>
-              <input
-                value={source}
-                onChange={(e) => setSource(e.target.value)}
-                placeholder={t("knowledge.source")}
-              />
-            </div>
-            <div className="knowledge-field">
-              <label>{t("knowledge.language")}</label>
-              <input
-                value={language}
-                onChange={(e) => setLanguage(e.target.value)}
-                placeholder={t("knowledge.language")}
-              />
-            </div>
-          </div>
-          <div className="knowledge-field">
-            <label>{t("knowledge.tags")} (逗号分隔)</label>
-            <input
-              value={tags}
-              onChange={(e) => setTags(e.target.value)}
-              placeholder="tag1, tag2, tag3"
-            />
-          </div>
-        </div>
-        <div className="knowledge-dialog-footer">
-          <button className="knowledge-btn" onClick={onClose}>
-            {t("knowledge.cancel")}
-          </button>
-          <button
-            className="knowledge-btn knowledge-btn-primary"
-            onClick={handleSubmit}
-            disabled={saving || !title.trim()}
+        <div className="form-field" style={{ flex: 1 }}>
+          <label className="form-label">{t("knowledge.riskLevel")}</label>
+          <select
+            className="input"
+            value={riskLevel}
+            onChange={(e) => setRiskLevel(e.target.value)}
+            style={{ width: "100%" }}
           >
-            {saving ? "…" : t("knowledge.save")}
-          </button>
+            <option value="safe">{t("knowledge.risks.safe")}</option>
+            <option value="readonly">{t("knowledge.risks.readonly")}</option>
+            <option value="medium">{t("knowledge.risks.medium")}</option>
+            <option value="dangerous">{t("knowledge.risks.dangerous")}</option>
+          </select>
         </div>
       </div>
-    </div>
+      <div className="form-field">
+        <label className="form-label">{t("knowledge.content")}</label>
+        <div className="knowledge-editor-shell">
+          <Editor
+            height="240px"
+            language="markdown"
+            theme="vs-dark"
+            value={content}
+            onChange={(v) => setContent(v ?? "")}
+            options={{
+              minimap: { enabled: false },
+              fontSize: 13,
+              lineNumbers: "on",
+              wordWrap: "on",
+              scrollBeyondLastLine: false,
+              padding: { top: 8, bottom: 8 },
+            }}
+          />
+        </div>
+      </div>
+      <div className="form-row">
+        <div className="form-field" style={{ flex: 1 }}>
+          <label className="form-label">{t("knowledge.source")}</label>
+          <input
+            className="input"
+            value={source}
+            onChange={(e) => setSource(e.target.value)}
+            placeholder={t("knowledge.source")}
+            style={{ width: "100%" }}
+          />
+        </div>
+        <div className="form-field" style={{ flex: 1 }}>
+          <label className="form-label">{t("knowledge.language")}</label>
+          <input
+            className="input"
+            value={language}
+            onChange={(e) => setLanguage(e.target.value)}
+            placeholder={t("knowledge.language")}
+            style={{ width: "100%" }}
+          />
+        </div>
+      </div>
+      <div className="form-field">
+        <label className="form-label">{t("knowledge.tags")} (逗号分隔)</label>
+        <input
+          className="input"
+          value={tags}
+          onChange={(e) => setTags(e.target.value)}
+          placeholder="tag1, tag2, tag3"
+          style={{ width: "100%" }}
+        />
+      </div>
+    </FormDialog>
   );
 }

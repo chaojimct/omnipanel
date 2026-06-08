@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { Modal } from "../../components/ui/Modal";
 import { Button } from "../../components/ui/Button";
+import { FormDialog } from "../../components/ui/FormDialog";
 import type { DockerNetworkSummary, DockerCreateNetworkRequest } from "../../ipc/bindings";
 import type { DockerActionResult } from "./useDockerWorkspace";
 
@@ -97,58 +97,52 @@ export function DockerNetworksTab({ networks, canManage, onRefresh, onCreate, on
           ))
       )}
 
-      <Modal open={showCreate} onClose={() => setShowCreate(false)}>
-        <div className="modal-dialog" onClick={(e) => e.stopPropagation()}>
-          <div className="modal-header">
-            <h3>新建网络</h3>
-            <Button variant="icon" onClick={() => setShowCreate(false)} title="关闭">×</Button>
-          </div>
-          <div className="modal-body">
-            <div className="form-field">
-              <label className="form-label">名称</label>
-              <input className="input" value={name} onChange={(e) => setName(e.target.value)} style={{ width: "100%" }} />
-            </div>
-            <div className="form-field">
-              <label className="form-label">驱动</label>
-              <select className="input" value={driver} onChange={(e) => setDriver(e.target.value)} style={{ width: "100%" }}>
-                <option value="bridge">bridge</option>
-                <option value="overlay">overlay</option>
-                <option value="macvlan">macvlan</option>
-              </select>
-            </div>
-            <div className="form-field">
-              <label className="form-label">子网（CIDR，可选）</label>
-              <input className="input" value={subnet} onChange={(e) => setSubnet(e.target.value)} placeholder="172.20.0.0/16" style={{ width: "100%" }} />
-            </div>
-            <div className="form-field" style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-              <input id="net-internal" type="checkbox" checked={internal} onChange={(e) => setInternal(e.target.checked)} />
-              <label htmlFor="net-internal" className="form-label" style={{ marginBottom: 0 }}>内部网络（无外网）</label>
-            </div>
-          </div>
-          <div className="modal-footer">
-            <Button variant="secondary" onClick={() => setShowCreate(false)}>取消</Button>
-            <Button
-              variant="primary"
-              disabled={!name.trim()}
-              onClick={async () => {
-                const r = await onCreate({
-                  name: name.trim(),
-                  driver: driver.trim() || null,
-                  internal,
-                  subnet: subnet.trim() || null,
-                });
-                if (r.ok) {
-                  setShowCreate(false);
-                  setName("");
-                  setSubnet("");
-                }
-              }}
-            >
-              创建
-            </Button>
-          </div>
+      <FormDialog
+        open={showCreate}
+        onClose={() => setShowCreate(false)}
+        title="新建网络"
+        onCancel={() => setShowCreate(false)}
+        primaryAction={{
+          label: "创建",
+          disabled: !name.trim(),
+          onClick: () => {
+            void (async () => {
+              const r = await onCreate({
+                name: name.trim(),
+                driver: driver.trim() || null,
+                internal,
+                subnet: subnet.trim() || null,
+              });
+              if (r.ok) {
+                setShowCreate(false);
+                setName("");
+                setSubnet("");
+              }
+            })();
+          },
+        }}
+      >
+        <div className="form-field">
+          <label className="form-label">名称</label>
+          <input className="input" value={name} onChange={(e) => setName(e.target.value)} style={{ width: "100%" }} />
         </div>
-      </Modal>
+        <div className="form-field">
+          <label className="form-label">驱动</label>
+          <select className="input" value={driver} onChange={(e) => setDriver(e.target.value)} style={{ width: "100%" }}>
+            <option value="bridge">bridge</option>
+            <option value="overlay">overlay</option>
+            <option value="macvlan">macvlan</option>
+          </select>
+        </div>
+        <div className="form-field">
+          <label className="form-label">子网（CIDR，可选）</label>
+          <input className="input" value={subnet} onChange={(e) => setSubnet(e.target.value)} placeholder="172.20.0.0/16" style={{ width: "100%" }} />
+        </div>
+        <div className="form-field" style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+          <input id="net-internal" type="checkbox" checked={internal} onChange={(e) => setInternal(e.target.checked)} />
+          <label htmlFor="net-internal" className="form-label" style={{ marginBottom: 0 }}>内部网络（无外网）</label>
+        </div>
+      </FormDialog>
       {confirm && (
         <ConfirmModal confirm={confirm} onCancel={() => setConfirm(null)} />
       )}
