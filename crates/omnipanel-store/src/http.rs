@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use super::storage::Storage;
 
 /// 保存的 HTTP 请求。
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct SavedHttpRequest {
     pub id: String,
@@ -19,32 +19,41 @@ pub struct SavedHttpRequest {
     pub auth_type: String,
     pub auth_value: String,
     pub collection_id: Option<String>,
+    #[specta(type = f64)]
     pub created_at: i64,
+    #[specta(type = f64)]
     pub updated_at: i64,
 }
 
 /// HTTP 请求历史记录。
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct HttpHistoryEntry {
     pub id: String,
     pub method: String,
     pub url: String,
+    #[specta(type = f64)]
     pub status_code: Option<i64>,
+    #[specta(type = f64)]
     pub response_time_ms: Option<i64>,
+    #[specta(type = f64)]
     pub request_size: Option<i64>,
+    #[specta(type = f64)]
     pub response_size: Option<i64>,
+    #[specta(type = f64)]
     pub created_at: i64,
 }
 
 /// HTTP 集合。
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct HttpCollection {
     pub id: String,
     pub name: String,
     pub description: String,
+    #[specta(type = f64)]
     pub created_at: i64,
+    #[specta(type = f64)]
     pub updated_at: i64,
 }
 

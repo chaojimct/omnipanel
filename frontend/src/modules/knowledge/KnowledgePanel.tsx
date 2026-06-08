@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useKnowledgeStore, type KnowledgeTab } from "../../stores/knowledgeStore";
 import { useI18n } from "../../i18n";
-import { SidebarWorkspace } from "../../components/ui/SidebarWorkspace";
 import { Button } from "../../components/ui/Button";
 import { KnowledgeCard } from "./KnowledgeCard";
 import { KnowledgeDetail } from "./KnowledgeDetail";
@@ -18,7 +17,7 @@ export function KnowledgePanel() {
   const { t } = useI18n();
   const {
     entries, searchResults, allTags,
-    activeTab, searchQuery, selectedTag, selectedEntryId, editingEntry,
+    activeTab, searchQuery, selectedTag, selectedEntryId,
     isLoading, error,
     loadEntries, loadTags, search,
     setActiveTab, setSearchQuery, setSelectedTag, setSelectedEntry, setEditingEntry, clearError,
@@ -55,20 +54,6 @@ export function KnowledgePanel() {
   const displayEntries = searchQuery.trim()
     ? searchResults.map((r) => r.entry)
     : entries;
-
-  const selectedEntry = displayEntries.find((e) => e.id === selectedEntryId) ?? null;
-
-  // 相对时间
-  const relativeTime = (ts: number) => {
-    const diff = Date.now() - ts;
-    const mins = Math.floor(diff / 60000);
-    if (mins < 1) return t("knowledge.time.justNow");
-    if (mins < 60) return t("knowledge.time.minutesAgo", { n: mins });
-    const hours = Math.floor(mins / 60);
-    if (hours < 24) return t("knowledge.time.hoursAgo", { n: hours });
-    const days = Math.floor(hours / 24);
-    return t("knowledge.time.daysAgo", { n: days });
-  };
 
   return (
     <div className="knowledge-panel">
@@ -133,9 +118,9 @@ export function KnowledgePanel() {
           <span className="knowledge-list-count">
             {isLoading ? "…" : `${displayEntries.length} ${t("knowledge.entries")}`}
           </span>
-          <button className="btn btn-primary btn-sm" onClick={() => setShowCreate(true)}>
+          <Button variant="primary" size="sm" onClick={() => setShowCreate(true)}>
             + {t("knowledge.create")}
-          </button>
+          </Button>
         </div>
 
         {error && (
@@ -159,7 +144,7 @@ export function KnowledgePanel() {
                   score={result.score}
                 />
               ))
-            : entries.map((entry) => (
+            : displayEntries.map((entry) => (
                 <KnowledgeCard
                   key={entry.id}
                   entry={entry}
@@ -171,117 +156,39 @@ export function KnowledgePanel() {
                 />
               ))}
 
-          <div className="knowledge-categories">
-            <div className="knowledge-section-title">{t("knowledge.categories")}</div>
-            {(["all", "snippet", "case", "ai"] as KnowledgeTab[]).map((tab) => (
-              <div
-                key={tab}
-                className={`knowledge-category-tab ${activeTab === tab ? "active" : ""}`}
-                onClick={() => setActiveTab(tab)}
-              >
-                <span className="knowledge-tab-icon">{TAB_ICONS[tab]}</span>
-                <span>{t(`knowledge.nav.${tab}`)}</span>
+          {!isLoading && displayEntries.length === 0 && (
+            <div className="knowledge-empty">
+              <div className="knowledge-empty-icon">📚</div>
+              <div className="knowledge-empty-title">
+                {searchQuery.trim() ? t("knowledge.noResults") : t("knowledge.noEntries")}
               </div>
-            ))}
-          </div>
-
-          <div className="knowledge-tags-section">
-            <div className="knowledge-section-title">{t("knowledge.tags")}</div>
-            <div className="knowledge-tag-cloud">
-              {selectedTag && (
-                <span
-                  className="knowledge-tag-pill active"
-                  onClick={() => setSelectedTag(null)}
-                >
-                  ✕ {selectedTag}
-                </span>
+              {!searchQuery.trim() && (
+                <div className="knowledge-empty-desc">{t("knowledge.createFirst")}</div>
               )}
-              {allTags.map((tag) => (
-                <span
-                  key={tag}
-                  className={`knowledge-tag-pill ${selectedTag === tag ? "active" : ""}`}
-                  onClick={() => setSelectedTag(selectedTag === tag ? null : tag)}
-                >
-                  {tag}
-                </span>
-              ))}
-              {allTags.length === 0 && (
-                <span className="text-muted text-sm">{t("knowledge.noTags")}</span>
-              )}
-            </div>
-          </div>
-        </div>
-      }
-    >
-      {/* ── 主区域：列表 + 详情 ─────────────────────────────── */}
-      <div className="knowledge-main">
-        {/* ── 中间列表 ─────────────────────────────── */}
-        <div className="knowledge-list">
-          <div className="knowledge-list-header">
-            <span className="knowledge-list-count">
-              {isLoading ? "…" : `${displayEntries.length} ${t("knowledge.entries")}`}
-            </span>
-            <Button variant="primary" size="sm" onClick={() => setShowCreate(true)}>
-              + {t("knowledge.create")}
-            </Button>
-          </div>
-
-          {error && (
-            <div className="knowledge-error">
-              <span>{error}</span>
-              <button onClick={clearError}>×</button>
             </div>
           )}
 
-          <div className="knowledge-list-body">
-            {displayEntries.map((entry) => (
-              <KnowledgeCard
-                key={entry.id}
-                entry={entry}
-                selected={entry.id === selectedEntryId}
-                onClick={() => {
-                  setSelectedEntry(entry.id);
-                  setEditingEntry(null);
-                }}
-                relativeTime={relativeTime}
-              />
-            ))}
-
-            {!isLoading && displayEntries.length === 0 && (
-              <div className="knowledge-empty">
-                <div className="knowledge-empty-icon">📚</div>
-                <div className="knowledge-empty-title">
-                  {searchQuery.trim() ? t("knowledge.noResults") : t("knowledge.noEntries")}
-                </div>
-                {!searchQuery.trim() && (
-                  <div className="knowledge-empty-desc">{t("knowledge.createFirst")}</div>
-                )}
-              </div>
-            )}
-
-            {isLoading && (
-              <div className="knowledge-loading">
-                <div className="knowledge-loading-spinner" />
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* ── 右侧详情 ─────────────────────────────── */}
-        <div className="knowledge-detail">
-          {selectedEntry ? (
-            <KnowledgeDetail entry={selectedEntry} relativeTime={relativeTime} />
-          ) : (
-            <div className="knowledge-detail-empty">
-              <div className="knowledge-detail-empty-icon">📝</div>
-              <div className="text-muted">{t("knowledge.selectEntry")}</div>
+          {isLoading && (
+            <div className="knowledge-loading">
+              <div className="knowledge-loading-spinner" />
             </div>
           )}
         </div>
       </div>
 
-      {/* ── 新建对话框 ───────────────────────────── */}
-      {showCreate && <CreateEntryDialog onClose={() => setShowCreate(false)} />}
-    </SidebarWorkspace>
+      {/* ── 右侧详情 ─────────────────────────────── */}
+      <div className="knowledge-detail">
+        {selectedEntryId ? (
+          <KnowledgeDetail />
+        ) : (
+          <div className="knowledge-detail-empty">
+            <div className="knowledge-detail-empty-icon">📝</div>
+            <div className="text-muted">{t("knowledge.selectEntry")}</div>
+          </div>
+        )}
+      </div>
+
+      <CreateEntryDialog open={showCreate} onClose={() => setShowCreate(false)} />
+    </div>
   );
 }

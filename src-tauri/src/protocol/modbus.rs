@@ -1,10 +1,7 @@
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::sync::Arc;
-use tokio::sync::Mutex;
 
 /// Modbus 连接配置。
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct ModbusConfig {
     pub host: String,
     pub port: u16,
@@ -14,7 +11,7 @@ pub struct ModbusConfig {
 
 /// Modbus 会话。
 pub struct ModbusSession {
-    pub config: ModbusConfig,
+    _config: ModbusConfig,
     pub connected: bool,
 }
 
@@ -22,7 +19,7 @@ impl ModbusSession {
     pub fn connect(config: ModbusConfig) -> Result<Self, String> {
         // Stub: mark as connected
         Ok(Self {
-            config,
+            _config: config,
             connected: true,
         })
     }
@@ -93,5 +90,3 @@ impl ModbusSession {
         Ok(())
     }
 }
-
-pub type ModbusSessions = Arc<Mutex<HashMap<String, ModbusSession>>>;

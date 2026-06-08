@@ -3,21 +3,23 @@ use tauri::State;
 
 use crate::state::AppState;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct FileContent {
     pub path: String,
     pub content: String,
     pub language: String,
+    #[specta(type = f64)]
     pub size: u64,
     pub modified: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct RecentFile {
     pub path: String,
     pub name: String,
+    #[specta(type = f64)]
     pub opened_at: i64,
 }
 
@@ -59,6 +61,7 @@ fn detect_language(path: &str) -> String {
 
 /// Open and read a file
 #[tauri::command]
+#[specta::specta]
 pub async fn editor_open_file(path: String) -> Result<FileContent, String> {
     let metadata = std::fs::metadata(&path).map_err(|e| format!("Failed to stat file: {}", e))?;
     let content = std::fs::read_to_string(&path)
@@ -83,6 +86,7 @@ pub async fn editor_open_file(path: String) -> Result<FileContent, String> {
 
 /// Save content to a file
 #[tauri::command]
+#[specta::specta]
 pub async fn editor_save_file(path: String, content: String) -> Result<(), String> {
     std::fs::write(&path, &content).map_err(|e| format!("Failed to write file: {}", e))?;
     Ok(())
@@ -90,6 +94,7 @@ pub async fn editor_save_file(path: String, content: String) -> Result<(), Strin
 
 /// List recently opened files (from storage)
 #[tauri::command]
+#[specta::specta]
 pub async fn editor_list_recent(state: State<'_, AppState>) -> Result<Vec<RecentFile>, String> {
     let storage = state.storage.lock().await;
     // Use a simple approach: read from a recent_files table or return empty

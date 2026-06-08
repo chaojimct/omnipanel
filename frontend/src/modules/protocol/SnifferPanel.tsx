@@ -163,7 +163,7 @@ export function SnifferPanel() {
     if (!selectedIface) return;
     try {
       const id = await invoke<string>("sniffer_start_capture", {
-        interface: selectedIface,
+        iface: selectedIface,
         filter: filter || "",
       });
       setCaptureId(id);

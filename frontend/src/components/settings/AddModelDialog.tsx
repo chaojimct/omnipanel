@@ -1,22 +1,26 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { FormDialog } from "../ui/FormDialog";
 import { useI18n } from "../../i18n";
 import {
   defaultBaseUrlFor,
-  findNameConflict,
+  findModelNameConflict,
   isValidBaseUrl,
+  parseModelNames,
   useAiModelsStore,
+  type AiModelProvider,
   type ApiStandard,
 } from "../../stores/aiModelsStore";
 
 interface AddModelDialogProps {
   open: boolean;
   onClose: () => void;
-  onCreated?: (id: string) => void;
+  /** 传入时为编辑模式 */
+  editProvider?: AiModelProvider | null;
 }
 
 interface FormState {
-  name: string;
+  providerName: string;
+  modelNames: string;
   apiStandard: ApiStandard;
   baseUrl: string;
   apiKey: string;
@@ -24,7 +28,8 @@ interface FormState {
 }
 
 const EMPTY_FORM: FormState = {
-  name: "",
+  providerName: "",
+  modelNames: "",
   apiStandard: "openai",
   baseUrl: "",
   apiKey: "",
@@ -36,24 +41,32 @@ const API_STANDARD_OPTIONS: { value: ApiStandard; label: string }[] = [
   { value: "anthropic", label: "Anthropic" },
 ];
 
-export function AddModelDialog({ open, onClose, onCreated }: AddModelDialogProps) {
+export function AddModelDialog({ open, onClose, editProvider }: AddModelDialogProps) {
   const { t } = useI18n();
-  const models = useAiModelsStore((s) => s.models);
-  const addModel = useAiModelsStore((s) => s.addModel);
+  const providers = useAiModelsStore((s) => s.providers);
+  const addProvider = useAiModelsStore((s) => s.addProvider);
+  const updateProvider = useAiModelsStore((s) => s.updateProvider);
 
+  const isEdit = Boolean(editProvider);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
-    setForm({ ...EMPTY_FORM, baseUrl: defaultBaseUrlFor(EMPTY_FORM.apiStandard) });
+    if (editProvider) {
+      setForm({
+        providerName: editProvider.providerName,
+        modelNames: editProvider.modelNames.join(", "),
+        apiStandard: editProvider.apiStandard,
+        baseUrl: editProvider.baseUrl,
+        apiKey: "",
+        baseUrlTouched: true,
+      });
+    } else {
+      setForm({ ...EMPTY_FORM, baseUrl: defaultBaseUrlFor(EMPTY_FORM.apiStandard) });
+    }
     setError(null);
-  }, [open]);
-
-  const conflict = useMemo(
-    () => (form.name.trim() ? findNameConflict(models, form.name) : null),
-    [models, form.name],
-  );
+  }, [open, editProvider]);
 
   const updateField = <K extends keyof FormState>(key: K, value: FormState[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -72,30 +85,78 @@ export function AddModelDialog({ open, onClose, onCreated }: AddModelDialogProps
     setError(null);
   };
 
+  const validateModelNames = (excludeProviderId?: string) => {
+    const parsed = parseModelNames(form.modelNames);
+    if (!parsed.ok) {
+      setError(t("settings.aiModels.errors.nameDuplicateInInput", { name: parsed.duplicate }));
+      return null;
+    }
+    if (parsed.names.length === 0) {
+      setError(t("settings.aiModels.errors.modelNamesRequired"));
+      return null;
+    }
+    for (const name of parsed.names) {
+      const conflict = findModelNameConflict(providers, name, excludeProviderId);
+      if (conflict) {
+        setError(
+          t("settings.aiModels.errors.modelNameDuplicate", {
+            name: conflict.modelName,
+            provider: conflict.providerName,
+          })
+        );
+        return null;
+      }
+    }
+    return parsed.names;
+  };
+
   const submit = () => {
-    const name = form.name.trim();
+    const providerName = form.providerName.trim();
     const baseUrl = form.baseUrl.trim();
     const apiKey = form.apiKey.trim();
 
-    if (!name) {
-      setError(t("settings.aiModels.errors.nameRequired"));
-      return;
-    }
-    if (conflict) {
-      setError(t("settings.aiModels.errors.nameDuplicate", { name: conflict.name }));
+    if (!providerName) {
+      setError(t("settings.aiModels.errors.providerNameRequired"));
       return;
     }
     if (!isValidBaseUrl(baseUrl)) {
       setError(t("settings.aiModels.errors.baseUrlInvalid"));
       return;
     }
+
+    if (isEdit && editProvider) {
+      const modelNames = validateModelNames(editProvider.id);
+      if (!modelNames) return;
+      if (!apiKey && !editProvider.apiKey) {
+        setError(t("settings.aiModels.errors.apiKeyRequired"));
+        return;
+      }
+
+      updateProvider(editProvider.id, {
+        providerName,
+        modelNames,
+        apiStandard: form.apiStandard,
+        baseUrl,
+        ...(apiKey ? { apiKey } : {}),
+      });
+      onClose();
+      return;
+    }
+
+    const modelNames = validateModelNames();
+    if (!modelNames) return;
     if (!apiKey) {
       setError(t("settings.aiModels.errors.apiKeyRequired"));
       return;
     }
 
-    const created = addModel({ name, apiStandard: form.apiStandard, baseUrl, apiKey });
-    onCreated?.(created.id);
+    addProvider({
+      providerName,
+      modelNames,
+      apiStandard: form.apiStandard,
+      baseUrl,
+      apiKey,
+    });
     onClose();
   };
 
@@ -103,24 +164,27 @@ export function AddModelDialog({ open, onClose, onCreated }: AddModelDialogProps
     <FormDialog
       open={open}
       onClose={onClose}
-      title={t("settings.aiModels.add.title")}
-      subtitle={t("settings.aiModels.add.subtitle")}
+      title={isEdit ? t("settings.aiModels.edit.title") : t("settings.aiModels.add.title")}
+      subtitle={isEdit ? t("settings.aiModels.edit.subtitle") : t("settings.aiModels.add.subtitle")}
       titleId="add-model-title"
       size="sm"
       bodyClassName="add-model-body"
       cancelLabel={t("settings.aiModels.add.cancel")}
       cancelVariant="ghost"
-      primaryAction={{ label: t("settings.aiModels.add.confirm"), onClick: submit }}
+      primaryAction={{
+        label: isEdit ? t("settings.aiModels.edit.confirm") : t("settings.aiModels.add.confirm"),
+        onClick: submit,
+      }}
     >
       <div className="form-field">
-        <label htmlFor="add-model-name">{t("settings.aiModels.fields.name")}</label>
+        <label htmlFor="add-model-provider">{t("settings.aiModels.fields.providerName")}</label>
         <input
-          id="add-model-name"
+          id="add-model-provider"
           className="input"
           autoFocus
-          value={form.name}
-          onChange={(e) => updateField("name", e.target.value)}
-          placeholder={t("settings.aiModels.fields.namePlaceholder")}
+          value={form.providerName}
+          onChange={(e) => updateField("providerName", e.target.value)}
+          placeholder={t("settings.aiModels.fields.providerNamePlaceholder")}
           onKeyDown={(e) => {
             if (e.key === "Enter") {
               e.preventDefault();
@@ -128,11 +192,24 @@ export function AddModelDialog({ open, onClose, onCreated }: AddModelDialogProps
             }
           }}
         />
-        {conflict && (
-          <div className="form-field-hint form-field-hint-warn">
-            {t("settings.aiModels.errors.nameDuplicate", { name: conflict.name })}
-          </div>
-        )}
+      </div>
+
+      <div className="form-field">
+        <label htmlFor="add-model-names">{t("settings.aiModels.fields.modelNames")}</label>
+        <input
+          id="add-model-names"
+          className="input"
+          value={form.modelNames}
+          onChange={(e) => updateField("modelNames", e.target.value)}
+          placeholder={t("settings.aiModels.fields.modelNamesPlaceholder")}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              submit();
+            }
+          }}
+        />
+        <div className="form-field-hint">{t("settings.aiModels.fields.modelNamesHint")}</div>
       </div>
 
       <div className="form-field">
@@ -188,7 +265,11 @@ export function AddModelDialog({ open, onClose, onCreated }: AddModelDialogProps
           spellCheck={false}
           value={form.apiKey}
           onChange={(e) => updateField("apiKey", e.target.value)}
-          placeholder={t("settings.aiModels.fields.apiKeyPlaceholder")}
+          placeholder={
+            isEdit
+              ? t("settings.aiModels.fields.apiKeyPlaceholderEdit")
+              : t("settings.aiModels.fields.apiKeyPlaceholder")
+          }
           onKeyDown={(e) => {
             if (e.key === "Enter") {
               e.preventDefault();
@@ -196,7 +277,9 @@ export function AddModelDialog({ open, onClose, onCreated }: AddModelDialogProps
             }
           }}
         />
-        <div className="form-field-hint">{t("settings.aiModels.fields.apiKeyHint")}</div>
+        <div className="form-field-hint">
+          {isEdit ? t("settings.aiModels.fields.apiKeyHintEdit") : t("settings.aiModels.fields.apiKeyHint")}
+        </div>
       </div>
 
       {error && <div className="form-error">{error}</div>}

@@ -4,7 +4,7 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 
 /// 网络接口信息。
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct NetworkInterface {
     pub name: String,
     pub description: String,
@@ -12,9 +12,10 @@ pub struct NetworkInterface {
 }
 
 /// 捕获的数据包。
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct SnifferPacket {
+    #[specta(type = f64)]
     pub id: u64,
     pub timestamp: String,
     pub src_ip: String,
@@ -22,6 +23,7 @@ pub struct SnifferPacket {
     pub protocol: String,
     pub src_port: Option<u16>,
     pub dst_port: Option<u16>,
+    #[specta(type = f64)]
     pub length: u32,
     pub payload_hex: String,
 }
@@ -32,7 +34,6 @@ pub struct SnifferSession {
     pub filter: String,
     pub packets: Vec<SnifferPacket>,
     pub running: bool,
-    pub packet_counter: u64,
     pub started_at: String,
 }
 
@@ -43,7 +44,6 @@ impl SnifferSession {
             filter: filter.to_string(),
             packets: Vec::new(),
             running: true,
-            packet_counter: 0,
             started_at: chrono_now(),
         }
     }
@@ -61,13 +61,14 @@ impl SnifferSession {
 }
 
 /// 抓包统计信息。
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct CaptureStats {
     pub capture_id: String,
-    pub interface: String,
+    pub iface: String,
     pub filter: String,
     pub running: bool,
+    #[specta(type = f64)]
     pub packet_count: usize,
     pub started_at: String,
 }
@@ -199,7 +200,7 @@ pub async fn get_stats(
     let session = sessions.get(capture_id).ok_or("Capture not found")?;
     Ok(CaptureStats {
         capture_id: capture_id.to_string(),
-        interface: session.interface.clone(),
+        iface: session.interface.clone(),
         filter: session.filter.clone(),
         running: session.running,
         packet_count: session.packets.len(),

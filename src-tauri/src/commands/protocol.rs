@@ -318,12 +318,14 @@ pub async fn mqtt_disconnect(state: State<'_, AppState>, id: String) -> Result<(
 // ──────────────────────────────────────────────
 
 #[tauri::command]
+#[specta::specta]
 pub async fn http_save_request(state: State<'_, AppState>, req: SavedHttpRequest) -> Result<(), String> {
     let storage = state.storage.lock().await;
     storage.http_save_request(&req).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn http_list_requests(
     state: State<'_, AppState>,
     collection_id: Option<String>,
@@ -335,12 +337,14 @@ pub async fn http_list_requests(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn http_delete_request(state: State<'_, AppState>, id: String) -> Result<(), String> {
     let storage = state.storage.lock().await;
     storage.http_delete_request(&id).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn http_add_history(
     state: State<'_, AppState>,
     entry: HttpHistoryEntry,
@@ -350,30 +354,40 @@ pub async fn http_add_history(
 }
 
 #[tauri::command]
-pub async fn http_list_history(state: State<'_, AppState>, limit: i64) -> Result<Vec<HttpHistoryEntry>, String> {
+#[specta::specta]
+pub async fn http_list_history(
+    state: State<'_, AppState>,
+    limit: f64,
+) -> Result<Vec<HttpHistoryEntry>, String> {
     let storage = state.storage.lock().await;
-    storage.http_list_history(limit).map_err(|e| e.to_string())
+    storage
+        .http_list_history(limit as i64)
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn http_clear_history(state: State<'_, AppState>) -> Result<(), String> {
     let storage = state.storage.lock().await;
     storage.http_clear_history().map_err(|e| e.to_string())
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn http_save_collection(state: State<'_, AppState>, col: HttpCollection) -> Result<(), String> {
     let storage = state.storage.lock().await;
     storage.http_save_collection(&col).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn http_list_collections(state: State<'_, AppState>) -> Result<Vec<HttpCollection>, String> {
     let storage = state.storage.lock().await;
     storage.http_list_collections().map_err(|e| e.to_string())
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn http_delete_collection(state: State<'_, AppState>, id: String) -> Result<(), String> {
     let storage = state.storage.lock().await;
     storage.http_delete_collection(&id).map_err(|e| e.to_string())
@@ -384,20 +398,23 @@ pub async fn http_delete_collection(state: State<'_, AppState>, id: String) -> R
 // ──────────────────────────────────────────────
 
 #[tauri::command]
+#[specta::specta]
 pub async fn sniffer_list_interfaces() -> Result<Vec<NetworkInterface>, String> {
     Ok(sniffer::list_interfaces().await)
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn sniffer_start_capture(
     state: State<'_, AppState>,
-    interface: String,
+    iface: String,
     filter: String,
 ) -> Result<String, String> {
-    sniffer::start_capture(&state.sniffer_sessions, interface, filter).await
+    sniffer::start_capture(&state.sniffer_sessions, iface, filter).await
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn sniffer_stop_capture(
     state: State<'_, AppState>,
     capture_id: String,
@@ -406,15 +423,18 @@ pub async fn sniffer_stop_capture(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn sniffer_get_packets(
     state: State<'_, AppState>,
     capture_id: String,
-    limit: Option<usize>,
+    limit: Option<f64>,
 ) -> Result<Vec<SnifferPacket>, String> {
+    let limit = limit.map(|n| n as usize);
     sniffer::get_packets(&state.sniffer_sessions, &capture_id, limit).await
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn sniffer_get_stats(
     state: State<'_, AppState>,
     capture_id: String,
@@ -429,6 +449,7 @@ pub async fn sniffer_get_stats(
 static MODBUS_COUNTER: AtomicU64 = AtomicU64::new(1);
 
 #[tauri::command]
+#[specta::specta]
 pub async fn modbus_connect(
     state: State<'_, AppState>,
     config: ModbusConfig,
@@ -440,6 +461,7 @@ pub async fn modbus_connect(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn modbus_read_coils(
     state: State<'_, AppState>,
     id: String,
@@ -452,6 +474,7 @@ pub async fn modbus_read_coils(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn modbus_read_discrete_inputs(
     state: State<'_, AppState>,
     id: String,
@@ -464,6 +487,7 @@ pub async fn modbus_read_discrete_inputs(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn modbus_read_holding_registers(
     state: State<'_, AppState>,
     id: String,
@@ -476,6 +500,7 @@ pub async fn modbus_read_holding_registers(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn modbus_read_input_registers(
     state: State<'_, AppState>,
     id: String,
@@ -488,6 +513,7 @@ pub async fn modbus_read_input_registers(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn modbus_write_single_coil(
     state: State<'_, AppState>,
     id: String,
@@ -500,6 +526,7 @@ pub async fn modbus_write_single_coil(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn modbus_write_single_register(
     state: State<'_, AppState>,
     id: String,
@@ -512,6 +539,7 @@ pub async fn modbus_write_single_register(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn modbus_write_multiple_coils(
     state: State<'_, AppState>,
     id: String,
@@ -524,6 +552,7 @@ pub async fn modbus_write_multiple_coils(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn modbus_write_multiple_registers(
     state: State<'_, AppState>,
     id: String,
@@ -536,6 +565,7 @@ pub async fn modbus_write_multiple_registers(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn modbus_disconnect(
     state: State<'_, AppState>,
     id: String,

@@ -42,13 +42,6 @@ pub struct KnowledgeSearchResult {
     pub score: i64,
 }
 
-fn map_search_row(row: &rusqlite::Row) -> rusqlite::Result<(KnowledgeEntry, String)> {
-    Ok((
-        Storage::row_to_entry(row)?,
-        row.get::<_, String>(12)?,
-    ))
-}
-
 impl Storage {
     /// 列出知识条目（可选按 kind / tag 过滤，按更新时间倒序）。
     pub fn list_knowledge(
