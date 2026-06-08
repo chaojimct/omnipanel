@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { Modal } from "../../components/ui/Modal";
 import { Button } from "../../components/ui/Button";
+import { FormDialog } from "../../components/ui/FormDialog";
 import { useConnectionStore } from "../../stores/connectionStore";
 import { sanitizeSshGroupInput } from "../../lib/sshGroups";
 import type { Connection } from "../../ipc/bindings";
@@ -335,18 +335,20 @@ export function DockerConnectionDialog({
   };
 
   return (
-    <Modal open={open} onClose={onClose}>
-      <div className="modal-dialog" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <h3>{isEdit ? "编辑 Docker 连接" : "添加 Docker 连接"}</h3>
-          <Button variant="icon" onClick={onClose} title="关闭">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
-              <path d="M18 6L6 18M6 6l12 12" />
-            </svg>
-          </Button>
-        </div>
-
-        <div className="modal-body">
+    <FormDialog
+      open={open}
+      onClose={onClose}
+      title={isEdit ? "编辑 Docker 连接" : "添加 Docker 连接"}
+      size="lg"
+      onCancel={onClose}
+      cancelDisabled={saving}
+      status={error ? { kind: "error", message: error } : null}
+      primaryAction={{
+        label: saving ? "保存中…" : "保存",
+        disabled: saving,
+        onClick: () => void handleSave(),
+      }}
+    >
           <div className="form-field">
             <label className="form-label">连接名称</label>
             <input
@@ -719,22 +721,6 @@ export function DockerConnectionDialog({
               />
             </div>
           </div>
-        </div>
-
-        <div className="modal-footer">
-          <Button variant="secondary" onClick={onClose} disabled={saving}>
-            取消
-          </Button>
-          {error ? (
-            <span className="modal-footer-status modal-footer-status--error">{error}</span>
-          ) : (
-            <div className="modal-footer-spacer" />
-          )}
-          <Button variant="primary" onClick={() => void handleSave()} disabled={saving}>
-            {saving ? "保存中…" : "保存"}
-          </Button>
-        </div>
-      </div>
-    </Modal>
+    </FormDialog>
   );
 }

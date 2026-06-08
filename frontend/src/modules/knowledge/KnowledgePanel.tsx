@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useKnowledgeStore, type KnowledgeTab } from "../../stores/knowledgeStore";
 import { useI18n } from "../../i18n";
-import { SidebarWorkspace } from "../../components/ui/SidebarWorkspace";
 import { Button } from "../../components/ui/Button";
 import { KnowledgeCard } from "./KnowledgeCard";
 import { KnowledgeDetail } from "./KnowledgeDetail";
@@ -18,7 +17,7 @@ export function KnowledgePanel() {
   const { t } = useI18n();
   const {
     entries, searchResults, allTags,
-    activeTab, searchQuery, selectedTag, selectedEntryId, editingEntry,
+    activeTab, searchQuery, selectedTag, selectedEntryId,
     isLoading, error,
     loadEntries, loadTags, search,
     setActiveTab, setSearchQuery, setSelectedTag, setSelectedEntry, setEditingEntry, clearError,
@@ -56,148 +55,140 @@ export function KnowledgePanel() {
     ? searchResults.map((r) => r.entry)
     : entries;
 
-  const selectedEntry = displayEntries.find((e) => e.id === selectedEntryId) ?? null;
-
-  // 相对时间
-  const relativeTime = (ts: number) => {
-    const diff = Date.now() - ts;
-    const mins = Math.floor(diff / 60000);
-    if (mins < 1) return t("knowledge.time.justNow");
-    if (mins < 60) return t("knowledge.time.minutesAgo", { n: mins });
-    const hours = Math.floor(mins / 60);
-    if (hours < 24) return t("knowledge.time.hoursAgo", { n: hours });
-    const days = Math.floor(hours / 24);
-    return t("knowledge.time.daysAgo", { n: days });
-  };
-
   return (
-    <SidebarWorkspace
-      className="knowledge-panel"
-      sidebar={
-        <div className="knowledge-sidebar">
-          <div className="knowledge-search">
-            <svg className="knowledge-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
-              <circle cx="11" cy="11" r="8" /><path d="M21 21l-4.35-4.35" />
-            </svg>
-            <input
-              type="text"
-              placeholder={t("knowledge.searchPlaceholder")}
-              value={searchInput}
-              onChange={(e) => handleSearchChange(e.target.value)}
-            />
-          </div>
+    <div className="knowledge-panel">
+      {/* ── 左侧边栏 ─────────────────────────────── */}
+      <div className="knowledge-sidebar">
+        <div className="knowledge-search">
+          <svg className="knowledge-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
+            <circle cx="11" cy="11" r="8" /><path d="M21 21l-4.35-4.35" />
+          </svg>
+          <input
+            type="text"
+            placeholder={t("knowledge.searchPlaceholder")}
+            value={searchInput}
+            onChange={(e) => handleSearchChange(e.target.value)}
+          />
+        </div>
 
-          <div className="knowledge-categories">
-            <div className="knowledge-section-title">{t("knowledge.categories")}</div>
-            {(["all", "snippet", "case", "ai"] as KnowledgeTab[]).map((tab) => (
-              <div
-                key={tab}
-                className={`knowledge-category-tab ${activeTab === tab ? "active" : ""}`}
-                onClick={() => setActiveTab(tab)}
-              >
-                <span className="knowledge-tab-icon">{TAB_ICONS[tab]}</span>
-                <span>{t(`knowledge.nav.${tab}`)}</span>
-              </div>
-            ))}
-          </div>
-
-          <div className="knowledge-tags-section">
-            <div className="knowledge-section-title">{t("knowledge.tags")}</div>
-            <div className="knowledge-tag-cloud">
-              {selectedTag && (
-                <span
-                  className="knowledge-tag-pill active"
-                  onClick={() => setSelectedTag(null)}
-                >
-                  ✕ {selectedTag}
-                </span>
-              )}
-              {allTags.map((tag) => (
-                <span
-                  key={tag}
-                  className={`knowledge-tag-pill ${selectedTag === tag ? "active" : ""}`}
-                  onClick={() => setSelectedTag(selectedTag === tag ? null : tag)}
-                >
-                  {tag}
-                </span>
-              ))}
-              {allTags.length === 0 && (
-                <span className="text-muted text-sm">{t("knowledge.noTags")}</span>
-              )}
+        <div className="knowledge-categories">
+          <div className="knowledge-section-title">{t("knowledge.categories")}</div>
+          {(["all", "snippet", "case", "ai"] as KnowledgeTab[]).map((tab) => (
+            <div
+              key={tab}
+              className={`knowledge-category-tab ${activeTab === tab ? "active" : ""}`}
+              onClick={() => setActiveTab(tab)}
+            >
+              <span className="knowledge-tab-icon">{TAB_ICONS[tab]}</span>
+              <span>{t(`knowledge.nav.${tab}`)}</span>
             </div>
+          ))}
+        </div>
+
+        <div className="knowledge-tags-section">
+          <div className="knowledge-section-title">{t("knowledge.tags")}</div>
+          <div className="knowledge-tag-cloud">
+            {selectedTag && (
+              <span
+                className="knowledge-tag-pill active"
+                onClick={() => setSelectedTag(null)}
+              >
+                ✕ {selectedTag}
+              </span>
+            )}
+            {allTags.map((tag) => (
+              <span
+                key={tag}
+                className={`knowledge-tag-pill ${selectedTag === tag ? "active" : ""}`}
+                onClick={() => setSelectedTag(selectedTag === tag ? null : tag)}
+              >
+                {tag}
+              </span>
+            ))}
+            {allTags.length === 0 && (
+              <span className="text-muted text-sm">{t("knowledge.noTags")}</span>
+            )}
           </div>
         </div>
-      }
-    >
-      {/* ── 主区域：列表 + 详情 ─────────────────────────────── */}
-      <div className="knowledge-main">
-        {/* ── 中间列表 ─────────────────────────────── */}
-        <div className="knowledge-list">
-          <div className="knowledge-list-header">
-            <span className="knowledge-list-count">
-              {isLoading ? "…" : `${displayEntries.length} ${t("knowledge.entries")}`}
-            </span>
-            <Button variant="primary" size="sm" onClick={() => setShowCreate(true)}>
-              + {t("knowledge.create")}
-            </Button>
-          </div>
+      </div>
 
-          {error && (
-            <div className="knowledge-error">
-              <span>{error}</span>
-              <button onClick={clearError}>×</button>
+      {/* ── 中间列表 ─────────────────────────────── */}
+      <div className="knowledge-list">
+        <div className="knowledge-list-header">
+          <span className="knowledge-list-count">
+            {isLoading ? "…" : `${displayEntries.length} ${t("knowledge.entries")}`}
+          </span>
+          <Button variant="primary" size="sm" onClick={() => setShowCreate(true)}>
+            + {t("knowledge.create")}
+          </Button>
+        </div>
+
+        {error && (
+          <div className="knowledge-error">
+            <span>{error}</span>
+            <button onClick={clearError}>×</button>
+          </div>
+        )}
+
+        <div className="knowledge-list-body">
+          {searchQuery.trim()
+            ? searchResults.map((result) => (
+                <KnowledgeCard
+                  key={result.entry.id}
+                  entry={result.entry}
+                  selected={result.entry.id === selectedEntryId}
+                  onClick={() => {
+                    setSelectedEntry(result.entry.id);
+                    setEditingEntry(null);
+                  }}
+                  score={result.score}
+                />
+              ))
+            : displayEntries.map((entry) => (
+                <KnowledgeCard
+                  key={entry.id}
+                  entry={entry}
+                  selected={entry.id === selectedEntryId}
+                  onClick={() => {
+                    setSelectedEntry(entry.id);
+                    setEditingEntry(null);
+                  }}
+                />
+              ))}
+
+          {!isLoading && displayEntries.length === 0 && (
+            <div className="knowledge-empty">
+              <div className="knowledge-empty-icon">📚</div>
+              <div className="knowledge-empty-title">
+                {searchQuery.trim() ? t("knowledge.noResults") : t("knowledge.noEntries")}
+              </div>
+              {!searchQuery.trim() && (
+                <div className="knowledge-empty-desc">{t("knowledge.createFirst")}</div>
+              )}
             </div>
           )}
 
-          <div className="knowledge-list-body">
-            {displayEntries.map((entry) => (
-              <KnowledgeCard
-                key={entry.id}
-                entry={entry}
-                selected={entry.id === selectedEntryId}
-                onClick={() => {
-                  setSelectedEntry(entry.id);
-                  setEditingEntry(null);
-                }}
-                relativeTime={relativeTime}
-              />
-            ))}
-
-            {!isLoading && displayEntries.length === 0 && (
-              <div className="knowledge-empty">
-                <div className="knowledge-empty-icon">📚</div>
-                <div className="knowledge-empty-title">
-                  {searchQuery.trim() ? t("knowledge.noResults") : t("knowledge.noEntries")}
-                </div>
-                {!searchQuery.trim() && (
-                  <div className="knowledge-empty-desc">{t("knowledge.createFirst")}</div>
-                )}
-              </div>
-            )}
-
-            {isLoading && (
-              <div className="knowledge-loading">
-                <div className="knowledge-loading-spinner" />
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* ── 右侧详情 ─────────────────────────────── */}
-        <div className="knowledge-detail">
-          {selectedEntry ? (
-            <KnowledgeDetail entry={selectedEntry} relativeTime={relativeTime} />
-          ) : (
-            <div className="knowledge-detail-empty">
-              <div className="knowledge-detail-empty-icon">📝</div>
-              <div className="text-muted">{t("knowledge.selectEntry")}</div>
+          {isLoading && (
+            <div className="knowledge-loading">
+              <div className="knowledge-loading-spinner" />
             </div>
           )}
         </div>
       </div>
 
-      {/* ── 新建对话框 ───────────────────────────── */}
-      {showCreate && <CreateEntryDialog onClose={() => setShowCreate(false)} />}
-    </SidebarWorkspace>
+      {/* ── 右侧详情 ─────────────────────────────── */}
+      <div className="knowledge-detail">
+        {selectedEntryId ? (
+          <KnowledgeDetail />
+        ) : (
+          <div className="knowledge-detail-empty">
+            <div className="knowledge-detail-empty-icon">📝</div>
+            <div className="text-muted">{t("knowledge.selectEntry")}</div>
+          </div>
+        )}
+      </div>
+
+      <CreateEntryDialog open={showCreate} onClose={() => setShowCreate(false)} />
+    </div>
   );
 }

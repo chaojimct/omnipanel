@@ -18,30 +18,125 @@ pub struct ProviderInfo {
 const MAX_TOOL_ITERATIONS: usize = 10;
 
 /// Build the default set of tools available to the AI.
-/// This includes the built-in `search_knowledge` tool for RAG.
+/// Includes knowledge search, terminal execution, file I/O, and HTTP requests.
 fn build_default_tools() -> Vec<ToolDef> {
-    vec![ToolDef {
-        tool_type: "function".to_string(),
-        function: FunctionDef {
-            name: "search_knowledge".to_string(),
-            description: "Search the knowledge base for relevant information including code snippets, troubleshooting cases, and documented procedures. Use this when the user asks about stored knowledge, debugging solutions, configuration examples, or any documented best practices.".to_string(),
-            parameters: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": "The search query to find relevant knowledge entries"
+    vec![
+        ToolDef {
+            tool_type: "function".to_string(),
+            function: FunctionDef {
+                name: "search_knowledge".to_string(),
+                description: "Search the knowledge base for relevant information including code snippets, troubleshooting cases, and documented procedures. Use this when the user asks about stored knowledge, debugging solutions, configuration examples, or any documented best practices.".to_string(),
+                parameters: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "query": {
+                            "type": "string",
+                            "description": "The search query to find relevant knowledge entries"
+                        },
+                        "kind": {
+                            "type": "string",
+                            "enum": ["snippet", "case", "ai"],
+                            "description": "Optional filter by knowledge entry type: snippet (code), case (troubleshooting), ai (AI-generated)"
+                        }
                     },
-                    "kind": {
-                        "type": "string",
-                        "enum": ["snippet", "case", "ai"],
-                        "description": "Optional filter by knowledge entry type: snippet (code), case (troubleshooting), ai (AI-generated)"
-                    }
-                },
-                "required": ["query"]
-            }),
+                    "required": ["query"]
+                }),
+            },
         },
-    }]
+        ToolDef {
+            tool_type: "function".to_string(),
+            function: FunctionDef {
+                name: "execute_terminal".to_string(),
+                description: "Execute a shell command on the local system and return stdout+stderr. Use for running scripts, checking system state, installing packages, etc. Output is truncated to 4096 chars.".to_string(),
+                parameters: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "command": {
+                            "type": "string",
+                            "description": "The shell command to execute"
+                        },
+                        "workdir": {
+                            "type": "string",
+                            "description": "Optional working directory for the command"
+                        }
+                    },
+                    "required": ["command"]
+                }),
+            },
+        },
+        ToolDef {
+            tool_type: "function".to_string(),
+            function: FunctionDef {
+                name: "read_file".to_string(),
+                description: "Read the contents of a file at the given path. Returns the file text, truncated to 8192 characters. Supports optional offset and limit for large files.".to_string(),
+                parameters: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "path": {
+                            "type": "string",
+                            "description": "Absolute or relative path to the file"
+                        },
+                        "offset": {
+                            "type": "number",
+                            "description": "Optional line number to start reading from (1-indexed)"
+                        },
+                        "limit": {
+                            "type": "number",
+                            "description": "Optional maximum number of lines to read"
+                        }
+                    },
+                    "required": ["path"]
+                }),
+            },
+        },
+        ToolDef {
+            tool_type: "function".to_string(),
+            function: FunctionDef {
+                name: "list_files".to_string(),
+                description: "List files and directories at the given path. Returns a JSON array of entries with name, type (file/dir), and size.".to_string(),
+                parameters: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "path": {
+                            "type": "string",
+                            "description": "Directory path to list"
+                        }
+                    },
+                    "required": ["path"]
+                }),
+            },
+        },
+        ToolDef {
+            tool_type: "function".to_string(),
+            function: FunctionDef {
+                name: "http_request".to_string(),
+                description: "Send an HTTP request and return the response. Useful for testing APIs, fetching data, or checking endpoints. Returns status code and body (truncated to 4096 chars).".to_string(),
+                parameters: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "method": {
+                            "type": "string",
+                            "enum": ["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD"],
+                            "description": "HTTP method"
+                        },
+                        "url": {
+                            "type": "string",
+                            "description": "Request URL"
+                        },
+                        "headers": {
+                            "type": "object",
+                            "description": "Optional request headers as key-value pairs"
+                        },
+                        "body": {
+                            "type": "string",
+                            "description": "Optional request body"
+                        }
+                    },
+                    "required": ["method", "url"]
+                }),
+            },
+        },
+    ]
 }
 
 /// Execute a tool by name and return the result as a string.
@@ -91,6 +186,181 @@ async fn execute_tool(state: &AppState, name: &str, arguments: &str) -> (String,
                     }
                 }
                 Err(e) => (format!("Knowledge search error: {}", e), false),
+            }
+        }
+        "execute_terminal" => {
+            let args: serde_json::Value = serde_json::from_str(arguments).unwrap_or_default();
+            let command = args.get("command").and_then(|v| v.as_str()).unwrap_or("");
+            let workdir = args.get("workdir").and_then(|v| v.as_str());
+
+            if command.trim().is_empty() {
+                return ("Error: command parameter is required".to_string(), false);
+            }
+
+            let mut cmd = if cfg!(target_os = "windows") {
+                let mut c = tokio::process::Command::new("cmd");
+                c.arg("/C").arg(command);
+                c
+            } else {
+                let mut c = tokio::process::Command::new("sh");
+                c.arg("-c").arg(command);
+                c
+            };
+
+            if let Some(dir) = workdir {
+                cmd.current_dir(dir);
+            }
+
+            match tokio::time::timeout(
+                std::time::Duration::from_secs(30),
+                cmd.output(),
+            )
+            .await
+            {
+                Ok(Ok(output)) => {
+                    let stdout = String::from_utf8_lossy(&output.stdout);
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    let mut result = String::new();
+                    if !stdout.is_empty() {
+                        result.push_str(&stdout);
+                    }
+                    if !stderr.is_empty() {
+                        if !result.is_empty() {
+                            result.push_str("\n--- stderr ---\n");
+                        }
+                        result.push_str(&stderr);
+                    }
+                    if result.is_empty() {
+                        result = format!("Command exited with code: {}", output.status.code().unwrap_or(-1));
+                    }
+                    // Truncate to 4096 chars
+                    if result.len() > 4096 {
+                        result.truncate(4092);
+                        result.push_str("...");
+                    }
+                    (result, true)
+                }
+                Ok(Err(e)) => (format!("Command execution error: {}", e), false),
+                Err(_) => ("Error: command timed out after 30 seconds".to_string(), false),
+            }
+        }
+        "read_file" => {
+            let args: serde_json::Value = serde_json::from_str(arguments).unwrap_or_default();
+            let path = args.get("path").and_then(|v| v.as_str()).unwrap_or("");
+            let offset = args.get("offset").and_then(|v| v.as_u64()).unwrap_or(1) as usize;
+            let limit = args.get("limit").and_then(|v| v.as_u64()).unwrap_or(200) as usize;
+
+            if path.trim().is_empty() {
+                return ("Error: path parameter is required".to_string(), false);
+            }
+
+            match std::fs::read_to_string(path) {
+                Ok(content) => {
+                    let lines: Vec<&str> = content.lines().collect();
+                    let start = if offset > 0 { offset - 1 } else { 0 };
+                    let end = std::cmp::min(start + limit, lines.len());
+                    if start >= lines.len() {
+                        return ("Error: offset exceeds file length".to_string(), false);
+                    }
+                    let mut result = lines[start..end].join("\n");
+                    if result.len() > 8192 {
+                        result.truncate(8188);
+                        result.push_str("...");
+                    }
+                    (result, true)
+                }
+                Err(e) => (format!("File read error: {}", e), false),
+            }
+        }
+        "list_files" => {
+            let args: serde_json::Value = serde_json::from_str(arguments).unwrap_or_default();
+            let path = args.get("path").and_then(|v| v.as_str()).unwrap_or(".");
+
+            match std::fs::read_dir(path) {
+                Ok(entries) => {
+                    let mut files: Vec<serde_json::Value> = Vec::new();
+                    for entry in entries.flatten() {
+                        let name = entry.file_name().to_string_lossy().to_string();
+                        let file_type = if entry.path().is_dir() {
+                            "dir"
+                        } else {
+                            "file"
+                        };
+                        let size = entry.metadata().map(|m| m.len()).unwrap_or(0);
+                        files.push(serde_json::json!({
+                            "name": name,
+                            "type": file_type,
+                            "size": size,
+                        }));
+                    }
+                    let result = serde_json::to_string_pretty(&files).unwrap_or_default();
+                    let truncated = if result.len() > 4096 {
+                        format!("{}...", &result[..4092])
+                    } else {
+                        result
+                    };
+                    (truncated, true)
+                }
+                Err(e) => (format!("Directory listing error: {}", e), false),
+            }
+        }
+        "http_request" => {
+            let args: serde_json::Value = serde_json::from_str(arguments).unwrap_or_default();
+            let method = args.get("method").and_then(|v| v.as_str()).unwrap_or("GET");
+            let url = args.get("url").and_then(|v| v.as_str()).unwrap_or("");
+            let headers = args.get("headers").and_then(|v| v.as_object());
+            let body = args.get("body").and_then(|v| v.as_str());
+
+            if url.trim().is_empty() {
+                return ("Error: url parameter is required".to_string(), false);
+            }
+
+            let client = reqwest::Client::new();
+            let mut req = match method.to_uppercase().as_str() {
+                "GET" => client.get(url),
+                "POST" => client.post(url),
+                "PUT" => client.put(url),
+                "DELETE" => client.delete(url),
+                "PATCH" => client.patch(url),
+                "HEAD" => client.head(url),
+                _ => return (format!("Unsupported method: {}", method), false),
+            };
+
+            if let Some(hdrs) = headers {
+                for (k, v) in hdrs {
+                    if let Some(val) = v.as_str() {
+                        req = req.header(k.as_str(), val);
+                    }
+                }
+            }
+
+            if let Some(b) = body {
+                req = req.body(b.to_string());
+            }
+
+            match tokio::time::timeout(std::time::Duration::from_secs(30), req.send()).await {
+                Ok(Ok(resp)) => {
+                    let status = resp.status().as_u16();
+                    let resp_headers: std::collections::HashMap<String, String> = resp
+                        .headers()
+                        .iter()
+                        .map(|(k, v)| (k.to_string(), v.to_str().unwrap_or("").to_string()))
+                        .collect();
+                    let resp_body = resp.text().await.unwrap_or_default();
+                    let truncated_body = if resp_body.len() > 4096 {
+                        format!("{}...", &resp_body[..4092])
+                    } else {
+                        resp_body
+                    };
+                    let result = serde_json::json!({
+                        "status": status,
+                        "headers": resp_headers,
+                        "body": truncated_body,
+                    });
+                    (serde_json::to_string_pretty(&result).unwrap_or_default(), true)
+                }
+                Ok(Err(e)) => (format!("HTTP request error: {}", e), false),
+                Err(_) => ("Error: HTTP request timed out after 30 seconds".to_string(), false),
             }
         }
         _ => (format!("Unknown tool: {}", name), false),
@@ -349,4 +619,27 @@ pub async fn ai_get_active(state: State<'_, AppState>) -> Result<Option<(String,
         (Some(p), Some(m)) => Ok(Some((p, m))),
         _ => Ok(None),
     }
+}
+
+/// Add a custom OpenAI-compatible provider at runtime.
+///
+/// The provider is registered in the AI registry and immediately available
+/// for `ai_set_provider` / `ai_send_message`.
+#[tauri::command]
+pub async fn ai_add_custom_provider(
+    state: State<'_, AppState>,
+    name: String,
+    api_key: Option<String>,
+    base_url: String,
+    models: Option<Vec<ModelInfo>>,
+) -> Result<(), String> {
+    use omnipanel_ai::providers::openai::OpenAiProvider;
+
+    let api_key = api_key.unwrap_or_else(|| "sk-none".to_string());
+    let models = models.unwrap_or_else(|| Vec::new());
+
+    let provider = OpenAiProvider::new(&name, &api_key, &base_url, models);
+    let mut registry = state.ai_registry.lock().await;
+    registry.register(Box::new(provider));
+    Ok(())
 }

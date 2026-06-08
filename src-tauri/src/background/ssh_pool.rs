@@ -129,22 +129,18 @@ impl SshPool {
         }
     }
 
-    /// 应用启动：从持久化存储加载 SSH 连接并探测端口。
+    /// 应用启动：从持久化存储加载 SSH 连接配置（不做列表端口扫描）。
     pub async fn start(&self, storage: Arc<Mutex<Storage>>, app_handle: tauri::AppHandle) {
         self.log
-            .log("ssh-pool", "info", "SSH 端口探测启动中…")
+            .log("ssh-pool", "info", "SSH 连接池初始化中…")
             .await;
-        self.reload_hosts(storage, app_handle.clone()).await;
-        if self
+        self.reload_hosts(storage, app_handle).await;
+        let _ = self
             .background_started
-            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
-            .is_ok()
-        {
-            Self::spawn_background_loop(self.entries.clone(), app_handle, self.log.clone());
-        }
+            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst);
     }
 
-    /// 从持久化存储重新加载主机列表并探测端口（同步 ~/.ssh/config 后调用）。
+    /// 从持久化存储重新加载主机列表（同步 ~/.ssh/config 后调用，不扫描端口）。
     pub async fn reload_hosts(&self, storage: Arc<Mutex<Storage>>, app_handle: tauri::AppHandle) {
         let connections = {
             let guard = storage.lock().await;
@@ -190,12 +186,6 @@ impl SshPool {
                     },
                 },
             );
-            emit_status(
-                &app_handle,
-                &resource_id,
-                "error",
-                Some(&format!("配置解析失败: {err}")),
-            );
         }
 
         {
@@ -209,11 +199,10 @@ impl SshPool {
         }
 
         if specs.is_empty() {
-            info!("SSH 池：无任何可探测的 SSH 主机");
+            info!("SSH 池：无已保存的 SSH 主机");
             self.log
-                .log("ssh-pool", "info", "无任何可探测的 SSH 主机")
+                .log("ssh-pool", "info", "无已保存的 SSH 主机")
                 .await;
-            self.emit_all_status(&app_handle).await;
             return;
         }
 
@@ -221,7 +210,7 @@ impl SshPool {
             .log(
                 "ssh-pool",
                 "info",
-                &format!("共 {} 个主机，开始并发端口探测", specs.len()),
+                &format!("已加载 {} 个 SSH 主机配置", specs.len()),
             )
             .await;
 
@@ -231,7 +220,7 @@ impl SshPool {
                 pool.insert(
                     spec.resource_id.clone(),
                     PoolEntry {
-                        status: "connecting".into(),
+                        status: "idle".into(),
                         error: None,
                         host_name: spec.name.clone(),
                         config: spec.config.clone(),
@@ -239,29 +228,7 @@ impl SshPool {
                 );
             }
         }
-        for spec in &specs {
-            emit_status(&app_handle, &spec.resource_id, "connecting", None);
-        }
-
-        let entries = self.entries.clone();
-        for spec in specs {
-            let entries = entries.clone();
-            let app = app_handle.clone();
-            let log = self.log.clone();
-            tokio::spawn(async move {
-                log.log("ssh-pool", "info", &format!("正在探测 {} 端口…", spec.name))
-                    .await;
-                Self::probe_and_update_entry(
-                    &entries,
-                    &app,
-                    &spec.resource_id,
-                    &spec.name,
-                    &spec.config,
-                    &log,
-                )
-                .await;
-            });
-        }
+        let _ = app_handle;
     }
 
     fn specs_from_connections(

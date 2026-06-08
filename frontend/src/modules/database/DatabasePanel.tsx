@@ -1087,7 +1087,7 @@ export function DatabasePanel() {
             </div>
             <div className="db-workspace-body">
               {!activeWorkspaceTab ? (
-                <WorkspaceEmptyPage hint={t("database.workspace.emptyTabs")} />
+                <WorkspaceEmptyPage prompt={t("database.workspace.emptyTabs")} />
               ) : (
                 renderSqlPane(activeWorkspaceTab)
               )}

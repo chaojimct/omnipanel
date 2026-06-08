@@ -4,7 +4,7 @@ import { useAiStore } from "../../stores/aiStore";
 import {
   useAiModelsStore,
   maskApiKey,
-  type AiModelConfig,
+  type AiModelProvider,
 } from "../../stores/aiModelsStore";
 import {
   useSettingsStore,
@@ -265,17 +265,37 @@ function KeybindingsSection() {
 
 function AiModelsSection() {
   const { t } = useI18n();
-  const models = useAiModelsStore((s) => s.models);
-  const removeModel = useAiModelsStore((s) => s.removeModel);
-  const currentProvider = useAiStore((s) => s.currentProvider);
-  const currentModel = useAiStore((s) => s.currentModel);
-  const setCurrentProvider = useAiStore((s) => s.setCurrentProvider);
+  const providers = useAiModelsStore((s) => s.providers);
+  const removeProvider = useAiModelsStore((s) => s.removeProvider);
 
-  const [showAdd, setShowAdd] = useState(false);
+  const [showDialog, setShowDialog] = useState(false);
+  const [editingProvider, setEditingProvider] = useState<AiModelProvider | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
 
-  const handleSelect = (m: AiModelConfig) => {
-    setCurrentProvider(m.apiStandard, m.id);
+  const openAddDialog = () => {
+    setEditingProvider(null);
+    setShowDialog(true);
+  };
+
+  const openEditDialog = (provider: AiModelProvider) => {
+    setConfirmDeleteId(null);
+    setEditingProvider(provider);
+    setShowDialog(true);
+  };
+
+  const closeDialog = () => {
+    setShowDialog(false);
+    setEditingProvider(null);
+  };
+
+  const toggleExpanded = (id: string) => {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   };
 
   return (
@@ -290,7 +310,7 @@ function AiModelsSection() {
             variant="primary"
             size="sm"
             className="ai-models-add-btn"
-            onClick={() => setShowAdd(true)}
+            onClick={openAddDialog}
             title={t("settings.aiModels.add.title")}
             aria-label={t("settings.aiModels.add.title")}
           >
@@ -308,7 +328,7 @@ function AiModelsSection() {
           </Button>
         </div>
 
-        {models.length === 0 ? (
+        {providers.length === 0 ? (
           <div className="ai-models-empty">
             <div className="ai-models-empty-icon">🤖</div>
             <div className="ai-models-empty-title">{t("settings.aiModels.empty.title")}</div>
@@ -317,99 +337,139 @@ function AiModelsSection() {
               variant="secondary"
               size="sm"
               style={{ marginTop: "var(--sp-3)" }}
-              onClick={() => setShowAdd(true)}
+              onClick={openAddDialog}
             >
               {t("settings.aiModels.empty.cta")}
             </Button>
           </div>
         ) : (
           <ul className="ai-models-list">
-            {models.map((m) => {
-              const isActive = currentProvider === m.apiStandard && currentModel === m.id;
-              const isConfirmingDelete = confirmDeleteId === m.id;
+            {providers.map((provider) => {
+              const isConfirmingDelete = confirmDeleteId === provider.id;
+              const hasMultipleModels = provider.modelNames.length > 1;
+              const isExpanded = expandedIds.has(provider.id);
               return (
-                <li
-                  key={m.id}
-                  className={`ai-model-row${isActive ? " active" : ""}`}
-                >
-                  <div className="ai-model-row-main">
-                    <div className="ai-model-row-title">
-                      <span className="ai-model-row-name">{m.name}</span>
-                      <span className={`ai-model-row-standard ai-model-row-standard-${m.apiStandard}`}>
-                        {m.apiStandard === "openai" ? "OpenAI" : "Anthropic"}
-                      </span>
+                <li key={provider.id} className="ai-provider-card">
+                  <div className="ai-provider-header">
+                    <div className="ai-provider-header-main">
+                      {hasMultipleModels ? (
+                        <button
+                          type="button"
+                          className="ai-provider-expand"
+                          aria-expanded={isExpanded}
+                          aria-label={t("settings.aiModels.toggleModels")}
+                          onClick={() => toggleExpanded(provider.id)}
+                        >
+                          {isExpanded ? "▾" : "▸"}
+                        </button>
+                      ) : (
+                        <span className="ai-provider-expand-placeholder" aria-hidden />
+                      )}
+                      <div className="ai-provider-summary">
+                        <div className="ai-provider-title-row">
+                          <span className="ai-provider-name">{provider.providerName}</span>
+                          <span
+                            className={`ai-model-row-standard ai-model-row-standard-${provider.apiStandard}`}
+                          >
+                            {provider.apiStandard === "openai" ? "OpenAI" : "Anthropic"}
+                          </span>
+                          {hasMultipleModels ? (
+                            <span className="ai-provider-model-count">
+                              {t("settings.aiModels.modelCount", {
+                                count: provider.modelNames.length,
+                              })}
+                            </span>
+                          ) : (
+                            <span className="ai-provider-single-model">{provider.modelNames[0]}</span>
+                          )}
+                        </div>
+                        <div className="ai-model-row-meta">
+                          <span className="ai-model-row-baseurl" title={provider.baseUrl}>
+                            {provider.baseUrl}
+                          </span>
+                          <span className="ai-model-row-sep">·</span>
+                          <span className="ai-model-row-key" title={provider.apiKey}>
+                            {maskApiKey(provider.apiKey)}
+                          </span>
+                        </div>
+                      </div>
                     </div>
-                    <div className="ai-model-row-meta">
-                      <span className="ai-model-row-baseurl" title={m.baseUrl}>
-                        {m.baseUrl}
-                      </span>
-                      <span className="ai-model-row-sep">·</span>
-                      <span className="ai-model-row-key" title={m.apiKey}>
-                        {maskApiKey(m.apiKey)}
-                      </span>
+
+                    <div className="ai-model-row-actions">
+                      {isConfirmingDelete ? (
+                        <>
+                          <Button
+                            variant="danger"
+                            size="sm"
+                            onClick={() => {
+                              removeProvider(provider.id);
+                              setConfirmDeleteId(null);
+                            }}
+                          >
+                            {t("settings.aiModels.confirmDelete")}
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setConfirmDeleteId(null)}
+                          >
+                            {t("settings.aiModels.cancelDelete")}
+                          </Button>
+                        </>
+                      ) : (
+                        <>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="ai-model-row-edit"
+                            title={t("settings.aiModels.editBtn")}
+                            aria-label={t("settings.aiModels.editBtn")}
+                            onClick={() => openEditDialog(provider)}
+                          >
+                            <svg
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                              width="14"
+                              height="14"
+                            >
+                              <path d="M12 20h9M16.5 3.5a2.12 2.12 0 013 3L7 19l-4 1 1-4L16.5 3.5z" />
+                            </svg>
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="ai-model-row-delete"
+                            title={t("settings.aiModels.deleteBtn")}
+                            aria-label={t("settings.aiModels.deleteBtn")}
+                            onClick={() => setConfirmDeleteId(provider.id)}
+                          >
+                            <svg
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                              width="14"
+                              height="14"
+                            >
+                              <path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />
+                            </svg>
+                          </Button>
+                        </>
+                      )}
                     </div>
                   </div>
 
-                  <div className="ai-model-row-actions">
-                    {isActive ? (
-                      <span className="badge badge-success">
-                        {t("settings.aiModels.activeBadge")}
-                      </span>
-                    ) : (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleSelect(m)}
-                      >
-                        {t("settings.aiModels.useBtn")}
-                      </Button>
-                    )}
-
-                    {isConfirmingDelete ? (
-                      <>
-                        <Button
-                          variant="danger"
-                          size="sm"
-                          onClick={() => {
-                            if (isActive) {
-                              setCurrentProvider("openai", "gpt-4o");
-                            }
-                            removeModel(m.id);
-                            setConfirmDeleteId(null);
-                          }}
-                        >
-                          {t("settings.aiModels.confirmDelete")}
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setConfirmDeleteId(null)}
-                        >
-                          {t("settings.aiModels.cancelDelete")}
-                        </Button>
-                      </>
-                    ) : (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="ai-model-row-delete"
-                        title={t("settings.aiModels.deleteBtn")}
-                        aria-label={t("settings.aiModels.deleteBtn")}
-                        onClick={() => setConfirmDeleteId(m.id)}
-                      >
-                        <svg
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          width="14"
-                          height="14"
-                        >
-                          <path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />
-                        </svg>
-                      </Button>
-                    )}
-                  </div>
+                  {hasMultipleModels && isExpanded ? (
+                    <ul className="ai-provider-models">
+                      {provider.modelNames.map((modelName) => (
+                        <li key={modelName} className="ai-provider-model-item">
+                          {modelName}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
                 </li>
               );
             })}
@@ -417,7 +477,11 @@ function AiModelsSection() {
         )}
       </div>
 
-      <AddModelDialog open={showAdd} onClose={() => setShowAdd(false)} />
+      <AddModelDialog
+        open={showDialog}
+        onClose={closeDialog}
+        editProvider={editingProvider}
+      />
     </div>
   );
 }

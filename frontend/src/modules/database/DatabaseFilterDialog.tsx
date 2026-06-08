@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useI18n } from "../../i18n";
-import { Modal } from "../../components/ui/Modal";
 import { Button } from "../../components/ui/Button";
+import { FormDialog } from "../../components/ui/FormDialog";
 
 export interface SchemaFilterState {
   orderedNames: string[];
@@ -42,10 +42,6 @@ export function SchemaFilterDialog({
     setDragIndex(null);
   }, [open, items, initial]);
 
-  if (!open) {
-    return null;
-  }
-
   const toggleOne = (name: string) => {
     setVisible((prev) => {
       const next = new Set(prev);
@@ -79,18 +75,17 @@ export function SchemaFilterDialog({
   };
 
   return (
-    <Modal open={open} onClose={onClose}>
-      <div className="modal-dialog db-filter-dialog" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <h3>{title}</h3>
-          <Button variant="icon" onClick={onClose}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
-              <path d="M18 6L6 18M6 6l12 12" />
-            </svg>
-          </Button>
-        </div>
-
-        <div className="modal-body">
+    <FormDialog
+      open={open}
+      onClose={onClose}
+      title={title}
+      className="db-filter-dialog"
+      onCancel={onClose}
+      primaryAction={{
+        label: t("database.filter.apply"),
+        onClick: handleApply,
+      }}
+    >
           <div className="db-filter-toolbar">
             <span className="db-filter-count">
               {t("database.filter.selectedCount", { count: visible.size, total: ordered.length })}
@@ -140,19 +135,7 @@ export function SchemaFilterDialog({
               </div>
             ))}
           </div>
-        </div>
-
-        <div className="modal-footer">
-          <Button variant="secondary" type="button" onClick={onClose}>
-            {t("common.cancel")}
-          </Button>
-          <div style={{ flex: 1 }} />
-          <Button variant="primary" type="button" onClick={handleApply}>
-            {t("database.filter.apply")}
-          </Button>
-        </div>
-      </div>
-    </Modal>
+    </FormDialog>
   );
 }
 

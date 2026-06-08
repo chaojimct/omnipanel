@@ -18,16 +18,6 @@ const navPaths = [
     ),
   },
   {
-    path: "/ssh",
-    key: "shell.nav.ssh",
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-        <rect x="2" y="3" width="20" height="14" rx="2" />
-        <path d="M8 21h8M12 17v4" />
-      </svg>
-    ),
-  },
-  {
     path: "/database",
     key: "shell.nav.database",
     icon: (
@@ -114,6 +104,17 @@ const utilPaths = [
         <path d="M6 10v2c0 3.31 2.69 6 6 6s6-2.69 6-6v-2" />
         <circle cx="9" cy="7" r="0.5" fill="currentColor" />
         <circle cx="15" cy="7" r="0.5" fill="currentColor" />
+      </svg>
+    ),
+  },
+  {
+    path: "/editor",
+    key: "shell.nav.editor",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+        <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+        <path d="M14 2v6h6" />
+        <path d="M16 13H8M16 17H8M10 9H8" />
       </svg>
     ),
   },

@@ -253,6 +253,10 @@ export const zhCN = {
     rows: "行",
     readonly: "只读结果",
     editable: "可编辑",
+    copy: "复制",
+    copied: "已复制",
+    showSecret: "显示",
+    hideSecret: "隐藏",
   },
   quickInput: {
     required: "请输入内容",
@@ -270,6 +274,7 @@ export const zhCN = {
       knowledge: "知识库",
       tasks: "任务中心",
       aiAgent: "AI 智能体",
+      editor: "文件编辑器",
       settings: "设置",
       ai: "AI 助手",
     },
@@ -350,6 +355,7 @@ export const zhCN = {
     workflow: "工作流",
     knowledge: "知识库",
     tasks: "任务中心",
+    editor: "文件编辑器",
     settings: "设置",
     default: "OmniPanel",
   },
@@ -702,6 +708,9 @@ export const zhCN = {
     },
   },
   docker: {
+    empty: {
+      localEngine: "无法连接本地 Docker Engine。请启动 Docker Desktop 或本机 Docker 服务后重试。",
+    },
     toolbar: {
       hint: "容器、日志、Compose 与服务器上下文统一管理。",
     },
@@ -767,6 +776,10 @@ export const zhCN = {
     edit: {
       title: "编辑服务器",
     },
+    dialog: {
+      sshSection: "SSH 连接",
+      panelSection: "面板配置",
+    },
     create: {
       title: "创建服务器",
       name: "名称",
@@ -786,10 +799,14 @@ export const zhCN = {
       bt: "宝塔",
       "1panel": "1Panel",
     },
+    hostList: {
+      panelConfigured: "已配置面板",
+    },
     empty: {
       title: "暂无服务器",
       description: '点击"+"按钮或下方按钮添加服务器。',
-      selectServer: "在左侧选择服务器，或在顶栏点击「+」打开服务器标签页。",
+      selectServer: "在左侧选择一台主机以查看已安装应用。",
+      noPanelConfig: "该主机尚未配置面板，请在主机菜单中编辑并填写面板信息。",
     },
     placeholder: "{name} 已就绪。服务器管理功能即将上线。",
     apps: {
@@ -826,6 +843,8 @@ export const zhCN = {
       },
     },
     tabs: {
+      panel: "面板",
+      terminal: "终端",
       openServer: "打开服务器",
       monitor: "监控",
       processes: "进程",
@@ -931,35 +950,48 @@ export const zhCN = {
     },
     aiModels: {
       title: "AI 模型",
-      description: "添加并管理可用的 AI 模型。选中的模型将被 AI 助手使用。",
-      activeBadge: "使用中",
-      useBtn: "使用",
+      description: "按提供商管理模型接入配置，同一提供商下可配置多个模型。",
+      editBtn: "编辑",
       deleteBtn: "删除",
       confirmDelete: "确认删除",
       cancelDelete: "取消",
+      toggleModels: "展开或折叠模型列表",
+      modelCount: "{count} 个模型",
       empty: {
         title: "还没有添加模型",
-        desc: "添加一个 OpenAI 兼容或 Anthropic 模型以开始使用 AI 助手。",
+        desc: "添加一个 OpenAI 兼容或 Anthropic 提供商以开始使用 AI 助手。",
         cta: "添加模型",
       },
       add: {
         title: "新建模型",
-        subtitle: "填写模型的接入信息，保存后可随时在列表中切换。",
+        subtitle: "填写提供商信息与模型列表，多个模型将共用同一组接入配置。",
         confirm: "保存",
         cancel: "取消",
       },
+      edit: {
+        title: "编辑提供商",
+        subtitle: "修改提供商名称、模型列表、API 标准或接入地址。留空 API Key 则保持原值。",
+        confirm: "保存修改",
+      },
       fields: {
-        name: "模型名称",
-        namePlaceholder: "如 GPT-4o、Claude Sonnet、自建代理…",
+        providerName: "提供商名称",
+        providerNamePlaceholder: "如 OpenAI、Anthropic、通义千问…",
+        modelNames: "模型名称",
+        modelNamesPlaceholder: "如 GPT-4o, GPT-4o-mini, o3-mini",
+        modelNamesHint: "可填写多个模型名称，使用英文逗号分隔。",
         standard: "API 标准",
         baseUrl: "Base URL",
         apiKey: "API Key",
         apiKeyPlaceholder: "sk-…",
+        apiKeyPlaceholderEdit: "留空则保持不变",
         apiKeyHint: "API Key 仅保存在本地浏览器存储中，不会发送到任何第三方服务。",
+        apiKeyHintEdit: "不修改 API Key 时请留空。",
       },
       errors: {
-        nameRequired: "请填写模型名称",
-        nameDuplicate: "已存在同名模型「{name}」",
+        providerNameRequired: "请填写提供商名称",
+        modelNamesRequired: "请至少填写一个模型名称",
+        modelNameDuplicate: "模型「{name}」已存在于提供商「{provider}」",
+        nameDuplicateInInput: "模型名称「{name}」在输入中重复",
         baseUrlInvalid: "Base URL 格式不正确，请填写 http(s):// 开头的地址",
         apiKeyRequired: "请填写 API Key",
       },
@@ -1027,7 +1059,7 @@ export const zhCN = {
     },
   },
   protocol: {
-    tabs: { http: "HTTP / REST", ws: "WebSocket", mqtt: "MQTT", serial: "串口" },
+    tabs: { http: "HTTP / REST", ws: "WebSocket", mqtt: "MQTT", serial: "串口", grpc: "gRPC", sniffer: "抓包", modbus: "Modbus" },
     sidebar: {
       history: "请求历史",
       endpoints: "连接端点",

@@ -1,15 +1,21 @@
+import type { ReactNode } from "react";
 import { useI18n } from "../../i18n";
 import { AppLogo } from "./AppLogo";
 
 export interface WorkspaceEmptyPageProps {
-  /** 上下文提示，显示在 Banner 下方 */
+  /** 模块上下文提示语，显示在 Banner 下方 */
+  prompt?: string;
+  /** @deprecated 请使用 `prompt` */
   hint?: string;
+  /** 提示语下方的操作区（如重试按钮） */
+  actions?: ReactNode;
   className?: string;
 }
 
 /** 工作区无内容时的通用空页面：品牌 Logo、名称与 Banner。 */
-export function WorkspaceEmptyPage({ hint, className }: WorkspaceEmptyPageProps) {
+export function WorkspaceEmptyPage({ prompt, hint, actions, className }: WorkspaceEmptyPageProps) {
   const { t } = useI18n();
+  const message = prompt ?? hint;
   const rootClass = className
     ? `workspace-empty-page ${className}`
     : "workspace-empty-page";
@@ -24,7 +30,8 @@ export function WorkspaceEmptyPage({ hint, className }: WorkspaceEmptyPageProps)
       <div className="workspace-empty-page__banner" role="presentation">
         {t("app.banner")}
       </div>
-      {hint ? <p className="workspace-empty-page__hint">{hint}</p> : null}
+      {message ? <p className="workspace-empty-page__prompt">{message}</p> : null}
+      {actions ? <div className="workspace-empty-page__actions">{actions}</div> : null}
     </div>
   );
 }

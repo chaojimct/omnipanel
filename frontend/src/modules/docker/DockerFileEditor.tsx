@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
-import { Modal } from "../../components/ui/Modal";
-import { Button } from "../../components/ui/Button";
+import { FormDialog } from "../../components/ui/FormDialog";
 import Editor from "@monaco-editor/react";
 
 /* eslint-disable react-hooks/set-state-in-effect -- controlled form state reset */
@@ -28,7 +27,7 @@ export function DockerFileEditor({ open, filePath, initialContent, onClose, onSa
     }
   }, [open, initialContent]);
 
-  if (!open || filePath == null) return null;
+  if (filePath == null) return null;
 
   const bytes = new TextEncoder().encode(content).length;
   const tooLarge = bytes > MAX_SAFE_BYTES;
@@ -54,13 +53,22 @@ export function DockerFileEditor({ open, filePath, initialContent, onClose, onSa
   };
 
   return (
-    <Modal open={open} onClose={saving ? () => undefined : onClose}>
-      <div className="modal-dialog docker-file-editor" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <h3 title={filePath}>编辑文件 · {filePath}</h3>
-          <Button variant="icon" onClick={onClose} disabled={saving} title="关闭">×</Button>
-        </div>
-        <div className="modal-body">
+    <FormDialog
+      open={open}
+      onClose={saving ? () => undefined : onClose}
+      title={`编辑文件 · ${filePath}`}
+      className="docker-file-editor"
+      size="xl"
+      closeDisabled={saving}
+      cancelLabel="关闭"
+      onCancel={onClose}
+      cancelDisabled={saving}
+      primaryAction={{
+        label: saving ? "保存中…" : "保存",
+        disabled: saving || !dirty || tooLarge,
+        onClick: () => void handleSave(),
+      }}
+    >
           <div className="docker-file-editor-meta">
             <span className="text-muted text-sm">
               {bytes} / {MAX_SAFE_BYTES} 字节
@@ -91,18 +99,6 @@ export function DockerFileEditor({ open, filePath, initialContent, onClose, onSa
           </div>
           {error && <div className="text-danger text-sm" style={{ marginTop: 8 }}>{error}</div>}
           {message && <div className="text-success text-sm" style={{ marginTop: 8 }}>{message}</div>}
-        </div>
-        <div className="modal-footer">
-          <Button variant="secondary" onClick={onClose} disabled={saving}>关闭</Button>
-          <Button
-            variant="primary"
-            onClick={handleSave}
-            disabled={saving || !dirty || tooLarge}
-          >
-            {saving ? "保存中…" : "保存"}
-          </Button>
-        </div>
-      </div>
-    </Modal>
+    </FormDialog>
   );
 }

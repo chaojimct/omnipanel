@@ -45,7 +45,7 @@ const RESOURCE_ICON: Record<ResourceType, { bg: string; color: string; path: str
 
 const QUICK_LINKS: { path: string; type: ResourceType; label: string; hint: string }[] = [
   { path: "/terminal", type: "terminal", label: "Terminal", hint: "Local" },
-  { path: "/ssh", type: "ssh", label: "prod-web-01", hint: "SSH" },
+  { path: "/server", type: "ssh", label: "prod-web-01", hint: "SSH" },
   { path: "/database", type: "database", label: "prod-db", hint: "PostgreSQL" },
   { path: "/docker", type: "docker", label: "Containers", hint: "Docker" },
 ];

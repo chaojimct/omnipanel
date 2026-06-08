@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Modal } from "../../components/ui/Modal";
+import { FormDialog } from "../../components/ui/FormDialog";
 import { commands } from "../../ipc/bindings";
 import type { DockerCreateContainerRequest } from "../../ipc/bindings";
 
@@ -102,21 +102,19 @@ export function CreateContainerDialog({ open, connectionId, onClose, onCreated }
     }
   };
 
-  if (!open) return null;
-
   return (
-    <Modal open={open} onClose={onClose}>
-      <div className="modal-dialog" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <h3>创建容器</h3>
-          <button className="btn-icon" onClick={onClose} title="关闭">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
-              <path d="M18 6L6 18M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-
-        <div className="modal-body">
+    <FormDialog
+      open={open}
+      onClose={onClose}
+      title="创建容器"
+      onCancel={onClose}
+      cancelDisabled={saving}
+      primaryAction={{
+        label: saving ? "创建中…" : "创建",
+        disabled: saving || !connectionId,
+        onClick: () => void handleSubmit(),
+      }}
+    >
           {error && <div className="form-error" style={{ marginBottom: 8 }}>{error}</div>}
 
           <div className="form-field">
@@ -198,15 +196,6 @@ export function CreateContainerDialog({ open, connectionId, onClose, onCreated }
             <input type="checkbox" checked={autoRemove} onChange={(e) => setAutoRemove(e.target.checked)} />
             <label className="form-label" style={{ margin: 0 }}>自动删除（--rm）</label>
           </div>
-        </div>
-
-        <div className="modal-footer">
-          <button className="btn btn-secondary" onClick={onClose} disabled={saving}>取消</button>
-          <button className="btn btn-primary" onClick={handleSubmit} disabled={saving || !connectionId}>
-            {saving ? "创建中…" : "创建"}
-          </button>
-        </div>
-      </div>
-    </Modal>
+    </FormDialog>
   );
 }

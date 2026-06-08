@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, useLocation, useNavigate } from "react-router-dom";
+import { useServerViewStore } from "./stores/serverViewStore";
 import { useEffect, useState } from "react";
 import { Sidebar } from "./components/shell/Sidebar";
 import { Topbar } from "./components/shell/Topbar";
@@ -12,14 +13,15 @@ import { Button } from "./components/ui/Button";
 import { WindowResize } from "./components/shell/WindowResize";
 import { Dashboard } from "./modules/workspace/Dashboard";
 import { TerminalPanel } from "./modules/terminal/TerminalPanel";
-import { SshManager } from "./modules/ssh/SshManager";
 import { DatabasePanel } from "./modules/database/DatabasePanel";
 import { DockerPanel } from "./modules/docker/DockerPanel";
 import { ServerPanel } from "./modules/server/ServerPanel";
+import { SshRedirect } from "./modules/server/SshRedirect";
 import { ProtocolPanel } from "./modules/protocol/ProtocolPanel";
 import { WorkflowPanel } from "./modules/workflow/WorkflowPanel";
 import { KnowledgePanel } from "./modules/knowledge/KnowledgePanel";
 import { TasksPanel } from "./modules/tasks/TasksPanel";
+import { FileEditorPanel } from "./modules/editor/FileEditorPanel";
 import { SettingsPanel } from "./modules/settings/SettingsPanel";
 import { AiAgentPanel } from "./modules/ai";
 import { useAiDrawerShortcut } from "./hooks/useAiDrawerShortcut";
@@ -61,7 +63,7 @@ function TopbarPageActions() {
     );
   }
 
-  if (path === "/ssh") {
+  if (path === "/server" && useServerViewStore.getState().viewTab === "terminal") {
     return (
       <Button
         variant="primary"
@@ -115,7 +117,7 @@ function TopbarPageActions() {
   return null;
 }
 
-const TOPBAR_TAB_ROUTES = ["/terminal", "/ssh", "/database", "/docker", "/server", "/tasks", "/protocol"];
+const TOPBAR_TAB_ROUTES = ["/terminal", "/database", "/docker", "/server", "/tasks", "/protocol"];
 
 function AppShell() {
   useAiDrawerShortcut();
@@ -190,7 +192,7 @@ function AppShell() {
                 <Routes>
                   <Route path="/" element={<Dashboard />} />
                   <Route path="/terminal" element={null} />
-                  <Route path="/ssh" element={<SshManager />} />
+                  <Route path="/ssh" element={<SshRedirect />} />
                   <Route path="/database" element={<DatabasePanel />} />
                   <Route path="/docker" element={<DockerPanel />} />
                   <Route path="/server" element={<ServerPanel />} />
@@ -200,6 +202,7 @@ function AppShell() {
                   <Route path="/tasks" element={<TasksPanel />} />
                   <Route path="/ai-agent" element={<AiAgentPanel />} />
                   <Route path="/settings" element={<SettingsPanel />} />
+                  <Route path="/editor" element={<FileEditorPanel />} />
                 </Routes>
               )}
             </div>

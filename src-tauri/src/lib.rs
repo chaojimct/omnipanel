@@ -150,6 +150,37 @@ fn export_ipc_bindings() {
         commands::grpc::grpc_call,
         commands::grpc::grpc_list_connections,
         commands::grpc::grpc_close,
+        // File Editor
+        commands::editor::editor_open_file,
+        commands::editor::editor_save_file,
+        commands::editor::editor_list_recent,
+        // Protocol Lab — HTTP history & collections
+        commands::protocol::http_save_request,
+        commands::protocol::http_list_requests,
+        commands::protocol::http_delete_request,
+        commands::protocol::http_add_history,
+        commands::protocol::http_list_history,
+        commands::protocol::http_clear_history,
+        commands::protocol::http_save_collection,
+        commands::protocol::http_list_collections,
+        commands::protocol::http_delete_collection,
+        // Protocol Lab — Sniffer
+        commands::protocol::sniffer_list_interfaces,
+        commands::protocol::sniffer_start_capture,
+        commands::protocol::sniffer_stop_capture,
+        commands::protocol::sniffer_get_packets,
+        commands::protocol::sniffer_get_stats,
+        // Modbus
+        commands::protocol::modbus_connect,
+        commands::protocol::modbus_read_coils,
+        commands::protocol::modbus_read_discrete_inputs,
+        commands::protocol::modbus_read_holding_registers,
+        commands::protocol::modbus_read_input_registers,
+        commands::protocol::modbus_write_single_coil,
+        commands::protocol::modbus_write_single_register,
+        commands::protocol::modbus_write_multiple_coils,
+        commands::protocol::modbus_write_multiple_registers,
+        commands::protocol::modbus_disconnect,
     ]);
 
     // 用 CARGO_MANIFEST_DIR 拼绝对路径，避免 cwd 在不同入口（cargo test/run）下不一致。
@@ -215,7 +246,22 @@ pub fn run() {
             let app_state = AppState::new(app.handle().clone(), storage, db_connections);
             let pool_storage = app_state.storage.clone();
             let ssh_pool = app_state.ssh_pool.clone();
+            let ai_registry = app_state.ai_registry.clone();
             app.manage(app_state);
+
+            // Try to auto-register Ollama provider (silent skip if unavailable)
+            tauri::async_runtime::spawn(async move {
+                match omnipanel_ai::providers::ollama::OllamaProvider::discover_default().await {
+                    Some(provider) => {
+                        let mut reg = ai_registry.lock().await;
+                        reg.register(Box::new(provider));
+                        tracing::info!("Ollama provider auto-registered with discovered models");
+                    }
+                    None => {
+                        tracing::debug!("Ollama not available at localhost:11434, skipping");
+                    }
+                }
+            });
 
             // 启动 SSH 端口探测后台任务
             background::BackgroundScheduler::start(ssh_pool, pool_storage, app.handle().clone());
@@ -230,6 +276,7 @@ pub fn run() {
             commands::ai::ai_list_providers,
             commands::ai::ai_add_acp_agent,
             commands::ai::ai_get_active,
+            commands::ai::ai_add_custom_provider,
             // Protocol Lab — Serial
             commands::protocol::serial_scan_ports,
             commands::protocol::serial_open,
@@ -239,6 +286,15 @@ pub fn run() {
             commands::protocol::serial_set_rts,
             // Protocol Lab — HTTP
             commands::protocol::http_request,
+            commands::protocol::http_save_request,
+            commands::protocol::http_list_requests,
+            commands::protocol::http_delete_request,
+            commands::protocol::http_add_history,
+            commands::protocol::http_list_history,
+            commands::protocol::http_clear_history,
+            commands::protocol::http_save_collection,
+            commands::protocol::http_list_collections,
+            commands::protocol::http_delete_collection,
             // Protocol Lab — WebSocket
             commands::protocol::ws_connect,
             commands::protocol::ws_send_text,
@@ -251,6 +307,23 @@ pub fn run() {
             commands::protocol::mqtt_unsubscribe,
             commands::protocol::mqtt_publish,
             commands::protocol::mqtt_disconnect,
+            // Protocol Lab — Sniffer
+            commands::protocol::sniffer_list_interfaces,
+            commands::protocol::sniffer_start_capture,
+            commands::protocol::sniffer_stop_capture,
+            commands::protocol::sniffer_get_packets,
+            commands::protocol::sniffer_get_stats,
+        // Modbus
+        commands::protocol::modbus_connect,
+        commands::protocol::modbus_read_coils,
+        commands::protocol::modbus_read_discrete_inputs,
+        commands::protocol::modbus_read_holding_registers,
+        commands::protocol::modbus_read_input_registers,
+        commands::protocol::modbus_write_single_coil,
+        commands::protocol::modbus_write_single_register,
+        commands::protocol::modbus_write_multiple_coils,
+        commands::protocol::modbus_write_multiple_registers,
+        commands::protocol::modbus_disconnect,
             // Terminal
             commands::terminal::create_terminal,
             commands::terminal::write_terminal,
@@ -409,6 +482,10 @@ pub fn run() {
             commands::grpc::grpc_call,
             commands::grpc::grpc_list_connections,
             commands::grpc::grpc_close,
+            // File Editor
+            commands::editor::editor_open_file,
+            commands::editor::editor_save_file,
+            commands::editor::editor_list_recent,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

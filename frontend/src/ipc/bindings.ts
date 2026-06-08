@@ -281,6 +281,36 @@ export const commands = {
 	grpcCall: (connectionId: string, request: GrpcCallRequest) => typedError<GrpcCallResponse, string>(__TAURI_INVOKE("grpc_call", { connectionId, request })),
 	grpcListConnections: () => typedError<string[], string>(__TAURI_INVOKE("grpc_list_connections")),
 	grpcClose: (connectionId: string) => typedError<null, string>(__TAURI_INVOKE("grpc_close", { connectionId })),
+	/**  Open and read a file */
+	editorOpenFile: (path: string) => typedError<FileContent, string>(__TAURI_INVOKE("editor_open_file", { path })),
+	/**  Save content to a file */
+	editorSaveFile: (path: string, content: string) => typedError<null, string>(__TAURI_INVOKE("editor_save_file", { path, content })),
+	/**  List recently opened files (from storage) */
+	editorListRecent: () => typedError<RecentFile[], string>(__TAURI_INVOKE("editor_list_recent")),
+	httpSaveRequest: (req: SavedHttpRequest) => typedError<null, string>(__TAURI_INVOKE("http_save_request", { req })),
+	httpListRequests: (collectionId: string | null) => typedError<SavedHttpRequest[], string>(__TAURI_INVOKE("http_list_requests", { collectionId })),
+	httpDeleteRequest: (id: string) => typedError<null, string>(__TAURI_INVOKE("http_delete_request", { id })),
+	httpAddHistory: (entry: HttpHistoryEntry) => typedError<null, string>(__TAURI_INVOKE("http_add_history", { entry })),
+	httpListHistory: (limit: number | null) => typedError<HttpHistoryEntry[], string>(__TAURI_INVOKE("http_list_history", { limit })),
+	httpClearHistory: () => typedError<null, string>(__TAURI_INVOKE("http_clear_history")),
+	httpSaveCollection: (col: HttpCollection) => typedError<null, string>(__TAURI_INVOKE("http_save_collection", { col })),
+	httpListCollections: () => typedError<HttpCollection[], string>(__TAURI_INVOKE("http_list_collections")),
+	httpDeleteCollection: (id: string) => typedError<null, string>(__TAURI_INVOKE("http_delete_collection", { id })),
+	snifferListInterfaces: () => typedError<NetworkInterface[], string>(__TAURI_INVOKE("sniffer_list_interfaces")),
+	snifferStartCapture: (iface: string, filter: string) => typedError<string, string>(__TAURI_INVOKE("sniffer_start_capture", { iface, filter })),
+	snifferStopCapture: (captureId: string) => typedError<null, string>(__TAURI_INVOKE("sniffer_stop_capture", { captureId })),
+	snifferGetPackets: (captureId: string, limit: number | null) => typedError<SnifferPacket[], string>(__TAURI_INVOKE("sniffer_get_packets", { captureId, limit })),
+	snifferGetStats: (captureId: string) => typedError<CaptureStats, string>(__TAURI_INVOKE("sniffer_get_stats", { captureId })),
+	modbusConnect: (config: ModbusConfig) => typedError<string, string>(__TAURI_INVOKE("modbus_connect", { config })),
+	modbusReadCoils: (id: string, addr: number, qty: number) => typedError<boolean[], string>(__TAURI_INVOKE("modbus_read_coils", { id, addr, qty })),
+	modbusReadDiscreteInputs: (id: string, addr: number, qty: number) => typedError<boolean[], string>(__TAURI_INVOKE("modbus_read_discrete_inputs", { id, addr, qty })),
+	modbusReadHoldingRegisters: (id: string, addr: number, qty: number) => typedError<number[], string>(__TAURI_INVOKE("modbus_read_holding_registers", { id, addr, qty })),
+	modbusReadInputRegisters: (id: string, addr: number, qty: number) => typedError<number[], string>(__TAURI_INVOKE("modbus_read_input_registers", { id, addr, qty })),
+	modbusWriteSingleCoil: (id: string, addr: number, value: boolean) => typedError<null, string>(__TAURI_INVOKE("modbus_write_single_coil", { id, addr, value })),
+	modbusWriteSingleRegister: (id: string, addr: number, value: number) => typedError<null, string>(__TAURI_INVOKE("modbus_write_single_register", { id, addr, value })),
+	modbusWriteMultipleCoils: (id: string, addr: number, values: boolean[]) => typedError<null, string>(__TAURI_INVOKE("modbus_write_multiple_coils", { id, addr, values })),
+	modbusWriteMultipleRegisters: (id: string, addr: number, values: number[]) => typedError<null, string>(__TAURI_INVOKE("modbus_write_multiple_registers", { id, addr, values })),
+	modbusDisconnect: (id: string) => typedError<null, string>(__TAURI_INVOKE("modbus_disconnect", { id })),
 };
 
 /* Types */
@@ -294,6 +324,16 @@ export type ActionRequest = {
 	envTag?: string | null,
 	/**  工作目录（本地 shell 类执行可用）。 */
 	cwd?: string | null,
+};
+
+/**  抓包统计信息。 */
+export type CaptureStats = {
+	captureId: string,
+	iface: string,
+	filter: string,
+	running: boolean,
+	packetCount: number | null,
+	startedAt: string,
 };
 
 /**
@@ -826,6 +866,14 @@ export type ErrorCode =
 
 export type ExecutionStatus = "running" | "completed" | "failed" | "cancelled";
 
+export type FileContent = {
+	path: string,
+	content: string,
+	language: string,
+	size: number | null,
+	modified: string | null,
+};
+
 /**  gRPC 调用请求。 */
 export type GrpcCallRequest = {
 	/**  完整方法名，如 `mypackage.MyService/MyMethod` */
@@ -873,6 +921,27 @@ export type HostSystemStats = {
 	timestamp: number | null,
 };
 
+/**  HTTP 集合。 */
+export type HttpCollection = {
+	id: string,
+	name: string,
+	description: string,
+	createdAt: number | null,
+	updatedAt: number | null,
+};
+
+/**  HTTP 请求历史记录。 */
+export type HttpHistoryEntry = {
+	id: string,
+	method: string,
+	url: string,
+	statusCode: number | null,
+	responseTimeMs: number | null,
+	requestSize: number | null,
+	responseSize: number | null,
+	createdAt: number | null,
+};
+
 /**  知识条目模型。 */
 export type KnowledgeEntry = {
 	id: string,
@@ -898,12 +967,29 @@ export type KnowledgeEntry = {
 export type KnowledgeSearchResult = {
 	entry: KnowledgeEntry,
 	snippet: string,
+	/**  关键词相关性评分（0-100），分数越高越相关。 */
+	score: number | null,
 };
 
 export type MemoryStats = {
 	total: number | null,
 	used: number | null,
 	available: number | null,
+};
+
+/**  Modbus 连接配置。 */
+export type ModbusConfig = {
+	host: string,
+	port: number,
+	slave_id: number,
+	mode: string,
+};
+
+/**  网络接口信息。 */
+export type NetworkInterface = {
+	name: string,
+	description: string,
+	addresses: string[],
 };
 
 export type NetworkStats = {
@@ -932,6 +1018,12 @@ export type OmniError_Serialize = {
 	message: string,
 	/**  可选的底层原因（调试用，可能含技术细节） */
 	cause?: string | null,
+};
+
+export type RecentFile = {
+	path: string,
+	name: string,
+	openedAt: number | null,
 };
 
 export type RiskLevel = "low" | "medium" | "high" | "critical" | "read_only";
@@ -970,6 +1062,21 @@ export type SaveWorkflowRequest = {
 	steps: SaveStepRequest[],
 };
 
+/**  保存的 HTTP 请求。 */
+export type SavedHttpRequest = {
+	id: string,
+	name: string,
+	method: string,
+	url: string,
+	headers: string,
+	body: string,
+	authType: string,
+	authValue: string,
+	collectionId: string | null,
+	createdAt: number | null,
+	updatedAt: number | null,
+};
+
 /**  单个连接或库下的过滤项（与前端 `SchemaFilterState` 对应，可见项为列表）。 */
 export type SchemaFilterRecord = {
 	orderedNames: string[],
@@ -987,6 +1094,19 @@ export type SftpEntry = {
 	name: string,
 	isDir: boolean,
 	size: number | null,
+};
+
+/**  捕获的数据包。 */
+export type SnifferPacket = {
+	id: number | null,
+	timestamp: string,
+	srcIp: string,
+	dstIp: string,
+	protocol: string,
+	srcPort: number | null,
+	dstPort: number | null,
+	length: number | null,
+	payloadHex: string,
 };
 
 /**  SSH 认证方式。 */

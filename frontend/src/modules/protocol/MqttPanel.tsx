@@ -44,6 +44,22 @@ export function MqttPanel() {
   const [pubQos, setPubQos] = useState<MqttQos>(0);
   const [pubPayload, setPubPayload] = useState('{"action":"reboot"}');
 
+  // TLS state
+  const [useTls, setUseTls] = useState(false);
+  const [tlsCaPath, setTlsCaPath] = useState("");
+  const [tlsClientCert, setTlsClientCert] = useState("");
+  const [tlsClientKey, setTlsClientKey] = useState("");
+
+  // Will Message state
+  const [willTopic, setWillTopic] = useState("");
+  const [willPayload, setWillPayload] = useState("");
+  const [willQos, setWillQos] = useState<MqttQos>(0);
+  const [willRetain, setWillRetain] = useState(false);
+
+  // Collapsible sections
+  const [showTls, setShowTls] = useState(false);
+  const [showWill, setShowWill] = useState(false);
+
   const sessionIdRef = useRef<string | null>(null);
   const unlistenRef = useRef<(() => void) | null>(null);
 
@@ -87,7 +103,14 @@ export function MqttPanel() {
         password: null,
         keep_alive_secs: 60,
         clean_session: true,
-        use_tls: brokerUrl.startsWith("mqtts"),
+        use_tls: useTls || brokerUrl.startsWith("mqtts"),
+        tls_ca_path: tlsCaPath || null,
+        tls_client_cert: tlsClientCert || null,
+        tls_client_key: tlsClientKey || null,
+        will_topic: willTopic || null,
+        will_payload: willPayload || null,
+        will_qos: willTopic ? willQos : null,
+        will_retain: willTopic ? willRetain : null,
       };
 
       const id = await invoke<string>("mqtt_connect", { config, onMessage });
@@ -110,7 +133,7 @@ export function MqttPanel() {
       console.error("MQTT connect failed:", e);
       setStatus("disconnected");
     }
-  }, [status, brokerUrl, clientId]);
+  }, [status, brokerUrl, clientId, useTls, tlsCaPath, tlsClientCert, tlsClientKey, willTopic, willPayload, willQos, willRetain]);
 
   const handleSubscribe = useCallback(async () => {
     if (!newTopic.trim() || !sessionIdRef.current) return;
@@ -183,6 +206,138 @@ export function MqttPanel() {
               : t("protocol.common.connect")}
         </Button>
       </div>
+
+      {/* TLS & Will toggle row */}
+      <div
+        style={{
+          display: "flex",
+          gap: "var(--sp-3)",
+          marginBottom: "var(--sp-2)",
+          fontSize: "11px",
+        }}
+      >
+        <label style={{ display: "flex", alignItems: "center", gap: "var(--sp-1)", cursor: "pointer" }}>
+          <input
+            type="checkbox"
+            checked={showTls}
+            onChange={() => setShowTls(!showTls)}
+            disabled={status === "connected"}
+          />
+          TLS
+        </label>
+        <label style={{ display: "flex", alignItems: "center", gap: "var(--sp-1)", cursor: "pointer" }}>
+          <input
+            type="checkbox"
+            checked={showWill}
+            onChange={() => setShowWill(!showWill)}
+            disabled={status === "connected"}
+          />
+          Will Message
+        </label>
+      </div>
+
+      {/* TLS Configuration */}
+      {showTls && (
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: "var(--sp-2)",
+            marginBottom: "var(--sp-3)",
+            padding: "var(--sp-2)",
+            background: "var(--bg-secondary)",
+            borderRadius: "var(--radius)",
+            fontSize: "11px",
+          }}
+        >
+          <label style={{ display: "flex", alignItems: "center", gap: "var(--sp-1)" }}>
+            <input
+              type="checkbox"
+              checked={useTls}
+              onChange={(e) => setUseTls(e.target.checked)}
+              disabled={status === "connected"}
+            />
+            Enable TLS
+          </label>
+          <input
+            className="input"
+            placeholder="CA certificate path"
+            value={tlsCaPath}
+            onChange={(e) => setTlsCaPath(e.target.value)}
+            style={{ flex: "1 1 200px", fontSize: "11px" }}
+            disabled={status === "connected"}
+          />
+          <input
+            className="input"
+            placeholder="Client certificate path"
+            value={tlsClientCert}
+            onChange={(e) => setTlsClientCert(e.target.value)}
+            style={{ flex: "1 1 200px", fontSize: "11px" }}
+            disabled={status === "connected"}
+          />
+          <input
+            className="input"
+            placeholder="Client private key path"
+            value={tlsClientKey}
+            onChange={(e) => setTlsClientKey(e.target.value)}
+            style={{ flex: "1 1 200px", fontSize: "11px" }}
+            disabled={status === "connected"}
+          />
+        </div>
+      )}
+
+      {/* Will Message Configuration */}
+      {showWill && (
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: "var(--sp-2)",
+            marginBottom: "var(--sp-3)",
+            padding: "var(--sp-2)",
+            background: "var(--bg-secondary)",
+            borderRadius: "var(--radius)",
+            fontSize: "11px",
+          }}
+        >
+          <input
+            className="input"
+            placeholder="Will topic (e.g. status/client)"
+            value={willTopic}
+            onChange={(e) => setWillTopic(e.target.value)}
+            style={{ flex: "1 1 180px", fontSize: "11px" }}
+            disabled={status === "connected"}
+          />
+          <input
+            className="input"
+            placeholder="Will payload"
+            value={willPayload}
+            onChange={(e) => setWillPayload(e.target.value)}
+            style={{ flex: "1 1 180px", fontSize: "11px" }}
+            disabled={status === "connected"}
+          />
+          <select
+            className="input"
+            style={{ width: "70px", fontSize: "11px" }}
+            value={willQos}
+            onChange={(e) => setWillQos(Number(e.target.value) as MqttQos)}
+            disabled={status === "connected"}
+          >
+            <option value={0}>QoS 0</option>
+            <option value={1}>QoS 1</option>
+            <option value={2}>QoS 2</option>
+          </select>
+          <label style={{ display: "flex", alignItems: "center", gap: "var(--sp-1)" }}>
+            <input
+              type="checkbox"
+              checked={willRetain}
+              onChange={(e) => setWillRetain(e.target.checked)}
+              disabled={status === "connected"}
+            />
+            Retain
+          </label>
+        </div>
+      )}
 
       {/* Status bar */}
       <div

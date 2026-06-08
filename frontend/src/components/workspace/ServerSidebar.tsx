@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { useI18n } from "../../i18n";
 import { ContextMenu, type ContextMenuItem } from "../ui/ContextMenu";
 import { Button } from "../ui/Button";
-import type { ServerEntry } from "../../modules/server/CreateServerDialog";
+import type { ServerEntry } from "../../modules/server/panel/serverConnection";
 import type { ServerConnectionGroup } from "../../stores/serverGroupStore";
 
 interface ServerSidebarProps {

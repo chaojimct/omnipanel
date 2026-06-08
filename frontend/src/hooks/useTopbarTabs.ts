@@ -21,7 +21,7 @@ export function useTopbarTabs(
 
   useEffect(() => {
     if (!enabled) {
-      clearTabs();
+      // 不注册顶栏 Tab，也不清除——父级模块可能仍持有顶栏（如服务器「面板/终端」）
       return;
     }
     setTabs(

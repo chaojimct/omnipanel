@@ -61,7 +61,6 @@ export function getRouteTitle(path: string, locale?: Locale) {
   const map: Record<string, Path> = {
     "/": "routes.workspace",
     "/terminal": "routes.terminal",
-    "/ssh": "routes.ssh",
     "/database": "routes.database",
     "/docker": "routes.docker",
     "/server": "routes.server",
@@ -69,6 +68,7 @@ export function getRouteTitle(path: string, locale?: Locale) {
     "/workflow": "routes.workflow",
     "/knowledge": "routes.knowledge",
     "/tasks": "routes.tasks",
+    "/editor": "routes.editor",
     "/settings": "routes.settings",
   };
   return t(map[path] ?? "routes.default", undefined, locale);
