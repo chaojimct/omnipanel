@@ -6,11 +6,6 @@ import type { DockerNetworkSummary, DockerCreateNetworkRequest } from "../../ipc
 import type { DockerActionResult } from "./useDockerWorkspace";
 import { formatDockerTime } from "./format";
 import { TrashIcon } from "./icons";
-import { TrashIcon } from "./icons";
-import { TrashIcon } from "./icons";
-import { TrashIcon } from "./icons";
-import { TrashIcon } from "./icons";
-import { TrashIcon } from "./icons";
 
 interface ConfirmState {
   title: string;
