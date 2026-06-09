@@ -7297,6 +7297,13 @@
         text-align: left;
     }
 
+    /* 单元格文本需支持选择/复制（覆盖全局 user-select: none） */
+    .db-data-table td,
+    .db-data-table td * {
+        -webkit-user-select: text;
+        user-select: text;
+    }
+
     .db-data-table td,
     .db-data-table th {
         overflow: hidden;

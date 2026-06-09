@@ -4,7 +4,7 @@ use serde_json::Value;
 use sqlx::mysql::{MySqlConnectOptions, MySqlPool, MySqlPoolOptions, MySqlRow, MySqlSslMode};
 use sqlx::{Column, Row, TypeInfo, ValueRef};
 
-use crate::{DbDriver, DbParams, QueryResult, is_query, map_sqlx_err};
+use crate::{DbDriver, DbParams, QueryResult, is_query, map_sqlx_err, split_statements};
 
 pub struct MySqlDriver {
     pool: MySqlPool,
@@ -101,32 +101,49 @@ impl DbDriver for MySqlDriver {
 }
 
 async fn run(pool: &MySqlPool, sql: &str) -> OmniResult<QueryResult> {
-    if is_query(sql) {
-        let rows = sqlx::query(sql)
-            .fetch_all(pool)
-            .await
-            .map_err(map_sqlx_err)?;
-        let columns: Vec<String> = match rows.first() {
-            Some(r) => r.columns().iter().map(|c| c.name().to_string()).collect(),
-            None => Vec::new(),
-        };
-        let data = rows
-            .iter()
-            .map(|r| (0..columns.len()).map(|i| extract(r, i)).collect())
-            .collect();
-        Ok(QueryResult {
-            columns,
-            rows: data,
-            rows_affected: 0,
-        })
-    } else {
-        let res = sqlx::query(sql).execute(pool).await.map_err(map_sqlx_err)?;
-        Ok(QueryResult {
+    let statements = split_statements(sql);
+    if statements.is_empty() {
+        return Ok(QueryResult {
             columns: Vec::new(),
             rows: Vec::new(),
-            rows_affected: res.rows_affected(),
-        })
+            rows_affected: 0,
+        });
     }
+
+    let mut result = QueryResult {
+        columns: Vec::new(),
+        rows: Vec::new(),
+        rows_affected: 0,
+    };
+    for stmt in statements {
+        if is_query(&stmt) {
+            let rows = sqlx::query(&stmt)
+                .fetch_all(pool)
+                .await
+                .map_err(map_sqlx_err)?;
+            let columns: Vec<String> = match rows.first() {
+                Some(r) => r.columns().iter().map(|c| c.name().to_string()).collect(),
+                None => Vec::new(),
+            };
+            let data = rows
+                .iter()
+                .map(|r| (0..columns.len()).map(|i| extract(r, i)).collect())
+                .collect();
+            // 多个查询时以最后一条为准（前端只展示一个结果集）。
+            result = QueryResult {
+                columns,
+                rows: data,
+                rows_affected: 0,
+            };
+        } else {
+            let res = sqlx::query(&stmt)
+                .execute(pool)
+                .await
+                .map_err(map_sqlx_err)?;
+            result.rows_affected = result.rows_affected.saturating_add(res.rows_affected());
+        }
+    }
+    Ok(result)
 }
 
 fn extract(row: &MySqlRow, index: usize) -> Value {

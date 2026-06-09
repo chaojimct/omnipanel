@@ -259,11 +259,14 @@ export function TableDataGrid({ columns, rows, totalRows, page, pageSize, loadin
                   const canEdit = onCellEdit && colMeta;
                   const overrideValue = overrideForRow?.[cell.column.id];
                   const cellDirty = overrideValue !== undefined && rowDirty;
+                  const rawValue = overrideValue !== undefined ? overrideValue : cell.getValue();
+                  const cellTitle = cellToText(rawValue);
                   return (
                     <td
                       key={cell.id}
                       className={`db-data-table-cell${isCustomHeight ? " db-data-table-cell--custom-h" : ""}${columnSizing[cell.column.id] !== undefined ? " db-data-table-cell--sized" : ""}${canEdit ? " db-cell--editable" : ""}${cellDirty ? " db-data-table-cell--dirty" : ""}`}
                       onDoubleClick={canEdit ? () => onCellEdit({ rowIndex: cell.row.index, column: cell.column.id, row: cell.row.original }) : undefined}
+                      title={cellTitle}
                     >
                       {overrideValue !== undefined
                         ? flexRender(
