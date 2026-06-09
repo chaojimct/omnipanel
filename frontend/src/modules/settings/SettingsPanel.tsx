@@ -1,6 +1,7 @@
 import { useState, useEffect, type ReactNode } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { useAiStore } from "../../stores/aiStore";
+import { detectMonospaceFonts } from "../../lib/systemFonts";
 import {
   useAiModelsStore,
   maskApiKey,
@@ -128,17 +129,22 @@ function SettingSelect({
   value,
   onChange,
   options,
+  optionLabels,
 }: {
   value: string;
   onChange: (v: string) => void;
   options: string[];
+  optionLabels?: string[];
 }) {
+  const selectOptions = optionLabels
+    ? options.map((v, i) => ({ value: v, label: optionLabels[i] ?? v }))
+    : options;
   return (
     <Select
       className="setting-select"
       size="sm"
       value={value}
-      options={options}
+      options={selectOptions}
       onChange={onChange}
       searchable={options.length > 6}
     />
@@ -550,15 +556,22 @@ export function SettingsPanel() {
   const [auditLog, setAuditLog] = useState(true);
   const [sensitiveMask, setSensitiveMask] = useState(true);
 
-  // Terminal settings state
-  const [fontFamily, setFontFamily] = useState("Berkeley Mono");
-  const [fontSize, setFontSize] = useState("13px");
-  const [lineHeight, setLineHeight] = useState("1.6");
-  const [cursorStyle, setCursorStyle] = useState("Bar");
-  const [cursorBlink, setCursorBlink] = useState(true);
-  const [scrollback, setScrollback] = useState("10000");
-  const [gpuAccel, setGpuAccel] = useState(true);
-  const [copyOnSelect, setCopyOnSelect] = useState(false);
+  // Terminal settings from store
+  const terminalFontFamily = useSettingsStore((s) => s.terminalFontFamily);
+  const terminalFontSize = useSettingsStore((s) => s.terminalFontSize);
+  const terminalLineHeight = useSettingsStore((s) => s.terminalLineHeight);
+  const terminalCursorStyle = useSettingsStore((s) => s.terminalCursorStyle);
+  const terminalCursorBlink = useSettingsStore((s) => s.terminalCursorBlink);
+  const terminalScrollback = useSettingsStore((s) => s.terminalScrollback);
+  const terminalGpuAccel = useSettingsStore((s) => s.terminalGpuAccel);
+  const terminalCopyOnSelect = useSettingsStore((s) => s.terminalCopyOnSelect);
+  const setTerminalSettings = useSettingsStore((s) => s.setTerminalSettings);
+
+  // Detect installed monospace fonts on mount
+  const [systemFonts, setSystemFonts] = useState<string[]>([]);
+  useEffect(() => {
+    detectMonospaceFonts().then(setSystemFonts);
+  }, []);
 
   // Update state
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
@@ -1003,59 +1016,117 @@ export function SettingsPanel() {
         {activeSection === "terminal" && (
           <div className="settings-panel active">
             <div className="settings-section">
-              <h2>终端</h2>
-              <p className="section-desc">终端模拟器设置</p>
+              <h2>{t("settings.terminal.label")}</h2>
+              <p className="section-desc">{t("settings.terminal.desc")}</p>
+
+              {/* Live preview */}
+              <div className="terminal-preview">
+                <div className="terminal-preview-bar">
+                  <span className="terminal-preview-dot" />
+                  <span className="terminal-preview-dot" />
+                  <span className="terminal-preview-dot" />
+                  <span className="terminal-preview-title">{t("settings.terminal.preview")}</span>
+                </div>
+                <div
+                  className="terminal-preview-body"
+                  style={{
+                    fontFamily: `"${terminalFontFamily}", "Cascadia Code", "Fira Code", Menlo, Consolas, monospace`,
+                    fontSize: `${terminalFontSize}px`,
+                    lineHeight: terminalLineHeight,
+                  }}
+                >
+                  <div>
+                    <span style={{ color: "#4ec9b0" }}>user@omnipanel</span>
+                    <span style={{ color: "#6a9955" }}>:</span>
+                    <span style={{ color: "#569cd6" }}>~/project</span>
+                    <span style={{ color: "#d4d4d4" }}>$ </span>
+                    <span style={{ color: "#d4d4d4" }}>git status</span>
+                    {terminalCursorStyle === "block" && <span className="term-cursor term-cursor--block"> </span>}
+                    {terminalCursorStyle === "bar" && <span className="term-cursor term-cursor--bar" />}
+                    {terminalCursorStyle === "underline" && <span className="term-cursor term-cursor--underline" />}
+                  </div>
+                  <div style={{ color: "#569cd6" }}>On branch main</div>
+                  <div style={{ color: "#6a9955" }}>Changes committed:</div>
+                  <div>
+                    <span style={{ color: "#d4d4d4" }}>  modified: </span>
+                    <span style={{ color: "#ce9178" }}>src/App.tsx</span>
+                  </div>
+                  <div>
+                    <span style={{ color: "#d4d4d4" }}>  new file: </span>
+                    <span style={{ color: "#ce9178" }}>src/modules/ai/AgentPanel.tsx</span>
+                  </div>
+                  <div style={{ color: "#d4d4d4" }}>$ <span className="term-cursor-blink" style={{
+                    display: "inline-block",
+                    width: terminalCursorStyle === "block" ? `${terminalFontSize * 0.6}px` : terminalCursorStyle === "underline" ? `${terminalFontSize * 0.6}px` : "2px",
+                    height: terminalCursorStyle === "block" ? `${terminalFontSize}px` : terminalCursorStyle === "underline" ? "2px" : `${terminalFontSize}px`,
+                    background: "#d4d4d4",
+                    verticalAlign: terminalCursorStyle === "underline" ? "bottom" : "text-bottom",
+                    animation: terminalCursorBlink ? "term-blink 1s step-end infinite" : "none",
+                  }} /></div>
+                </div>
+              </div>
+
               <div className="setting-row">
                 <div className="setting-label">
-                  <h4>Font Family</h4>
-                  <p>Monospace font for terminal</p>
+                  <h4>{t("settings.terminal.fontFamily")}</h4>
+                  <p>{t("settings.terminal.fontFamilyDesc")}</p>
                 </div>
-                <SettingSelect value={fontFamily} onChange={setFontFamily} options={["Berkeley Mono", "JetBrains Mono", "Fira Code", "IBM Plex Mono", "Cascadia Code"]} />
+                <SettingSelect
+                  value={terminalFontFamily}
+                  onChange={(v) => setTerminalSettings({ terminalFontFamily: v })}
+                  options={
+                    systemFonts.length > 0
+                      ? systemFonts.includes(terminalFontFamily)
+                        ? systemFonts
+                        : [terminalFontFamily, ...systemFonts]
+                      : [terminalFontFamily, "Cascadia Code", "JetBrains Mono", "Fira Code", "IBM Plex Mono", "Consolas", "Menlo"]
+                  }
+                />
               </div>
               <div className="setting-row">
                 <div className="setting-label">
-                  <h4>Font Size</h4>
+                  <h4>{t("settings.terminal.fontSize")}</h4>
                 </div>
-                <SettingSelect value={fontSize} onChange={setFontSize} options={["11px", "12px", "13px", "14px", "15px", "16px", "18px"]} />
+                <SettingSelect value={String(terminalFontSize)} onChange={(v) => setTerminalSettings({ terminalFontSize: Number(v) })} options={["11", "12", "13", "14", "15", "16", "18"]} />
               </div>
               <div className="setting-row">
                 <div className="setting-label">
-                  <h4>Line Height</h4>
+                  <h4>{t("settings.terminal.lineHeight")}</h4>
                 </div>
-                <SettingSelect value={lineHeight} onChange={setLineHeight} options={["1.2", "1.4", "1.6", "1.8"]} />
+                <SettingSelect value={String(terminalLineHeight)} onChange={(v) => setTerminalSettings({ terminalLineHeight: Number(v) })} options={["1.2", "1.4", "1.6", "1.8"]} />
               </div>
               <div className="setting-row">
                 <div className="setting-label">
-                  <h4>Cursor Style</h4>
+                  <h4>{t("settings.terminal.cursorStyle")}</h4>
                 </div>
-                <SettingSelect value={cursorStyle} onChange={setCursorStyle} options={["Block", "Bar", "Underline"]} />
+                <SettingSelect value={terminalCursorStyle} onChange={(v) => setTerminalSettings({ terminalCursorStyle: v as "block" | "bar" | "underline" })} options={["block", "bar", "underline"]} optionLabels={[t("settings.terminal.cursorBlock"), t("settings.terminal.cursorBar"), t("settings.terminal.cursorUnderline")]} />
               </div>
               <div className="setting-row">
                 <div className="setting-label">
-                  <h4>Cursor Blink</h4>
+                  <h4>{t("settings.terminal.cursorBlink")}</h4>
                 </div>
-                <Toggle value={cursorBlink} onChange={setCursorBlink} />
+                <Toggle value={terminalCursorBlink} onChange={(v) => setTerminalSettings({ terminalCursorBlink: v })} />
               </div>
               <div className="setting-row">
                 <div className="setting-label">
-                  <h4>Scrollback Lines</h4>
-                  <p>Number of lines to keep in scroll buffer</p>
+                  <h4>{t("settings.terminal.scrollback")}</h4>
+                  <p>{t("settings.terminal.scrollbackDesc")}</p>
                 </div>
-                <SettingSelect value={scrollback} onChange={setScrollback} options={["1000", "5000", "10000", "50000"]} />
+                <SettingSelect value={String(terminalScrollback)} onChange={(v) => setTerminalSettings({ terminalScrollback: Number(v) })} options={["1000", "5000", "10000", "50000"]} />
               </div>
               <div className="setting-row">
                 <div className="setting-label">
-                  <h4>GPU Acceleration</h4>
-                  <p>Use WebGL for terminal rendering</p>
+                  <h4>{t("settings.terminal.gpuAccel")}</h4>
+                  <p>{t("settings.terminal.gpuAccelDesc")}</p>
                 </div>
-                <Toggle value={gpuAccel} onChange={setGpuAccel} />
+                <Toggle value={terminalGpuAccel} onChange={(v) => setTerminalSettings({ terminalGpuAccel: v })} />
               </div>
               <div className="setting-row">
                 <div className="setting-label">
-                  <h4>Copy on select</h4>
-                  <p>Automatically copy selected text to clipboard</p>
+                  <h4>{t("settings.terminal.copyOnSelect")}</h4>
+                  <p>{t("settings.terminal.copyOnSelectDesc")}</p>
                 </div>
-                <Toggle value={copyOnSelect} onChange={setCopyOnSelect} />
+                <Toggle value={terminalCopyOnSelect} onChange={(v) => setTerminalSettings({ terminalCopyOnSelect: v })} />
               </div>
             </div>
           </div>

@@ -5,6 +5,7 @@ import {
   findTerminalPane,
   useTerminalStore,
 } from "../../stores/terminalStore";
+import { useSettingsStore } from "../../stores/settingsStore";
 import type { WorkspaceResource } from "../../lib/resourceRegistry";
 import {
   getMockCommandOutput,
@@ -78,20 +79,23 @@ export function TerminalView({
     const container = containerRef.current;
     if (!container) return;
 
+    const settings = useSettingsStore.getState();
     const term = new Terminal({
-      cursorBlink: true,
-      fontSize: 13,
-      fontFamily:
-        '"Cascadia Code", "Fira Code", Menlo, Consolas, monospace',
+      cursorBlink: settings.terminalCursorBlink,
+      cursorStyle: settings.terminalCursorStyle,
+      fontSize: settings.terminalFontSize,
+      fontFamily: `"${settings.terminalFontFamily}", "Cascadia Code", "Fira Code", Menlo, Consolas, monospace`,
+      lineHeight: settings.terminalLineHeight,
       theme: {
         background: "#1a1717",
         foreground: "#fdfcfc",
         cursor: "#fdfcfc",
         selectionBackground: "#007aff30",
       },
-      scrollback: 5000,
+      scrollback: settings.terminalScrollback,
       allowTransparency: false,
     });
+    term.options.copyOnSelect = settings.terminalCopyOnSelect;
 
     term.open(container);
     term.attachCustomKeyEventHandler((e) => triggerAiDrawerToggle(e));

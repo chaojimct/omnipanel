@@ -12,6 +12,7 @@ import {
   useTerminalStore,
 } from "../stores/terminalStore";
 import { useConnectionStore } from "../stores/connectionStore";
+import { useSettingsStore } from "../stores/settingsStore";
 import { isOpenSshHostId, openSshHostAlias } from "../lib/sshConfigHosts";
 import { createBlockId, useBlocksStore, type TerminalBlock } from "../stores/blocksStore";
 import { triggerAiDrawerToggle } from "./useAiDrawerShortcut";
@@ -437,15 +438,18 @@ export function useTerminal(
       if (destroyed || term || suspendedRef.current) return;
 
       try {
+        const settings = useSettingsStore.getState();
         term = new Terminal({
-          cursorBlink: true,
-          fontSize: 13,
-          fontFamily:
-            '"Berkeley Mono", "IBM Plex Mono", ui-monospace, "Cascadia Code", "Fira Code", Menlo, Consolas, monospace',
+          cursorBlink: settings.terminalCursorBlink,
+          cursorStyle: settings.terminalCursorStyle,
+          fontSize: settings.terminalFontSize,
+          fontFamily: `"${settings.terminalFontFamily}", "IBM Plex Mono", ui-monospace, "Cascadia Code", "Fira Code", Menlo, Consolas, monospace`,
+          lineHeight: settings.terminalLineHeight,
           theme: TERMINAL_THEME,
           allowProposedApi: true,
-          scrollback: 10000,
+          scrollback: settings.terminalScrollback,
         });
+        term.options.copyOnSelect = settings.terminalCopyOnSelect;
 
         fitAddon = new FitAddon();
         term.loadAddon(fitAddon);
@@ -455,11 +459,13 @@ export function useTerminal(
         term.loadAddon(searchAddon);
         searchAddonRef.current = searchAddon;
 
-        try {
-          webglAddon = new WebglAddon();
-          term.loadAddon(webglAddon);
-        } catch {
-          // WebGL not available, fall back to canvas renderer
+        if (settings.terminalGpuAccel) {
+          try {
+            webglAddon = new WebglAddon();
+            term.loadAddon(webglAddon);
+          } catch {
+            // WebGL not available, fall back to canvas renderer
+          }
         }
 
         term.open(container!);
