@@ -2481,6 +2481,18 @@
         margin-bottom: var(--sp-4);
     }
 
+    /* Terminal settings preview */
+    .terminal-preview { border: 1px solid var(--border); border-radius: var(--r-md); overflow: hidden; margin-bottom: var(--sp-4); }
+    .terminal-preview-bar { display: flex; align-items: center; gap: 6px; padding: 8px 12px; background: #2d2d2d; }
+    .terminal-preview-dot { width: 10px; height: 10px; border-radius: 50%; }
+    .terminal-preview-dot:nth-child(1) { background: #ff5f57; }
+    .terminal-preview-dot:nth-child(2) { background: #febc2e; }
+    .terminal-preview-dot:nth-child(3) { background: #28c840; }
+    .terminal-preview-title { flex: 1; text-align: center; font-size: 11px; color: #888; margin-right: 28px; }
+    .terminal-preview-body { background: #1a1717; padding: 12px 16px; color: #d4d4d4; min-height: 140px; }
+    .terminal-preview-body > div { white-space: pre; }
+    @keyframes term-blink { 50% { opacity: 0; } }
+
     .setting-row {
         display: flex;
         align-items: center;

@@ -58,6 +58,8 @@ export const DEFAULT_PROXY: ProxyConfig = {
 
 export type AiDisplayMode = "subwindow" | "dockview";
 
+export type TerminalCursorStyle = "block" | "bar" | "underline";
+
 export const AI_DOCK_WIDTH_MIN = 300;
 export const AI_DOCK_WIDTH_DEFAULT = 480;
 
@@ -70,6 +72,14 @@ interface SettingsState {
   proxy: ProxyConfig;
   aiDisplayMode: AiDisplayMode;
   aiDockWidth: number;
+  terminalFontFamily: string;
+  terminalFontSize: number;
+  terminalLineHeight: number;
+  terminalCursorStyle: TerminalCursorStyle;
+  terminalCursorBlink: boolean;
+  terminalScrollback: number;
+  terminalGpuAccel: boolean;
+  terminalCopyOnSelect: boolean;
   resolved: "light" | "dark";
   setLocale: (locale: Locale) => void;
   setUiDensity: (density: UiDensity) => void;
@@ -79,6 +89,11 @@ interface SettingsState {
   setProxy: (proxy: ProxyConfig) => void;
   setAiDisplayMode: (mode: AiDisplayMode) => void;
   setAiDockWidth: (width: number) => void;
+  setTerminalSettings: (patch: Partial<Pick<SettingsState,
+    "terminalFontFamily" | "terminalFontSize" | "terminalLineHeight" |
+    "terminalCursorStyle" | "terminalCursorBlink" | "terminalScrollback" |
+    "terminalGpuAccel" | "terminalCopyOnSelect"
+  >>) => void;
 }
 
 export function clampUiScale(percent: number): number {
@@ -137,6 +152,14 @@ export const useSettingsStore = create<SettingsState>()(
       proxy: { ...DEFAULT_PROXY },
       aiDisplayMode: "subwindow",
       aiDockWidth: AI_DOCK_WIDTH_DEFAULT,
+      terminalFontFamily: "Cascadia Code",
+      terminalFontSize: 13,
+      terminalLineHeight: 1.6,
+      terminalCursorStyle: "bar",
+      terminalCursorBlink: true,
+      terminalScrollback: 10000,
+      terminalGpuAccel: true,
+      terminalCopyOnSelect: false,
       resolved: resolveTheme("system"),
       setLocale: (locale) => {
         applyDocumentLocale(locale);
@@ -159,6 +182,7 @@ export const useSettingsStore = create<SettingsState>()(
       setProxy: (proxy) => set({ proxy }),
       setAiDisplayMode: (aiDisplayMode) => set({ aiDisplayMode }),
       setAiDockWidth: (aiDockWidth) => set({ aiDockWidth }),
+      setTerminalSettings: (patch) => set(patch),
     }),
     {
       name: "omnipanel-settings",
@@ -172,6 +196,14 @@ export const useSettingsStore = create<SettingsState>()(
         proxy: state.proxy,
         aiDisplayMode: state.aiDisplayMode,
         aiDockWidth: state.aiDockWidth,
+        terminalFontFamily: state.terminalFontFamily,
+        terminalFontSize: state.terminalFontSize,
+        terminalLineHeight: state.terminalLineHeight,
+        terminalCursorStyle: state.terminalCursorStyle,
+        terminalCursorBlink: state.terminalCursorBlink,
+        terminalScrollback: state.terminalScrollback,
+        terminalGpuAccel: state.terminalGpuAccel,
+        terminalCopyOnSelect: state.terminalCopyOnSelect,
       }),
       onRehydrateStorage: () => (state) => {
         applyDocumentLocale(state?.locale ?? "zh-CN");
