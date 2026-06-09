@@ -118,7 +118,7 @@ fn extract(row: &PgRow, index: usize) -> Value {
             .unwrap_or(Value::Null),
         "int2" | "int4" | "int8" => row
             .try_get::<i64, _>(index)
-            .map(|v| serde_json::json!(v))
+            .map(|v| safe_int_to_value(v as i128))
             .unwrap_or(Value::Null),
         "float4" | "float8" | "numeric" => row
             .try_get::<f64, _>(index)
@@ -133,5 +133,15 @@ fn extract(row: &PgRow, index: usize) -> Value {
             .try_get::<String, _>(index)
             .map(Value::String)
             .unwrap_or(Value::Null),
+    }
+}
+
+/// 整数若落在 JS Number 安全区间（±2^53）内返回 number，否则返回字符串以保留精度。
+fn safe_int_to_value(v: i128) -> Value {
+    const SAFE_MAX: i128 = 1i128 << 53;
+    if v.abs() < SAFE_MAX {
+        serde_json::json!(v)
+    } else {
+        Value::String(v.to_string())
     }
 }

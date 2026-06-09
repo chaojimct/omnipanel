@@ -114,7 +114,7 @@ fn run(conn: &Connection, sql: &str) -> OmniResult<QueryResult> {
             for i in 0..col_count {
                 let value = match row.get_ref(i) {
                     Ok(ValueRef::Null) => Value::Null,
-                    Ok(ValueRef::Integer(n)) => serde_json::json!(n),
+                    Ok(ValueRef::Integer(n)) => safe_int_to_value(n),
                     Ok(ValueRef::Real(f)) => serde_json::json!(f),
                     Ok(ValueRef::Text(t)) => Value::String(String::from_utf8_lossy(t).into_owned()),
                     Ok(ValueRef::Blob(_)) => Value::String("[BLOB]".to_string()),
@@ -138,6 +138,17 @@ fn run(conn: &Connection, sql: &str) -> OmniResult<QueryResult> {
             rows: Vec::new(),
             rows_affected: affected as u64,
         })
+    }
+}
+
+
+/// 整数若落在 JS Number 安全区间（±2^53）内返回 number，否则返回字符串以保留精度。
+fn safe_int_to_value(v: i64) -> Value {
+    const SAFE_MAX: i64 = 1i64 << 53;
+    if v.abs() < SAFE_MAX {
+        serde_json::json!(v)
+    } else {
+        Value::String(v.to_string())
     }
 }
 

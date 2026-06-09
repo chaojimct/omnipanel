@@ -137,10 +137,14 @@ fn extract(row: &MySqlRow, index: usize) -> Value {
         return Value::Null;
     }
     let type_name = raw.type_info().name().to_lowercase();
-    if type_name.contains("int")
-        && let Ok(v) = row.try_get::<i64, _>(index)
-    {
-        return serde_json::json!(v);
+    if type_name.contains("int") {
+        // BIGINT UNSIGNED 超出 i64 范围，先按 u64 尝试，避免 i64 溢出吞精度
+        if let Ok(v) = row.try_get::<u64, _>(index) {
+            return safe_int_to_value(v as i128);
+        }
+        if let Ok(v) = row.try_get::<i64, _>(index) {
+            return safe_int_to_value(v as i128);
+        }
     }
     if (type_name.contains("float")
         || type_name.contains("double")
@@ -155,5 +159,15 @@ fn extract(row: &MySqlRow, index: usize) -> Value {
     match row.try_get::<String, _>(index) {
         Ok(v) => Value::String(v),
         Err(_) => Value::Null,
+    }
+}
+
+/// 整数若落在 JS Number 安全区间（±2^53）内返回 number，否则返回字符串以保留精度。
+fn safe_int_to_value(v: i128) -> Value {
+    const SAFE_MAX: i128 = 1i128 << 53;
+    if v.abs() < SAFE_MAX {
+        serde_json::json!(v)
+    } else {
+        Value::String(v.to_string())
     }
 }
