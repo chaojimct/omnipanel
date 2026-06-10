@@ -6677,7 +6677,6 @@
     .db-toolbox-side__filters .db-select {
         flex: 1;
         min-width: 120px;
-        padding: 4px 8px;
         background: var(--surface);
         border: 1px solid var(--border);
         border-radius: var(--r-sm);
@@ -7438,7 +7437,6 @@
     }
 
     .sql-toolbar .db-select {
-        padding: 3px 8px;
         background: var(--surface);
         border: 1px solid var(--border);
         border-radius: var(--r-sm);
