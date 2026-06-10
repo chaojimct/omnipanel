@@ -126,8 +126,10 @@ function AppShell() {
   const navigate = useNavigate();
   const title = getRouteTitle(location.pathname);
   const isTerminal = location.pathname === "/terminal";
+  const isDocker = location.pathname === "/docker";
   const [otherRoutesMounted, setOtherRoutesMounted] = useState(!isTerminal);
   const [terminalMounted, setTerminalMounted] = useState(isTerminal);
+  const [dockerMounted, setDockerMounted] = useState(isDocker);
   const aiDisplayMode = useSettingsStore((s) => s.aiDisplayMode);
   const drawerOpen = useAiStore((s) => s.drawerOpen);
   const setActivePath = useWorkspaceStore((state) => state.setActivePath);
@@ -147,6 +149,12 @@ function AppShell() {
       setTerminalMounted(true);
     }
   }, [isTerminal]);
+
+  useEffect(() => {
+    if (isDocker) {
+      setDockerMounted(true);
+    }
+  }, [isDocker]);
 
   useEffect(() => {
     setActivePath(location.pathname);
@@ -235,14 +243,17 @@ function AppShell() {
               <div className={`route-panel${isTerminal ? " route-panel--active" : ""}`}>
                 {terminalMounted && <TerminalPanel />}
               </div>
-              <div className={`route-panel${!isTerminal ? " route-panel--active" : ""}`}>
+              <div className={`route-panel${isDocker ? " route-panel--active" : ""}`}>
+                {dockerMounted && <DockerPanel />}
+              </div>
+              <div className={`route-panel${!isTerminal && !isDocker ? " route-panel--active" : ""}`}>
                 {otherRoutesMounted && (
                   <Routes>
                     <Route path="/" element={<Dashboard />} />
                     <Route path="/terminal" element={null} />
                     <Route path="/ssh" element={<SshRedirect />} />
                     <Route path="/database" element={<DatabasePanel />} />
-                    <Route path="/docker" element={<DockerPanel />} />
+                    <Route path="/docker" element={null} />
                     <Route path="/server" element={<ServerPanel />} />
                     <Route path="/protocol" element={<ProtocolPanel />} />
                     <Route path="/workflow" element={<WorkflowPanel />} />
