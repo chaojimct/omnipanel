@@ -52,6 +52,7 @@ export default defineConfig({
       "@langchain/langgraph-sdk",
       "js-tiktoken",
       "langsmith",
+      "rc-dock",
     ],
     exclude: [
       "node-ipc",

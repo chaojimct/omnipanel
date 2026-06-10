@@ -30,6 +30,7 @@
     "deepagents": "^1.10.2",
     "langchain": "^1.4.4",
     "node-sql-parser": "^5.4.0",
+    "rc-dock": "^4.0.0-alpha.2",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
     "react-markdown": "^10.1.0",
