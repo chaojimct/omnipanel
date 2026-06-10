@@ -568,6 +568,9 @@ export const enUS: TranslationDict = {
       paginationPrev: "Previous page",
       paginationNext: "Next page",
       paginationLast: "Last page",
+      transposeOn: "Transpose rows/columns",
+      transposeOff: "Restore normal view",
+      transposeField: "Field",
     },
     context: {
       title: "Database Context",

@@ -270,6 +270,7 @@ export function DbPanelSurface({ tab }: DbPanelSurfaceProps) {
             pageSize={preview.pageSize}
             loading={false}
             columnMeta={colMeta}
+            enableTranspose
             onCellEdit={(cellInfo) => ws.handleCellEdit(tab.id, cellInfo)}
             dirtyRowKeys={new Set(Object.keys(ws.tabDirtyRows[tab.id] ?? {}))}
             cellOverrides={ws.tabDirtyRows[tab.id]}

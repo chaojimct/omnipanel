@@ -1186,6 +1186,31 @@ export function DatabasePanel() {
     schemaByKey, schemaLoadingKey, setActiveConnId, sqlCompletionSchemas, connectionForSql,
   ]);
 
+  const dockTabs = useMemo(
+    () => workspaceTabs.map((tab) => ({ id: tab.id, label: tab.label })),
+    [workspaceTabs],
+  );
+
+  const renderDockPanel = useCallback(
+    (tabId: string) => {
+      const tab = workspaceTabs.find((item) => item.id === tabId);
+      if (!tab) return null;
+      return (
+        <div className="db-workspace-pane db-dock-pane">
+          <DbPanelSurface tab={tab} />
+        </div>
+      );
+    },
+    [workspaceTabs],
+  );
+
+  const handleDockTabContextMenu = useCallback(
+    (event: ReactMouseEvent, tabId: string, index: number) => {
+      setCtxMenu({ x: event.clientX, y: event.clientY, tabId, index });
+    },
+    [],
+  );
+
   return (
     <DbWorkspaceProvider value={ctxValue}>
       <SidebarWorkspace
@@ -1205,25 +1230,15 @@ export function DatabasePanel() {
       >
         <DockableWorkspace
           className="db-workspace"
-          tabs={workspaceTabs.map((tab) => ({ id: tab.id, label: tab.label }))}
+          tabs={dockTabs}
           activeTabId={activeWorkspaceTabId}
           onActiveTabChange={setActiveWorkspaceTabId}
           onCloseTab={(tabId) => requestTabAction({ kind: "close", tabId })}
           savedLayout={dockLayout}
           onSavedLayoutChange={setDockLayout}
           emptyContent={t("database.workspace.emptyTabs")}
-          renderPanel={(tabId) => {
-            const tab = workspaceTabs.find((item) => item.id === tabId);
-            if (!tab) return null;
-            return (
-              <div className="db-workspace-pane db-dock-pane">
-                <DbPanelSurface tab={tab} />
-              </div>
-            );
-          }}
-          onTabContextMenu={(_event, tabId, index) => {
-            setCtxMenu({ x: _event.clientX, y: _event.clientY, tabId, index });
-          }}
+          renderPanel={renderDockPanel}
+          onTabContextMenu={handleDockTabContextMenu}
         />
       </SidebarWorkspace>
       {ctxMenu && (

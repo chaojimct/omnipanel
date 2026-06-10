@@ -564,6 +564,9 @@ export const zhCN = {
       paginationPrev: "上一页",
       paginationNext: "下一页",
       paginationLast: "最后一页",
+      transposeOn: "行列转换",
+      transposeOff: "恢复正常显示",
+      transposeField: "字段",
     },
     context: {
       title: "数据库上下文",
