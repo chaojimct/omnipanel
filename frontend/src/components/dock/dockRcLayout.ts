@@ -129,9 +129,9 @@ export function mergeTabsIntoRcLayout(
   base: LayoutBase | null,
   tabIds: string[],
   activeTabId: string,
-): LayoutBase {
+): LayoutBase | null {
   if (tabIds.length === 0) {
-    return createDefaultRcLayout([], activeTabId);
+    return null;
   }
 
   if (!base) {
@@ -165,7 +165,7 @@ export function removeTabFromRcLayout(layout: LayoutBase, tabId: string): Layout
     return createDefaultRcLayout([], tabId);
   }
   const fallbackActive = [...allowed][0] ?? tabId;
-  return mergeTabsIntoRcLayout(layout, [...allowed], fallbackActive);
+  return mergeTabsIntoRcLayout(layout, [...allowed], fallbackActive) ?? createDefaultRcLayout([...allowed], fallbackActive);
 }
 
 export function diffRemovedTabIds(prev: LayoutBase, next: LayoutBase): string[] {
