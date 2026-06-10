@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { FormDialog } from "../../../../components/ui/FormDialog";
+import { ResourceTagEditor } from "../../../../components/ui/ResourceTagEditor";
 import { SecretInput } from "../../../../components/ui/SecretInput";
 import { Select } from "../../../../components/ui/Select";
 import { useI18n } from "../../../../i18n";
@@ -31,6 +32,7 @@ export function SshConnectionDialog({
   const connections = useConnectionStore((s) => s.connections);
   const [form, setForm] = useState<UnifiedServerFormData>(EMPTY_SERVER_FORM);
   const [keys, setKeys] = useState<SshKeyInfo[]>([]);
+  const [tags, setTags] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -70,6 +72,7 @@ export function SshConnectionDialog({
   useEffect(() => {
     if (!open) return;
     setForm(connectionsToForm(editConnection));
+    setTags(editConnection?.tags ?? []);
     setError(null);
     setSaving(false);
     void (async () => {
@@ -110,7 +113,7 @@ export function SshConnectionDialog({
     setSaving(true);
     setError(null);
     try {
-      const saved = await saveConn(buildSshConnection(form, editConnection?.id));
+      const saved = await saveConn(buildSshConnection(form, editConnection?.id, undefined, tags));
       if (!saved) throw new Error("SSH save failed");
       onSaved?.();
       onClose();
@@ -253,6 +256,9 @@ export function SshConnectionDialog({
         </datalist>
         <p className="form-hint">{t("ssh.dialog.groupHint")}</p>
       </div>
+
+      <div className="form-section-title">{t("resourceTags.section")}</div>
+      <ResourceTagEditor tags={tags} onChange={setTags} />
     </FormDialog>
   );
 }

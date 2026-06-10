@@ -5996,6 +5996,85 @@
         color: var(--muted);
     }
 
+    .resource-tag-editor {
+        display: flex;
+        flex-direction: column;
+        gap: var(--sp-3);
+    }
+
+    .resource-tag-editor-section {
+        display: flex;
+        flex-direction: column;
+        gap: var(--sp-2);
+    }
+
+    .resource-tag-editor-label {
+        font-size: 12px;
+        font-weight: 500;
+        color: var(--fg-2);
+        display: flex;
+        align-items: center;
+        gap: var(--sp-2);
+    }
+
+    .resource-tag-editor-hint {
+        font-weight: 400;
+        color: var(--muted);
+        font-size: 11px;
+    }
+
+    .resource-tag-editor-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+
+    .resource-tag-editor-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 2px 6px 2px 8px;
+        border-radius: var(--radius-sm);
+        border: 1px solid var(--border);
+        background: var(--surface);
+        font-size: 12px;
+        color: var(--fg-2);
+        max-width: 200px;
+    }
+
+    .resource-tag-editor-chip-text {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .resource-tag-editor-chip-remove {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 16px;
+        height: 16px;
+        padding: 0;
+        border: none;
+        background: transparent;
+        color: var(--muted);
+        cursor: pointer;
+        border-radius: 2px;
+        font-size: 14px;
+        line-height: 1;
+    }
+
+    .resource-tag-editor-chip-remove:hover {
+        color: var(--fg);
+        background: color-mix(in srgb, var(--danger) 12%, transparent);
+    }
+
+    .resource-tag-editor-add {
+        display: flex;
+        gap: var(--sp-2);
+        align-items: center;
+    }
+
     /* ══════════════════════════════════════════════════════════════════════
      Database (database.html)
      ══════════════════════════════════════════════════════════════════════ */

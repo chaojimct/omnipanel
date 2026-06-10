@@ -252,6 +252,16 @@ export const enUS: TranslationDict = {
     empty: "No logs",
     lineCount: "{count} log entries",
   },
+  resourceTags: {
+    section: "Resource Tags",
+    system: "System Tags",
+    systemHint: "Auto-collected after connect",
+    custom: "Custom Tags",
+    add: "Add",
+    addPlaceholder: "e.g. prod or role:web",
+    addHint: "Use key:value format; plain text is stored as custom:text",
+    remove: "Remove tag",
+  },
   common: {
     noResources: "No resources",
     loading: "Loading…",

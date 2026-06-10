@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { parseResourceTag } from "../../lib/resourceTags";
 import { type WorkspaceResource } from "../../lib/resourceRegistry";
 import { Button } from "../ui/Button";
 import {
@@ -170,13 +171,20 @@ export function HostListPanel({ resources, onConnect }: HostListPanelProps) {
 
   const grouped = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const filtered = resources.filter(
-      (r) =>
-        !q ||
-        r.name.toLowerCase().includes(q) ||
-        r.subtitle.toLowerCase().includes(q) ||
-        normalizeSshGroup(r.group).toLowerCase().includes(q),
-    );
+    const filtered = resources.filter((r) => {
+      if (!q) return true;
+      if (r.name.toLowerCase().includes(q)) return true;
+      if (r.subtitle.toLowerCase().includes(q)) return true;
+      if (normalizeSshGroup(r.group).toLowerCase().includes(q)) return true;
+      return (r.tags ?? []).some((tag) => {
+        const { key, value } = parseResourceTag(tag);
+        return (
+          tag.toLowerCase().includes(q) ||
+          key.toLowerCase().includes(q) ||
+          value.toLowerCase().includes(q)
+        );
+      });
+    });
     const map = new Map<string, WorkspaceResource[]>();
     for (const host of filtered) {
       const key = normalizeSshGroup(host.group);

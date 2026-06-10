@@ -379,7 +379,7 @@ export type Connection = {
 	name: string,
 	group?: string,
 	envTag?: string,
-	/**  全局资源标签，如 os:Ubuntu 24.04.2 LTS */
+	/**  全局资源标签，如 `os:Ubuntu 24.04.2 LTS`（key:value 字符串列表） */
 	tags?: string[],
 	/**  连接配置 JSON 文本（host/port/user/database 等，因 kind 而异） */
 	config?: string,

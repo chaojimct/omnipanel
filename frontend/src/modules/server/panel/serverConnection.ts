@@ -149,6 +149,7 @@ export function buildSshConnection(
   form: UnifiedServerFormData,
   existingId?: string,
   panelConnectionId?: string,
+  tags?: string[],
 ): Connection {
   const auth =
     form.authType === "password"
@@ -174,6 +175,7 @@ export function buildSshConnection(
     name: form.name.trim(),
     group: form.group.trim() || "默认",
     envTag: "unknown",
+    tags: tags ?? [],
     config: JSON.stringify(config),
   };
 }

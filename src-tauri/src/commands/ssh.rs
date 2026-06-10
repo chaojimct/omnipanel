@@ -398,6 +398,7 @@ pub async fn ssh_sync_config_hosts(
                     name: host.alias.clone(),
                     group: SSH_CONFIG_SYNC_GROUP.to_string(),
                     env_tag: "unknown".to_string(),
+                    tags: vec![],
                     config: config_json,
                     credential_ref: None,
                     created_at: now,

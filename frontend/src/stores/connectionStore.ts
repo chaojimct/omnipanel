@@ -18,10 +18,6 @@ import {
   getResourceTagValue,
   upsertResourceTag,
 } from "../lib/resourceTags";
-import {
-  getResourceTagValue,
-  upsertResourceTag,
-} from "../lib/resourceTags";
 import { useSshHostStore } from "./sshHostStore";
 import { forceReleaseSshPoolSession } from "./sshPoolSessionStore";
 

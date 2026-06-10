@@ -248,6 +248,16 @@ export const zhCN = {
     empty: "暂无日志",
     lineCount: "{count} 条日志",
   },
+  resourceTags: {
+    section: "资源标签",
+    system: "系统标签",
+    systemHint: "连接后自动采集",
+    custom: "自定义标签",
+    add: "添加",
+    addPlaceholder: "输入标签，如 prod 或 role:web",
+    addHint: "支持 key:value 格式；纯文本将存为 custom:文本",
+    remove: "移除标签",
+  },
   common: {
     noResources: "暂无资源",
     loading: "加载中…",
