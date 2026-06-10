@@ -14,7 +14,7 @@ export const zhCN = {
   },
   agent: {
     title: "AI 智能体",
-    description: "基于 deepagents 框架的文件系统智能体",
+    description: "支持文件读写、终端执行等工具调用的 AI 智能体",
     conversations: "对话",
     newChat: "新建对话",
     noConversations: "暂无对话",

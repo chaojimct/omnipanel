@@ -2,14 +2,13 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { useI18n } from "../../i18n";
 import { Button } from "../../components/ui/Button";
 import { SidebarWorkspace } from "../../components/ui/SidebarWorkspace";
-import { createDeepAgent, FilesystemBackend } from "deepagents";
-import { ChatOpenAI } from "@langchain/openai";
 
 interface Message {
   id: string;
   role: "user" | "assistant";
   content: string;
   timestamp: number;
+  isStreaming?: boolean;
 }
 
 interface Conversation {
@@ -21,20 +20,6 @@ interface Conversation {
 let idCounter = 0;
 function genId() {
   return `agent-${Date.now()}-${++idCounter}`;
-}
-
-/** Create a simple deepagents agent with FilesystemBackend */
-function createAgent(rootDir: string) {
-  const backend = new FilesystemBackend({ rootDir });
-  const model = new ChatOpenAI({
-    modelName: "gpt-4o-mini",
-    temperature: 0,
-  });
-  return createDeepAgent({
-    model,
-    backend,
-    systemPrompt: "You are a helpful coding assistant. Use the filesystem tools to read, write, and edit files. Be concise and precise.",
-  });
 }
 
 export function AgentPanel() {
@@ -59,21 +44,36 @@ export function AgentPanel() {
   }, []);
 
   const handleSend = useCallback(async () => {
-    if (!input.trim() || !activeId || isRunning) return;
+    const trimmed = input.trim();
+    if (!trimmed || !activeId || isRunning) return;
+
     const userMsg: Message = {
       id: genId(),
       role: "user",
-      content: input.trim(),
+      content: trimmed,
       timestamp: Date.now(),
     };
+    const assistantMsgId = genId();
+    const assistantMsg: Message = {
+      id: assistantMsgId,
+      role: "assistant",
+      content: "",
+      timestamp: Date.now(),
+      isStreaming: true,
+    };
+
+    const conv = conversations.find((c) => c.id === activeId);
+    const history = [...(conv?.messages ?? []), userMsg]
+      .slice(-20)
+      .map((m) => ({ role: m.role, content: m.content }));
 
     setConversations((prev) =>
       prev.map((c) =>
         c.id === activeId
           ? {
               ...c,
-              title: c.messages.length === 0 ? input.trim().slice(0, 40) : c.title,
-              messages: [...c.messages, userMsg],
+              title: c.messages.length === 0 ? trimmed.slice(0, 40) : c.title,
+              messages: [...c.messages, userMsg, assistantMsg],
             }
           : c
       )
@@ -81,46 +81,65 @@ export function AgentPanel() {
     setInput("");
     setIsRunning(true);
 
+    const updateAssistant = (updater: (msg: Message) => Message) => {
+      setConversations((prev) =>
+        prev.map((c) =>
+          c.id === activeId
+            ? {
+                ...c,
+                messages: c.messages.map((m) =>
+                  m.id === assistantMsgId ? updater(m) : m
+                ),
+              }
+            : c
+        )
+      );
+    };
+
     try {
-      const agent = createAgent(".");
-      const result = await agent.invoke({
-        messages: [{ role: "user", content: input.trim() }],
-      });
+      const { invoke } = await import("@tauri-apps/api/core");
+      const { listen } = await import("@tauri-apps/api/event");
 
-      const lastMsg = result.messages[result.messages.length - 1];
-      const assistantContent =
-        typeof lastMsg?.content === "string"
-          ? lastMsg.content
-          : JSON.stringify(lastMsg?.content ?? "");
+      let unlistenFn: (() => void) | null = null;
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- AI 流式事件 payload 为后端动态联合类型
+        unlistenFn = await listen<any>(`ai-stream-${activeId}`, (event) => {
+          const evt = event.payload;
+          switch (evt.type) {
+            case "content_delta":
+              updateAssistant((m) => ({ ...m, content: m.content + evt.text }));
+              break;
+            case "done":
+              updateAssistant((m) => ({ ...m, isStreaming: false }));
+              break;
+            case "error":
+              updateAssistant((m) => ({
+                ...m,
+                content: `${m.content}\n\n错误：${evt.message}`,
+                isStreaming: false,
+              }));
+              break;
+          }
+        });
 
-      const assistantMsg: Message = {
-        id: genId(),
-        role: "assistant",
-        content: assistantContent,
-        timestamp: Date.now(),
-      };
-
-      setConversations((prev) =>
-        prev.map((c) =>
-          c.id === activeId ? { ...c, messages: [...c.messages, assistantMsg] } : c
-        )
-      );
+        await invoke("ai_send_message", {
+          conversationId: activeId,
+          content: trimmed,
+          history,
+        });
+      } finally {
+        unlistenFn?.();
+      }
     } catch (err) {
-      const errMsg: Message = {
-        id: genId(),
-        role: "assistant",
-        content: `Error: ${err instanceof Error ? err.message : String(err)}`,
-        timestamp: Date.now(),
-      };
-      setConversations((prev) =>
-        prev.map((c) =>
-          c.id === activeId ? { ...c, messages: [...c.messages, errMsg] } : c
-        )
-      );
+      updateAssistant((m) => ({
+        ...m,
+        content: `发送失败：${err instanceof Error ? err.message : String(err)}`,
+        isStreaming: false,
+      }));
     } finally {
       setIsRunning(false);
     }
-  }, [input, activeId, isRunning]);
+  }, [input, activeId, isRunning, conversations]);
 
   const handleDelete = useCallback(
     (id: string) => {
@@ -210,7 +229,7 @@ export function AgentPanel() {
                     border: msg.role === "user" ? "none" : "1px solid var(--border)",
                   }}
                 >
-                  {msg.content}
+                  {msg.content || (msg.isStreaming ? "..." : "")}
                 </div>
               </div>
             ))

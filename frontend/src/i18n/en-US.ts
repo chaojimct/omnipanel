@@ -16,7 +16,7 @@ export const enUS: TranslationDict = {
   },
   agent: {
     title: "AI Agent",
-    description: "Filesystem agent powered by deepagents",
+    description: "AI agent with file, terminal, and tool-calling capabilities",
     conversations: "Conversations",
     newChat: "New Chat",
     noConversations: "No conversations yet",
