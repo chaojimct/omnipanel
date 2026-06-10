@@ -25,11 +25,8 @@ export function useSshManager() {
 
   const sshResources = useSshHostResources();
   const activeResource = useMemo(() => {
-    if (selectedSshId) {
-      const match = sshResources.find((resource) => resource.id === selectedSshId);
-      if (match) return match;
-    }
-    return sshResources[0] ?? null;
+    if (!selectedSshId) return null;
+    return sshResources.find((resource) => resource.id === selectedSshId) ?? null;
   }, [selectedSshId, sshResources]);
   const profile = getProfile(activeResource);
 
@@ -109,16 +106,16 @@ export function useSshManager() {
   );
 
   useEffect(() => {
-    if (
-      !useWorkspaceStore.getState().selectedResourceByPath[SSH_PATH] &&
-      sshResources[0]
-    ) {
-      selectResource(sshResources[0].id, SSH_PATH);
+    const current = useWorkspaceStore.getState().selectedResourceByPath[SSH_PATH];
+    if (current && !sshResources.some((r) => r.id === current)) {
+      selectResource("", SSH_PATH);
     }
   }, [sshResources, selectResource]);
 
   useEffect(() => {
-    setDetailTab("overview");
+    if (activeResource?.id) {
+      setDetailTab("overview");
+    }
   }, [activeResource?.id]);
 
   const queueSshAction = useCallback(

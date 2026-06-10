@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { useSshStats, type HostSystemStats } from "../../../../../stores/sshStatsStore";
 import { useSshMonitoring } from "../../hooks/useSshMonitoring";
 import { useI18n } from "../../../../../i18n";
@@ -7,35 +7,6 @@ import { Button } from "../../../../../components/ui/Button";
 type Props = {
   activeResource: { id: string } | null;
 };
-
-const MAX_POINTS = 120;
-
-type Point = { ts: number; value: number };
-
-/** 根据两次累计计数计算合并不收发吞吐量（MB/s）。 */
-function networkMbps(prev: HostSystemStats, cur: HostSystemStats): number | null {
-  if (!prev.network || !cur.network) return null;
-  if (cur.timestamp == null || prev.timestamp == null) return null;
-  const dt = cur.timestamp - prev.timestamp;
-  if (dt <= 0) return null;
-  const drx = Math.max(0, (cur.network.rxBytes ?? 0) - (prev.network.rxBytes ?? 0));
-  const dtx = Math.max(0, (cur.network.txBytes ?? 0) - (prev.network.txBytes ?? 0));
-  const bytesPerSec = (drx + dtx) / dt;
-  return bytesPerSec / (1024 * 1024);
-}
-
-function appendPoint(
-  history: Point[],
-  stats: HostSystemStats,
-  extract: (s: HostSystemStats) => number | null,
-): Point[] {
-  const v = extract(stats);
-  if (v == null || stats.timestamp == null) return history;
-  const ts = stats.timestamp * 1000;
-  const last = history[history.length - 1];
-  if (last && last.ts === ts) return history;
-  return [...history.slice(-(MAX_POINTS - 1)), { ts, value: v }];
-}
 
 function fmtTime(ts: number): string {
   const d = new Date(ts);
@@ -50,7 +21,7 @@ function AreaChart({
   max,
   waiting,
 }: {
-  data: Point[];
+  data: { ts: number; value: number }[];
   label: string;
   color: string;
   unit: string;
@@ -167,63 +138,54 @@ export function MonitoringDetailTab({ activeResource }: Props) {
   const { t } = useI18n();
   const rid = activeResource?.id ?? null;
   const stats = useSshStats(rid);
-  const { phase, error, refresh } = useSshMonitoring(rid);
-
-  const [cpuSeries, setCpuSeries] = useState<Point[]>([]);
-  const [memSeries, setMemSeries] = useState<Point[]>([]);
-  const [netSeries, setNetSeries] = useState<Point[]>([]);
+  const {
+    phase,
+    enabled,
+    cpuSeries,
+    memSeries,
+    netSeries,
+    enable,
+    disable,
+    ingestStats,
+  } = useSshMonitoring(rid);
   const prevStatsRef = useRef<HostSystemStats | null>(null);
 
   useEffect(() => {
-    setCpuSeries([]);
-    setMemSeries([]);
-    setNetSeries([]);
     prevStatsRef.current = null;
   }, [rid]);
 
   useEffect(() => {
-    if (!stats) return;
-    setCpuSeries((h) => appendPoint(h, stats, (s) => s.cpuUsage));
-    setMemSeries((h) =>
-      appendPoint(h, stats, (s) => ((s.memory.used ?? 0) / (s.memory.total ?? 1)) * 100),
-    );
-
-    const prev = prevStatsRef.current;
-    if (prev && prev.timestamp != null && prev.timestamp !== stats.timestamp) {
-      const mbps = networkMbps(prev, stats);
-      if (mbps != null) {
-        if (stats.timestamp == null) return;
-        const ts = stats.timestamp * 1000;
-        setNetSeries((h) => {
-          const last = h[h.length - 1];
-          if (last && last.ts === ts) return h;
-          return [...h.slice(-(MAX_POINTS - 1)), { ts, value: mbps }];
-        });
-      }
-    }
+    if (!stats || !enabled) return;
+    ingestStats(stats, prevStatsRef.current);
     prevStatsRef.current = stats;
-  }, [stats]);
+  }, [stats, enabled, ingestStats]);
 
   const waitingLabel =
     phase === "loading"
       ? t("ssh.monitoring.loading")
-      : phase === "error"
-        ? (error ?? t("ssh.monitoring.loadError"))
+      : !enabled
+        ? t("ssh.monitoring.paused")
         : t("ssh.monitoring.waiting");
-
-  if (phase === "error" && cpuSeries.length === 0) {
-    return (
-      <div className="monitor-panel monitor-panel--error">
-        <p className="ssh-ov-error-text">{error ?? t("ssh.monitoring.loadError")}</p>
-        <Button variant="secondary" size="sm" onClick={() => refresh()}>
-          {t("ssh.overview.retry")}
-        </Button>
-      </div>
-    );
-  }
 
   return (
     <div className="monitor-panel">
+      <div className="monitor-toolbar">
+        <span className="monitor-toolbar-label">{t("ssh.monitoring.title")}</span>
+        {enabled ? (
+          <Button variant="secondary" size="sm" onClick={() => void disable()}>
+            {t("ssh.monitoring.pause")}
+          </Button>
+        ) : (
+          <Button variant="primary" size="sm" onClick={() => void enable()} disabled={!rid}>
+            {t("ssh.monitoring.start")}
+          </Button>
+        )}
+      </div>
+
+      {!enabled && (
+        <div className="monitor-hint">{t("ssh.monitoring.hint")}</div>
+      )}
+
       <div className="monitor-chart-row">
         <AreaChart
           data={cpuSeries}

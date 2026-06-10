@@ -6,15 +6,16 @@ use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
 use omnipanel_error::{ErrorCode, OmniError};
 use omnipanel_ssh::{
-    SftpEntry, SshConfig, SshConfigEntry, SshEvent, SshProcessInfo, SshSession, SshSink,
-    find_ssh_config_entry, load_ssh_config_hosts, ssh_config_to_connect_config,
+    default_ssh_dir, list_ssh_private_key_paths, ssh_public_key_meta, SftpEntry, SshConfig,
+    SshConfigEntry, SshEvent, SshProcessInfo, SshSession, SshSink, find_ssh_config_entry,
+    load_ssh_config_hosts, ssh_config_to_connect_config,
 };
 use omnipanel_store::{Connection, ConnectionKind};
 use serde::Serialize;
 use specta::Type;
 use tauri::{Emitter, State};
 
-use crate::background::{HostSystemStats, SshHostOverview};
+use crate::background::{HostSystemStats, PoolStatusEvent, SshHostOverview};
 use crate::output_buffer;
 use crate::state::AppState;
 
@@ -146,6 +147,48 @@ pub async fn ssh_pool_fetch_stats(
         .ssh_pool
         .fetch_stats(&resource_id, &state.app_handle)
         .await
+}
+
+/// 获取所有 SSH 主机的连接状态快照。
+#[tauri::command]
+#[specta::specta]
+pub async fn ssh_pool_get_statuses(
+    state: State<'_, AppState>,
+) -> Result<Vec<PoolStatusEvent>, OmniError> {
+    Ok(state.ssh_pool.get_statuses().await)
+}
+
+/// 开启持续监控采集（后端后台轮询并推送 stats）。
+#[tauri::command]
+#[specta::specta]
+pub async fn ssh_pool_subscribe_monitoring(
+    state: State<'_, AppState>,
+    resource_id: String,
+) -> Result<(), OmniError> {
+    state.ssh_pool.ensure_session(&resource_id).await?;
+    state.ssh_pool.subscribe_monitoring(&resource_id).await;
+    Ok(())
+}
+
+/// 关闭持续监控采集。
+#[tauri::command]
+#[specta::specta]
+pub async fn ssh_pool_unsubscribe_monitoring(
+    state: State<'_, AppState>,
+    resource_id: String,
+) -> Result<(), OmniError> {
+    state.ssh_pool.unsubscribe_monitoring(&resource_id).await;
+    Ok(())
+}
+
+/// 独立刷新进程列表（概览页局部刷新）。
+#[tauri::command]
+#[specta::specta]
+pub async fn ssh_pool_load_processes(
+    state: State<'_, AppState>,
+    resource_id: String,
+) -> Result<Vec<SshProcessInfo>, OmniError> {
+    state.ssh_pool.load_processes(&resource_id).await
 }
 
 /// 列出远端目录。
@@ -568,103 +611,77 @@ pub struct SshKeyInfo {
     pub comment: String,
 }
 
+fn detect_private_key_type(name: &str, pem: &str) -> String {
+    if pem.contains("OPENSSH PRIVATE KEY") {
+        if name.contains("ed25519") {
+            "ed25519".to_string()
+        } else if name.contains("rsa") {
+            "rsa".to_string()
+        } else if name.contains("ecdsa") {
+            "ecdsa".to_string()
+        } else {
+            "openssh".to_string()
+        }
+    } else if pem.contains("RSA PRIVATE KEY") {
+        "rsa".to_string()
+    } else if pem.contains("EC PRIVATE KEY") {
+        "ecdsa".to_string()
+    } else if pem.contains("DSA PRIVATE KEY") {
+        "dsa".to_string()
+    } else {
+        "unknown".to_string()
+    }
+}
+
+fn ssh_key_info_from_path(path: &std::path::Path) -> Option<SshKeyInfo> {
+    let name = path
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_default();
+    let pem = std::fs::read_to_string(path).ok()?;
+    let key_type = detect_private_key_type(&name, &pem);
+    let pub_path = path.with_extension("pub");
+    let (fingerprint, comment) = if pub_path.is_file() {
+        std::fs::read_to_string(&pub_path)
+            .map(|content| ssh_public_key_meta(&content))
+            .unwrap_or((String::new(), String::new()))
+    } else {
+        (String::new(), String::new())
+    };
+    Some(SshKeyInfo {
+        name,
+        key_type,
+        path: path.to_string_lossy().to_string(),
+        fingerprint,
+        comment,
+    })
+}
+
 /// 列出本地 ~/.ssh/ 下的密钥。
 #[tauri::command]
 #[specta::specta]
 pub async fn ssh_list_keys() -> Result<Vec<SshKeyInfo>, OmniError> {
-    let home = home_dir()?;
-    let ssh_dir = home.join(".ssh");
-    if !ssh_dir.exists() {
-        return Ok(Vec::new());
+    let paths = list_ssh_private_key_paths();
+    Ok(paths
+        .iter()
+        .filter_map(|path| ssh_key_info_from_path(path))
+        .collect())
+}
+
+/// 读取密钥对应的公钥文件内容（`~/.ssh/{name}.pub`）。
+#[tauri::command]
+#[specta::specta]
+pub async fn ssh_read_key_public(name: String) -> Result<Option<String>, OmniError> {
+    let ssh_dir = default_ssh_dir()
+        .ok_or_else(|| OmniError::new(ErrorCode::Internal, "无法定位用户主目录"))?;
+    let pub_path = ssh_dir.join(format!("{name}.pub"));
+    if !pub_path.is_file() {
+        return Ok(None);
     }
-
-    let mut keys = Vec::new();
-    let _private_names = ["id_rsa", "id_ed25519", "id_ecdsa", "id_dsa"];
-    let mut found_any = false;
-
-    for entry in std::fs::read_dir(&ssh_dir)
-        .map_err(|e| OmniError::new(ErrorCode::Io, "读取 .ssh 目录失败").with_cause(e.to_string()))?
-    {
-        let entry = entry.map_err(|e| OmniError::new(ErrorCode::Io, "读取目录项失败").with_cause(e.to_string()))?;
-        let name = entry.file_name().to_string_lossy().to_string();
-
-        // Skip public keys and known files
-        if name.ends_with(".pub") || name == "known_hosts" || name == "config" || name == "authorized_keys" {
-            continue;
-        }
-
-        // Check if it looks like a private key
-        let path = entry.path();
-        if !path.is_file() { continue; }
-
-        // Try to detect key type from content
-        let content = match std::fs::read_to_string(&path) {
-            Ok(c) => c,
-            Err(_) => continue,
-        };
-
-        let key_type = if content.contains("OPENSSH PRIVATE KEY") {
-            if name.contains("ed25519") { "ed25519" }
-            else if name.contains("rsa") { "rsa" }
-            else if name.contains("ecdsa") { "ecdsa" }
-            else { "openssh" }
-        } else if content.contains("RSA PRIVATE KEY") {
-            "rsa"
-        } else if content.contains("EC PRIVATE KEY") {
-            "ecdsa"
-        } else {
-            continue; // Not a key file
-        };
-
-        found_any = true;
-        let pub_path = path.with_extension("pub");
-        let (fingerprint, comment) = if pub_path.exists() {
-            if let Ok(pub_content) = std::fs::read_to_string(&pub_path) {
-                let parts: Vec<&str> = pub_content.splitn(3, ' ').collect();
-                let fp = parts.get(0).unwrap_or(&"").to_string();
-                let cmt = parts.get(2).unwrap_or(&"").trim().to_string();
-                (fp, cmt)
-            } else {
-                (String::new(), String::new())
-            }
-        } else {
-            (String::new(), String::new())
-        };
-
-        keys.push(SshKeyInfo {
-            name,
-            key_type: key_type.to_string(),
-            path: path.to_string_lossy().to_string(),
-            fingerprint,
-            comment,
-        });
-    }
-
-    // Also scan for named keys that don't match standard names
-    if !found_any {
-        // Just list all non-hidden files as potential keys
-        for entry in std::fs::read_dir(&ssh_dir)
-            .map_err(|e| OmniError::new(ErrorCode::Io, "读取 .ssh 目录失败").with_cause(e.to_string()))?
-        {
-            let entry = entry.map_err(|e| OmniError::new(ErrorCode::Io, "").with_cause(e.to_string()))?;
-            let name = entry.file_name().to_string_lossy().to_string();
-            if name.ends_with(".pub") || name.starts_with('.') || name == "known_hosts" || name == "config" || name == "authorized_keys" {
-                continue;
-            }
-            let path = entry.path();
-            if path.is_file() {
-                keys.push(SshKeyInfo {
-                    name,
-                    key_type: "unknown".to_string(),
-                    path: path.to_string_lossy().to_string(),
-                    fingerprint: String::new(),
-                    comment: String::new(),
-                });
-            }
-        }
-    }
-
-    Ok(keys)
+    let content = std::fs::read_to_string(&pub_path).map_err(|e| {
+        OmniError::new(ErrorCode::Io, "读取公钥文件失败").with_cause(e.to_string())
+    })?;
+    Ok(Some(content))
 }
 
 /// 生成 SSH 密钥对。
@@ -715,13 +732,13 @@ pub async fn ssh_generate_key(
         ).with_cause(String::from_utf8_lossy(&output.stderr).to_string()));
     }
 
-    Ok(SshKeyInfo {
+    Ok(ssh_key_info_from_path(&key_path).unwrap_or(SshKeyInfo {
         name: filename,
         key_type: algo.to_string(),
         path: key_path.to_string_lossy().to_string(),
         fingerprint: String::new(),
         comment,
-    })
+    }))
 }
 
 /// 导入 SSH 私钥（写入 ~/.ssh/ 目录）。

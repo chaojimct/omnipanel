@@ -8,8 +8,10 @@
 mod openssh_config;
 
 pub use openssh_config::{
-    SshConfigEntry, default_ssh_config_path, find_ssh_config_entry, load_ssh_config_hosts,
-    load_ssh_config_hosts_from, ssh_config_to_connect_config,
+    SshConfigEntry, default_ssh_config_path, default_ssh_dir, discover_ssh_identity_file,
+    discover_ssh_identity_file_in, find_ssh_config_entry, list_ssh_private_key_paths,
+    list_ssh_private_key_paths_in, load_ssh_config_hosts, load_ssh_config_hosts_from,
+    ssh_config_to_connect_config, ssh_public_key_meta,
 };
 
 use std::sync::Arc;
@@ -32,7 +34,10 @@ pub enum SshAuth {
         password: String,
     },
     PrivateKey {
-        pem: String,
+        #[serde(default)]
+        pem: Option<String>,
+        #[serde(default, rename = "keyPath", alias = "key_path")]
+        key_path: Option<String>,
         passphrase: Option<String>,
     },
 }
@@ -45,6 +50,96 @@ pub struct SshConfig {
     pub port: u16,
     pub user: String,
     pub auth: SshAuth,
+}
+
+fn private_key_candidates_from_auth(
+    pem: &Option<String>,
+    key_path: &Option<String>,
+) -> OmniResult<Vec<(String, String)>> {
+    if let Some(value) = pem.as_deref().filter(|value| !value.trim().is_empty()) {
+        return Ok(vec![("inline".to_string(), value.to_string())]);
+    }
+
+    match key_path.as_deref().filter(|value| !value.trim().is_empty()) {
+        Some("auto") | None => {
+            let paths = list_ssh_private_key_paths();
+            if paths.is_empty() {
+                return Err(OmniError::new(
+                    ErrorCode::Auth,
+                    "未配置 SSH 私钥，且 ~/.ssh 中未找到可用私钥",
+                ));
+            }
+
+            let mut candidates = Vec::new();
+            let mut read_errors = Vec::new();
+            for path in paths {
+                match std::fs::read_to_string(&path) {
+                    Ok(pem) => candidates.push((path.to_string_lossy().to_string(), pem)),
+                    Err(e) => read_errors.push(format!("{}: {}", path.display(), e)),
+                }
+            }
+            if candidates.is_empty() {
+                return Err(OmniError::new(ErrorCode::Auth, "读取 SSH 私钥失败")
+                    .with_cause(read_errors.join("; ")));
+            }
+            Ok(candidates)
+        }
+        Some(path) => {
+            let path = std::path::PathBuf::from(path);
+            let pem = std::fs::read_to_string(&path).map_err(|e| {
+                OmniError::new(ErrorCode::Auth, "读取 SSH 私钥失败")
+                    .with_cause(format!("{}: {}", path.display(), e))
+            })?;
+            Ok(vec![(path.to_string_lossy().to_string(), pem)])
+        }
+    }
+}
+
+async fn authenticate_private_key(
+    session: &mut client::Handle<Client>,
+    user: &str,
+    pem: &Option<String>,
+    key_path: &Option<String>,
+    passphrase: &Option<String>,
+) -> OmniResult<bool> {
+    let candidates = private_key_candidates_from_auth(pem, key_path)?;
+    let hash = session
+        .best_supported_rsa_hash()
+        .await
+        .map_err(|e| OmniError::new(ErrorCode::Ssh, "协商 RSA 哈希失败").with_cause(e.to_string()))?
+        .flatten();
+
+    let mut attempted = false;
+    let mut last_error: Option<String> = None;
+    for (label, key_pem) in candidates {
+        let key = match decode_secret_key(&key_pem, passphrase.as_deref()) {
+            Ok(key) => key,
+            Err(e) => {
+                last_error = Some(format!("{label}: 私钥解析失败: {e}"));
+                continue;
+            }
+        };
+        attempted = true;
+        let result = session
+            .authenticate_publickey(user, PrivateKeyWithHashAlg::new(Arc::new(key), hash))
+            .await
+            .map_err(|e| {
+                OmniError::new(ErrorCode::Auth, "SSH 公钥认证失败")
+                    .with_cause(format!("{label}: {e}"))
+            })?;
+        if result.success() {
+            return Ok(true);
+        }
+        last_error = Some(format!("{label}: SSH 公钥认证被拒绝"));
+    }
+
+    let message = if attempted {
+        "SSH 公钥认证被拒绝"
+    } else {
+        "SSH 私钥解析失败"
+    };
+    Err(OmniError::new(ErrorCode::Auth, message)
+        .with_cause(last_error.unwrap_or_else(|| "没有可用私钥".into())))
 }
 
 /// SFTP 目录项。
@@ -326,29 +421,9 @@ impl SshSession {
                     OmniError::new(ErrorCode::Auth, "SSH 密码认证失败").with_cause(e.to_string())
                 })?
                 .success(),
-            SshAuth::PrivateKey { pem, passphrase } => {
-                let key = decode_secret_key(pem, passphrase.as_deref()).map_err(|e| {
-                    OmniError::new(ErrorCode::Auth, "SSH 私钥解析失败").with_cause(e.to_string())
-                })?;
-                let hash = session
-                    .best_supported_rsa_hash()
-                    .await
-                    .map_err(|e| {
-                        OmniError::new(ErrorCode::Ssh, "协商 RSA 哈希失败")
-                            .with_cause(e.to_string())
-                    })?
-                    .flatten();
-                session
-                    .authenticate_publickey(
-                        &config.user,
-                        PrivateKeyWithHashAlg::new(Arc::new(key), hash),
-                    )
-                    .await
-                    .map_err(|e| {
-                        OmniError::new(ErrorCode::Auth, "SSH 公钥认证失败")
-                            .with_cause(e.to_string())
-                    })?
-                    .success()
+            SshAuth::PrivateKey { pem, key_path, passphrase } => {
+                authenticate_private_key(&mut session, &config.user, pem, key_path, passphrase)
+                    .await?
             }
         };
 
@@ -438,29 +513,9 @@ impl SshSession {
                     OmniError::new(ErrorCode::Auth, "SSH 密码认证失败").with_cause(e.to_string())
                 })?
                 .success(),
-            SshAuth::PrivateKey { pem, passphrase } => {
-                let key = decode_secret_key(pem, passphrase.as_deref()).map_err(|e| {
-                    OmniError::new(ErrorCode::Auth, "SSH 私钥解析失败").with_cause(e.to_string())
-                })?;
-                let hash = session
-                    .best_supported_rsa_hash()
-                    .await
-                    .map_err(|e| {
-                        OmniError::new(ErrorCode::Ssh, "协商 RSA 哈希失败")
-                            .with_cause(e.to_string())
-                    })?
-                    .flatten();
-                session
-                    .authenticate_publickey(
-                        &config.user,
-                        PrivateKeyWithHashAlg::new(Arc::new(key), hash),
-                    )
-                    .await
-                    .map_err(|e| {
-                        OmniError::new(ErrorCode::Auth, "SSH 公钥认证失败")
-                            .with_cause(e.to_string())
-                    })?
-                    .success()
+            SshAuth::PrivateKey { pem, key_path, passphrase } => {
+                authenticate_private_key(&mut session, &config.user, pem, key_path, passphrase)
+                    .await?
             }
         };
 

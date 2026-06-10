@@ -14,6 +14,16 @@ import {
 } from "../lib/resourceRegistry";
 import { getOpenSshHostResource } from "../lib/sshConfigHosts";
 import { normalizeSshGroup, sanitizeSshGroupInput } from "../lib/sshGroups";
+import {
+  getResourceTagValue,
+  upsertResourceTag,
+} from "../lib/resourceTags";
+import {
+  getResourceTagValue,
+  upsertResourceTag,
+} from "../lib/resourceTags";
+import { useSshHostStore } from "./sshHostStore";
+import { forceReleaseSshPoolSession } from "./sshPoolSessionStore";
 
 /**
  * 连接状态层：后端 `omnipanel-store` 持久化的统一连接模型在前端的唯一缓存。
@@ -87,7 +97,28 @@ export function connectionToResource(connection: Connection): WorkspaceResource 
     environment: normalizeEnv(connection.envTag),
     status: "idle",
     group: normalizeSshGroup(connection.group),
+    tags: connection.tags ?? [],
   };
+}
+
+/** 持久化单个资源标签（值未变则跳过写入）。 */
+export async function persistResourceTag(
+  connectionId: string,
+  key: string,
+  value: string,
+): Promise<void> {
+  const trimmed = value.trim();
+  if (!trimmed) return;
+  const conn = useConnectionStore.getState().connections.find((c) => c.id === connectionId);
+  if (!conn) return;
+  const current = getResourceTagValue(conn.tags, key);
+  if (current === trimmed) return;
+  const tags = upsertResourceTag(conn.tags, key, trimmed);
+  await useConnectionStore.getState().save({
+    ...conn,
+    tags,
+    updatedAt: Math.floor(Date.now() / 1000),
+  });
 }
 
 export const useConnectionStore = create<ConnectionState>((set, get) => ({
@@ -162,9 +193,14 @@ export const useConnectionStore = create<ConnectionState>((set, get) => ({
 
   remove: async (id) => {
     try {
+      const conn = get().connections.find((c) => c.id === id);
       const res = await commands.connDelete(id);
       if (res.status === "ok") {
         set((state) => ({ connections: state.connections.filter((c) => c.id !== id) }));
+        if (conn?.kind === "ssh") {
+          useSshHostStore.getState().clearHost(id);
+          forceReleaseSshPoolSession(id);
+        }
       } else {
         set({ error: res.error.message });
       }

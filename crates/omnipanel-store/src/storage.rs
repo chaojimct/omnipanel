@@ -174,6 +174,10 @@ const MIGRATIONS: &[&str] = &[
 
     CREATE INDEX IF NOT EXISTS idx_tasks_updated ON tasks(updated_at);
     "#,
+    // v5 — 连接资源全局标签（JSON 数组，如 os:Ubuntu 24.04）
+    r#"
+    ALTER TABLE connections ADD COLUMN tags TEXT NOT NULL DEFAULT '[]';
+    "#,
 ];
 
 /// 审计日志条目。所有高风险操作经执行引擎写入此表。

@@ -1,95 +1,263 @@
-import { getProfile } from "../data/hostProfiles";
-import type { SshManagerContext } from "../hooks/useSshManager";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { commands } from "../../../../ipc/bindings";
+import type { SshTunnelInfo } from "../../../../ipc/bindings";
+import type { WorkspaceResource } from "../../../../lib/resourceRegistry";
+import { useI18n } from "../../../../i18n";
 import { Button } from "../../../../components/ui/Button";
+import { Select } from "../../../../components/ui/Select";
 
-type Props = Pick<
-  SshManagerContext,
-  "sshResources" | "triggerTunnelAction"
->;
+type Props = {
+  sshResources: WorkspaceResource[];
+};
 
-export function TunnelsModuleView({ sshResources, triggerTunnelAction }: Props) {
+export function TunnelsModuleView({ sshResources }: Props) {
+  const { t } = useI18n();
+  const [tunnels, setTunnels] = useState<SshTunnelInfo[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [showCreate, setShowCreate] = useState(false);
+  const [tunnelType, setTunnelType] = useState<"local" | "remote" | "dynamic">("local");
+  const [localPort, setLocalPort] = useState("");
+  const [remoteHost, setRemoteHost] = useState("");
+  const [remotePort, setRemotePort] = useState("");
+  const [connectionId, setConnectionId] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  const hostNameById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const resource of sshResources) {
+      map.set(resource.id, resource.name);
+    }
+    return map;
+  }, [sshResources]);
+
+  const connectionOptions = useMemo(
+    () =>
+      sshResources.map((resource) => ({
+        value: resource.id,
+        label: resource.name,
+      })),
+    [sshResources],
+  );
+
+  const loadTunnels = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await commands.sshListTunnels();
+      if (res.status === "ok") {
+        setTunnels(res.data);
+      } else {
+        setError(res.error.message);
+      }
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadTunnels();
+  }, [loadTunnels]);
+
+  useEffect(() => {
+    if (!connectionId && sshResources[0]) {
+      setConnectionId(sshResources[0].id);
+    }
+  }, [connectionId, sshResources]);
+
+  const handleCreate = async () => {
+    if (!localPort || !remoteHost || !remotePort || !connectionId) {
+      setError(t("ssh.tunnels.formRequired"));
+      return;
+    }
+    try {
+      const res = await commands.sshCreateTunnel(
+        connectionId,
+        tunnelType,
+        parseInt(localPort, 10),
+        remoteHost,
+        parseInt(remotePort, 10),
+      );
+      if (res.status === "ok") {
+        setShowCreate(false);
+        setLocalPort("");
+        setRemoteHost("");
+        setRemotePort("");
+        loadTunnels();
+      } else {
+        setError(res.error.message);
+      }
+    } catch (e) {
+      setError(String(e));
+    }
+  };
+
+  const handleClose = async (tunnelId: string) => {
+    try {
+      const res = await commands.sshCloseTunnel(tunnelId);
+      if (res.status === "ok") {
+        loadTunnels();
+      } else {
+        setError(res.error.message);
+      }
+    } catch (e) {
+      setError(String(e));
+    }
+  };
+
   return (
     <div className="ssh-detail">
       <div className="ssh-detail-header">
         <div>
-          <div className="host-title">Port Tunnels</div>
-          <div className="host-addr-detail">
-            为常用数据库、缓存和内部服务建立安全转发
-          </div>
+          <div className="host-title">{t("ssh.tunnels.moduleTitle")}</div>
+          <div className="host-addr-detail">{t("ssh.tunnels.moduleSubtitle")}</div>
         </div>
         <Button
           variant="primary"
           size="sm"
           style={{ marginLeft: "auto" }}
-          onClick={() =>
-            triggerTunnelAction(
-              "创建全局 Tunnel",
-              "从 Tunnel 总览页新建安全转发",
-              "ssh -L 8080:127.0.0.1:8080 deploy@host",
-            )
-          }
+          onClick={() => setShowCreate((v) => !v)}
+          disabled={sshResources.length === 0}
         >
-          + New Tunnel
+          + {t("ssh.tunnels.create")}
         </Button>
       </div>
+
+      {error && <div className="sftp-error">{error}</div>}
+
+      {showCreate && (
+        <div className="panel" style={{ margin: "0 24px 8px" }}>
+          <div className="panel-header"><h3>{t("ssh.tunnels.create")}</h3></div>
+          <div className="panel-body" style={{ padding: 12, display: "flex", flexDirection: "column", gap: 8 }}>
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <Select
+                className="input"
+                value={tunnelType}
+                onChange={(v) => setTunnelType(v as typeof tunnelType)}
+                style={{ width: 120 }}
+                searchable={false}
+                options={[
+                  { value: "local", label: t("ssh.tunnels.typeLocal") },
+                  { value: "remote", label: t("ssh.tunnels.typeRemote") },
+                  { value: "dynamic", label: t("ssh.tunnels.typeDynamic") },
+                ]}
+              />
+              <Select
+                className="input"
+                value={connectionId}
+                onChange={setConnectionId}
+                style={{ flex: 1 }}
+                searchable
+                options={connectionOptions}
+                placeholder={t("ssh.tunnels.selectHost")}
+              />
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <input
+                className="input"
+                placeholder={t("ssh.tunnels.localPort")}
+                value={localPort}
+                onChange={(e) => setLocalPort(e.target.value)}
+                style={{ width: 120 }}
+              />
+              <input
+                className="input"
+                placeholder={t("ssh.tunnels.remoteHost")}
+                value={remoteHost}
+                onChange={(e) => setRemoteHost(e.target.value)}
+                style={{ flex: 1 }}
+              />
+              <input
+                className="input"
+                placeholder={t("ssh.tunnels.remotePort")}
+                value={remotePort}
+                onChange={(e) => setRemotePort(e.target.value)}
+                style={{ width: 120 }}
+              />
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button className="btn btn-primary btn-sm" onClick={handleCreate}>
+                {t("ssh.tunnels.create")}
+              </button>
+              <button className="btn btn-secondary btn-sm" onClick={() => setShowCreate(false)}>
+                {t("ssh.keys.cancel")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="ssh-detail-body ssh-workbench-grid">
         <div className="panel">
           <div className="panel-header">
-            <h3>全部 Tunnel</h3>
+            <h3>{t("ssh.tunnels.allTitle")}</h3>
           </div>
           <div className="panel-body">
-            <table>
-              <thead>
-                <tr>
-                  <th>Local</th>
-                  <th>Remote</th>
-                  <th>Host</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sshResources
-                  .flatMap((resource) =>
-                    getProfile(resource).tunnels.map((tunnel) => ({
-                      resource,
-                      tunnel,
-                    })),
-                  )
-                  .map(({ resource, tunnel }) => (
-                    <tr key={`${resource.id}-${tunnel.local}-${tunnel.remote}`}>
-                      <td>{tunnel.local}</td>
-                      <td>{tunnel.remote}</td>
-                      <td>{resource.name}</td>
+            {loading && <div className="text-muted text-sm" style={{ padding: 12 }}>{t("ssh.keys.loading")}</div>}
+            {!loading && tunnels.length === 0 && (
+              <div className="text-muted text-sm" style={{ padding: 12 }}>{t("ssh.tunnels.empty")}</div>
+            )}
+            {!loading && tunnels.length > 0 && (
+              <table>
+                <thead>
+                  <tr>
+                    <th>{t("ssh.tunnels.type")}</th>
+                    <th>{t("ssh.tunnels.localPort")}</th>
+                    <th>{t("ssh.tunnels.remoteHost")}</th>
+                    <th>{t("ssh.tunnels.remotePort")}</th>
+                    <th>{t("ssh.tunnels.host")}</th>
+                    <th>{t("ssh.tunnels.status")}</th>
+                    <th />
+                  </tr>
+                </thead>
+                <tbody>
+                  {tunnels.map((tunnel) => (
+                    <tr key={tunnel.id}>
+                      <td>{tunnel.tunnelType}</td>
+                      <td>{tunnel.localPort}</td>
+                      <td>{tunnel.remoteHost}</td>
+                      <td>{tunnel.remotePort}</td>
+                      <td>{hostNameById.get(tunnel.connectionId) ?? tunnel.connectionId}</td>
                       <td>
                         <span
-                          className={`badge ${tunnel.status === "Active" ? "badge-success" : "badge-muted"}`}
+                          className={`badge ${
+                            tunnel.status === "active" ? "badge-success" : "badge-muted"
+                          }`}
                         >
-                          {tunnel.status}
+                          {tunnel.status === "active"
+                            ? t("ssh.tunnels.active")
+                            : t("ssh.tunnels.closed")}
                         </span>
+                      </td>
+                      <td>
+                        <button
+                          className="btn btn-ghost btn-sm text-danger"
+                          onClick={() => handleClose(tunnel.id)}
+                        >
+                          {t("ssh.tunnels.delete")}
+                        </button>
                       </td>
                     </tr>
                   ))}
-              </tbody>
-            </table>
+                </tbody>
+              </table>
+            )}
           </div>
         </div>
         <div className="ssh-side-stack">
           <div className="panel">
             <div className="panel-header">
-              <h3>使用建议</h3>
+              <h3>{t("ssh.tunnels.tipsTitle")}</h3>
             </div>
             <div className="panel-body action-list">
               <div className="action-row">
-                <span className="action-title">数据库调试</span>
-                <span className="action-meta">
-                  优先走只读链路，避免在生产侧直接暴露数据库端口。
-                </span>
+                <span className="action-title">{t("ssh.tunnels.tipDbTitle")}</span>
+                <span className="action-meta">{t("ssh.tunnels.tipDbDesc")}</span>
               </div>
               <div className="action-row">
-                <span className="action-title">服务联调</span>
-                <span className="action-meta">
-                  把内部服务转发到本地后，可继续联动协议调试与终端会话。
-                </span>
+                <span className="action-title">{t("ssh.tunnels.tipServiceTitle")}</span>
+                <span className="action-meta">{t("ssh.tunnels.tipServiceDesc")}</span>
               </div>
             </div>
           </div>

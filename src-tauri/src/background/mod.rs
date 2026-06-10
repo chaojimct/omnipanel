@@ -3,7 +3,7 @@ pub mod ssh_pool;
 use std::sync::Arc;
 
 use omnipanel_store::Storage;
-pub use ssh_pool::{HostSystemStats, SshHostOverview, SshPool};
+pub use ssh_pool::{HostSystemStats, PoolStatusEvent, SshHostOverview, SshPool};
 
 /// Background scheduler — SSH 连接池初始化。
 pub struct BackgroundScheduler;

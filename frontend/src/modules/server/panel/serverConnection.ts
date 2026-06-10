@@ -23,6 +23,7 @@ export interface SshAuthJson {
   type: AuthType;
   password?: string;
   pem?: string;
+  keyPath?: string;
   passphrase?: string | null;
 }
 
@@ -42,6 +43,7 @@ export interface UnifiedServerFormData {
   authType: AuthType;
   password: string;
   pem: string;
+  keyPath: string;
   passphrase: string;
   group: string;
   panelAddress: string;
@@ -57,6 +59,7 @@ export const EMPTY_SERVER_FORM: UnifiedServerFormData = {
   authType: "password",
   password: "",
   pem: "",
+  keyPath: "auto",
   passphrase: "",
   group: "默认",
   panelAddress: "",
@@ -121,6 +124,7 @@ export function connectionsToForm(
       if (cfg.auth.type === "privateKey") {
         form.authType = "privateKey";
         form.pem = cfg.auth.pem ?? "";
+        form.keyPath = cfg.auth.keyPath ?? (cfg.auth.pem ? "" : "auto");
         form.passphrase = cfg.auth.passphrase ?? "";
       } else {
         form.authType = "password";
@@ -151,7 +155,8 @@ export function buildSshConnection(
       ? { type: "password" as const, password: form.password }
       : {
           type: "privateKey" as const,
-          pem: form.pem,
+          ...(form.pem.trim() ? { pem: form.pem } : {}),
+          keyPath: form.keyPath || "auto",
           passphrase: form.passphrase || null,
         };
   const config: SshConfigJson = {

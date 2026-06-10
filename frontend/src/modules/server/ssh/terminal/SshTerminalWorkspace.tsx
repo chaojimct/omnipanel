@@ -22,12 +22,20 @@ export function SshTerminalWorkspace({ resource, active = true }: Props) {
     handleActivatePane,
     handleSplitPane,
     handleClosePane,
-  } = useSshTerminalWorkspace(resource);
+  } = useSshTerminalWorkspace(resource, active);
 
   if (!resource) {
     return (
       <div className="ssh-terminal-panel">
         <div className="ssh-terminal-empty">请从左侧列表选择一台主机</div>
+      </div>
+    );
+  }
+
+  if (!active) {
+    return (
+      <div className="ssh-terminal-panel">
+        <div className="ssh-terminal-empty">切换到终端页签后将建立 SSH 连接</div>
       </div>
     );
   }

@@ -11,11 +11,19 @@ import {
 } from "../../lib/sshGroups";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { useI18n } from "../../i18n";
-import { useSshStats } from "../../stores/sshStatsStore";
-import { syncFromOpenSshConfig, useConnectionStore } from "../../stores/connectionStore";
+import { ResourceTags } from "../ui/ResourceTags";
+import {
+  syncFromOpenSshConfig,
+  useConnectionStore,
+} from "../../stores/connectionStore";
+import {
+  loadSshPoolStatuses,
+  useHostOnlineStatus,
+} from "../../stores/sshConnectionStore";
+import { useSshHostStore } from "../../stores/sshHostStore";
 import { ContextMenu, type ContextMenuItem } from "../ui/ContextMenu";
 import { WarnAlert } from "../ui/WarnAlert";
-import { ServerConnectionDialog } from "../../modules/server/panel/ServerConnectionDialog";
+import { SshConnectionDialog } from "../../modules/server/ssh/components/SshConnectionDialog";
 import {
   findPanelForSsh,
   getLinkedConnectionIds,
@@ -54,10 +62,41 @@ function HostPanelBadge({ sshId }: { sshId: string }) {
   );
 }
 
-function HostOsInfo({ resourceId }: { resourceId: string }) {
-  const stats = useSshStats(resourceId);
-  if (!stats?.osInfo) return null;
-  return <span className="host-os-tag">{stats.osInfo}</span>;
+function HostResourceTags({ resourceId }: { resourceId: string }) {
+  const tags = useConnectionStore(
+    (s) => s.connections.find((c) => c.id === resourceId)?.tags,
+  );
+  return <ResourceTags tags={tags} keys={["os"]} variant="compact" />;
+}
+
+function HostStatusDot({ resourceId }: { resourceId: string }) {
+  const status = useHostOnlineStatus(resourceId);
+  const title =
+    status === "online"
+      ? "端口可达"
+      : status === "connecting"
+        ? "连接中"
+        : status === "error"
+          ? "不可达"
+          : "未知";
+  return (
+    <span
+      className={`host-status host-status--${status === "online" ? "online" : status}`}
+      title={title}
+      aria-label={title}
+    />
+  );
+}
+
+function HostMonitoringBadge({ resourceId }: { resourceId: string }) {
+  const { t } = useI18n();
+  const enabled = useSshHostStore((s) => s.isMonitoring(resourceId));
+  if (!enabled) return null;
+  return (
+    <span className="host-monitoring-badge" title={t("ssh.monitoring.active")}>
+      <span className="host-monitoring-dot" aria-hidden />
+    </span>
+  );
 }
 
 type HostGroupSectionProps = {
@@ -112,6 +151,10 @@ export function HostListPanel({ resources, onConnect }: HostListPanelProps) {
   const moveSshConnectionsToGroup = useConnectionStore((s) => s.moveSshConnectionsToGroup);
   const removeConn = useConnectionStore((s) => s.remove);
   const activeHostId = selectedResourceByPath[SSH_PATH];
+
+  useEffect(() => {
+    void loadSshPoolStatuses();
+  }, []);
 
   type HostListCtxMenu =
     | { kind: "host"; x: number; y: number; host: WorkspaceResource }
@@ -439,11 +482,13 @@ export function HostListPanel({ resources, onConnect }: HostListPanelProps) {
                     onClick={() => selectHost(host)}
                     onDoubleClick={() => onConnect?.(host.id)}
                   >
+                    <HostStatusDot resourceId={host.id} />
                     <div className="host-icon">{HOST_ICON}</div>
                     <div className="host-info">
                       <div className="host-row-1">
                         <span className="host-name">{host.name}</span>
-                        <HostOsInfo resourceId={host.id} />
+                        <HostResourceTags resourceId={host.id} />
+                        <HostMonitoringBadge resourceId={host.id} />
                       </div>
                       <div className="host-row-2">{host.subtitle}</div>
                     </div>
@@ -474,11 +519,11 @@ export function HostListPanel({ resources, onConnect }: HostListPanelProps) {
         onClose={() => setSyncWarnOpen(false)}
       />
 
-      <ServerConnectionDialog
+      <SshConnectionDialog
         open={showDialog}
         onClose={() => { setShowDialog(false); setEditConnection(undefined); }}
         onSaved={() => useConnectionStore.getState().refresh()}
-        editSshConnection={editConnection}
+        editConnection={editConnection}
       />
     </div>
   );

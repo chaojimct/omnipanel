@@ -72,7 +72,8 @@ export function SftpDetailTab({ activeResource }: Props) {
 
   useEffect(() => {
     if (activeResource?.id) {
-      void loadDir(path);
+      setPath("/");
+      void loadDir("/");
     }
   }, [activeResource?.id]);
 

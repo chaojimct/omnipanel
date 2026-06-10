@@ -2,23 +2,25 @@ import { useCallback, useEffect, useState } from "react";
 import { commands } from "../../../../ipc/bindings";
 import type { SshKeyInfo } from "../../../../ipc/bindings";
 import { Select } from "../../../../components/ui/Select";
+import { useI18n } from "../../../../i18n";
 
 export function KeysModuleView() {
+  const { t } = useI18n();
   const [keys, setKeys] = useState<SshKeyInfo[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showGenerate, setShowGenerate] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [publicKeyName, setPublicKeyName] = useState<string | null>(null);
+  const [publicKeyContent, setPublicKeyContent] = useState<string | null>(null);
 
-  // Generate form
   const [genKeyType, setGenKeyType] = useState<"ed25519" | "rsa">("ed25519");
   const [genBits, setGenBits] = useState("4096");
   const [genComment, setGenComment] = useState("");
   const [genPassphrase, setGenPassphrase] = useState("");
   const [generating, setGenerating] = useState(false);
 
-  // Import form
   const [importName, setImportName] = useState("");
   const [importKey, setImportKey] = useState("");
   const [importing, setImporting] = useState(false);
@@ -52,7 +54,7 @@ export function KeysModuleView() {
         genKeyType,
         genKeyType === "rsa" ? parseInt(genBits, 10) || 4096 : null,
         genComment,
-        genPassphrase
+        genPassphrase,
       );
       if (res.status === "ok") {
         setShowGenerate(false);
@@ -71,7 +73,7 @@ export function KeysModuleView() {
 
   const handleImport = async () => {
     if (!importName.trim() || !importKey.trim()) {
-      setError("请填写名称和私钥内容");
+      setError(t("ssh.keys.nameAndKeyRequired"));
       return;
     }
     setImporting(true);
@@ -107,19 +109,58 @@ export function KeysModuleView() {
     }
   };
 
+  const handleViewPublic = async (name: string) => {
+    setError(null);
+    try {
+      const res = await commands.sshReadKeyPublic(name);
+      if (res.status === "ok") {
+        if (!res.data) {
+          setError(t("ssh.keys.noPublicKey"));
+          return;
+        }
+        setPublicKeyName(name);
+        setPublicKeyContent(res.data);
+      } else {
+        setError(res.error.message);
+      }
+    } catch (e) {
+      setError(String(e));
+    }
+  };
+
+  const handleCopyPath = async (path: string) => {
+    try {
+      await navigator.clipboard.writeText(path);
+    } catch {
+      setError(t("ssh.keys.copyFailed"));
+    }
+  };
+
   return (
     <div className="ssh-detail">
       <div className="ssh-detail-header">
         <div>
-          <div className="host-title">SSH Keys</div>
-          <div className="host-addr-detail">统一管理本地 SSH 密钥</div>
+          <div className="host-title">{t("ssh.keys.title")}</div>
+          <div className="host-addr-detail">{t("ssh.keys.subtitle")}</div>
         </div>
         <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
-          <button className="btn btn-secondary btn-sm" onClick={() => { setShowGenerate(true); setShowImport(false); }}>
-            生成密钥
+          <button
+            className="btn btn-secondary btn-sm"
+            onClick={() => {
+              setShowGenerate(true);
+              setShowImport(false);
+            }}
+          >
+            {t("ssh.keys.generate")}
           </button>
-          <button className="btn btn-primary btn-sm" onClick={() => { setShowImport(true); setShowGenerate(false); }}>
-            + 导入密钥
+          <button
+            className="btn btn-primary btn-sm"
+            onClick={() => {
+              setShowImport(true);
+              setShowGenerate(false);
+            }}
+          >
+            + {t("ssh.keys.import")}
           </button>
         </div>
       </div>
@@ -127,11 +168,11 @@ export function KeysModuleView() {
       {error && <div className="sftp-error">{error}</div>}
 
       {showGenerate && (
-        <div className="panel" style={{ marginBottom: 8 }}>
-          <div className="panel-header"><h3>生成新密钥</h3></div>
+        <div className="panel" style={{ margin: "0 24px 8px" }}>
+          <div className="panel-header"><h3>{t("ssh.keys.generateTitle")}</h3></div>
           <div className="panel-body" style={{ padding: 12 }}>
             <div className="form-field">
-              <label className="form-label">密钥类型</label>
+              <label className="form-label">{t("ssh.keys.keyType")}</label>
               <Select
                 className="input"
                 value={genKeyType}
@@ -139,49 +180,76 @@ export function KeysModuleView() {
                 style={{ width: "100%" }}
                 searchable={false}
                 options={[
-                  { value: "ed25519", label: "ED25519（推荐）" },
-                  { value: "rsa", label: "RSA" },
+                  { value: "ed25519", label: t("ssh.keys.typeEd25519") },
+                  { value: "rsa", label: t("ssh.keys.typeRsa") },
                 ]}
               />
             </div>
             {genKeyType === "rsa" && (
               <div className="form-field">
-                <label className="form-label">位数</label>
-                <input className="input" type="number" value={genBits} onChange={(e) => setGenBits(e.target.value)} style={{ width: "100%" }} />
+                <label className="form-label">{t("ssh.keys.bits")}</label>
+                <input
+                  className="input"
+                  type="number"
+                  value={genBits}
+                  onChange={(e) => setGenBits(e.target.value)}
+                  style={{ width: "100%" }}
+                />
               </div>
             )}
             <div className="form-field">
-              <label className="form-label">注释</label>
-              <input className="input" placeholder="user@host" value={genComment} onChange={(e) => setGenComment(e.target.value)} style={{ width: "100%" }} />
+              <label className="form-label">{t("ssh.keys.comment")}</label>
+              <input
+                className="input"
+                placeholder="user@host"
+                value={genComment}
+                onChange={(e) => setGenComment(e.target.value)}
+                style={{ width: "100%" }}
+              />
             </div>
             <div className="form-field">
-              <label className="form-label">密码（可选）</label>
-              <input className="input" type="password" placeholder="留空无密码" value={genPassphrase} onChange={(e) => setGenPassphrase(e.target.value)} style={{ width: "100%" }} />
+              <label className="form-label">{t("ssh.keys.passphrase")}</label>
+              <input
+                className="input"
+                type="password"
+                placeholder={t("ssh.keys.passphrasePlaceholder")}
+                value={genPassphrase}
+                onChange={(e) => setGenPassphrase(e.target.value)}
+                style={{ width: "100%" }}
+              />
             </div>
             <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
               <button className="btn btn-primary btn-sm" onClick={handleGenerate} disabled={generating}>
-                {generating ? "生成中…" : "生成"}
+                {generating ? t("ssh.keys.generating") : t("ssh.keys.generateAction")}
               </button>
-              <button className="btn btn-secondary btn-sm" onClick={() => setShowGenerate(false)}>取消</button>
+              <button className="btn btn-secondary btn-sm" onClick={() => setShowGenerate(false)}>
+                {t("ssh.keys.cancel")}
+              </button>
             </div>
           </div>
         </div>
       )}
 
       {showImport && (
-        <div className="panel" style={{ marginBottom: 8 }}>
-          <div className="panel-header"><h3>导入密钥</h3></div>
+        <div className="panel" style={{ margin: "0 24px 8px" }}>
+          <div className="panel-header"><h3>{t("ssh.keys.importTitle")}</h3></div>
           <div className="panel-body" style={{ padding: 12 }}>
             <div className="form-field">
-              <label className="form-label">名称</label>
-              <input className="input" placeholder="id_ed25519" value={importName} onChange={(e) => setImportName(e.target.value)} style={{ width: "100%" }} />
+              <label className="form-label">{t("ssh.keys.name")}</label>
+              <input
+                className="input"
+                placeholder={t("ssh.keys.namePlaceholder")}
+                value={importName}
+                onChange={(e) => setImportName(e.target.value)}
+                style={{ width: "100%" }}
+              />
             </div>
             <div className="form-field">
-              <label className="form-label">私钥内容</label>
+              <label className="form-label">{t("ssh.keys.pem")}</label>
               <textarea
                 className="input"
                 rows={6}
-                placeholder="-----BEGIN OPENSSH PRIVATE KEY-----&#10;..."
+                placeholder={t("ssh.keys.pemPlaceholder")}
                 value={importKey}
                 onChange={(e) => setImportKey(e.target.value)}
                 style={{ width: "100%", resize: "vertical", fontFamily: "monospace" }}
@@ -189,9 +257,11 @@ export function KeysModuleView() {
             </div>
             <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
               <button className="btn btn-primary btn-sm" onClick={handleImport} disabled={importing}>
-                {importing ? "导入中…" : "导入"}
+                {importing ? t("ssh.keys.importing") : t("ssh.keys.importAction")}
               </button>
-              <button className="btn btn-secondary btn-sm" onClick={() => setShowImport(false)}>取消</button>
+              <button className="btn btn-secondary btn-sm" onClick={() => setShowImport(false)}>
+                {t("ssh.keys.cancel")}
+              </button>
             </div>
           </div>
         </div>
@@ -199,20 +269,38 @@ export function KeysModuleView() {
 
       <div className="ssh-detail-body">
         <div className="panel">
-          <div className="panel-header"><h3>Available Keys</h3></div>
+          <div className="panel-header"><h3>{t("ssh.keys.listTitle")}</h3></div>
           <div className="panel-body action-list">
-            {loading && <div className="text-muted text-sm" style={{ padding: 12 }}>加载中…</div>}
-            {!loading && keys.length === 0 && <div className="text-muted text-sm" style={{ padding: 12 }}>暂无密钥</div>}
+            {loading && <div className="text-muted text-sm" style={{ padding: 12 }}>{t("ssh.keys.loading")}</div>}
+            {!loading && keys.length === 0 && (
+              <div className="text-muted text-sm" style={{ padding: 12 }}>{t("ssh.keys.empty")}</div>
+            )}
             {keys.map((key) => (
               <div key={key.name} className="action-row" style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <div style={{ flex: 1 }}>
                   <div className="action-title">{key.name}</div>
                   <div className="action-meta">
-                    {key.keyType} · {key.path} · {key.fingerprint}
+                    {key.keyType}
+                    {key.path && ` · ${key.path}`}
+                    {key.fingerprint && ` · ${key.fingerprint}`}
                     {key.comment && ` · ${key.comment}`}
                   </div>
                 </div>
-                <button className="btn-icon text-danger" title="删除" onClick={() => setConfirmDelete(key.name)}>
+                <button
+                  className="btn btn-ghost btn-sm"
+                  title={t("ssh.keys.viewPublic")}
+                  onClick={() => handleViewPublic(key.name)}
+                >
+                  {t("ssh.keys.viewPublic")}
+                </button>
+                <button
+                  className="btn btn-ghost btn-sm"
+                  title={t("ssh.keys.copyPath")}
+                  onClick={() => handleCopyPath(key.path)}
+                >
+                  {t("ssh.keys.copyPath")}
+                </button>
+                <button className="btn-icon text-danger" title={t("ssh.keys.delete")} onClick={() => setConfirmDelete(key.name)}>
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
                     <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2" />
                   </svg>
@@ -227,11 +315,54 @@ export function KeysModuleView() {
         <>
           <div className="drawer-overlay show" onClick={() => setConfirmDelete(null)} />
           <div className="confirm-modal">
-            <h3>删除密钥</h3>
-            <p className="text-sm">确定要删除密钥 <code>{confirmDelete}</code> 吗？此操作不可恢复。</p>
+            <h3>{t("ssh.keys.deleteTitle")}</h3>
+            <p className="text-sm">{t("ssh.keys.deleteConfirm", { name: confirmDelete })}</p>
             <div className="flex gap-2" style={{ marginTop: 16, justifyContent: "flex-end" }}>
-              <button className="btn btn-secondary btn-sm" onClick={() => setConfirmDelete(null)}>取消</button>
-              <button className="btn btn-danger btn-sm" onClick={() => handleDelete(confirmDelete)}>确认删除</button>
+              <button className="btn btn-secondary btn-sm" onClick={() => setConfirmDelete(null)}>
+                {t("ssh.keys.cancel")}
+              </button>
+              <button className="btn btn-danger btn-sm" onClick={() => handleDelete(confirmDelete)}>
+                {t("ssh.keys.deleteAction")}
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+
+      {publicKeyName && publicKeyContent && (
+        <>
+          <div
+            className="drawer-overlay show"
+            onClick={() => {
+              setPublicKeyName(null);
+              setPublicKeyContent(null);
+            }}
+          />
+          <div className="confirm-modal" style={{ maxWidth: 560 }}>
+            <h3>{t("ssh.keys.publicKeyTitle")} — {publicKeyName}</h3>
+            <textarea
+              className="input"
+              readOnly
+              rows={4}
+              value={publicKeyContent}
+              style={{ width: "100%", fontFamily: "monospace", marginTop: 12 }}
+            />
+            <div className="flex gap-2" style={{ marginTop: 16, justifyContent: "flex-end" }}>
+              <button
+                className="btn btn-secondary btn-sm"
+                onClick={() => navigator.clipboard.writeText(publicKeyContent)}
+              >
+                {t("ssh.keys.copyPublic")}
+              </button>
+              <button
+                className="btn btn-primary btn-sm"
+                onClick={() => {
+                  setPublicKeyName(null);
+                  setPublicKeyContent(null);
+                }}
+              >
+                {t("ssh.keys.close")}
+              </button>
             </div>
           </div>
         </>

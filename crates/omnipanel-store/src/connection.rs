@@ -52,6 +52,9 @@ pub struct Connection {
     pub group: String,
     #[serde(default = "default_env_tag")]
     pub env_tag: String,
+    /// 全局资源标签，如 `os:Ubuntu 24.04.2 LTS`（key:value 字符串列表）
+    #[serde(default)]
+    pub tags: Vec<String>,
     /// 连接配置 JSON 文本（host/port/user/database 等，因 kind 而异）
     #[serde(default = "default_config")]
     pub config: String,
@@ -77,13 +80,13 @@ fn default_config() -> String {
 impl Storage {
     /// 列出全部连接（按更新时间倒序）。
     pub fn list_connections(&self) -> OmniResult<Vec<Connection>> {
-        self.query_connections("SELECT id, kind, name, group_name, env_tag, config, credential_ref, created_at, updated_at FROM connections ORDER BY updated_at DESC", [])
+        self.query_connections("SELECT id, kind, name, group_name, env_tag, tags, config, credential_ref, created_at, updated_at FROM connections ORDER BY updated_at DESC", [])
     }
 
     /// 按类型列出连接。
     pub fn list_connections_by_kind(&self, kind: ConnectionKind) -> OmniResult<Vec<Connection>> {
         self.query_connections(
-            "SELECT id, kind, name, group_name, env_tag, config, credential_ref, created_at, updated_at FROM connections WHERE kind = ?1 ORDER BY updated_at DESC",
+            "SELECT id, kind, name, group_name, env_tag, tags, config, credential_ref, created_at, updated_at FROM connections WHERE kind = ?1 ORDER BY updated_at DESC",
             [kind.as_str()],
         )
     }
@@ -92,7 +95,7 @@ impl Storage {
     pub fn get_connection(&self, id: &str) -> OmniResult<Option<Connection>> {
         Ok(self
             .query_connections(
-                "SELECT id, kind, name, group_name, env_tag, config, credential_ref, created_at, updated_at FROM connections WHERE id = ?1",
+                "SELECT id, kind, name, group_name, env_tag, tags, config, credential_ref, created_at, updated_at FROM connections WHERE id = ?1",
                 [id],
             )?
             .into_iter()
@@ -103,13 +106,14 @@ impl Storage {
     pub fn save_connection(&self, conn: &Connection) -> OmniResult<()> {
         self.conn()
             .execute(
-                "INSERT INTO connections (id, kind, name, group_name, env_tag, config, credential_ref, created_at, updated_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+                "INSERT INTO connections (id, kind, name, group_name, env_tag, tags, config, credential_ref, created_at, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
                  ON CONFLICT(id) DO UPDATE SET
                     kind = excluded.kind,
                     name = excluded.name,
                     group_name = excluded.group_name,
                     env_tag = excluded.env_tag,
+                    tags = excluded.tags,
                     config = excluded.config,
                     credential_ref = excluded.credential_ref,
                     updated_at = excluded.updated_at",
@@ -119,6 +123,7 @@ impl Storage {
                     conn.name,
                     conn.group,
                     conn.env_tag,
+                    serde_json::to_string(&conn.tags).unwrap_or_else(|_| "[]".to_string()),
                     conn.config,
                     conn.credential_ref,
                     conn.created_at,
@@ -146,6 +151,9 @@ impl Storage {
         let rows = stmt
             .query_map(params, |row| {
                 let kind_str: String = row.get(1)?;
+                let tags_json: String = row.get(5)?;
+                let tags: Vec<String> =
+                    serde_json::from_str(&tags_json).unwrap_or_default();
                 Ok((
                     Connection {
                         id: row.get(0)?,
@@ -153,10 +161,11 @@ impl Storage {
                         name: row.get(2)?,
                         group: row.get(3)?,
                         env_tag: row.get(4)?,
-                        config: row.get(5)?,
-                        credential_ref: row.get(6)?,
-                        created_at: row.get(7)?,
-                        updated_at: row.get(8)?,
+                        tags,
+                        config: row.get(6)?,
+                        credential_ref: row.get(7)?,
+                        created_at: row.get(8)?,
+                        updated_at: row.get(9)?,
                     },
                     kind_str,
                 ))
@@ -184,6 +193,7 @@ mod tests {
             name: format!("conn-{id}"),
             group: "default".into(),
             env_tag: "dev".into(),
+            tags: vec![],
             config: r#"{"host":"127.0.0.1","port":22}"#.into(),
             credential_ref: Some(format!("cred-{id}")),
             created_at: 1_700_000_000,

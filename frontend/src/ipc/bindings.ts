@@ -172,7 +172,7 @@ export const commands = {
 	 *  建立 SSH 连接并请求交互式 shell。返回会话 id；
 	 *  shell 输出复用 `terminal-output` 事件，前端 xterm 无需区分本地/远程。
 	 */
-	sshConnect: (config: SshConfig, cols: number, rows: number) => typedError<string, OmniError_Serialize>(__TAURI_INVOKE("ssh_connect", { config, cols, rows })),
+	sshConnect: (config: SshConfig_Deserialize, cols: number, rows: number) => typedError<string, OmniError_Serialize>(__TAURI_INVOKE("ssh_connect", { config, cols, rows })),
 	/**  写入远端 shell。 */
 	sshWrite: (id: string, data: number[]) => typedError<null, OmniError_Serialize>(__TAURI_INVOKE("ssh_write", { id, data })),
 	/**  调整远端 PTY 窗口大小。 */
@@ -203,6 +203,14 @@ export const commands = {
 	sshPoolRelease: (resourceId: string) => typedError<null, OmniError_Serialize>(__TAURI_INVOKE("ssh_pool_release", { resourceId })),
 	/**  监控页：复用连接池会话，仅拉取系统指标。 */
 	sshPoolFetchStats: (resourceId: string) => typedError<HostSystemStats, OmniError_Serialize>(__TAURI_INVOKE("ssh_pool_fetch_stats", { resourceId })),
+	/**  获取所有 SSH 主机的连接状态快照。 */
+	sshPoolGetStatuses: () => typedError<PoolStatusEvent[], OmniError_Serialize>(__TAURI_INVOKE("ssh_pool_get_statuses")),
+	/**  开启持续监控采集（后端后台轮询并推送 stats）。 */
+	sshPoolSubscribeMonitoring: (resourceId: string) => typedError<null, OmniError_Serialize>(__TAURI_INVOKE("ssh_pool_subscribe_monitoring", { resourceId })),
+	/**  关闭持续监控采集。 */
+	sshPoolUnsubscribeMonitoring: (resourceId: string) => typedError<null, OmniError_Serialize>(__TAURI_INVOKE("ssh_pool_unsubscribe_monitoring", { resourceId })),
+	/**  独立刷新进程列表（概览页局部刷新）。 */
+	sshPoolLoadProcesses: (resourceId: string) => typedError<SshProcessInfo[], OmniError_Serialize>(__TAURI_INVOKE("ssh_pool_load_processes", { resourceId })),
 	/**
 	 *  创建 SSH 隧道（端口转发）。
 	 *  通过 SSH exec 运行 `ssh -L/-R/-D` 命令实现，隧道进程在后台运行。
@@ -220,6 +228,8 @@ export const commands = {
 	sshImportKey: (name: string, privateKey: string) => typedError<SshKeyInfo, OmniError_Serialize>(__TAURI_INVOKE("ssh_import_key", { name, privateKey })),
 	/**  删除 SSH 密钥。 */
 	sshDeleteKey: (name: string) => typedError<null, OmniError_Serialize>(__TAURI_INVOKE("ssh_delete_key", { name })),
+	/**  读取密钥对应的公钥文件内容（`~/.ssh/{name}.pub`）。 */
+	sshReadKeyPublic: (name: string) => typedError<string | null, OmniError_Serialize>(__TAURI_INVOKE("ssh_read_key_public", { name })),
 	/**
 	 *  将文本写入用户通过 `plugin-dialog::save` 选择的任意路径。
 	 * 
@@ -369,6 +379,8 @@ export type Connection = {
 	name: string,
 	group?: string,
 	envTag?: string,
+	/**  全局资源标签，如 os:Ubuntu 24.04.2 LTS */
+	tags?: string[],
 	/**  连接配置 JSON 文本（host/port/user/database 等，因 kind 而异） */
 	config?: string,
 	credentialRef?: string | null,
@@ -1035,6 +1047,13 @@ export type OmniError_Serialize = {
 	cause?: string | null,
 };
 
+/**  发射到前端的单个主机连接状态 */
+export type PoolStatusEvent = {
+	resourceId: string,
+	status: string,
+	error: string | null,
+};
+
 /**  Proxy 配置，从前端设置同步到后端。 */
 export type ProxyConfig = {
 	enabled: boolean,
@@ -1129,15 +1148,26 @@ export type SnifferPacket = {
 };
 
 /**  SSH 认证方式。 */
-export type SshAuth = { type: "password"; password: string } | { type: "privateKey"; pem: string; passphrase: string | null };
+export type SshAuth = SshAuth_Serialize | SshAuth_Deserialize;
+
+/**  SSH 认证方式。 */
+export type SshAuth_Deserialize = ({ password: {
+	type: "password",
+	password: string,
+} }) & { privateKey?: never } | ({ privateKey: {
+	type: "privateKey",
+} & {
+	pem?: string | null,
+	passphrase: string | null,
+} & {
+	keyPath?: string | null,
+} }) & { password?: never };
+
+/**  SSH 认证方式。 */
+export type SshAuth_Serialize = ({ type: "password"; password: string }) & { keyPath?: never; passphrase?: never; pem?: never } | ({ type: "privateKey"; pem: string | null; keyPath: string | null; passphrase: string | null }) & { password?: never };
 
 /**  SSH 连接配置。 */
-export type SshConfig = {
-	host: string,
-	port: number,
-	user: string,
-	auth: SshAuth,
-};
+export type SshConfig = SshConfig_Serialize | SshConfig_Deserialize;
 
 /**  `~/.ssh/config` 中的一个 Host 条目（已展开 HostName）。 */
 export type SshConfigEntry = {
@@ -1158,6 +1188,22 @@ export type SshConfigSyncResult = {
 	updated: number,
 	skipped: number,
 	failures: SshConfigSyncFailure[],
+};
+
+/**  SSH 连接配置。 */
+export type SshConfig_Deserialize = {
+	host: string,
+	port: number,
+	user: string,
+	auth: SshAuth_Deserialize,
+};
+
+/**  SSH 连接配置。 */
+export type SshConfig_Serialize = {
+	host: string,
+	port: number,
+	user: string,
+	auth: SshAuth_Serialize,
 };
 
 /**  SSH host info for Docker connection binding. */

@@ -1,16 +1,12 @@
 import { useEffect } from "react";
 import { create } from "zustand";
 import { listen } from "@tauri-apps/api/event";
-
-export type PoolStatusEvent = {
-  resourceId: string;
-  status: "connecting" | "connected" | "disconnected" | "error";
-  error?: string;
-};
+import { commands, type PoolStatusEvent } from "../ipc/bindings";
 
 type SshConnectionState = {
   statusMap: Record<string, PoolStatusEvent>;
   setStatus: (ev: PoolStatusEvent) => void;
+  hydrateStatuses: (events: PoolStatusEvent[]) => void;
 };
 
 export const useSshConnectionStore = create<SshConnectionState>((set) => ({
@@ -19,7 +15,29 @@ export const useSshConnectionStore = create<SshConnectionState>((set) => ({
     set((state) => ({
       statusMap: { ...state.statusMap, [ev.resourceId]: ev },
     })),
+  hydrateStatuses: (events) =>
+    set((state) => {
+      const next = { ...state.statusMap };
+      for (const ev of events) {
+        next[ev.resourceId] = ev;
+      }
+      return { statusMap: next };
+    }),
 }));
+
+let statusSnapshotLoaded = false;
+export async function loadSshPoolStatuses() {
+  if (statusSnapshotLoaded) return;
+  try {
+    const res = await commands.sshPoolGetStatuses();
+    if (res.status === "ok") {
+      useSshConnectionStore.getState().hydrateStatuses(res.data);
+      statusSnapshotLoaded = true;
+    }
+  } catch {
+    // Tauri 未就绪时忽略
+  }
+}
 
 let listening = false;
 function ensureListener() {
@@ -34,6 +52,7 @@ function ensureListener() {
 
 if (typeof window !== "undefined") {
   ensureListener();
+  void loadSshPoolStatuses();
 }
 
 /** 根据 resourceId 获取主机 SSH 端口可达状态（TCP 探测，非完整登录）。

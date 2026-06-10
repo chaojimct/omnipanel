@@ -18,7 +18,181 @@ pub struct SshConfigEntry {
 
 /// 默认 OpenSSH 配置文件路径（`~/.ssh/config`）。
 pub fn default_ssh_config_path() -> Option<PathBuf> {
-    home_dir().map(|home| home.join(".ssh").join("config"))
+    default_ssh_dir().map(|dir| dir.join("config"))
+}
+
+/// 默认 OpenSSH 私钥目录（`~/.ssh`）。
+pub fn default_ssh_dir() -> Option<PathBuf> {
+    home_dir().map(|home| home.join(".ssh"))
+}
+
+/// OpenSSH 客户端默认 IdentityFile 顺序（与 `ssh_config` 一致）。
+const DEFAULT_IDENTITY_FILE_NAMES: &[&str] = &[
+    "id_rsa",
+    "id_dsa",
+    "id_ecdsa",
+    "id_ed25519",
+    "id_xmss",
+];
+
+fn ssh_dir_skip_file_name(name: &str) -> bool {
+    matches!(
+        name,
+        "config"
+            | "known_hosts"
+            | "known_hosts.old"
+            | "authorized_keys"
+            | "authorized_keys2"
+            | "environment"
+            | "rc"
+            | "motd"
+    ) || name.ends_with(".pub")
+}
+
+/// 从 OpenSSH 公钥文本解析 SHA256 指纹与注释。
+pub fn ssh_public_key_meta(pub_content: &str) -> (String, String) {
+    use russh::keys::ssh_key::{HashAlg, PublicKey};
+
+    let trimmed = pub_content.trim();
+    if trimmed.is_empty() {
+        return (String::new(), String::new());
+    }
+    let comment = trimmed
+        .splitn(3, ' ')
+        .nth(2)
+        .unwrap_or("")
+        .trim()
+        .to_string();
+    if let Ok(key) = PublicKey::from_openssh(trimmed) {
+        let fp = key.fingerprint(HashAlg::Sha256);
+        return (fp.to_string(), comment);
+    }
+    (String::new(), comment)
+}
+
+fn looks_like_private_key_pem(content: &str) -> bool {
+    let trimmed = content.trim_start();
+    trimmed.starts_with("-----BEGIN OPENSSH PRIVATE KEY-----")
+        || trimmed.starts_with("-----BEGIN RSA PRIVATE KEY-----")
+        || trimmed.starts_with("-----BEGIN EC PRIVATE KEY-----")
+        || trimmed.starts_with("-----BEGIN DSA PRIVATE KEY-----")
+        || trimmed.starts_with("-----BEGIN PRIVATE KEY-----")
+}
+
+fn is_private_key_file(path: &Path) -> bool {
+    if !path.is_file() {
+        return false;
+    }
+    let content = match std::fs::read_to_string(path) {
+        Ok(c) => c,
+        Err(_) => return false,
+    };
+    looks_like_private_key_pem(&content)
+}
+
+/// 在指定 `.ssh` 目录中查找可用私钥（先默认文件名，再扫描其余文件）。
+pub fn discover_ssh_identity_file_in(ssh_dir: &Path) -> Option<PathBuf> {
+    if !ssh_dir.is_dir() {
+        return None;
+    }
+
+    for name in DEFAULT_IDENTITY_FILE_NAMES {
+        let path = ssh_dir.join(name);
+        if is_private_key_file(&path) {
+            return Some(path);
+        }
+    }
+
+    let Ok(read_dir) = std::fs::read_dir(ssh_dir) else {
+        return None;
+    };
+    let mut candidates: Vec<PathBuf> = read_dir
+        .filter_map(|e| e.ok())
+        .map(|e| e.path())
+        .filter(|p| p.is_file())
+        .filter(|p| {
+            let name = p
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or_default();
+            !ssh_dir_skip_file_name(name)
+        })
+        .filter(|p| is_private_key_file(p))
+        .collect();
+    candidates.sort();
+    candidates.first().cloned()
+}
+
+/// 在用户主目录 `~/.ssh` 中查找可用私钥。
+pub fn discover_ssh_identity_file() -> Option<PathBuf> {
+    default_ssh_dir().and_then(|dir| discover_ssh_identity_file_in(&dir))
+}
+
+/// 列出指定 `.ssh` 目录中的全部私钥路径（默认文件名优先，其余按名称排序）。
+pub fn list_ssh_private_key_paths_in(ssh_dir: &Path) -> Vec<PathBuf> {
+    if !ssh_dir.is_dir() {
+        return Vec::new();
+    }
+
+    let mut keys = Vec::new();
+    for name in DEFAULT_IDENTITY_FILE_NAMES {
+        let path = ssh_dir.join(name);
+        if is_private_key_file(&path) {
+            keys.push(path);
+        }
+    }
+
+    let Ok(read_dir) = std::fs::read_dir(ssh_dir) else {
+        return keys;
+    };
+    for entry in read_dir.filter_map(|e| e.ok()) {
+        let path = entry.path();
+        if !path.is_file() {
+            continue;
+        }
+        let name = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or_default();
+        if ssh_dir_skip_file_name(name) {
+            continue;
+        }
+        if is_private_key_file(&path) && !keys.iter().any(|p| p == &path) {
+            keys.push(path);
+        }
+    }
+    keys.sort();
+    keys
+}
+
+/// 列出用户主目录 `~/.ssh` 中的全部私钥路径。
+pub fn list_ssh_private_key_paths() -> Vec<PathBuf> {
+    default_ssh_dir()
+        .map(|dir| list_ssh_private_key_paths_in(&dir))
+        .unwrap_or_default()
+}
+
+fn resolve_identity_file_path(entry: &SshConfigEntry) -> OmniResult<PathBuf> {
+    if let Some(path) = &entry.identity_file {
+        let pb = PathBuf::from(path);
+        if !pb.is_file() {
+            return Err(OmniError::new(
+                ErrorCode::Auth,
+                format!("IdentityFile 不存在: {path}"),
+            ));
+        }
+        return Ok(pb);
+    }
+
+    discover_ssh_identity_file().ok_or_else(|| {
+        OmniError::new(
+            ErrorCode::Auth,
+            format!(
+                "Host `{}` 未配置 IdentityFile，且在 ~/.ssh 中未找到可用私钥",
+                entry.alias
+            ),
+        )
+    })
 }
 
 fn home_dir_from_env(var: &str) -> Option<PathBuf> {
@@ -197,27 +371,19 @@ impl HostBlock {
     }
 }
 
-/// 将配置条目转为连接用 [`crate::SshConfig`]（读取 IdentityFile）。
+/// 将配置条目转为连接用 [`crate::SshConfig`]（IdentityFile 缺失时使用 Auto 私钥选择）。
 pub fn ssh_config_to_connect_config(entry: &SshConfigEntry) -> OmniResult<crate::SshConfig> {
     use crate::{SshAuth, SshConfig};
 
-    let auth = if let Some(path) = &entry.identity_file {
-        let pem = std::fs::read_to_string(path).map_err(|e| {
-            OmniError::new(ErrorCode::Auth, "读取 SSH 私钥失败")
-                .with_cause(format!("{path}: {}", e))
-        })?;
-        SshAuth::PrivateKey {
-            pem,
-            passphrase: None,
-        }
+    let key_path = if entry.identity_file.is_some() {
+        Some(resolve_identity_file_path(entry)?.to_string_lossy().to_string())
     } else {
-        return Err(OmniError::new(
-            ErrorCode::Auth,
-            format!(
-                "Host `{}` 未配置 IdentityFile，请在 ~/.ssh/config 中指定私钥",
-                entry.alias
-            ),
-        ));
+        Some("auto".to_string())
+    };
+    let auth = SshAuth::PrivateKey {
+        pem: None,
+        key_path,
+        passphrase: None,
     };
 
     Ok(SshConfig {
@@ -261,5 +427,66 @@ Host *
         let text = "Host *\n  HostName nowhere\n";
         let entries = parse_ssh_config_text(text, Path::new(".")).unwrap();
         assert!(entries.is_empty());
+    }
+
+    #[test]
+    fn discover_prefers_default_identity_names() {
+        let base = std::env::temp_dir().join(format!(
+            "omnipanel-ssh-test-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&base).unwrap();
+        std::fs::write(
+            base.join("custom_key"),
+            "-----BEGIN OPENSSH PRIVATE KEY-----\nabc\n-----END OPENSSH PRIVATE KEY-----\n",
+        )
+        .unwrap();
+        std::fs::write(
+            base.join("id_ed25519"),
+            "-----BEGIN OPENSSH PRIVATE KEY-----\ndef\n-----END OPENSSH PRIVATE KEY-----\n",
+        )
+        .unwrap();
+
+        let found = discover_ssh_identity_file_in(&base).unwrap();
+        assert_eq!(found.file_name().and_then(|n| n.to_str()), Some("id_ed25519"));
+
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn discover_falls_back_to_custom_key() {
+        let base = std::env::temp_dir().join(format!(
+            "omnipanel-ssh-test-custom-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&base).unwrap();
+        std::fs::write(
+            base.join("my_server"),
+            "-----BEGIN RSA PRIVATE KEY-----\nabc\n-----END RSA PRIVATE KEY-----\n",
+        )
+        .unwrap();
+
+        let found = discover_ssh_identity_file_in(&base).unwrap();
+        assert_eq!(found.file_name().and_then(|n| n.to_str()), Some("my_server"));
+
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn discover_skips_pub_and_config() {
+        let base = std::env::temp_dir().join(format!(
+            "omnipanel-ssh-test-skip-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&base).unwrap();
+        std::fs::write(base.join("config"), "Host x").unwrap();
+        std::fs::write(base.join("id_rsa.pub"), "ssh-rsa AAAA").unwrap();
+
+        assert!(discover_ssh_identity_file_in(&base).is_none());
+
+        let _ = std::fs::remove_dir_all(&base);
     }
 }

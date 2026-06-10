@@ -1,0 +1,181 @@
+import { create } from "zustand";
+import type { SshProcessInfo } from "../ipc/bindings";
+import type { HostSystemStats } from "./sshStatsStore";
+
+export type OverviewPhase = "idle" | "loading" | "ready" | "error";
+
+export type MonitorPoint = { ts: number; value: number };
+
+export type HostOverviewState = {
+  phase: OverviewPhase;
+  stats: HostSystemStats | null;
+  processes: SshProcessInfo[];
+  error: string | null;
+  updatedAt: number | null;
+  refreshing: boolean;
+};
+
+export type HostMonitoringState = {
+  enabled: boolean;
+  cpuSeries: MonitorPoint[];
+  memSeries: MonitorPoint[];
+  netSeries: MonitorPoint[];
+};
+
+type HostSnapshot = {
+  overview: HostOverviewState;
+  monitoring: HostMonitoringState;
+  terminalConnected: boolean;
+};
+
+const emptyOverview = (): HostOverviewState => ({
+  phase: "idle",
+  stats: null,
+  processes: [],
+  error: null,
+  updatedAt: null,
+  refreshing: false,
+});
+
+const emptyMonitoring = (): HostMonitoringState => ({
+  enabled: false,
+  cpuSeries: [],
+  memSeries: [],
+  netSeries: [],
+});
+
+const emptySnapshot = (): HostSnapshot => ({
+  overview: emptyOverview(),
+  monitoring: emptyMonitoring(),
+  terminalConnected: false,
+});
+
+type SshHostStoreState = {
+  hosts: Record<string, HostSnapshot>;
+  getSnapshot: (resourceId: string) => HostSnapshot;
+  setOverview: (resourceId: string, patch: Partial<HostOverviewState>) => void;
+  setMonitoring: (resourceId: string, patch: Partial<HostMonitoringState>) => void;
+  setMonitoringEnabled: (resourceId: string, enabled: boolean) => void;
+  appendMonitorPoints: (
+    resourceId: string,
+    points: Partial<Pick<HostMonitoringState, "cpuSeries" | "memSeries" | "netSeries">>,
+  ) => void;
+  setTerminalConnected: (resourceId: string, connected: boolean) => void;
+  clearHost: (resourceId: string) => void;
+  isMonitoring: (resourceId: string) => boolean;
+};
+
+export const useSshHostStore = create<SshHostStoreState>((set, get) => ({
+  hosts: {},
+
+  getSnapshot: (resourceId) => get().hosts[resourceId] ?? emptySnapshot(),
+
+  setOverview: (resourceId, patch) =>
+    set((state) => {
+      const prev = state.hosts[resourceId] ?? emptySnapshot();
+      return {
+        hosts: {
+          ...state.hosts,
+          [resourceId]: {
+            ...prev,
+            overview: { ...prev.overview, ...patch },
+          },
+        },
+      };
+    }),
+
+  setMonitoring: (resourceId, patch) =>
+    set((state) => {
+      const prev = state.hosts[resourceId] ?? emptySnapshot();
+      return {
+        hosts: {
+          ...state.hosts,
+          [resourceId]: {
+            ...prev,
+            monitoring: { ...prev.monitoring, ...patch },
+          },
+        },
+      };
+    }),
+
+  setMonitoringEnabled: (resourceId, enabled) =>
+    set((state) => {
+      const prev = state.hosts[resourceId] ?? emptySnapshot();
+      return {
+        hosts: {
+          ...state.hosts,
+          [resourceId]: {
+            ...prev,
+            monitoring: {
+              ...prev.monitoring,
+              enabled,
+              ...(enabled
+                ? {}
+                : { cpuSeries: [], memSeries: [], netSeries: [] }),
+            },
+          },
+        },
+      };
+    }),
+
+  appendMonitorPoints: (resourceId, points) =>
+    set((state) => {
+      const prev = state.hosts[resourceId] ?? emptySnapshot();
+      const mon = prev.monitoring;
+      return {
+        hosts: {
+          ...state.hosts,
+          [resourceId]: {
+            ...prev,
+            monitoring: {
+              ...mon,
+              cpuSeries: points.cpuSeries ?? mon.cpuSeries,
+              memSeries: points.memSeries ?? mon.memSeries,
+              netSeries: points.netSeries ?? mon.netSeries,
+            },
+          },
+        },
+      };
+    }),
+
+  setTerminalConnected: (resourceId, connected) =>
+    set((state) => {
+      const prev = state.hosts[resourceId] ?? emptySnapshot();
+      return {
+        hosts: {
+          ...state.hosts,
+          [resourceId]: { ...prev, terminalConnected: connected },
+        },
+      };
+    }),
+
+  clearHost: (resourceId) =>
+    set((state) => {
+      const next = { ...state.hosts };
+      delete next[resourceId];
+      return { hosts: next };
+    }),
+
+  isMonitoring: (resourceId) =>
+    get().hosts[resourceId]?.monitoring.enabled ?? false,
+}));
+
+export function useHostOverview(resourceId: string | null) {
+  return useSshHostStore((s) =>
+    resourceId ? (s.hosts[resourceId]?.overview ?? emptyOverview()) : emptyOverview(),
+  );
+}
+
+export function useHostMonitoring(resourceId: string | null) {
+  return useSshHostStore((s) =>
+    resourceId
+      ? (s.hosts[resourceId]?.monitoring ?? emptyMonitoring())
+      : emptyMonitoring(),
+  );
+}
+
+export function useHostTerminalConnected(resourceId: string | null): boolean {
+  return useSshHostStore((s) =>
+    resourceId ? (s.hosts[resourceId]?.terminalConnected ?? false) : false,
+  );
+}

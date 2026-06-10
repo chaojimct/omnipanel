@@ -122,7 +122,7 @@ function TopbarPageActions() {
 }
 
 /** 会在顶栏注册 Tab 的路由；不含 SSH / 服务器等无顶栏 Tab 的模块 */
-const TOPBAR_TAB_ROUTES = ["/terminal", "/database", "/docker", "/tasks", "/protocol"];
+const TOPBAR_TAB_ROUTES = ["/terminal", "/database", "/docker", "/ssh", "/tasks", "/protocol"];
 
 function AppShell() {
   useAiDrawerShortcut();

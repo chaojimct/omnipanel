@@ -21,7 +21,10 @@ function disposeWorkspacePanes(workspaceId: string, resourceId: string) {
 }
 
 /** SSH 详情内嵌终端：按主机管理工作区窗格与拆分布局（与顶部终端 Tab 隔离） */
-export function useSshTerminalWorkspace(resource: WorkspaceResource | null) {
+export function useSshTerminalWorkspace(
+  resource: WorkspaceResource | null,
+  active = false,
+) {
   const upsertEmbeddedPane = useTerminalStore((s) => s.upsertEmbeddedPane);
   const removeEmbeddedPane = useTerminalStore((s) => s.removeEmbeddedPane);
   const embeddedPanes = useTerminalStore((s) => s.embeddedPanes);
@@ -40,9 +43,7 @@ export function useSshTerminalWorkspace(resource: WorkspaceResource | null) {
   }, [embeddedPanes, resource?.id, workspaceId]);
 
   useEffect(() => {
-    if (!resource || !workspaceId) {
-      setLayout(null);
-      setActivePaneId(null);
+    if (!resource || !workspaceId || !active) {
       return;
     }
 
@@ -66,7 +67,7 @@ export function useSshTerminalWorkspace(resource: WorkspaceResource | null) {
         ? prev
         : (panes[0]?.id ?? null),
     );
-  }, [resource, workspaceId, upsertEmbeddedPane]);
+  }, [resource, workspaceId, active, upsertEmbeddedPane]);
 
   useEffect(() => {
     if (!resource || !workspaceId) return;

@@ -1,7 +1,11 @@
 import { DETAIL_TABS } from "../constants";
 import type { SshManagerContext } from "../hooks/useSshManager";
 import { normalizeSshGroup, sshGroupLabel } from "../../../../lib/sshGroups";
-import { useSshStats } from "../../../../stores/sshStatsStore";
+import { useI18n } from "../../../../i18n";
+import { ResourceTags } from "../../../../components/ui/ResourceTags";
+import { useConnectionStore } from "../../../../stores/connectionStore";
+import { parseSshConfig } from "../../panel/serverConnection";
+import { useHostOnlineStatus } from "../../../../stores/sshConnectionStore";
 import { HostTunnelsDetailTab } from "./detail/HostTunnelsDetailTab";
 import { MonitoringDetailTab } from "./detail/MonitoringDetailTab";
 import { OverviewDetailTab } from "./detail/OverviewDetailTab";
@@ -10,10 +14,32 @@ import { TerminalDetailTab } from "./detail/TerminalDetailTab";
 
 type Props = SshManagerContext;
 
-function HostOsTag({ resourceId }: { resourceId: string | undefined }) {
-  const stats = useSshStats(resourceId ?? null);
-  if (!stats?.osInfo) return null;
-  return <span className="host-os-tag-detail">{stats.osInfo}</span>;
+function HostDetailTags({ resourceId }: { resourceId: string | undefined }) {
+  const tags = useConnectionStore(
+    (s) => s.connections.find((c) => c.id === resourceId)?.tags,
+  );
+  return <ResourceTags tags={tags} variant="detail" />;
+}
+
+function HostConnectionStatus({ resourceId }: { resourceId: string | undefined }) {
+  const { t } = useI18n();
+  const status = useHostOnlineStatus(resourceId ?? null);
+  const label =
+    status === "online"
+      ? t("ssh.status.online")
+      : status === "connecting"
+        ? t("ssh.status.connecting")
+        : status === "error"
+          ? t("ssh.status.offline")
+          : t("ssh.status.unknown");
+  const dotClass =
+    status === "online" ? "host-status--online" : `host-status--${status}`;
+  return (
+    <span className={`ssh-detail-status ssh-detail-status--${status}`}>
+      <span className={`host-status ${dotClass}`} />
+      {label}
+    </span>
+  );
 }
 
 export function HostDetailPanel(ctx: Props) {
@@ -27,18 +53,26 @@ export function HostDetailPanel(ctx: Props) {
     hostName,
   } = ctx;
 
+  const connections = useConnectionStore((s) => s.connections);
+  const connection = activeResource
+    ? connections.find((c) => c.id === activeResource.id)
+    : undefined;
+  const sshConfig = connection ? parseSshConfig(connection) : null;
+  const username = sshConfig?.user ?? profile.username;
+
   return (
     <div className="ssh-detail">
       <div className="ssh-detail-header">
         <div>
           <div className="host-title">
             {hostName}
-            <HostOsTag resourceId={activeResource?.id} />
+            <HostDetailTags resourceId={activeResource?.id} />
           </div>
           <div className="host-addr-detail">
-            {profile.username}@{hostAddress}
+            {username}@{hostAddress}
           </div>
         </div>
+        <HostConnectionStatus resourceId={activeResource?.id} />
         {activeResource && (
           <span className="badge badge-muted">
             {sshGroupLabel(normalizeSshGroup(activeResource.group), t)}
@@ -79,7 +113,9 @@ export function HostDetailPanel(ctx: Props) {
           />
         </div>
         {detailTab === "sftp" && <SftpDetailTab activeResource={activeResource} />}
-        {detailTab === "tunnels" && <HostTunnelsDetailTab />}
+        {detailTab === "tunnels" && (
+          <HostTunnelsDetailTab activeResource={activeResource} />
+        )}
         {detailTab === "monitoring" && <MonitoringDetailTab activeResource={activeResource} />}
       </div>
     </div>

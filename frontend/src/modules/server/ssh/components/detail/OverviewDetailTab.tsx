@@ -99,16 +99,34 @@ type ProcessListPanelProps = {
   processes: SshProcessInfo[];
   loading: boolean;
   error: string | null;
+  updatedAt: number | null;
   onRefresh: () => void;
 };
 
-function ProcessListPanel({ processes, loading, error, onRefresh }: ProcessListPanelProps) {
+function ProcessListPanel({
+  processes,
+  loading,
+  error,
+  updatedAt,
+  onRefresh,
+}: ProcessListPanelProps) {
   const { t } = useI18n();
   const [page, setPage] = useState(0);
   const [sortKey, setSortKey] = useState<SortKey>("cpu");
   const [sortDir, setSortDir] = useState<-1 | 1>(-1);
+  const [query, setQuery] = useState("");
 
-  const sorted = [...processes].sort((a, b) => {
+  const filtered = processes.filter((p) => {
+    if (!query.trim()) return true;
+    const q = query.trim().toLowerCase();
+    return (
+      String(p.pid).includes(q) ||
+      (p.user ?? "").toLowerCase().includes(q) ||
+      (p.command ?? "").toLowerCase().includes(q)
+    );
+  });
+
+  const sorted = [...filtered].sort((a, b) => {
     const av = a[sortKey];
     const bv = b[sortKey];
     if (typeof av === "number" && typeof bv === "number") return sortDir * (av - bv);
@@ -148,10 +166,29 @@ function ProcessListPanel({ processes, loading, error, onRefresh }: ProcessListP
     { key: "command", label: t("ssh.processList.command") },
   ];
 
+  const updatedLabel =
+    updatedAt != null
+      ? new Date(updatedAt).toLocaleTimeString()
+      : null;
+
   return (
     <div className="proc-panel">
       <div className="proc-header">
         <span className="proc-title">{t("ssh.processList.title")}</span>
+        {updatedLabel && (
+          <span className="proc-updated">
+            {t("ssh.processList.updatedAt", { time: updatedLabel })}
+          </span>
+        )}
+        <input
+          className="input input-sm proc-search"
+          placeholder={t("ssh.processList.search")}
+          value={query}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setPage(0);
+          }}
+        />
         <button className="proc-refresh" onClick={onRefresh} disabled={loading}>
           {loading ? "⟳" : "↻"}
         </button>
@@ -210,7 +247,16 @@ export function OverviewDetailTab({
 }: Props) {
   const { t } = useI18n();
   const resourceId = activeResource?.id ?? null;
-  const { phase, stats, processes, error, refresh } = useSshOverview(resourceId);
+  const {
+    phase,
+    stats,
+    processes,
+    error,
+    updatedAt,
+    refreshing,
+    refreshProcesses,
+    refresh,
+  } = useSshOverview(resourceId);
 
   const cpuPct = stats ? Math.round(stats.cpuUsage ?? 0) : 0;
   const memPct = stats
@@ -230,7 +276,9 @@ export function OverviewDetailTab({
     ? [`${formatBytes(stats.disk.used)} / ${formatBytes(stats.disk.total)}`, `${formatBytes(stats.disk.available)} 可用`]
     : [profile.disk ?? "—"];
 
-  if (phase === "loading" || phase === "idle") {
+  const hasCachedStats = stats != null;
+
+  if ((phase === "loading" || phase === "idle") && !hasCachedStats) {
     return (
       <div className="ssh-ov ssh-ov--loading">
         <div className="ssh-ov-loading">
@@ -241,7 +289,7 @@ export function OverviewDetailTab({
     );
   }
 
-  if (phase === "error") {
+  if (phase === "error" && !hasCachedStats) {
     return (
       <div className="ssh-ov ssh-ov--error">
         <div className="ssh-ov-loading">
@@ -282,11 +330,15 @@ export function OverviewDetailTab({
           accent="var(--warn)"
         />
       </div>
+      {refreshing && (
+        <div className="ssh-ov-refresh-hint">{t("ssh.overview.refreshing")}</div>
+      )}
       <ProcessListPanel
         processes={processes}
-        loading={false}
-        error={null}
-        onRefresh={refresh}
+        loading={refreshing}
+        error={error}
+        updatedAt={updatedAt}
+        onRefresh={refreshProcesses}
       />
     </div>
   );
