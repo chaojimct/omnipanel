@@ -4,7 +4,6 @@ import { useAiStore } from "../../stores/aiStore";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { useActionStore } from "../../stores/actionStore";
 import { openLocalTerminalSession } from "../../lib/terminalSession";
-import { useServerViewStore } from "../../stores/serverViewStore";
 import { useI18n } from "../../i18n";
 import {
   formatShortcut,
@@ -31,7 +30,8 @@ const COMMAND_DEFS: CommandItem[] = [
   { id: "terminal", labelKey: "shell.commandPalette.commands.terminal", shortcut: "⌘2", path: "/terminal", categoryKey: "shell.commandPalette.categories.nav" },
   { id: "database", labelKey: "shell.commandPalette.commands.database", shortcut: "⌘3", path: "/database", categoryKey: "shell.commandPalette.categories.nav" },
   { id: "docker", labelKey: "shell.commandPalette.commands.docker", shortcut: "⌘4", path: "/docker", categoryKey: "shell.commandPalette.categories.nav" },
-  { id: "server", labelKey: "shell.commandPalette.commands.server", shortcut: "⌘5", path: "/server", categoryKey: "shell.commandPalette.categories.nav" },
+  { id: "ssh", labelKey: "shell.commandPalette.commands.ssh", shortcut: "⌘5", path: "/ssh", categoryKey: "shell.commandPalette.categories.nav" },
+  { id: "server", labelKey: "shell.commandPalette.commands.server", path: "/server", categoryKey: "shell.commandPalette.categories.nav" },
   { id: "protocol", labelKey: "shell.commandPalette.commands.protocol", path: "/protocol", categoryKey: "shell.commandPalette.categories.nav" },
   { id: "workflow", labelKey: "shell.commandPalette.commands.workflow", path: "/workflow", categoryKey: "shell.commandPalette.categories.nav" },
   { id: "knowledge", labelKey: "shell.commandPalette.commands.knowledge", path: "/knowledge", categoryKey: "shell.commandPalette.categories.nav" },
@@ -41,8 +41,7 @@ const COMMAND_DEFS: CommandItem[] = [
   {
     id: "new-ssh",
     labelKey: "shell.commandPalette.commands.newSsh",
-    path: "/server",
-    action: () => useServerViewStore.getState().setViewTab("terminal"),
+    path: "/ssh",
     categoryKey: "shell.commandPalette.categories.action",
   },
   { id: "new-query", labelKey: "shell.commandPalette.commands.newQuery", categoryKey: "shell.commandPalette.categories.action" },

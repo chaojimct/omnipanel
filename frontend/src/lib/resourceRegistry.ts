@@ -66,7 +66,7 @@ export const SEED_RESOURCES: WorkspaceResource[] = [
     type: "ssh",
     name: "prod-web-01",
     subtitle: "deploy@192.168.1.100:22",
-    modulePath: "/server",
+    modulePath: "/ssh",
     environment: "prod",
     status: "online",
     group: "生产",
@@ -78,7 +78,7 @@ export const SEED_RESOURCES: WorkspaceResource[] = [
     type: "ssh",
     name: "prod-web-02",
     subtitle: "deploy@192.168.1.101:22",
-    modulePath: "/server",
+    modulePath: "/ssh",
     environment: "prod",
     status: "online",
     group: "生产",
@@ -90,7 +90,7 @@ export const SEED_RESOURCES: WorkspaceResource[] = [
     type: "ssh",
     name: "staging-bastion",
     subtitle: "ops@10.0.8.12:22",
-    modulePath: "/server",
+    modulePath: "/ssh",
     environment: "staging",
     status: "warning",
     group: "预发",
@@ -154,7 +154,7 @@ export const SEED_RESOURCES: WorkspaceResource[] = [
     type: "ssh",
     name: "staging-api",
     subtitle: "ubuntu@10.0.2.15:22",
-    modulePath: "/server",
+    modulePath: "/ssh",
     environment: "staging",
     status: "online",
     tags: ["SSH", "SFTP"],
@@ -196,9 +196,7 @@ export function getResourceById(id: string | null | undefined) {
 }
 
 export function getSshHosts() {
-  const cached = getCachedOpenSshHosts();
-  if (cached.length > 0) return cached;
-  return SEED_RESOURCES.filter((resource) => resource.type === "ssh");
+  return getCachedOpenSshHosts();
 }
 
 /** 服务器监控侧栏：SSH 主机 + server 类型，按名称去重（优先 server 条目）。 */
@@ -217,10 +215,15 @@ export function getServerMonitorResources(resources: WorkspaceResource[] = SEED_
 
 export function getResourcesByPath(pathname: string) {
   if (pathname === "/") return SEED_RESOURCES;
-  if (pathname === "/server") return getServerMonitorResources();
+  if (pathname === "/ssh") {
+    return [];
+  }
+  if (pathname === "/server") {
+    return [];
+  }
   return SEED_RESOURCES.filter((resource) => resource.modulePath === pathname);
 }
 
 export function getDefaultResourceForPath(pathname: string) {
-  return getResourcesByPath(pathname)[0] ?? SEED_RESOURCES[0] ?? null;
+  return getResourcesByPath(pathname)[0] ?? null;
 }

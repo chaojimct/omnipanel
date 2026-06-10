@@ -19,7 +19,6 @@ import {
 import { resolveResourceById, useSshHostResources } from "../../stores/connectionStore";
 import { openSshTerminalSession } from "../../lib/terminalSession";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
-import { useServerViewStore } from "../../stores/serverViewStore";
 import { useActionStore } from "../../stores/actionStore";
 import { useTopbarTabs } from "../../hooks/useTopbarTabs";
 import { useI18n } from "../../i18n";
@@ -327,8 +326,7 @@ export function TerminalPanel() {
         return;
       }
       if (id === "manage-hosts") {
-        useServerViewStore.getState().setViewTab("terminal");
-        navigate("/server");
+        navigate("/ssh");
         return;
       }
       openSshTerminalSession(id);

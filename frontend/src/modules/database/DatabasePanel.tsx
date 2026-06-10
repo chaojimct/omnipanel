@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type MouseEvent as ReactMouseEvent } from "react";
+import { useLocation } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { save } from "@tauri-apps/plugin-dialog";
 import { SidebarWorkspace } from "../../components/ui/SidebarWorkspace";
@@ -77,6 +78,8 @@ function readRowKeyValue(rowKey: string, colName: string): string {
 
 export function DatabasePanel() {
   const { t } = useI18n();
+  const location = useLocation();
+  const isActiveRoute = location.pathname === "/database";
   const enqueueAction = useActionStore((s) => s.enqueueAction);
   const groups = useDbGroupStore((s) => s.groups);
   const activeGroupId = useDbGroupStore((s) => s.activeGroupId);
@@ -1007,7 +1010,7 @@ export function DatabasePanel() {
       onSelect: (id) => setActiveGroupId(id),
       onAdd: () => void handleCreateGroup(),
     },
-    { mode: "connection", showAddTab: true, addTabTitle: t("database.groups.new") },
+    { mode: "connection", showAddTab: true, addTabTitle: t("database.groups.new"), enabled: isActiveRoute },
   );
 
   const runQuery = useCallback(async (sqlOverride?: string, tabIdOverride?: string) => {

@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useActionStore } from "../../stores/actionStore";
-import { useServerViewStore } from "../../stores/serverViewStore";
 import { useAiStore } from "../../stores/aiStore";
 import { useTopbarTabs } from "../../hooks/useTopbarTabs";
 import { useI18n } from "../../i18n";
@@ -82,6 +81,7 @@ const SOURCE_LABEL: Record<string, string> = {
 export function DockerPanel() {
   const { t } = useI18n();
   const location = useLocation();
+  const isActiveRoute = location.pathname === "/docker";
   const navigate = useNavigate();
   const enqueueAction = useActionStore((s) => s.enqueueAction);
   const setAiDraft = useAiStore((s) => s.setDraftPrompt);
@@ -175,7 +175,7 @@ export function DockerPanel() {
       onSelect: (id) => selectConnection(id),
       onAdd: () => setShowAddConn(true),
     },
-    { mode: "connection", showAddTab: true, addTabTitle: "添加 Docker 连接" }
+    { mode: "connection", showAddTab: true, addTabTitle: "添加 Docker 连接", enabled: isActiveRoute }
   );
 
   // 切换连接时复位本地视图状态（数据在 hook 内后台加载，无全屏遮罩）。
@@ -1234,10 +1234,9 @@ function ContainerDrawer({
                       <span className="v">{hostLabel ?? "—"}</span>
                     </div>
                     <div className="flex gap-2" style={{ flexWrap: "wrap", marginTop: "var(--sp-2)" }}>
-                      <Button variant="secondary" size="sm" onClick={() => {
-                        useServerViewStore.getState().setViewTab("terminal");
-                        onNavigate("/server");
-                      }}>打开 SSH</Button>
+                      <Button variant="secondary" size="sm" onClick={() => onNavigate("/ssh")}>
+                        打开 SSH
+                      </Button>
                       <Button variant="secondary" size="sm" onClick={() => onNavigate("/server")}>查看服务器</Button>
                       <Button variant="secondary" size="sm" onClick={() => onSendToAi(detail)}>发送给 AI 分析</Button>
                     </div>

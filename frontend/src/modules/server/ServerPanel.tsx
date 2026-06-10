@@ -1,70 +1,137 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { SidebarWorkspace } from "../../components/ui/SidebarWorkspace";
-import { HostListPanel } from "../../components/workspace/HostListPanel";
-import { HostDetailPanel } from "./ssh/components/HostDetailPanel";
-import { useSshManager } from "./ssh/hooks/useSshManager";
-import { useConnectionStore, useSshHostResources } from "../../stores/connectionStore";
-import { useServerViewStore } from "../../stores/serverViewStore";
-import { useTopbarTabs } from "../../hooks/useTopbarTabs";
-import { useI18n } from "../../i18n";
+import { ServerSidebar } from "../../components/workspace/ServerSidebar";
+import { Button } from "../../components/ui/Button";
 import { WorkspaceEmptyPage } from "../../components/ui/WorkspaceEmptyPage";
+import { useConnectionStore } from "../../stores/connectionStore";
+import { useServerGroupStore } from "../../stores/serverGroupStore";
+import { useWorkspaceStore } from "../../stores/workspaceStore";
+import { useI18n } from "../../i18n";
 import { ServerInstalledApps } from "./panel/ServerInstalledApps";
-import { SERVER_VIEW_TABS } from "./panel/constants";
-import { connectionToServerEntry } from "./panel/panelConnection";
-import { findPanelForSsh } from "./panel/serverConnection";
+import { ServerConnectionDialog } from "./panel/ServerConnectionDialog";
+import { SERVER_PATH } from "./panel/constants";
+import {
+  connectionMatchesServerGroup,
+  connectionToServerEntry,
+} from "./panel/panelConnection";
+import type { ServerEntry } from "./panel/serverConnection";
+import type { Connection } from "../../ipc/bindings";
 
 export function ServerPanel() {
   const { t } = useI18n();
   const connections = useConnectionStore((s) => s.connections);
-  const sshResources = useSshHostResources();
-  const ctx = useSshManager();
-  const viewTab = useServerViewStore((s) => s.viewTab);
-  const setViewTab = useServerViewStore((s) => s.setViewTab);
+  const removeConn = useConnectionStore((s) => s.remove);
+  const groups = useServerGroupStore((s) => s.groups);
+  const activeGroupId = useServerGroupStore((s) => s.activeGroupId);
+  const setActiveGroupId = useServerGroupStore((s) => s.setActiveGroupId);
+  const addGroup = useServerGroupStore((s) => s.addGroup);
+  const getGroupName = useServerGroupStore((s) => s.getGroupName);
+  const selectedResourceByPath = useWorkspaceStore((s) => s.selectedResourceByPath);
+  const selectResource = useWorkspaceStore((s) => s.selectResource);
 
-  const activePanelServer = useMemo(() => {
-    const sshId = ctx.activeResource?.id;
-    if (!sshId) return null;
-    const panel = findPanelForSsh(connections, sshId);
-    return panel ? connectionToServerEntry(panel) : null;
-  }, [connections, ctx.activeResource?.id]);
+  const activeGroupName = getGroupName(activeGroupId);
 
-  const topbarTabs = useMemo(
+  const panelServers = useMemo(
     () =>
-      SERVER_VIEW_TABS.map((tab) => ({
-        id: tab,
-        label: t(`server.tabs.${tab}`),
-        active: viewTab === tab,
-      })),
-    [viewTab, t],
+      connections
+        .filter(
+          (c) => c.kind === "panel" && connectionMatchesServerGroup(c, activeGroupName),
+        )
+        .map(connectionToServerEntry),
+    [connections, activeGroupName],
   );
 
-  useTopbarTabs(topbarTabs, { onSelect: (id) => setViewTab(id as typeof viewTab) }, {
-    mode: "segment",
-  });
+  const activeServerId = selectedResourceByPath[SERVER_PATH] ?? panelServers[0]?.id ?? null;
+  const activeServer = useMemo(
+    () => panelServers.find((s) => s.id === activeServerId) ?? null,
+    [panelServers, activeServerId],
+  );
 
-  const panelEmptyHint = useCallback(() => {
-    if (!ctx.activeResource) {
-      return t("server.empty.selectServer");
+  const [showDialog, setShowDialog] = useState(false);
+  const [editPanelConnection, setEditPanelConnection] = useState<Connection | undefined>();
+
+  useEffect(() => {
+    if (!selectedResourceByPath[SERVER_PATH] && panelServers[0]) {
+      selectResource(panelServers[0].id, SERVER_PATH);
     }
-    return t("server.empty.noPanelConfig");
-  }, [ctx.activeResource, t]);
+  }, [panelServers, selectedResourceByPath, selectResource]);
+
+  const handleCreateGroup = useCallback(() => {
+    const name = window.prompt(t("server.groups.namePlaceholder"));
+    if (!name?.trim()) return;
+    const result = addGroup(name);
+    if (!result.ok && result.reason === "duplicate") {
+      window.alert(t("server.groups.duplicate"));
+    }
+  }, [addGroup, t]);
+
+  const handleSelectServer = useCallback(
+    (serverId: string) => {
+      selectResource(serverId, SERVER_PATH);
+    },
+    [selectResource],
+  );
+
+  const handleCreateServer = useCallback(() => {
+    setEditPanelConnection(undefined);
+    setShowDialog(true);
+  }, []);
+
+  const handleEditServer = useCallback(
+    (server: ServerEntry) => {
+      const conn = connections.find((c) => c.id === server.id);
+      setEditPanelConnection(conn);
+      setShowDialog(true);
+    },
+    [connections],
+  );
+
+  const handleDeleteServer = useCallback(
+    async (serverId: string) => {
+      if (!window.confirm(t("server.sidebar.delete"))) return;
+      await removeConn(serverId);
+    },
+    [removeConn, t],
+  );
 
   return (
-    <SidebarWorkspace
-      preset="host"
-      sidebar={<HostListPanel resources={sshResources} />}
-    >
-      {viewTab === "panel" ? (
-        <div className="server-main">
-          {activePanelServer ? (
-            <ServerInstalledApps server={activePanelServer} />
-          ) : (
-              <WorkspaceEmptyPage prompt={panelEmptyHint()} />
-          )}
-        </div>
-      ) : (
-        <HostDetailPanel {...ctx} />
-      )}
+    <SidebarWorkspace preset="server" sidebar={
+      <ServerSidebar
+        servers={panelServers}
+        groups={groups}
+        activeGroupId={activeGroupId}
+        activeServerId={activeServerId}
+        onGroupChange={setActiveGroupId}
+        onCreateGroup={handleCreateGroup}
+        onSelectServer={handleSelectServer}
+        onCreateServer={handleCreateServer}
+        onEditServer={handleEditServer}
+        onDeleteServer={handleDeleteServer}
+      />
+    }>
+      <div className="server-main">
+        {activeServer ? (
+          <ServerInstalledApps server={activeServer} />
+        ) : (
+          <WorkspaceEmptyPage
+            prompt={t("server.empty.description")}
+            actions={
+              <Button variant="primary" size="sm" onClick={handleCreateServer}>
+                {t("server.sidebar.addServer")}
+              </Button>
+            }
+          />
+        )}
+      </div>
+
+      <ServerConnectionDialog
+        open={showDialog}
+        onClose={() => setShowDialog(false)}
+        onSaved={() => setShowDialog(false)}
+        editPanelConnection={editPanelConnection}
+        requirePanel
+        defaultGroup={activeGroupName}
+      />
     </SidebarWorkspace>
   );
 }

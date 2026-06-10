@@ -63,6 +63,7 @@ export function getRouteTitle(path: string, locale?: Locale) {
     "/terminal": "routes.terminal",
     "/database": "routes.database",
     "/docker": "routes.docker",
+    "/ssh": "routes.ssh",
     "/server": "routes.server",
     "/protocol": "routes.protocol",
     "/workflow": "routes.workflow",
