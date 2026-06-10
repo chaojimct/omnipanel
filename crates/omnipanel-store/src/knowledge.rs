@@ -1,7 +1,7 @@
 use omnipanel_error::{ErrorCode, OmniError, OmniResult};
 use serde::{Deserialize, Serialize};
 
-use crate::storage::{map_sqlite, Storage};
+use crate::storage::{Storage, map_sqlite};
 
 /// 知识条目模型。
 #[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
@@ -65,7 +65,8 @@ impl Storage {
         }
         sql.push_str(" ORDER BY updated_at DESC");
 
-        let param_refs: Vec<&dyn rusqlite::types::ToSql> = params.iter().map(|p| p.as_ref()).collect();
+        let param_refs: Vec<&dyn rusqlite::types::ToSql> =
+            params.iter().map(|p| p.as_ref()).collect();
         self.query_knowledge(&sql, param_refs.as_slice())
     }
 
@@ -164,34 +165,35 @@ impl Storage {
         let mut stmt = self.conn().prepare(sql).map_err(map_sqlite)?;
         let mut results = Vec::new();
         if let Some(k) = kind {
-            let rows = stmt.query_map(rusqlite::params![fts_query, k], |row| {
-                Ok(KnowledgeSearchResult {
-                    entry: Self::row_to_entry(row)?,
-                    snippet: row.get::<_, String>(12)?,
-                    score: 0, // 占位，稍后计算
+            let rows = stmt
+                .query_map(rusqlite::params![fts_query, k], |row| {
+                    Ok(KnowledgeSearchResult {
+                        entry: Self::row_to_entry(row)?,
+                        snippet: row.get::<_, String>(12)?,
+                        score: 0, // 占位，稍后计算
+                    })
                 })
-            }).map_err(map_sqlite)?;
+                .map_err(map_sqlite)?;
             for row in rows {
                 results.push(row.map_err(map_sqlite)?);
             }
         } else {
-            let rows = stmt.query_map([fts_query], |row| {
-                Ok(KnowledgeSearchResult {
-                    entry: Self::row_to_entry(row)?,
-                    snippet: row.get::<_, String>(12)?,
-                    score: 0, // 占位，稍后计算
+            let rows = stmt
+                .query_map([fts_query], |row| {
+                    Ok(KnowledgeSearchResult {
+                        entry: Self::row_to_entry(row)?,
+                        snippet: row.get::<_, String>(12)?,
+                        score: 0, // 占位，稍后计算
+                    })
                 })
-            }).map_err(map_sqlite)?;
+                .map_err(map_sqlite)?;
             for row in rows {
                 results.push(row.map_err(map_sqlite)?);
             }
         }
 
         // ── 关键词相关性评分 ──────────────────────────────────
-        let keywords: Vec<String> = query
-            .split_whitespace()
-            .map(|w| w.to_lowercase())
-            .collect();
+        let keywords: Vec<String> = query.split_whitespace().map(|w| w.to_lowercase()).collect();
 
         for result in &mut results {
             let title_lower = result.entry.title.to_lowercase();
@@ -212,12 +214,7 @@ impl Storage {
                     s += 3;
                 }
                 // tags 匹配
-                if result
-                    .entry
-                    .tags
-                    .iter()
-                    .any(|t| t.to_lowercase() == *kw)
-                {
+                if result.entry.tags.iter().any(|t| t.to_lowercase() == *kw) {
                     s += 2;
                 }
             }

@@ -430,7 +430,10 @@ async fn pg_build_ddl(pool: &PgPool, table_name: &str) -> Result<String, String>
         ddl.push('\n');
         ddl.push_str(&format!(
             "CREATE {unique}INDEX \"{name}\" ON \"{table_name}\" ({});\n",
-            cols.iter().map(|c| format!("\"{c}\"")).collect::<Vec<_>>().join(", ")
+            cols.iter()
+                .map(|c| format!("\"{c}\""))
+                .collect::<Vec<_>>()
+                .join(", ")
         ));
     }
 
@@ -443,8 +446,7 @@ fn sqlite_table_ddl(connection: &DbConnectionConfig, table_name: &str) -> Result
     if path.is_empty() {
         return Err("SQLite database path is empty".into());
     }
-    let conn = rusqlite::Connection::open(path)
-        .map_err(|e| format!("SQLite open failed: {e}"))?;
+    let conn = rusqlite::Connection::open(path).map_err(|e| format!("SQLite open failed: {e}"))?;
     let sql = format!(
         "SELECT sql FROM sqlite_master WHERE type='table' AND name='{}'",
         table_name.replace('\'', "''")
@@ -918,8 +920,7 @@ fn introspect_sqlite_schema_inner(
     if path.is_empty() {
         return Err("SQLite database path is empty".into());
     }
-    let conn = rusqlite::Connection::open(path)
-        .map_err(|e| format!("SQLite open failed: {e}"))?;
+    let conn = rusqlite::Connection::open(path).map_err(|e| format!("SQLite open failed: {e}"))?;
 
     let table_names: Vec<String> = {
         let mut stmt = conn
@@ -957,8 +958,7 @@ fn introspect_sqlite_table_inner(
     if path.is_empty() {
         return Err("SQLite database path is empty".into());
     }
-    let conn = rusqlite::Connection::open(path)
-        .map_err(|e| format!("SQLite open failed: {e}"))?;
+    let conn = rusqlite::Connection::open(path).map_err(|e| format!("SQLite open failed: {e}"))?;
 
     let columns = sqlite_pragma_columns(&conn, table_name)?;
     let indexes = sqlite_pragma_indexes(&conn, table_name)?;
@@ -1006,7 +1006,7 @@ fn sqlite_pragma_indexes(
     let idx_rows = stmt
         .query_map([], |row| {
             Ok((
-                row.get::<_, String>(1)?, // index name
+                row.get::<_, String>(1)?,   // index name
                 row.get::<_, i32>(2)? != 0, // unique
             ))
         })

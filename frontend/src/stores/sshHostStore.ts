@@ -44,11 +44,14 @@ const emptyMonitoring = (): HostMonitoringState => ({
   netSeries: [],
 });
 
-const emptySnapshot = (): HostSnapshot => ({
-  overview: emptyOverview(),
-  monitoring: emptyMonitoring(),
+/** 稳定空快照，避免 selector 每次返回新引用触发无限重渲染 */
+const EMPTY_OVERVIEW: HostOverviewState = emptyOverview();
+const EMPTY_MONITORING: HostMonitoringState = emptyMonitoring();
+const EMPTY_SNAPSHOT: HostSnapshot = {
+  overview: EMPTY_OVERVIEW,
+  monitoring: EMPTY_MONITORING,
   terminalConnected: false,
-});
+};
 
 type SshHostStoreState = {
   hosts: Record<string, HostSnapshot>;
@@ -68,11 +71,11 @@ type SshHostStoreState = {
 export const useSshHostStore = create<SshHostStoreState>((set, get) => ({
   hosts: {},
 
-  getSnapshot: (resourceId) => get().hosts[resourceId] ?? emptySnapshot(),
+  getSnapshot: (resourceId) => get().hosts[resourceId] ?? EMPTY_SNAPSHOT,
 
   setOverview: (resourceId, patch) =>
     set((state) => {
-      const prev = state.hosts[resourceId] ?? emptySnapshot();
+      const prev = state.hosts[resourceId] ?? EMPTY_SNAPSHOT;
       return {
         hosts: {
           ...state.hosts,
@@ -86,7 +89,7 @@ export const useSshHostStore = create<SshHostStoreState>((set, get) => ({
 
   setMonitoring: (resourceId, patch) =>
     set((state) => {
-      const prev = state.hosts[resourceId] ?? emptySnapshot();
+      const prev = state.hosts[resourceId] ?? EMPTY_SNAPSHOT;
       return {
         hosts: {
           ...state.hosts,
@@ -100,7 +103,7 @@ export const useSshHostStore = create<SshHostStoreState>((set, get) => ({
 
   setMonitoringEnabled: (resourceId, enabled) =>
     set((state) => {
-      const prev = state.hosts[resourceId] ?? emptySnapshot();
+      const prev = state.hosts[resourceId] ?? EMPTY_SNAPSHOT;
       return {
         hosts: {
           ...state.hosts,
@@ -120,7 +123,7 @@ export const useSshHostStore = create<SshHostStoreState>((set, get) => ({
 
   appendMonitorPoints: (resourceId, points) =>
     set((state) => {
-      const prev = state.hosts[resourceId] ?? emptySnapshot();
+      const prev = state.hosts[resourceId] ?? EMPTY_SNAPSHOT;
       const mon = prev.monitoring;
       return {
         hosts: {
@@ -140,7 +143,7 @@ export const useSshHostStore = create<SshHostStoreState>((set, get) => ({
 
   setTerminalConnected: (resourceId, connected) =>
     set((state) => {
-      const prev = state.hosts[resourceId] ?? emptySnapshot();
+      const prev = state.hosts[resourceId] ?? EMPTY_SNAPSHOT;
       return {
         hosts: {
           ...state.hosts,
@@ -162,15 +165,21 @@ export const useSshHostStore = create<SshHostStoreState>((set, get) => ({
 
 export function useHostOverview(resourceId: string | null) {
   return useSshHostStore((s) =>
-    resourceId ? (s.hosts[resourceId]?.overview ?? emptyOverview()) : emptyOverview(),
+    resourceId ? (s.hosts[resourceId]?.overview ?? EMPTY_OVERVIEW) : EMPTY_OVERVIEW,
+  );
+}
+
+export function useHostOverviewPhase(resourceId: string | null): OverviewPhase {
+  return useSshHostStore((s) =>
+    resourceId ? (s.hosts[resourceId]?.overview.phase ?? "idle") : "idle",
   );
 }
 
 export function useHostMonitoring(resourceId: string | null) {
   return useSshHostStore((s) =>
     resourceId
-      ? (s.hosts[resourceId]?.monitoring ?? emptyMonitoring())
-      : emptyMonitoring(),
+      ? (s.hosts[resourceId]?.monitoring ?? EMPTY_MONITORING)
+      : EMPTY_MONITORING,
   );
 }
 

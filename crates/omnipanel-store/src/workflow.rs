@@ -4,7 +4,7 @@ use omnipanel_error::{ErrorCode, OmniError, OmniResult};
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
 
-use super::storage::{map_sqlite, Storage};
+use super::storage::{Storage, map_sqlite};
 
 /// Serialize enum to bare string without JSON quotes.
 fn enum_str<T: serde::Serialize>(v: &T) -> String {
@@ -248,12 +248,10 @@ impl Storage {
                     workflow_id: row.get(1)?,
                     name: row.get(2)?,
                     description: row.get(3)?,
-                    step_type: parse_enum(&row.get::<_, String>(4)?)
-                        .unwrap_or(StepType::Shell),
+                    step_type: parse_enum(&row.get::<_, String>(4)?).unwrap_or(StepType::Shell),
                     command: row.get(5)?,
                     step_order: row.get(6)?,
-                    status: parse_enum(&row.get::<_, String>(7)?)
-                        .unwrap_or(StepStatus::Ready),
+                    status: parse_enum(&row.get::<_, String>(7)?).unwrap_or(StepStatus::Ready),
                 })
             })
             .map_err(map_sqlite)?
@@ -393,10 +391,7 @@ impl Storage {
     }
 
     /// Insert a workflow_execution_steps record.
-    pub fn workflow_insert_execution_step(
-        &self,
-        step: &WorkflowExecutionStep,
-    ) -> OmniResult<()> {
+    pub fn workflow_insert_execution_step(&self, step: &WorkflowExecutionStep) -> OmniResult<()> {
         self.conn()
             .execute(
                 "INSERT INTO workflow_execution_steps (id, execution_id, step_id, step_order, name, step_type, command, status, output, error, started_at, finished_at)
@@ -421,10 +416,7 @@ impl Storage {
     }
 
     /// Update a workflow_execution_steps record (status, output, error, timestamps).
-    pub fn workflow_update_execution_step(
-        &self,
-        step: &WorkflowExecutionStep,
-    ) -> OmniResult<()> {
+    pub fn workflow_update_execution_step(&self, step: &WorkflowExecutionStep) -> OmniResult<()> {
         self.conn()
             .execute(
                 "UPDATE workflow_execution_steps
@@ -490,11 +482,9 @@ impl Storage {
                     step_id: row.get(2)?,
                     step_order: row.get(3)?,
                     name: row.get(4)?,
-                    step_type: parse_enum(&row.get::<_, String>(5)?)
-                        .unwrap_or(StepType::Shell),
+                    step_type: parse_enum(&row.get::<_, String>(5)?).unwrap_or(StepType::Shell),
                     command: row.get(6)?,
-                    status: parse_enum(&row.get::<_, String>(7)?)
-                        .unwrap_or(StepStatus::Pending),
+                    status: parse_enum(&row.get::<_, String>(7)?).unwrap_or(StepStatus::Pending),
                     output: row.get(8)?,
                     error: row.get(9)?,
                     started_at: row.get(10)?,
@@ -509,10 +499,7 @@ impl Storage {
     }
 
     /// Update a workflow execution record (status, finished_at, duration_ms, output).
-    pub fn workflow_update_execution(
-        &self,
-        exec: &WorkflowExecution,
-    ) -> OmniResult<()> {
+    pub fn workflow_update_execution(&self, exec: &WorkflowExecution) -> OmniResult<()> {
         self.conn()
             .execute(
                 "UPDATE workflow_executions

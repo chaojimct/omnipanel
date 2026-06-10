@@ -89,8 +89,7 @@ pub struct GrpcSession {
 impl GrpcSession {
     /// 创建新 gRPC 会话。
     pub fn connect(config: GrpcConnectionConfig) -> OmniResult<Self> {
-        let mut builder = reqwest::Client::builder()
-            .timeout(std::time::Duration::from_secs(30));
+        let mut builder = reqwest::Client::builder().timeout(std::time::Duration::from_secs(30));
 
         if !config.use_tls {
             builder = builder.danger_accept_invalid_certs(true);
@@ -110,7 +109,11 @@ impl GrpcSession {
     /// 发送 gRPC 调用（简化版：JSON 序列化，不做 protobuf 编码）。
     pub async fn call(&self, request: GrpcCallRequest) -> OmniResult<GrpcCallResponse> {
         let start = std::time::Instant::now();
-        let url = format!("{}/{}", self.endpoint, request.method.trim_start_matches('/'));
+        let url = format!(
+            "{}/{}",
+            self.endpoint,
+            request.method.trim_start_matches('/')
+        );
 
         let mut headers = reqwest::header::HeaderMap::new();
         headers.insert("content-type", "application/grpc+json".parse().unwrap());
@@ -143,7 +146,9 @@ impl GrpcSession {
             .body(body)
             .send()
             .await
-            .map_err(|e| OmniError::new(ErrorCode::Connection, "gRPC 请求失败").with_cause(e.to_string()))?;
+            .map_err(|e| {
+                OmniError::new(ErrorCode::Connection, "gRPC 请求失败").with_cause(e.to_string())
+            })?;
 
         let status_code = resp.status().as_u16();
         let resp_headers: HashMap<String, String> = resp

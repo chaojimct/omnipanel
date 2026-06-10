@@ -11,15 +11,17 @@ use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
 use futures::StreamExt;
 use omnipanel_docker::{
-    bollard, ContainerFilter, DockerAdapter, DockerBuildContext, DockerBuildResult,
-    DockerComposeAction, DockerComposeProject, DockerComposeRequest, DockerComposeResult,
-    DockerConnectionInfo, DockerConnectionSource, DockerConnectionStatus, DockerContainerAction,
-    DockerContainerDetail, DockerContainerStats, DockerContainerSummary,
-    DockerCreateContainerRequest, DockerCreateNetworkRequest, DockerCreateVolumeRequest, DockerFileEntry, DockerImageDetail,
-    DockerImageHistoryLayer, DockerImageProgress, DockerImageSummary, DockerLogLine,
-    DockerNetworkDetail, DockerNetworkSummary, DockerOverview, DockerProbe, DockerPruneResult,
-    DockerPruneVolumesResult, DockerPullResult, DockerVolumeDetail, DockerVolumeSummary, DockerServiceSummary, DockerCreateServiceRequest, DockerNodeSummary, DockerStackSummary,
-    LocalDockerAdapter, OnePanelAdapter, OnePanelClient, SshDockerAdapter,
+    ContainerFilter, DockerAdapter, DockerBuildContext, DockerBuildResult, DockerComposeAction,
+    DockerComposeProject, DockerComposeRequest, DockerComposeResult, DockerConnectionInfo,
+    DockerConnectionSource, DockerConnectionStatus, DockerContainerAction, DockerContainerDetail,
+    DockerContainerStats, DockerContainerSummary, DockerCreateContainerRequest,
+    DockerCreateNetworkRequest, DockerCreateServiceRequest, DockerCreateVolumeRequest,
+    DockerFileEntry, DockerImageDetail, DockerImageHistoryLayer, DockerImageProgress,
+    DockerImageSummary, DockerLogLine, DockerNetworkDetail, DockerNetworkSummary,
+    DockerNodeSummary, DockerOverview, DockerProbe, DockerPruneResult, DockerPruneVolumesResult,
+    DockerPullResult, DockerServiceSummary, DockerStackSummary, DockerVolumeDetail,
+    DockerVolumeSummary, LocalDockerAdapter, OnePanelAdapter, OnePanelClient, SshDockerAdapter,
+    bollard,
 };
 use omnipanel_error::{ErrorCode, OmniError};
 use omnipanel_ssh::{SshConfig, SshEvent, SshSession, SshSink};
@@ -111,7 +113,9 @@ async fn resolve_target(state: &AppState, connection_id: &str) -> Result<DockerT
                     "remote-engine 类型的 Docker 连接缺少 host 字段",
                 )
             })?;
-            let port = cfg.port.unwrap_or(if cfg.tls.unwrap_or(true) { 2376 } else { 2375 });
+            let port = cfg
+                .port
+                .unwrap_or(if cfg.tls.unwrap_or(true) { 2376 } else { 2375 });
             let docker = if cfg.tls.unwrap_or(true) {
                 LocalDockerAdapter::connect_remote_https(
                     &host,
@@ -166,21 +170,17 @@ async fn ensure_docker_ssh(
     //    先查存储中的 Docker 连接配置，看是否有 bound_ssh_connection_id
     let bound_id: Option<String> = {
         let storage = state.storage.lock().await;
-        storage
-            .get_connection(connection_id)?
-            .and_then(|c| {
-                serde_json::from_str::<DockerConnectionConfig>(&c.config)
-                    .ok()
-                    .and_then(|cfg| cfg.bound_ssh_connection_id)
-            })
+        storage.get_connection(connection_id)?.and_then(|c| {
+            serde_json::from_str::<DockerConnectionConfig>(&c.config)
+                .ok()
+                .and_then(|cfg| cfg.bound_ssh_connection_id)
+        })
     };
 
     if let Some(ref ssh_id) = bound_id {
         // 从 SSH 池获取配置，建立专用 Docker 会话（exec-only，无 shell）
         if let Some(ssh_config) = state.ssh_pool.get_ssh_config(ssh_id).await {
-            tracing::info!(
-                "Docker 连接 {connection_id} 使用 SSH 配置 {ssh_id} 建立专用会话"
-            );
+            tracing::info!("Docker 连接 {connection_id} 使用 SSH 配置 {ssh_id} 建立专用会话");
             let sink: SshSink = Arc::new(|_: SshEvent| {});
             let session = SshSession::connect(ssh_config, 80, 24, sink).await?;
             let handle = Arc::new(Mutex::new(session));
@@ -258,9 +258,9 @@ pub async fn docker_list_connections(
             .or_else(|| cfg.onepanel.as_ref().map(|p| p.base_url.clone()))
             .unwrap_or_else(|| conn.name.clone());
         let warning_message = match source {
-            DockerConnectionSource::OnePanel => {
-                Some("1Panel 适配器：暂不支持日志流式 / 容器 exec / 镜像 push-pull / build".to_string())
-            }
+            DockerConnectionSource::OnePanel => Some(
+                "1Panel 适配器：暂不支持日志流式 / 容器 exec / 镜像 push-pull / build".to_string(),
+            ),
             _ => None,
         };
         out.push(DockerConnectionInfo {
@@ -518,8 +518,7 @@ pub async fn docker_stream_stats(
                 }),
             );
         };
-        let sink: Box<dyn FnMut(DockerContainerStats) + Send> =
-            Box::new(emit);
+        let sink: Box<dyn FnMut(DockerContainerStats) + Send> = Box::new(emit);
 
         let result: Result<(), OmniError> = match target {
             DockerTarget::Local => match LocalDockerAdapter::connect() {
@@ -809,9 +808,7 @@ pub async fn docker_pull_image(
     let cb = move |p: DockerImageProgress| {
         let _ = app_for_cb.emit(&channel, &p);
     };
-    adapter
-        .pull_image(&image, Some(Box::new(cb) as _))
-        .await
+    adapter.pull_image(&image, Some(Box::new(cb) as _)).await
 }
 
 /// 推送镜像。进度通过 `docker_image_progress` 事件向指定 `progress_channel` 投递。
@@ -830,9 +827,7 @@ pub async fn docker_push_image(
     let cb = move |p: DockerImageProgress| {
         let _ = app_for_cb.emit(&channel, &p);
     };
-    adapter
-        .push_image(&image, Some(Box::new(cb) as _))
-        .await
+    adapter.push_image(&image, Some(Box::new(cb) as _)).await
 }
 
 /// 给本地或远端镜像打 tag。
@@ -866,9 +861,7 @@ pub async fn docker_build_image(
     let cb = move |p: DockerImageProgress| {
         let _ = app_for_cb.emit(&channel, &p);
     };
-    adapter
-        .build_image(&context, Some(Box::new(cb) as _))
-        .await
+    adapter.build_image(&context, Some(Box::new(cb) as _)).await
 }
 
 /// Compose 生命周期（up/down/restart/pull/logs）。
@@ -1091,10 +1084,7 @@ pub async fn docker_probe_ssh_docker(
     ssh_connection_id: String,
 ) -> Result<DockerAutoDetectResult, OmniError> {
     // Get or create SSH session from the pool
-    let session = state
-        .ssh_pool
-        .ensure_session(&ssh_connection_id)
-        .await?;
+    let session = state.ssh_pool.ensure_session(&ssh_connection_id).await?;
 
     // Probe Docker daemon
     let version_output = session
@@ -1203,105 +1193,233 @@ pub async fn docker_create_container(
 
 #[tauri::command]
 #[specta::specta]
-pub async fn docker_swarm_init(state: State<'_, AppState>, connection_id: String, listen_addr: Option<String>, advertise_addr: Option<String>) -> Result<String, OmniError> {
-    resolve_adapter(&state, &connection_id).await?.swarm_init(listen_addr.as_deref(), advertise_addr.as_deref()).await
+pub async fn docker_swarm_init(
+    state: State<'_, AppState>,
+    connection_id: String,
+    listen_addr: Option<String>,
+    advertise_addr: Option<String>,
+) -> Result<String, OmniError> {
+    resolve_adapter(&state, &connection_id)
+        .await?
+        .swarm_init(listen_addr.as_deref(), advertise_addr.as_deref())
+        .await
 }
 
 #[tauri::command]
 #[specta::specta]
-pub async fn docker_swarm_join(state: State<'_, AppState>, connection_id: String, remote_addrs: Vec<String>, token: String, listen_addr: Option<String>) -> Result<(), OmniError> {
-    resolve_adapter(&state, &connection_id).await?.swarm_join(remote_addrs, &token, listen_addr.as_deref()).await
+pub async fn docker_swarm_join(
+    state: State<'_, AppState>,
+    connection_id: String,
+    remote_addrs: Vec<String>,
+    token: String,
+    listen_addr: Option<String>,
+) -> Result<(), OmniError> {
+    resolve_adapter(&state, &connection_id)
+        .await?
+        .swarm_join(remote_addrs, &token, listen_addr.as_deref())
+        .await
 }
 
 #[tauri::command]
 #[specta::specta]
-pub async fn docker_swarm_leave(state: State<'_, AppState>, connection_id: String, force: bool) -> Result<(), OmniError> {
-    resolve_adapter(&state, &connection_id).await?.swarm_leave(force).await
+pub async fn docker_swarm_leave(
+    state: State<'_, AppState>,
+    connection_id: String,
+    force: bool,
+) -> Result<(), OmniError> {
+    resolve_adapter(&state, &connection_id)
+        .await?
+        .swarm_leave(force)
+        .await
 }
 
 #[tauri::command]
 #[specta::specta]
-pub async fn docker_swarm_inspect(state: State<'_, AppState>, connection_id: String) -> Result<String, OmniError> {
-    let val = resolve_adapter(&state, &connection_id).await?.swarm_inspect().await?;
-    serde_json::to_string_pretty(&val).map_err(|e| OmniError::new(ErrorCode::Internal, "序列化失败").with_cause(e.to_string()))
+pub async fn docker_swarm_inspect(
+    state: State<'_, AppState>,
+    connection_id: String,
+) -> Result<String, OmniError> {
+    let val = resolve_adapter(&state, &connection_id)
+        .await?
+        .swarm_inspect()
+        .await?;
+    serde_json::to_string_pretty(&val)
+        .map_err(|e| OmniError::new(ErrorCode::Internal, "序列化失败").with_cause(e.to_string()))
 }
 
 #[tauri::command]
 #[specta::specta]
-pub async fn docker_service_list(state: State<'_, AppState>, connection_id: String) -> Result<Vec<DockerServiceSummary>, OmniError> {
-    resolve_adapter(&state, &connection_id).await?.service_list().await
+pub async fn docker_service_list(
+    state: State<'_, AppState>,
+    connection_id: String,
+) -> Result<Vec<DockerServiceSummary>, OmniError> {
+    resolve_adapter(&state, &connection_id)
+        .await?
+        .service_list()
+        .await
 }
 
 #[tauri::command]
 #[specta::specta]
-pub async fn docker_service_create(state: State<'_, AppState>, connection_id: String, request: DockerCreateServiceRequest) -> Result<String, OmniError> {
-    resolve_adapter(&state, &connection_id).await?.service_create(&request).await
+pub async fn docker_service_create(
+    state: State<'_, AppState>,
+    connection_id: String,
+    request: DockerCreateServiceRequest,
+) -> Result<String, OmniError> {
+    resolve_adapter(&state, &connection_id)
+        .await?
+        .service_create(&request)
+        .await
 }
 
 #[tauri::command]
 #[specta::specta]
-pub async fn docker_service_update(state: State<'_, AppState>, connection_id: String, service_id: String, replicas: Option<f64>, image: Option<String>) -> Result<(), OmniError> {
+pub async fn docker_service_update(
+    state: State<'_, AppState>,
+    connection_id: String,
+    service_id: String,
+    replicas: Option<f64>,
+    image: Option<String>,
+) -> Result<(), OmniError> {
     let replicas_u64 = replicas.map(|r| r as u64);
-    resolve_adapter(&state, &connection_id).await?.service_update(&service_id, replicas_u64, image.as_deref()).await
+    resolve_adapter(&state, &connection_id)
+        .await?
+        .service_update(&service_id, replicas_u64, image.as_deref())
+        .await
 }
 
 #[tauri::command]
 #[specta::specta]
-pub async fn docker_service_remove(state: State<'_, AppState>, connection_id: String, service_id: String) -> Result<(), OmniError> {
-    resolve_adapter(&state, &connection_id).await?.service_remove(&service_id).await
+pub async fn docker_service_remove(
+    state: State<'_, AppState>,
+    connection_id: String,
+    service_id: String,
+) -> Result<(), OmniError> {
+    resolve_adapter(&state, &connection_id)
+        .await?
+        .service_remove(&service_id)
+        .await
 }
 
 #[tauri::command]
 #[specta::specta]
-pub async fn docker_service_logs(state: State<'_, AppState>, connection_id: String, service_id: String, tail: Option<String>) -> Result<String, OmniError> {
-    resolve_adapter(&state, &connection_id).await?.service_logs(&service_id, tail.as_deref()).await
+pub async fn docker_service_logs(
+    state: State<'_, AppState>,
+    connection_id: String,
+    service_id: String,
+    tail: Option<String>,
+) -> Result<String, OmniError> {
+    resolve_adapter(&state, &connection_id)
+        .await?
+        .service_logs(&service_id, tail.as_deref())
+        .await
 }
 
 #[tauri::command]
 #[specta::specta]
-pub async fn docker_node_list(state: State<'_, AppState>, connection_id: String) -> Result<Vec<DockerNodeSummary>, OmniError> {
-    resolve_adapter(&state, &connection_id).await?.node_list().await
+pub async fn docker_node_list(
+    state: State<'_, AppState>,
+    connection_id: String,
+) -> Result<Vec<DockerNodeSummary>, OmniError> {
+    resolve_adapter(&state, &connection_id)
+        .await?
+        .node_list()
+        .await
 }
 
 #[tauri::command]
 #[specta::specta]
-pub async fn docker_node_inspect(state: State<'_, AppState>, connection_id: String, node_id: String) -> Result<String, OmniError> {
-    let val = resolve_adapter(&state, &connection_id).await?.node_inspect(&node_id).await?;
-    serde_json::to_string_pretty(&val).map_err(|e| OmniError::new(ErrorCode::Internal, "序列化失败").with_cause(e.to_string()))
+pub async fn docker_node_inspect(
+    state: State<'_, AppState>,
+    connection_id: String,
+    node_id: String,
+) -> Result<String, OmniError> {
+    let val = resolve_adapter(&state, &connection_id)
+        .await?
+        .node_inspect(&node_id)
+        .await?;
+    serde_json::to_string_pretty(&val)
+        .map_err(|e| OmniError::new(ErrorCode::Internal, "序列化失败").with_cause(e.to_string()))
 }
 
 #[tauri::command]
 #[specta::specta]
-pub async fn docker_node_update(state: State<'_, AppState>, connection_id: String, node_id: String, availability: Option<String>, labels: Option<Vec<omnipanel_docker::DockerKeyValue>>) -> Result<(), OmniError> {
-    resolve_adapter(&state, &connection_id).await?.node_update(&node_id, availability.as_deref(), labels).await
+pub async fn docker_node_update(
+    state: State<'_, AppState>,
+    connection_id: String,
+    node_id: String,
+    availability: Option<String>,
+    labels: Option<Vec<omnipanel_docker::DockerKeyValue>>,
+) -> Result<(), OmniError> {
+    resolve_adapter(&state, &connection_id)
+        .await?
+        .node_update(&node_id, availability.as_deref(), labels)
+        .await
 }
 
 #[tauri::command]
 #[specta::specta]
-pub async fn docker_node_remove(state: State<'_, AppState>, connection_id: String, node_id: String, force: bool) -> Result<(), OmniError> {
-    resolve_adapter(&state, &connection_id).await?.node_remove(&node_id, force).await
+pub async fn docker_node_remove(
+    state: State<'_, AppState>,
+    connection_id: String,
+    node_id: String,
+    force: bool,
+) -> Result<(), OmniError> {
+    resolve_adapter(&state, &connection_id)
+        .await?
+        .node_remove(&node_id, force)
+        .await
 }
 
 #[tauri::command]
 #[specta::specta]
-pub async fn docker_stack_deploy(state: State<'_, AppState>, connection_id: String, name: String, compose_content: String, env: Option<Vec<String>>) -> Result<(), OmniError> {
-    resolve_adapter(&state, &connection_id).await?.stack_deploy(&name, &compose_content, env).await
+pub async fn docker_stack_deploy(
+    state: State<'_, AppState>,
+    connection_id: String,
+    name: String,
+    compose_content: String,
+    env: Option<Vec<String>>,
+) -> Result<(), OmniError> {
+    resolve_adapter(&state, &connection_id)
+        .await?
+        .stack_deploy(&name, &compose_content, env)
+        .await
 }
 
 #[tauri::command]
 #[specta::specta]
-pub async fn docker_stack_list(state: State<'_, AppState>, connection_id: String) -> Result<Vec<DockerStackSummary>, OmniError> {
-    resolve_adapter(&state, &connection_id).await?.stack_list().await
+pub async fn docker_stack_list(
+    state: State<'_, AppState>,
+    connection_id: String,
+) -> Result<Vec<DockerStackSummary>, OmniError> {
+    resolve_adapter(&state, &connection_id)
+        .await?
+        .stack_list()
+        .await
 }
 
 #[tauri::command]
 #[specta::specta]
-pub async fn docker_stack_remove(state: State<'_, AppState>, connection_id: String, name: String) -> Result<(), OmniError> {
-    resolve_adapter(&state, &connection_id).await?.stack_remove(&name).await
+pub async fn docker_stack_remove(
+    state: State<'_, AppState>,
+    connection_id: String,
+    name: String,
+) -> Result<(), OmniError> {
+    resolve_adapter(&state, &connection_id)
+        .await?
+        .stack_remove(&name)
+        .await
 }
 
 #[tauri::command]
 #[specta::specta]
-pub async fn docker_stack_services(state: State<'_, AppState>, connection_id: String, name: String) -> Result<Vec<DockerServiceSummary>, OmniError> {
-    resolve_adapter(&state, &connection_id).await?.stack_services(&name).await
+pub async fn docker_stack_services(
+    state: State<'_, AppState>,
+    connection_id: String,
+    name: String,
+) -> Result<Vec<DockerServiceSummary>, OmniError> {
+    resolve_adapter(&state, &connection_id)
+        .await?
+        .stack_services(&name)
+        .await
 }

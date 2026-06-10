@@ -211,12 +211,7 @@ async fn execute_tool(state: &AppState, name: &str, arguments: &str) -> (String,
                 cmd.current_dir(dir);
             }
 
-            match tokio::time::timeout(
-                std::time::Duration::from_secs(30),
-                cmd.output(),
-            )
-            .await
-            {
+            match tokio::time::timeout(std::time::Duration::from_secs(30), cmd.output()).await {
                 Ok(Ok(output)) => {
                     let stdout = String::from_utf8_lossy(&output.stdout);
                     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -231,7 +226,10 @@ async fn execute_tool(state: &AppState, name: &str, arguments: &str) -> (String,
                         result.push_str(&stderr);
                     }
                     if result.is_empty() {
-                        result = format!("Command exited with code: {}", output.status.code().unwrap_or(-1));
+                        result = format!(
+                            "Command exited with code: {}",
+                            output.status.code().unwrap_or(-1)
+                        );
                     }
                     // Truncate to 4096 chars
                     if result.len() > 4096 {
@@ -241,7 +239,10 @@ async fn execute_tool(state: &AppState, name: &str, arguments: &str) -> (String,
                     (result, true)
                 }
                 Ok(Err(e)) => (format!("Command execution error: {}", e), false),
-                Err(_) => ("Error: command timed out after 30 seconds".to_string(), false),
+                Err(_) => (
+                    "Error: command timed out after 30 seconds".to_string(),
+                    false,
+                ),
             }
         }
         "read_file" => {
@@ -281,11 +282,7 @@ async fn execute_tool(state: &AppState, name: &str, arguments: &str) -> (String,
                     let mut files: Vec<serde_json::Value> = Vec::new();
                     for entry in entries.flatten() {
                         let name = entry.file_name().to_string_lossy().to_string();
-                        let file_type = if entry.path().is_dir() {
-                            "dir"
-                        } else {
-                            "file"
-                        };
+                        let file_type = if entry.path().is_dir() { "dir" } else { "file" };
                         let size = entry.metadata().map(|m| m.len()).unwrap_or(0);
                         files.push(serde_json::json!({
                             "name": name,
@@ -358,10 +355,16 @@ async fn execute_tool(state: &AppState, name: &str, arguments: &str) -> (String,
                         "headers": resp_headers,
                         "body": truncated_body,
                     });
-                    (serde_json::to_string_pretty(&result).unwrap_or_default(), true)
+                    (
+                        serde_json::to_string_pretty(&result).unwrap_or_default(),
+                        true,
+                    )
                 }
                 Ok(Err(e)) => (format!("HTTP request error: {}", e), false),
-                Err(_) => ("Error: HTTP request timed out after 30 seconds".to_string(), false),
+                Err(_) => (
+                    "Error: HTTP request timed out after 30 seconds".to_string(),
+                    false,
+                ),
             }
         }
         _ => (format!("Unknown tool: {}", name), false),
@@ -445,11 +448,18 @@ pub async fn ai_send_message(
             match event {
                 Ok(evt) => {
                     match &evt {
-                        StreamEvent::ToolCall { id, name, arguments } => {
+                        StreamEvent::ToolCall {
+                            id,
+                            name,
+                            arguments,
+                        } => {
                             if !name.is_empty() {
                                 // New tool call
-                                accumulated_tool_calls
-                                    .push((id.clone(), name.clone(), arguments.clone()));
+                                accumulated_tool_calls.push((
+                                    id.clone(),
+                                    name.clone(),
+                                    arguments.clone(),
+                                ));
                             } else if !arguments.is_empty() {
                                 // Argument continuation for the last tool call
                                 if let Some(last) = accumulated_tool_calls.last_mut() {
@@ -594,11 +604,10 @@ pub async fn ai_add_acp_agent(
     binary_path: String,
     name: String,
 ) -> Result<(), String> {
-    use omnipanel_ai::providers::acp::types::AcpProfile;
     use omnipanel_ai::providers::acp::AcpProvider;
+    use omnipanel_ai::providers::acp::types::AcpProfile;
 
-    let mut provider =
-        AcpProvider::new(&name, &binary_path, vec![], AcpProfile::ClientTools, None);
+    let mut provider = AcpProvider::new(&name, &binary_path, vec![], AcpProfile::ClientTools, None);
 
     provider
         .initialize()

@@ -189,10 +189,6 @@ export const commands = {
 	sftpMkdir: (id: string, path: string) => typedError<null, OmniError_Serialize>(__TAURI_INVOKE("sftp_mkdir", { id, path })),
 	/**  删除远程服务器上的文件。 */
 	sftpRemove: (id: string, path: string) => typedError<null, OmniError_Serialize>(__TAURI_INVOKE("sftp_remove", { id, path })),
-	/**  重命名远程文件/目录。 */
-	sftpRename: (id: string, oldPath: string, newPath: string) => typedError<null, OmniError_Serialize>(__TAURI_INVOKE("sftp_rename", { id, oldPath, newPath })),
-	/**  修改远程文件权限。 */
-	sftpChmod: (id: string, path: string, mode: number) => typedError<null, OmniError_Serialize>(__TAURI_INVOKE("sftp_chmod", { id, path, mode })),
 	/**  读取 `~/.ssh/config` 中的 Host 条目（含 Include）。 */
 	sshListConfigHosts: () => typedError<SshConfigEntry[], OmniError_Serialize>(__TAURI_INVOKE("ssh_list_config_hosts")),
 	/**  将 `~/.ssh/config` 中的 Host 同步到本地持久化连接存储（按 Host 名称匹配更新）。 */
@@ -200,21 +196,25 @@ export const commands = {
 	/**  按 `~/.ssh/config` 中的 Host 别名建立连接（使用 IdentityFile 等配置）。 */
 	sshConnectConfigHost: (alias: string, cols: number, rows: number) => typedError<string, OmniError_Serialize>(__TAURI_INVOKE("ssh_connect_config_host", { alias, cols, rows })),
 	/**  列出远程进程列表。 */
-	sshProcessList: (id: string) => typedError<SshProcessInfo[], OmniError_Serialize>(__TAURI_INVOKE("ssh_process_list", { id })),
+	sshProcessList: (id: string) => typedError<SshProcessInfo_Serialize[], OmniError_Serialize>(__TAURI_INVOKE("ssh_process_list", { id })),
 	/**  概览页：连接池建立 SSH 会话并拉取系统指标与进程列表。 */
-	sshPoolLoadOverview: (resourceId: string) => typedError<SshHostOverview, OmniError_Serialize>(__TAURI_INVOKE("ssh_pool_load_overview", { resourceId })),
+	sshPoolLoadOverview: (resourceId: string) => typedError<SshHostOverview_Serialize, OmniError_Serialize>(__TAURI_INVOKE("ssh_pool_load_overview", { resourceId })),
 	/**  释放连接池中指定资源的 SSH 会话（离开概览等场景）。 */
 	sshPoolRelease: (resourceId: string) => typedError<null, OmniError_Serialize>(__TAURI_INVOKE("ssh_pool_release", { resourceId })),
 	/**  监控页：复用连接池会话，仅拉取系统指标。 */
 	sshPoolFetchStats: (resourceId: string) => typedError<HostSystemStats, OmniError_Serialize>(__TAURI_INVOKE("ssh_pool_fetch_stats", { resourceId })),
 	/**  获取所有 SSH 主机的连接状态快照。 */
 	sshPoolGetStatuses: () => typedError<PoolStatusEvent[], OmniError_Serialize>(__TAURI_INVOKE("ssh_pool_get_statuses")),
+	/**  获取当前已建立 SSH 会话的主机 ID 列表。 */
+	sshPoolGetActiveSessions: () => typedError<string[], OmniError_Serialize>(__TAURI_INVOKE("ssh_pool_get_active_sessions")),
 	/**  开启持续监控采集（后端后台轮询并推送 stats）。 */
 	sshPoolSubscribeMonitoring: (resourceId: string) => typedError<null, OmniError_Serialize>(__TAURI_INVOKE("ssh_pool_subscribe_monitoring", { resourceId })),
 	/**  关闭持续监控采集。 */
 	sshPoolUnsubscribeMonitoring: (resourceId: string) => typedError<null, OmniError_Serialize>(__TAURI_INVOKE("ssh_pool_unsubscribe_monitoring", { resourceId })),
 	/**  独立刷新进程列表（概览页局部刷新）。 */
-	sshPoolLoadProcesses: (resourceId: string) => typedError<SshProcessInfo[], OmniError_Serialize>(__TAURI_INVOKE("ssh_pool_load_processes", { resourceId })),
+	sshPoolLoadProcesses: (resourceId: string) => typedError<SshProcessInfo_Serialize[], OmniError_Serialize>(__TAURI_INVOKE("ssh_pool_load_processes", { resourceId })),
+	/**  强制终止远程进程（默认 SIGKILL）。 */
+	sshPoolKillProcess: (resourceId: string, pid: number, signal: number | null) => typedError<null, OmniError_Serialize>(__TAURI_INVOKE("ssh_pool_kill_process", { resourceId, pid, signal })),
 	/**
 	 *  创建 SSH 隧道（端口转发）。
 	 *  通过 SSH exec 运行 `ssh -L/-R/-D` 命令实现，隧道进程在后台运行。
@@ -1220,9 +1220,18 @@ export type SshHostInfo = {
 };
 
 /**  概览页一次加载的完整数据（系统指标 + 进程列表）。 */
-export type SshHostOverview = {
+export type SshHostOverview = SshHostOverview_Serialize | SshHostOverview_Deserialize;
+
+/**  概览页一次加载的完整数据（系统指标 + 进程列表）。 */
+export type SshHostOverview_Deserialize = {
 	stats: HostSystemStats,
-	processes: SshProcessInfo[],
+	processes: SshProcessInfo_Deserialize[],
+};
+
+/**  概览页一次加载的完整数据（系统指标 + 进程列表）。 */
+export type SshHostOverview_Serialize = {
+	stats: HostSystemStats,
+	processes: SshProcessInfo_Serialize[],
 };
 
 /**  SSH 密钥信息。 */
@@ -1234,8 +1243,11 @@ export type SshKeyInfo = {
 	comment: string,
 };
 
-/**  远程进程信息（ps aux 解析结果）。 */
-export type SshProcessInfo = {
+/**  远程进程信息。 */
+export type SshProcessInfo = SshProcessInfo_Serialize | SshProcessInfo_Deserialize;
+
+/**  远程进程信息。 */
+export type SshProcessInfo_Deserialize = {
 	user: string,
 	pid: number,
 	cpu: number | null,
@@ -1246,6 +1258,45 @@ export type SshProcessInfo = {
 	start: string,
 	time: string,
 	command: string,
+	ports?: SshProcessPort_Deserialize[],
+};
+
+/**  远程进程信息。 */
+export type SshProcessInfo_Serialize = {
+	user: string,
+	pid: number,
+	cpu: number | null,
+	mem: number | null,
+	vsz: number | null,
+	rss: number | null,
+	stat: string,
+	start: string,
+	time: string,
+	command: string,
+	ports: SshProcessPort_Serialize[],
+};
+
+/**  进程关联的监听端口。 */
+export type SshProcessPort = SshProcessPort_Serialize | SshProcessPort_Deserialize;
+
+/**  进程关联的监听端口。 */
+export type SshProcessPort_Deserialize = {
+	protocol: string,
+	localAddress: string,
+	localPort: number,
+	state: string,
+	remoteAddress?: string | null,
+	remotePort?: number | null,
+};
+
+/**  进程关联的监听端口。 */
+export type SshProcessPort_Serialize = {
+	protocol: string,
+	localAddress: string,
+	localPort: number,
+	state: string,
+	remoteAddress?: string | null,
+	remotePort?: number | null,
 };
 
 /**  隧道信息。 */

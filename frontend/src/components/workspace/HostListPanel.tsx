@@ -17,10 +17,8 @@ import {
   syncFromOpenSshConfig,
   useConnectionStore,
 } from "../../stores/connectionStore";
-import {
-  loadSshPoolStatuses,
-  useHostOnlineStatus,
-} from "../../stores/sshConnectionStore";
+import { HostStatusIndicator } from "../../modules/server/ssh/components/HostStatusIndicator";
+import { loadSshPoolStatuses } from "../../stores/sshConnectionStore";
 import { useSshHostStore } from "../../stores/sshHostStore";
 import { ContextMenu, type ContextMenuItem } from "../ui/ContextMenu";
 import { WarnAlert } from "../ui/WarnAlert";
@@ -68,25 +66,6 @@ function HostResourceTags({ resourceId }: { resourceId: string }) {
     (s) => s.connections.find((c) => c.id === resourceId)?.tags,
   );
   return <ResourceTags tags={tags} keys={["os"]} variant="compact" />;
-}
-
-function HostStatusDot({ resourceId }: { resourceId: string }) {
-  const status = useHostOnlineStatus(resourceId);
-  const title =
-    status === "online"
-      ? "端口可达"
-      : status === "connecting"
-        ? "连接中"
-        : status === "error"
-          ? "不可达"
-          : "未知";
-  return (
-    <span
-      className={`host-status host-status--${status === "online" ? "online" : status}`}
-      title={title}
-      aria-label={title}
-    />
-  );
 }
 
 function HostMonitoringBadge({ resourceId }: { resourceId: string }) {
@@ -490,7 +469,7 @@ export function HostListPanel({ resources, onConnect }: HostListPanelProps) {
                     onClick={() => selectHost(host)}
                     onDoubleClick={() => onConnect?.(host.id)}
                   >
-                    <HostStatusDot resourceId={host.id} />
+                    <HostStatusIndicator resourceId={host.id} />
                     <div className="host-icon">{HOST_ICON}</div>
                     <div className="host-info">
                       <div className="host-row-1">

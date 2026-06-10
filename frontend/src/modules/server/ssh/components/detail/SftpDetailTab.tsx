@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { commands } from "../../../../../ipc/bindings";
 import { Button } from "../../../../../components/ui/Button";
+import { useSshDetailNavigationStore } from "../../../../../stores/sshDetailNavigationStore";
+import { useI18n } from "../../../../../i18n";
 
 type SftpEntry = { name: string; isDir: boolean; size: number };
 
@@ -36,33 +38,48 @@ function fmtError(e: unknown): string {
 }
 
 export function SftpDetailTab({ activeResource }: Props) {
+  const { t } = useI18n();
   const [path, setPath] = useState("/");
   const [entries, setEntries] = useState<SftpEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
   const [showMkdir, setShowMkdir] = useState(false);
   const [mkdirName, setMkdirName] = useState("");
+  const [selectedName, setSelectedName] = useState<string | null>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; entry: SftpEntry } | null>(null);
   const [renameTarget, setRenameTarget] = useState<SftpEntry | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [chmodTarget, setChmodTarget] = useState<SftpEntry | null>(null);
   const [chmodValue, setChmodValue] = useState("");
   const activeResourceRef = useRef(activeResource);
+  const pendingSftp = useSshDetailNavigationStore((s) => s.pendingSftp);
   activeResourceRef.current = activeResource;
 
-  const loadDir = async (dir: string) => {
+  const loadDir = async (dir: string, opts?: { fromNavigation?: boolean }) => {
     if (!activeResourceRef.current?.id) return;
     setLoading(true);
     setError(null);
+    if (!opts?.fromNavigation) setInfo(null);
     try {
-      const list = await invoke<SftpEntry[]>("sftp_list", { id: activeResourceRef.current.id, path: dir });
+      const list = await invoke<SftpEntry[]>("sftp_list", {
+        id: activeResourceRef.current.id,
+        path: dir,
+      });
       list.sort((a, b) => {
         if (a.isDir !== b.isDir) return a.isDir ? -1 : 1;
         return a.name.localeCompare(b.name);
       });
       setEntries(list);
       setPath(dir);
+      setSelectedName(null);
     } catch (e) {
+      if (opts?.fromNavigation && dir !== "/") {
+        const parent = dir.split("/").slice(0, -1).join("/") || "/";
+        setInfo(t("ssh.sftp.pathFallback", { path: dir, parent }));
+        await loadDir(parent);
+        return;
+      }
       setError(fmtError(e));
       setEntries([]);
     } finally {
@@ -71,13 +88,18 @@ export function SftpDetailTab({ activeResource }: Props) {
   };
 
   useEffect(() => {
-    if (activeResource?.id) {
-      setPath("/");
-      void loadDir("/");
-    }
+    if (!activeResource?.id) return;
+    const pending = useSshDetailNavigationStore.getState().consumeSftpPath(activeResource.id);
+    void loadDir(pending?.path ?? "/", { fromNavigation: Boolean(pending) });
   }, [activeResource?.id]);
 
-  // Close context menu on click elsewhere
+  useEffect(() => {
+    if (!activeResource?.id || !pendingSftp) return;
+    if (pendingSftp.resourceId !== activeResource.id) return;
+    const pending = useSshDetailNavigationStore.getState().consumeSftpPath(activeResource.id);
+    if (pending) void loadDir(pending.path, { fromNavigation: true });
+  }, [pendingSftp, activeResource?.id]);
+
   useEffect(() => {
     const handler = () => setContextMenu(null);
     if (contextMenu) {
@@ -89,20 +111,20 @@ export function SftpDetailTab({ activeResource }: Props) {
   const navigateUp = () => {
     if (path === "/") return;
     const parent = path.split("/").slice(0, -1).join("/") || "/";
-    loadDir(parent);
+    void loadDir(parent);
   };
 
   const navigateTo = (entry: SftpEntry) => {
     if (!entry.isDir) return;
     const newPath = path === "/" ? `/${entry.name}` : `${path}/${entry.name}`;
-    loadDir(newPath);
+    void loadDir(newPath);
   };
 
   const handleDelete = async (entry: SftpEntry) => {
     const fullPath = path === "/" ? `/${entry.name}` : `${path}/${entry.name}`;
     try {
       await invoke("sftp_remove", { id: activeResource!.id, path: fullPath });
-      loadDir(path);
+      void loadDir(path);
     } catch (e) {
       setError(fmtError(e));
     }
@@ -115,7 +137,7 @@ export function SftpDetailTab({ activeResource }: Props) {
       await invoke("sftp_mkdir", { id: activeResource!.id, path: fullPath });
       setShowMkdir(false);
       setMkdirName("");
-      loadDir(path);
+      void loadDir(path);
     } catch (e) {
       setError(fmtError(e));
     }
@@ -131,7 +153,7 @@ export function SftpDetailTab({ activeResource }: Props) {
       if (res.status === "ok") {
         setRenameTarget(null);
         setRenameValue("");
-        loadDir(path);
+        void loadDir(path);
       } else {
         setError(res.error.message);
       }
@@ -145,7 +167,7 @@ export function SftpDetailTab({ activeResource }: Props) {
     const fullPath = path === "/" ? `/${chmodTarget.name}` : `${path}/${chmodTarget.name}`;
     const mode = parseInt(chmodValue.trim(), 8);
     if (isNaN(mode) || mode < 0 || mode > 0o777) {
-      setError("请输入有效的八进制权限（如 755）");
+      setError(t("ssh.sftp.invalidChmod"));
       return;
     }
     try {
@@ -153,7 +175,7 @@ export function SftpDetailTab({ activeResource }: Props) {
       if (res.status === "ok") {
         setChmodTarget(null);
         setChmodValue("");
-        loadDir(path);
+        void loadDir(path);
       } else {
         setError(res.error.message);
       }
@@ -165,145 +187,178 @@ export function SftpDetailTab({ activeResource }: Props) {
   const handleContextMenu = (e: React.MouseEvent, entry: SftpEntry) => {
     e.preventDefault();
     e.stopPropagation();
+    setSelectedName(entry.name);
     setContextMenu({ x: e.clientX, y: e.clientY, entry });
   };
 
   const pathParts = path.split("/").filter(Boolean);
+  const selectedEntry = entries.find((entry) => entry.name === selectedName) ?? null;
 
   return (
     <div className="sftp-panel">
       <div className="sftp-toolbar">
-        <Button variant="secondary" size="sm" onClick={navigateUp} disabled={path === "/"} title="上级目录">
+        <Button variant="secondary" size="sm" onClick={navigateUp} disabled={path === "/"} title={t("ssh.sftp.up")}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14"><path d="M15 18l-6-6 6-6" /></svg>
         </Button>
-        <Button variant="secondary" size="sm" onClick={() => setShowMkdir(true)} title="新建文件夹">+ 目录</Button>
+        <Button variant="secondary" size="sm" onClick={() => setShowMkdir(true)}>
+          {t("ssh.sftp.mkdir")}
+        </Button>
         <div className="sftp-path">
-          <button className="sftp-path-seg" onClick={() => loadDir("/")}>/</button>
+          <button type="button" className="sftp-path-seg" onClick={() => void loadDir("/")}>/</button>
           {pathParts.map((seg, i) => {
             const segPath = "/" + pathParts.slice(0, i + 1).join("/");
             return (
               <span key={segPath} className="sftp-path-group">
                 <span className="sftp-path-sep">/</span>
-                <button className="sftp-path-seg" onClick={() => loadDir(segPath)}>{seg}</button>
+                <button type="button" className="sftp-path-seg" onClick={() => void loadDir(segPath)}>{seg}</button>
               </span>
             );
           })}
         </div>
       </div>
-      {showMkdir && (
-        <div className="sftp-mkdir-bar">
-          <input className="input input-sm" value={mkdirName} onChange={(e) => setMkdirName(e.target.value)} placeholder="文件夹名称" />
-          <Button variant="primary" size="sm" onClick={handleMkdir}>创建</Button>
-          <Button variant="secondary" size="sm" onClick={() => { setShowMkdir(false); setMkdirName(""); }}>取消</Button>
-        </div>
-      )}
-      {renameTarget && (
-        <div className="sftp-mkdir-bar">
-          <span className="text-sm">重命名 <code>{renameTarget.name}</code> →</span>
-          <input className="input input-sm" value={renameValue} onChange={(e) => setRenameValue(e.target.value)} placeholder="新名称" autoFocus onKeyDown={(e) => e.key === "Enter" && handleRename()} />
-          <button className="btn btn-primary btn-sm" onClick={handleRename}>确定</button>
-          <button className="btn btn-secondary btn-sm" onClick={() => { setRenameTarget(null); setRenameValue(""); }}>取消</button>
-        </div>
-      )}
-      {chmodTarget && (
-        <div className="sftp-mkdir-bar">
-          <span className="text-sm">修改权限 <code>{chmodTarget.name}</code></span>
-          <input className="input input-sm" value={chmodValue} onChange={(e) => setChmodValue(e.target.value)} placeholder="755" autoFocus onKeyDown={(e) => e.key === "Enter" && handleChmod()} style={{ width: 80 }} />
-          <button className="btn btn-primary btn-sm" onClick={handleChmod}>确定</button>
-          <button className="btn btn-secondary btn-sm" onClick={() => { setChmodTarget(null); setChmodValue(""); }}>取消</button>
-        </div>
-      )}
-      {error && <div className="sftp-error">{error}</div>}
-      {!activeResource?.id ? (
-        <div className="empty-state compact">请选择主机</div>
-      ) : loading ? (
-        <div className="empty-state compact">加载中…</div>
-      ) : (
-        <table className="sftp-table">
-          <thead>
-            <tr>
-              <th className="sftp-col-name">名称</th>
-              <th className="sftp-col-size">大小</th>
-              <th className="sftp-col-actions"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {entries.map((entry) => (
-              <tr key={entry.name} className={entry.isDir ? "sftp-row-dir" : "sftp-row-file"} onContextMenu={(e) => handleContextMenu(e, entry)}>
-                <td className="sftp-col-name" onClick={() => entry.isDir && navigateTo(entry)}>
-                  <span className={`sftp-icon ${entry.isDir ? "sftp-icon-dir" : "sftp-icon-file"}`}>
-                    {entry.isDir ? "📁" : "📄"}
-                  </span>
-                  <span className={entry.isDir ? "sftp-name-dir" : "sftp-name-file"}>{entry.name}</span>
-                </td>
-                <td className="sftp-col-size text-muted">{entry.isDir ? "—" : formatSize(entry.size)}</td>
-                <td className="sftp-col-actions">
-                  <button className="sftp-action-btn" onClick={() => handleDelete(entry)} title="删除">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" /></svg>
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-      <div className="sftp-quick-paths">
+
+      <div className="sftp-quick-paths sftp-quick-paths--top">
         {QUICK_PATHS.map((qp) => (
-          <button key={qp.path} className="sftp-quick-btn" onClick={() => loadDir(qp.path)}>
+          <button key={qp.path} type="button" className="sftp-quick-btn" onClick={() => void loadDir(qp.path)}>
             {qp.label}
           </button>
         ))}
       </div>
 
-      {/* Context Menu */}
+      {showMkdir && (
+        <div className="sftp-mkdir-bar">
+          <input className="input input-sm" value={mkdirName} onChange={(e) => setMkdirName(e.target.value)} placeholder={t("ssh.sftp.mkdirPlaceholder")} />
+          <Button variant="primary" size="sm" onClick={() => void handleMkdir()}>{t("ssh.sftp.create")}</Button>
+          <Button variant="secondary" size="sm" onClick={() => { setShowMkdir(false); setMkdirName(""); }}>{t("ssh.keys.cancel")}</Button>
+        </div>
+      )}
+      {renameTarget && (
+        <div className="sftp-mkdir-bar">
+          <span className="text-sm">{t("ssh.sftp.rename")} <code>{renameTarget.name}</code></span>
+          <input className="input input-sm" value={renameValue} onChange={(e) => setRenameValue(e.target.value)} autoFocus onKeyDown={(e) => e.key === "Enter" && void handleRename()} />
+          <Button variant="primary" size="sm" onClick={() => void handleRename()}>{t("ssh.sftp.confirm")}</Button>
+          <Button variant="secondary" size="sm" onClick={() => { setRenameTarget(null); setRenameValue(""); }}>{t("ssh.keys.cancel")}</Button>
+        </div>
+      )}
+      {chmodTarget && (
+        <div className="sftp-mkdir-bar">
+          <span className="text-sm">{t("ssh.sftp.chmod")} <code>{chmodTarget.name}</code></span>
+          <input className="input input-sm" value={chmodValue} onChange={(e) => setChmodValue(e.target.value)} placeholder="755" autoFocus onKeyDown={(e) => e.key === "Enter" && void handleChmod()} style={{ width: 80 }} />
+          <Button variant="primary" size="sm" onClick={() => void handleChmod()}>{t("ssh.sftp.confirm")}</Button>
+          <Button variant="secondary" size="sm" onClick={() => { setChmodTarget(null); setChmodValue(""); }}>{t("ssh.keys.cancel")}</Button>
+        </div>
+      )}
+
+      {error && <div className="sftp-error">{error}</div>}
+      {info && <div className="sftp-info">{info}</div>}
+
+      {!activeResource?.id ? (
+        <div className="sftp-empty">{t("ssh.empty.selectHost")}</div>
+      ) : (
+        <div className="sftp-table-wrap">
+          {loading ? (
+            <div className="sftp-empty">{t("ssh.sftp.loading")}</div>
+          ) : entries.length === 0 ? (
+            <div className="sftp-empty">{t("ssh.sftp.emptyDir")}</div>
+          ) : (
+            <table className="sftp-table">
+              <thead>
+                <tr>
+                  <th className="sftp-col-name">{t("ssh.sftp.name")}</th>
+                  <th className="sftp-col-size">{t("ssh.sftp.size")}</th>
+                  <th className="sftp-col-actions" />
+                </tr>
+              </thead>
+              <tbody>
+                {entries.map((entry) => {
+                  const selected = selectedName === entry.name;
+                  return (
+                    <tr
+                      key={entry.name}
+                      className={[
+                        entry.isDir ? "sftp-row-dir" : "sftp-row-file",
+                        selected ? "sftp-row-selected" : "",
+                      ].filter(Boolean).join(" ")}
+                      onClick={() => setSelectedName(entry.name)}
+                      onDoubleClick={() => entry.isDir && navigateTo(entry)}
+                      onContextMenu={(e) => handleContextMenu(e, entry)}
+                    >
+                      <td className="sftp-col-name">
+                        <span className={`sftp-icon ${entry.isDir ? "sftp-icon-dir" : "sftp-icon-file"}`}>
+                          {entry.isDir ? "📁" : "📄"}
+                        </span>
+                        <span className={entry.isDir ? "sftp-name-dir" : "sftp-name-file"}>{entry.name}</span>
+                      </td>
+                      <td className="sftp-col-size text-muted">{entry.isDir ? "—" : formatSize(entry.size)}</td>
+                      <td className="sftp-col-actions">
+                        <button type="button" className="sftp-action-btn" onClick={(e) => { e.stopPropagation(); void handleDelete(entry); }} title={t("ssh.sftp.delete")}>
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" /></svg>
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
+
+      {selectedEntry && (
+        <div className="sftp-status-bar">
+          {t("ssh.sftp.selected", { name: selectedEntry.name })}
+        </div>
+      )}
+
       {contextMenu && (
         <div
           className="sftp-context-menu"
-          style={{
-            position: "fixed",
-            left: contextMenu.x,
-            top: contextMenu.y,
-            zIndex: 1000,
-            background: "var(--bg-elevated, #1e1e2e)",
-            border: "1px solid var(--border)",
-            borderRadius: "var(--r-sm, 4px)",
-            padding: "4px 0",
-            boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
-            minWidth: 140,
-          }}
+          style={{ left: contextMenu.x, top: contextMenu.y }}
           onClick={(e) => e.stopPropagation()}
         >
+          {contextMenu.entry.isDir && (
+            <button
+              type="button"
+              className="sftp-ctx-item"
+              onClick={() => {
+                navigateTo(contextMenu.entry);
+                setContextMenu(null);
+              }}
+            >
+              {t("ssh.sftp.openDir")}
+            </button>
+          )}
           <button
+            type="button"
             className="sftp-ctx-item"
-            style={{ display: "block", width: "100%", padding: "6px 12px", textAlign: "left", background: "none", border: "none", cursor: "pointer", color: "var(--fg, #cdd6f4)", fontSize: 12 }}
             onClick={() => {
               setRenameTarget(contextMenu.entry);
               setRenameValue(contextMenu.entry.name);
               setContextMenu(null);
             }}
           >
-            重命名
+            {t("ssh.sftp.rename")}
           </button>
           <button
+            type="button"
             className="sftp-ctx-item"
-            style={{ display: "block", width: "100%", padding: "6px 12px", textAlign: "left", background: "none", border: "none", cursor: "pointer", color: "var(--fg, #cdd6f4)", fontSize: 12 }}
             onClick={() => {
               setChmodTarget(contextMenu.entry);
               setChmodValue("");
               setContextMenu(null);
             }}
           >
-            修改权限
+            {t("ssh.sftp.chmod")}
           </button>
           <button
-            className="sftp-ctx-item"
-            style={{ display: "block", width: "100%", padding: "6px 12px", textAlign: "left", background: "none", border: "none", cursor: "pointer", color: "var(--danger, #f38ba8)", fontSize: 12 }}
+            type="button"
+            className="sftp-ctx-item sftp-ctx-item--danger"
             onClick={() => {
-              handleDelete(contextMenu.entry);
+              void handleDelete(contextMenu.entry);
               setContextMenu(null);
             }}
           >
-            删除
+            {t("ssh.sftp.delete")}
           </button>
         </div>
       )}

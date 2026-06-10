@@ -206,8 +206,7 @@ impl AnthropicStreamParser {
             match event_type {
                 "content_block_start" => {
                     if let Some(block) = evt.get("content_block") {
-                        let block_type =
-                            block.get("type").and_then(|v| v.as_str()).unwrap_or("");
+                        let block_type = block.get("type").and_then(|v| v.as_str()).unwrap_or("");
                         if block_type == "tool_use" {
                             let index =
                                 evt.get("index").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
@@ -233,8 +232,7 @@ impl AnthropicStreamParser {
                 }
                 "content_block_delta" => {
                     if let Some(delta) = evt.get("delta") {
-                        let delta_type =
-                            delta.get("type").and_then(|v| v.as_str()).unwrap_or("");
+                        let delta_type = delta.get("type").and_then(|v| v.as_str()).unwrap_or("");
                         if delta_type == "input_json_delta" {
                             let index =
                                 evt.get("index").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
@@ -269,9 +267,7 @@ impl AnthropicStreamParser {
                 }
                 "message_delta" => {
                     if let Some(delta) = evt.get("delta") {
-                        if let Some(reason) =
-                            delta.get("stop_reason").and_then(|v| v.as_str())
-                        {
+                        if let Some(reason) = delta.get("stop_reason").and_then(|v| v.as_str()) {
                             let stop = match reason {
                                 "tool_use" => StopReason::ToolUse,
                                 "max_tokens" => StopReason::MaxTokens,
@@ -287,8 +283,7 @@ impl AnthropicStreamParser {
                             let input = usage
                                 .get("input_tokens")
                                 .and_then(|v| v.as_u64())
-                                .unwrap_or(0)
-                                as u32;
+                                .unwrap_or(0) as u32;
                             results.push(Ok(StreamEvent::Usage {
                                 input_tokens: input,
                                 output_tokens: 0,
@@ -363,11 +358,7 @@ impl AiProvider for AnthropicProvider {
                     call_type: "function".to_string(),
                     function: crate::types::FunctionCall {
                         name: b.name.clone()?,
-                        arguments: b
-                            .input
-                            .as_ref()
-                            .map(|v| v.to_string())
-                            .unwrap_or_default(),
+                        arguments: b.input.as_ref().map(|v| v.to_string()).unwrap_or_default(),
                     },
                 })
             })

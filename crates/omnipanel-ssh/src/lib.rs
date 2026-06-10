@@ -6,6 +6,7 @@
 //! - SFTP 在独立 channel 上按需打开。
 
 mod openssh_config;
+mod process;
 
 pub use openssh_config::{
     SshConfigEntry, default_ssh_config_path, default_ssh_dir, discover_ssh_identity_file,
@@ -13,6 +14,7 @@ pub use openssh_config::{
     list_ssh_private_key_paths_in, load_ssh_config_hosts, load_ssh_config_hosts_from,
     ssh_config_to_connect_config, ssh_public_key_meta,
 };
+pub use process::{SshProcessInfo, SshProcessPort, attach_ports};
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -87,8 +89,11 @@ fn private_key_candidates_from_auth(
         Some(path) => {
             let path = std::path::PathBuf::from(path);
             let pem = std::fs::read_to_string(&path).map_err(|e| {
-                OmniError::new(ErrorCode::Auth, "读取 SSH 私钥失败")
-                    .with_cause(format!("{}: {}", path.display(), e))
+                OmniError::new(ErrorCode::Auth, "读取 SSH 私钥失败").with_cause(format!(
+                    "{}: {}",
+                    path.display(),
+                    e
+                ))
             })?;
             Ok(vec![(path.to_string_lossy().to_string(), pem)])
         }
@@ -150,24 +155,6 @@ pub struct SftpEntry {
     pub is_dir: bool,
     #[specta(type = f64)]
     pub size: u64,
-}
-
-/// 远程进程信息（ps aux 解析结果）。
-#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
-#[serde(rename_all = "camelCase")]
-pub struct SshProcessInfo {
-    pub user: String,
-    pub pid: u32,
-    pub cpu: f64,
-    pub mem: f64,
-    #[specta(type = f64)]
-    pub vsz: u64,
-    #[specta(type = f64)]
-    pub rss: u64,
-    pub stat: String,
-    pub start: String,
-    pub time: String,
-    pub command: String,
 }
 
 /// 非交互命令执行结果（exec channel，独立于交互 shell）。
@@ -277,9 +264,9 @@ impl SshPtySession {
     /// 写 stdin。
     pub async fn write(&self, data: &[u8]) -> OmniResult<()> {
         let ch = self.channel.lock().await;
-        ch.data(data)
-            .await
-            .map_err(|e| OmniError::new(ErrorCode::Ssh, "写入 PTY stdin 失败").with_cause(e.to_string()))
+        ch.data(data).await.map_err(|e| {
+            OmniError::new(ErrorCode::Ssh, "写入 PTY stdin 失败").with_cause(e.to_string())
+        })
     }
 
     /// 调整 PTY 尺寸。
@@ -287,7 +274,9 @@ impl SshPtySession {
         let ch = self.channel.lock().await;
         ch.window_change(cols as u32, rows as u32, 0, 0)
             .await
-            .map_err(|e| OmniError::new(ErrorCode::Ssh, "调整 PTY 尺寸失败").with_cause(e.to_string()))
+            .map_err(|e| {
+                OmniError::new(ErrorCode::Ssh, "调整 PTY 尺寸失败").with_cause(e.to_string())
+            })
     }
 
     /// 主动关闭会话。
@@ -421,7 +410,11 @@ impl SshSession {
                     OmniError::new(ErrorCode::Auth, "SSH 密码认证失败").with_cause(e.to_string())
                 })?
                 .success(),
-            SshAuth::PrivateKey { pem, key_path, passphrase } => {
+            SshAuth::PrivateKey {
+                pem,
+                key_path,
+                passphrase,
+            } => {
                 authenticate_private_key(&mut session, &config.user, pem, key_path, passphrase)
                     .await?
             }
@@ -513,7 +506,11 @@ impl SshSession {
                     OmniError::new(ErrorCode::Auth, "SSH 密码认证失败").with_cause(e.to_string())
                 })?
                 .success(),
-            SshAuth::PrivateKey { pem, key_path, passphrase } => {
+            SshAuth::PrivateKey {
+                pem,
+                key_path,
+                passphrase,
+            } => {
                 authenticate_private_key(&mut session, &config.user, pem, key_path, passphrase)
                     .await?
             }
@@ -611,7 +608,10 @@ impl SshSession {
             run_stream_task(&mut channel, tx, stop_clone).await;
         });
 
-        Ok(SshStreamHandle { stop, _task: Some(task) })
+        Ok(SshStreamHandle {
+            stop,
+            _task: Some(task),
+        })
     }
 
     /// 在独立 exec channel 上以 PTY 模式运行命令，返回 [`SshPtySession`] 用于交互式终端。
@@ -630,7 +630,9 @@ impl SshSession {
         channel
             .request_pty(false, "xterm-256color", cols as u32, rows as u32, 0, 0, &[])
             .await
-            .map_err(|e| OmniError::new(ErrorCode::Ssh, "请求 PTY 失败").with_cause(e.to_string()))?;
+            .map_err(|e| {
+                OmniError::new(ErrorCode::Ssh, "请求 PTY 失败").with_cause(e.to_string())
+            })?;
         channel.exec(true, command).await.map_err(|e| {
             OmniError::new(ErrorCode::Ssh, "发起 PTY exec 命令失败").with_cause(e.to_string())
         })?;
@@ -754,52 +756,75 @@ impl SshSession {
     /// 修改远程文件权限（通过 exec chmod）。
     pub async fn sftp_chmod(&self, path: &str, mode: u32) -> OmniResult<()> {
         let cmd = format!("chmod {:o} {}", mode, path);
-        self.exec_capture(&cmd)
-            .await?
-            .ok_or_err("chmod 失败")?;
+        self.exec_capture(&cmd).await?.ok_or_err("chmod 失败")?;
         Ok(())
     }
 
-    /// 列出远程进程列表（解析 ps aux 输出）。
-    pub async fn process_list(&self) -> OmniResult<Vec<SshProcessInfo>> {
-        let output = self
-            .exec_command(
-                "COLUMNS=2000 ps aux --no-headers 2>/dev/null || COLUMNS=2000 ps aux | tail -n +2",
-            )
-            .await
-            .map_err(|e| {
+    /// 仅拉取进程列表（不采集端口，用于快速刷新）。
+    pub async fn process_list_fast(&self) -> OmniResult<Vec<SshProcessInfo>> {
+        use crate::process::{PS_AUX_CMD, PS_EO_CMD, parse_ps_output};
+
+        let ps_output = match self.exec_command(PS_EO_CMD).await {
+            Ok(out) if !out.trim().is_empty() => out,
+            _ => self.exec_command(PS_AUX_CMD).await.map_err(|e| {
                 OmniError::new(ErrorCode::Ssh, "获取进程列表失败").with_cause(e.to_string())
-            })?;
-        let mut processes = Vec::new();
-        for line in output.lines() {
-            let line = line.trim();
-            if line.is_empty() {
-                continue;
-            }
-            let fields: Vec<&str> = line.splitn(11, char::is_whitespace).collect();
-            if fields.len() < 11 {
-                continue;
-            }
-            let command = fields[10].to_string();
-            if command.is_empty() {
-                continue;
-            }
-            let Ok(pid) = fields[1].parse::<u32>() else {
-                continue;
+            })?,
+        };
+
+        Ok(parse_ps_output(&ps_output))
+    }
+
+    /// 采集监听端口映射（优先 ss/netstat，必要时短超时 /proc 回退）。
+    pub async fn collect_listen_ports(
+        &self,
+    ) -> OmniResult<std::collections::HashMap<u32, Vec<crate::process::SshProcessPort>>> {
+        use std::collections::HashMap;
+        use std::time::Duration;
+
+        use crate::process::{
+            COLLECT_PORTS_CMD, NETSTAT_CMD, SS_CMD, SS_CMD_NO_HEADER, merge_ports,
+            parse_netstat_ports, parse_proc_ports, parse_ss_ports,
+        };
+
+        let mut ports_by_pid: HashMap<u32, Vec<crate::process::SshProcessPort>> = HashMap::new();
+
+        for cmd in [SS_CMD, SS_CMD_NO_HEADER, NETSTAT_CMD] {
+            let stdout = match self.exec_capture(cmd).await {
+                Ok(out) => out.stdout,
+                Err(_) => continue,
             };
-            processes.push(SshProcessInfo {
-                user: fields[0].to_string(),
-                pid,
-                cpu: fields[2].parse().unwrap_or(0.0),
-                mem: fields[3].parse().unwrap_or(0.0),
-                vsz: fields[4].parse().unwrap_or(0),
-                rss: fields[5].parse().unwrap_or(0),
-                stat: fields[7].to_string(),
-                start: fields[8].to_string(),
-                time: fields[9].to_string(),
-                command,
-            });
+            if stdout.trim().is_empty() {
+                continue;
+            }
+            let parsed = if cmd == NETSTAT_CMD {
+                parse_netstat_ports(&stdout)
+            } else {
+                parse_ss_ports(&stdout)
+            };
+            merge_ports(&mut ports_by_pid, parsed);
         }
+
+        if ports_by_pid.is_empty() {
+            match tokio::time::timeout(Duration::from_secs(8), self.exec_capture(COLLECT_PORTS_CMD))
+                .await
+            {
+                Ok(Ok(out)) if !out.stdout.trim().is_empty() => {
+                    merge_ports(&mut ports_by_pid, parse_proc_ports(&out.stdout));
+                }
+                _ => {}
+            }
+        }
+
+        Ok(ports_by_pid)
+    }
+
+    /// 列出远程进程列表（优先 ps -eo，回退 ps aux，并关联监听端口）。
+    pub async fn process_list(&self) -> OmniResult<Vec<SshProcessInfo>> {
+        use crate::process::attach_ports;
+
+        let mut processes = self.process_list_fast().await?;
+        let ports_by_pid = self.collect_listen_ports().await.unwrap_or_default();
+        attach_ports(&mut processes, &ports_by_pid);
         Ok(processes)
     }
 }

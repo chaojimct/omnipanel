@@ -68,9 +68,9 @@ fn task_type_to_kind(tt: &TaskType) -> &'static str {
         TaskType::Terminal => "terminal",
         TaskType::Docker => "docker",
         TaskType::Server => "server",
-        TaskType::Ssh => "terminal", // SSH 任务暂走 shell 执行器
-        TaskType::Sql => "terminal", // SQL 任务暂走 shell 执行器
-        TaskType::Ai => "terminal",  // AI 任务暂走 shell 执行器
+        TaskType::Ssh => "terminal",      // SSH 任务暂走 shell 执行器
+        TaskType::Sql => "terminal",      // SQL 任务暂走 shell 执行器
+        TaskType::Ai => "terminal",       // AI 任务暂走 shell 执行器
         TaskType::Workflow => "terminal", // 工作流任务暂走 shell 执行器
     }
 }
@@ -95,10 +95,7 @@ pub async fn task_run(state: State<'_, AppState>, id: String) -> Result<(), Omni
             // ok
         }
         TaskStatus::Running => {
-            return Err(OmniError::new(
-                ErrorCode::InvalidInput,
-                "任务正在运行中",
-            ));
+            return Err(OmniError::new(ErrorCode::InvalidInput, "任务正在运行中"));
         }
         TaskStatus::Blocked => {
             return Err(OmniError::new(

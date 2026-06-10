@@ -5,10 +5,10 @@ use tauri::AppHandle;
 use tokio::sync::Mutex;
 
 use crate::protocol::grpc::GrpcSession;
+use crate::protocol::modbus::ModbusSession;
 use crate::protocol::mqtt::MqttSession;
 use crate::protocol::serial::SerialSession;
 use crate::protocol::sniffer::SnifferSession;
-use crate::protocol::modbus::ModbusSession;
 use crate::protocol::ws::WsSession;
 use omnipanel_core::terminal::Terminal;
 use omnipanel_exec::{ExecutionEngine, ShellExecutor};

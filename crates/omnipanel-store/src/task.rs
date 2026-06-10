@@ -4,7 +4,7 @@ use omnipanel_error::{ErrorCode, OmniError, OmniResult};
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
 
-use super::storage::{map_sqlite, Storage};
+use super::storage::{Storage, map_sqlite};
 
 /// Serialize enum to bare string without JSON quotes.
 fn enum_str<T: serde::Serialize>(v: &T) -> String {
@@ -121,20 +121,16 @@ impl Storage {
         let map_row = |row: &rusqlite::Row| -> rusqlite::Result<Task> {
             Ok(Task {
                 id: row.get(0)?,
-                task_type: parse_enum(&row.get::<_, String>(1)?)
-                    .unwrap_or(TaskType::Terminal),
+                task_type: parse_enum(&row.get::<_, String>(1)?).unwrap_or(TaskType::Terminal),
                 title: row.get(2)?,
                 description: row.get(3)?,
                 resource_id: row.get(4)?,
                 resource_name: row.get(5)?,
                 env_tag: row.get(6)?,
                 command: row.get(7)?,
-                risk: parse_enum(&row.get::<_, String>(8)?)
-                    .unwrap_or(TaskRisk::Low),
-                status: parse_enum(&row.get::<_, String>(9)?)
-                    .unwrap_or(TaskStatus::Draft),
-                source: parse_enum(&row.get::<_, String>(10)?)
-                    .unwrap_or(TaskSource::User),
+                risk: parse_enum(&row.get::<_, String>(8)?).unwrap_or(TaskRisk::Low),
+                status: parse_enum(&row.get::<_, String>(9)?).unwrap_or(TaskStatus::Draft),
+                source: parse_enum(&row.get::<_, String>(10)?).unwrap_or(TaskSource::User),
                 output: row.get(11)?,
                 created_at: row.get(12)?,
                 updated_at: row.get(13)?,

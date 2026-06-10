@@ -719,4 +719,3 @@ pub struct DockerStackSummary {
     pub orchestrator: String,
     pub namespace: String,
 }
-

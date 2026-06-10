@@ -13,8 +13,8 @@ pub mod onepanel;
 pub mod ssh;
 
 use async_trait::async_trait;
-use std::sync::Arc;
 use omnipanel_error::OmniResult;
+use std::sync::Arc;
 
 pub use compose::aggregate_compose;
 pub use local::{DockerExecOutput, DockerExecSession, LocalDockerAdapter};
@@ -176,9 +176,18 @@ pub trait DockerAdapter: Send + Sync {
 
     // ── Swarm ────────────────────────────────────────────────────────────────
     /// 初始化 Docker Swarm。
-    async fn swarm_init(&self, listen_addr: Option<&str>, advertise_addr: Option<&str>) -> OmniResult<String>;
+    async fn swarm_init(
+        &self,
+        listen_addr: Option<&str>,
+        advertise_addr: Option<&str>,
+    ) -> OmniResult<String>;
     /// 加入已有的 Swarm 集群。
-    async fn swarm_join(&self, remote_addrs: Vec<String>, token: &str, listen_addr: Option<&str>) -> OmniResult<()>;
+    async fn swarm_join(
+        &self,
+        remote_addrs: Vec<String>,
+        token: &str,
+        listen_addr: Option<&str>,
+    ) -> OmniResult<()>;
     /// 离开 Swarm。
     async fn swarm_leave(&self, force: bool) -> OmniResult<()>;
     /// 查看 Swarm 信息。
@@ -188,7 +197,12 @@ pub trait DockerAdapter: Send + Sync {
     /// 创建 Swarm 服务。
     async fn service_create(&self, req: &DockerCreateServiceRequest) -> OmniResult<String>;
     /// 更新 Swarm 服务。
-    async fn service_update(&self, id: &str, replicas: Option<u64>, image: Option<&str>) -> OmniResult<()>;
+    async fn service_update(
+        &self,
+        id: &str,
+        replicas: Option<u64>,
+        image: Option<&str>,
+    ) -> OmniResult<()>;
     /// 删除 Swarm 服务。
     async fn service_remove(&self, id: &str) -> OmniResult<()>;
     /// Swarm 服务日志。
@@ -198,11 +212,21 @@ pub trait DockerAdapter: Send + Sync {
     /// 查看 Swarm 节点。
     async fn node_inspect(&self, id: &str) -> OmniResult<serde_json::Value>;
     /// 更新 Swarm 节点。
-    async fn node_update(&self, id: &str, availability: Option<&str>, labels: Option<Vec<DockerKeyValue>>) -> OmniResult<()>;
+    async fn node_update(
+        &self,
+        id: &str,
+        availability: Option<&str>,
+        labels: Option<Vec<DockerKeyValue>>,
+    ) -> OmniResult<()>;
     /// 删除 Swarm 节点。
     async fn node_remove(&self, id: &str, force: bool) -> OmniResult<()>;
     /// 部署 Stack（从 compose 文件）。
-    async fn stack_deploy(&self, name: &str, compose_content: &str, env: Option<Vec<String>>) -> OmniResult<()>;
+    async fn stack_deploy(
+        &self,
+        name: &str,
+        compose_content: &str,
+        env: Option<Vec<String>>,
+    ) -> OmniResult<()>;
     /// 列出 Stack。
     async fn stack_list(&self) -> OmniResult<Vec<DockerStackSummary>>;
     /// 删除 Stack。

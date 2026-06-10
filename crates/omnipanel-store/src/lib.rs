@@ -13,11 +13,12 @@ mod vault;
 mod workflow;
 
 pub use connection::{Connection, ConnectionKind};
-pub use http::{HttpCollection, HttpHistoryEntry, SavedHttpRequest};
 pub use database::{
     DatabaseConnectionStore, DbConnectionConfig, load_database_connections,
     save_database_connections,
 };
+pub use http::{HttpCollection, HttpHistoryEntry, SavedHttpRequest};
+pub use knowledge::{KnowledgeEntry, KnowledgeSearchResult};
 pub use paths::{
     database_connections_path, database_schema_filters_path, meta_db_path, module_dir, omnipd_root,
 };
@@ -26,7 +27,6 @@ pub use schema_filters::{
     save_schema_filters,
 };
 pub use storage::{AuditEntry, Storage};
-pub use knowledge::{KnowledgeEntry, KnowledgeSearchResult};
 pub use task::{SaveTaskRequest, Task, TaskRisk, TaskSource, TaskStatus, TaskType};
 pub use vault::Vault;
 pub use workflow::{

@@ -107,6 +107,7 @@ export function useSshTerminalWorkspace(
     ...split,
     activePaneId,
     workspacePanes,
+    hasPaneSender: (paneId: string) => split.hasPaneSender(paneId),
   };
 }
 

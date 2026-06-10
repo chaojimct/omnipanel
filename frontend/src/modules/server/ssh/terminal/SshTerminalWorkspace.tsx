@@ -1,7 +1,9 @@
+import { useEffect } from "react";
 import type { WorkspaceResource } from "../../../../lib/resourceRegistry";
 import { SplitTerminalWorkspace } from "../../../../components/terminal/split-workspace";
 import { getBlueprint } from "../../../terminal/sessionBlueprints";
 import { useSshTerminalWorkspace } from "../hooks/useSshTerminalWorkspace";
+import { useSshDetailNavigationStore } from "../../../../stores/sshDetailNavigationStore";
 
 const isTauriRuntime =
   typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
@@ -22,7 +24,47 @@ export function SshTerminalWorkspace({ resource, active = true }: Props) {
     handleActivatePane,
     handleSplitPane,
     handleClosePane,
+    hasPaneSender,
   } = useSshTerminalWorkspace(resource, active);
+
+  const pendingTerminal = useSshDetailNavigationStore((s) => s.pendingTerminal);
+  const consumeTerminalCommand = useSshDetailNavigationStore((s) => s.consumeTerminalCommand);
+
+  useEffect(() => {
+    if (!active || !pendingTerminal || !activePaneId || !resource?.id) return;
+    if (pendingTerminal.resourceId !== resource.id) return;
+
+    let cancelled = false;
+    let attempts = 0;
+    const timer = window.setInterval(() => {
+      if (cancelled) return;
+      attempts += 1;
+      if (!hasPaneSender(activePaneId)) {
+        if (attempts >= 50) {
+          window.clearInterval(timer);
+        }
+        return;
+      }
+      const pending = consumeTerminalCommand(resource.id);
+      if (pending) {
+        handleCommand(`${pending.command}\n`, activePaneId);
+      }
+      window.clearInterval(timer);
+    }, 100);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [
+    active,
+    pendingTerminal,
+    activePaneId,
+    resource?.id,
+    hasPaneSender,
+    handleCommand,
+    consumeTerminalCommand,
+  ]);
 
   if (!resource) {
     return (

@@ -5,7 +5,8 @@ import { useI18n } from "../../../../i18n";
 import { ResourceTags } from "../../../../components/ui/ResourceTags";
 import { useConnectionStore } from "../../../../stores/connectionStore";
 import { parseSshConfig } from "../../panel/serverConnection";
-import { useHostOnlineStatus } from "../../../../stores/sshConnectionStore";
+import { HostStatusIndicator } from "./HostStatusIndicator";
+import { useSshMonitoring } from "../hooks/useSshMonitoring";
 import { HostTunnelsDetailTab } from "./detail/HostTunnelsDetailTab";
 import { MonitoringDetailTab } from "./detail/MonitoringDetailTab";
 import { OverviewDetailTab } from "./detail/OverviewDetailTab";
@@ -21,24 +22,27 @@ function HostDetailTags({ resourceId }: { resourceId: string | undefined }) {
   return <ResourceTags tags={tags} variant="detail" />;
 }
 
-function HostConnectionStatus({ resourceId }: { resourceId: string | undefined }) {
+function MonitoringTabSwitch({ resourceId }: { resourceId: string | null }) {
   const { t } = useI18n();
-  const status = useHostOnlineStatus(resourceId ?? null);
-  const label =
-    status === "online"
-      ? t("ssh.status.online")
-      : status === "connecting"
-        ? t("ssh.status.connecting")
-        : status === "error"
-          ? t("ssh.status.offline")
-          : t("ssh.status.unknown");
-  const dotClass =
-    status === "online" ? "host-status--online" : `host-status--${status}`;
+  const { enabled, enable, disable } = useSshMonitoring(resourceId);
+
   return (
-    <span className={`ssh-detail-status ssh-detail-status--${status}`}>
-      <span className={`host-status ${dotClass}`} />
-      {label}
-    </span>
+    <label className="ssh-monitor-switch" title={t("ssh.monitoring.hint")}>
+      <span className="ssh-monitor-switch-label">{t("ssh.monitoring.title")}</span>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={enabled}
+        className={`ssh-monitor-switch-btn${enabled ? " active" : ""}`}
+        onClick={() => {
+          if (enabled) void disable();
+          else void enable();
+        }}
+        disabled={!resourceId}
+      >
+        <span className="ssh-monitor-switch-thumb" />
+      </button>
+    </label>
   );
 }
 
@@ -59,6 +63,7 @@ export function HostDetailPanel(ctx: Props) {
     : undefined;
   const sshConfig = connection ? parseSshConfig(connection) : null;
   const username = sshConfig?.user ?? profile.username;
+  const resourceId = activeResource?.id ?? null;
 
   return (
     <div className="ssh-detail">
@@ -72,7 +77,7 @@ export function HostDetailPanel(ctx: Props) {
             {username}@{hostAddress}
           </div>
         </div>
-        <HostConnectionStatus resourceId={activeResource?.id} />
+        <HostStatusIndicator resourceId={resourceId} showLabel />
         {activeResource && (
           <span className="badge badge-muted">
             {sshGroupLabel(normalizeSshGroup(activeResource.group), t)}
@@ -81,16 +86,19 @@ export function HostDetailPanel(ctx: Props) {
       </div>
 
       <div className="ssh-detail-tabs">
-        {DETAIL_TABS.map((tab) => (
-          <button
-            key={tab}
-            type="button"
-            className={`ssh-detail-tab${detailTab === tab ? " active" : ""}`}
-            onClick={() => setDetailTab(tab)}
-          >
-            {t(`ssh.detailTabs.${tab}`)}
-          </button>
-        ))}
+        <div className="ssh-detail-tabs-list">
+          {DETAIL_TABS.map((tab) => (
+            <button
+              key={tab}
+              type="button"
+              className={`ssh-detail-tab${detailTab === tab ? " active" : ""}`}
+              onClick={() => setDetailTab(tab)}
+            >
+              {t(`ssh.detailTabs.${tab}`)}
+            </button>
+          ))}
+        </div>
+        <MonitoringTabSwitch resourceId={resourceId} />
       </div>
 
       <div

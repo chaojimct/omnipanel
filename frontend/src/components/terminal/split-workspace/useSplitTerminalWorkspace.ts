@@ -205,5 +205,6 @@ export function useSplitTerminalWorkspace({
     handleActivatePane,
     handleSplitPane,
     handleClosePane,
+    hasPaneSender: (paneId: string) => Boolean(paneSendersRef.current[paneId]),
   };
 }

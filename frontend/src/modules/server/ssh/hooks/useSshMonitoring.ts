@@ -1,6 +1,7 @@
 import { useCallback, useEffect } from "react";
 import { commands } from "../../../../ipc/bindings";
 import type { HostSystemStats } from "../../../../stores/sshStatsStore";
+import { safePercent } from "../../../../stores/sshStatsStore";
 import {
   acquireSshPoolSession,
   releaseSshPoolSession,
@@ -71,7 +72,7 @@ export function useSshMonitoring(resourceId: string | null) {
       const memSeries = appendPoint(
         monitoring.memSeries,
         stats,
-        (s) => ((s.memory.used ?? 0) / (s.memory.total ?? 1)) * 100,
+        (s) => safePercent(s.memory.used, s.memory.total),
       );
       let netSeries = monitoring.netSeries;
       if (prev && prev.timestamp != null && prev.timestamp !== stats.timestamp) {

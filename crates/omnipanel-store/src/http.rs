@@ -66,7 +66,10 @@ impl Storage {
         Ok(())
     }
 
-    pub fn http_list_requests(&self, collection_id: Option<&str>) -> OmniResult<Vec<SavedHttpRequest>> {
+    pub fn http_list_requests(
+        &self,
+        collection_id: Option<&str>,
+    ) -> OmniResult<Vec<SavedHttpRequest>> {
         let conn = self.conn();
         let mut stmt = if collection_id.is_some() {
             conn.prepare("SELECT id, name, method, url, headers, body, auth_type, auth_value, collection_id, created_at, updated_at FROM http_requests WHERE collection_id = ?1 ORDER BY name")
@@ -77,12 +80,15 @@ impl Storage {
             stmt.query_map(params![cid], map_request)
         } else {
             stmt.query_map([], map_request)
-        }.map_err(|e| OmniError::new(ErrorCode::Database, e.to_string()))?;
-        rows.collect::<Result<Vec<_>, _>>().map_err(|e| OmniError::new(ErrorCode::Database, e.to_string()))
+        }
+        .map_err(|e| OmniError::new(ErrorCode::Database, e.to_string()))?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|e| OmniError::new(ErrorCode::Database, e.to_string()))
     }
 
     pub fn http_delete_request(&self, id: &str) -> OmniResult<()> {
-        self.conn().execute("DELETE FROM http_requests WHERE id = ?1", params![id])
+        self.conn()
+            .execute("DELETE FROM http_requests WHERE id = ?1", params![id])
             .map_err(|e| OmniError::new(ErrorCode::Database, e.to_string()))?;
         Ok(())
     }
@@ -100,18 +106,27 @@ impl Storage {
         let mut stmt = conn.prepare(
             "SELECT id, method, url, status_code, response_time_ms, request_size, response_size, created_at FROM http_history ORDER BY created_at DESC LIMIT ?1"
         ).map_err(|e| OmniError::new(ErrorCode::Database, e.to_string()))?;
-        let rows = stmt.query_map(params![limit], |row| {
-            Ok(HttpHistoryEntry {
-                id: row.get(0)?, method: row.get(1)?, url: row.get(2)?,
-                status_code: row.get(3)?, response_time_ms: row.get(4)?,
-                request_size: row.get(5)?, response_size: row.get(6)?, created_at: row.get(7)?,
+        let rows = stmt
+            .query_map(params![limit], |row| {
+                Ok(HttpHistoryEntry {
+                    id: row.get(0)?,
+                    method: row.get(1)?,
+                    url: row.get(2)?,
+                    status_code: row.get(3)?,
+                    response_time_ms: row.get(4)?,
+                    request_size: row.get(5)?,
+                    response_size: row.get(6)?,
+                    created_at: row.get(7)?,
+                })
             })
-        }).map_err(|e| OmniError::new(ErrorCode::Database, e.to_string()))?;
-        rows.collect::<Result<Vec<_>, _>>().map_err(|e| OmniError::new(ErrorCode::Database, e.to_string()))
+            .map_err(|e| OmniError::new(ErrorCode::Database, e.to_string()))?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|e| OmniError::new(ErrorCode::Database, e.to_string()))
     }
 
     pub fn http_clear_history(&self) -> OmniResult<()> {
-        self.conn().execute("DELETE FROM http_history", [])
+        self.conn()
+            .execute("DELETE FROM http_history", [])
             .map_err(|e| OmniError::new(ErrorCode::Database, e.to_string()))?;
         Ok(())
     }
@@ -129,17 +144,24 @@ impl Storage {
         let mut stmt = conn.prepare(
             "SELECT id, name, description, created_at, updated_at FROM http_collections ORDER BY name"
         ).map_err(|e| OmniError::new(ErrorCode::Database, e.to_string()))?;
-        let rows = stmt.query_map([], |row| {
-            Ok(HttpCollection {
-                id: row.get(0)?, name: row.get(1)?, description: row.get(2)?,
-                created_at: row.get(3)?, updated_at: row.get(4)?,
+        let rows = stmt
+            .query_map([], |row| {
+                Ok(HttpCollection {
+                    id: row.get(0)?,
+                    name: row.get(1)?,
+                    description: row.get(2)?,
+                    created_at: row.get(3)?,
+                    updated_at: row.get(4)?,
+                })
             })
-        }).map_err(|e| OmniError::new(ErrorCode::Database, e.to_string()))?;
-        rows.collect::<Result<Vec<_>, _>>().map_err(|e| OmniError::new(ErrorCode::Database, e.to_string()))
+            .map_err(|e| OmniError::new(ErrorCode::Database, e.to_string()))?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|e| OmniError::new(ErrorCode::Database, e.to_string()))
     }
 
     pub fn http_delete_collection(&self, id: &str) -> OmniResult<()> {
-        self.conn().execute("DELETE FROM http_collections WHERE id = ?1", params![id])
+        self.conn()
+            .execute("DELETE FROM http_collections WHERE id = ?1", params![id])
             .map_err(|e| OmniError::new(ErrorCode::Database, e.to_string()))?;
         Ok(())
     }
@@ -147,8 +169,16 @@ impl Storage {
 
 fn map_request(row: &rusqlite::Row) -> rusqlite::Result<SavedHttpRequest> {
     Ok(SavedHttpRequest {
-        id: row.get(0)?, name: row.get(1)?, method: row.get(2)?, url: row.get(3)?,
-        headers: row.get(4)?, body: row.get(5)?, auth_type: row.get(6)?, auth_value: row.get(7)?,
-        collection_id: row.get(8)?, created_at: row.get(9)?, updated_at: row.get(10)?,
+        id: row.get(0)?,
+        name: row.get(1)?,
+        method: row.get(2)?,
+        url: row.get(3)?,
+        headers: row.get(4)?,
+        body: row.get(5)?,
+        auth_type: row.get(6)?,
+        auth_value: row.get(7)?,
+        collection_id: row.get(8)?,
+        created_at: row.get(9)?,
+        updated_at: row.get(10)?,
     })
 }

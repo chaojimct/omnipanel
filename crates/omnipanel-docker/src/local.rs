@@ -63,7 +63,9 @@ impl DockerExecSession {
     /// 调整容器 TTY 尺寸。
     pub async fn resize(&self, cols: u16, rows: u16) -> OmniResult<()> {
         match self {
-            Self::Local { docker, exec_id, .. } => docker
+            Self::Local {
+                docker, exec_id, ..
+            } => docker
                 .resize_exec(
                     exec_id,
                     ResizeExecOptions {
@@ -109,14 +111,11 @@ fn tar_directory_chunks(dir: &std::path::Path) -> std::io::Result<Vec<Vec<u8>>> 
             tar.append_dir(rel, path)?;
         }
     }
-    let bytes = tar.into_inner().map_err(|e| {
-        std::io::Error::new(std::io::ErrorKind::Other, e.to_string())
-    })?;
+    let bytes = tar
+        .into_inner()
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
     const CHUNK: usize = 64 * 1024;
-    let chunks = bytes
-        .chunks(CHUNK)
-        .map(|c| c.to_vec())
-        .collect::<Vec<_>>();
+    let chunks = bytes.chunks(CHUNK).map(|c| c.to_vec()).collect::<Vec<_>>();
     Ok(chunks)
 }
 
@@ -307,7 +306,10 @@ impl LocalDockerAdapter {
     where
         F: FnMut(DockerContainerStats),
     {
-        let options = StatsOptionsBuilder::default().stream(true).one_shot(false).build();
+        let options = StatsOptionsBuilder::default()
+            .stream(true)
+            .one_shot(false)
+            .build();
         let stream = self.docker.stats(container_id, Some(options));
         tokio::pin!(stream);
         while let Some(item) = stream.next().await {
@@ -460,9 +462,7 @@ fn cpu_percent(s: &bollard::models::ContainerStatsResponse) -> f64 {
     }
 }
 
-fn memory_stats(
-    s: &bollard::models::ContainerStatsResponse,
-) -> (i64, Option<i64>, f64) {
+fn memory_stats(s: &bollard::models::ContainerStatsResponse) -> (i64, Option<i64>, f64) {
     let m = match s.memory_stats.as_ref() {
         Some(m) => m,
         None => return (0, None, 0.0),
@@ -787,11 +787,7 @@ impl DockerAdapter for LocalDockerAdapter {
     }
 
     async fn inspect_image(&self, id: &str) -> OmniResult<DockerImageDetail> {
-        let raw = self
-            .docker
-            .inspect_image(id)
-            .await
-            .map_err(map_bollard)?;
+        let raw = self.docker.inspect_image(id).await.map_err(map_bollard)?;
         let cfg = raw.config.clone().unwrap_or_default();
         let env = cfg.env.clone().unwrap_or_default();
         let labels_map = cfg.labels.clone().unwrap_or_default();
@@ -827,11 +823,7 @@ impl DockerAdapter for LocalDockerAdapter {
     }
 
     async fn image_history(&self, id: &str) -> OmniResult<Vec<DockerImageHistoryLayer>> {
-        let raw = self
-            .docker
-            .image_history(id)
-            .await
-            .map_err(map_bollard)?;
+        let raw = self.docker.image_history(id).await.map_err(map_bollard)?;
         Ok(raw
             .into_iter()
             .map(|h| DockerImageHistoryLayer {
@@ -980,12 +972,8 @@ impl DockerAdapter for LocalDockerAdapter {
 
         // 把 context_dir 打包成 tar 流喂给 bollard /build。
         // 出于内存考虑，用 64KiB chunked async stream 输出。
-        let tar_chunks = tar_directory_chunks(&context_dir).map_err(|e| {
-            OmniError::new(
-                ErrorCode::Internal,
-                format!("打包构建目录失败: {}", e),
-            )
-        })?;
+        let tar_chunks = tar_directory_chunks(&context_dir)
+            .map_err(|e| OmniError::new(ErrorCode::Internal, format!("打包构建目录失败: {}", e)))?;
         let chunk_stream = futures::stream::iter(tar_chunks.into_iter().map(Bytes::from));
         let body = bollard::body_stream(chunk_stream);
 
@@ -1072,10 +1060,10 @@ impl DockerAdapter for LocalDockerAdapter {
             cmd.current_dir(wd);
         }
         cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
-        let output = cmd
-            .output()
-            .await
-            .map_err(|e| OmniError::new(ErrorCode::Internal, "启动 docker compose 失败").with_cause(e.to_string()))?;
+        let output = cmd.output().await.map_err(|e| {
+            OmniError::new(ErrorCode::Internal, "启动 docker compose 失败")
+                .with_cause(e.to_string())
+        })?;
         let exit_code = output.status.code().unwrap_or(-1);
         Ok(DockerComposeResult {
             action,
@@ -1092,7 +1080,10 @@ impl DockerAdapter for LocalDockerAdapter {
         stop: Arc<AtomicBool>,
         mut sink: Box<dyn FnMut(DockerContainerStats) + Send>,
     ) -> OmniResult<()> {
-        let options = StatsOptionsBuilder::default().stream(true).one_shot(false).build();
+        let options = StatsOptionsBuilder::default()
+            .stream(true)
+            .one_shot(false)
+            .build();
         let stream = self.docker.stats(container_id, Some(options));
         tokio::pin!(stream);
         while let Some(item) = stream.next().await {
@@ -1275,7 +1266,11 @@ impl DockerAdapter for LocalDockerAdapter {
         let cfg = VolumeCreateRequest {
             name: Some(req.name.clone()),
             driver: req.driver.clone(),
-            labels: if labels.is_empty() { None } else { Some(labels) },
+            labels: if labels.is_empty() {
+                None
+            } else {
+                Some(labels)
+            },
             ..Default::default()
         };
         let resp = self.docker.create_volume(cfg).await.map_err(map_bollard)?;
@@ -1353,7 +1348,9 @@ impl DockerAdapter for LocalDockerAdapter {
         // 仅当 `path` 是目录时有效（当 path 指向文件时返回空）。
         use bollard::query_parameters::DownloadFromContainerOptionsBuilder;
         use futures::StreamExt;
-        let options = DownloadFromContainerOptionsBuilder::default().path(path).build();
+        let options = DownloadFromContainerOptionsBuilder::default()
+            .path(path)
+            .build();
         let stream = self
             .docker
             .download_from_container(container_id, Some(options));
@@ -1412,7 +1409,9 @@ impl DockerAdapter for LocalDockerAdapter {
     ) -> OmniResult<Vec<u8>> {
         use bollard::query_parameters::DownloadFromContainerOptionsBuilder;
         use futures::StreamExt;
-        let options = DownloadFromContainerOptionsBuilder::default().path(path).build();
+        let options = DownloadFromContainerOptionsBuilder::default()
+            .path(path)
+            .build();
         let stream = self
             .docker
             .download_from_container(container_id, Some(options));
@@ -1429,7 +1428,8 @@ impl DockerAdapter for LocalDockerAdapter {
         let mut file = archive
             .entries()
             .map_err(|e| {
-                OmniError::new(ErrorCode::Internal, "解析容器文件 tar 失败").with_cause(e.to_string())
+                OmniError::new(ErrorCode::Internal, "解析容器文件 tar 失败")
+                    .with_cause(e.to_string())
             })?
             .next()
             .ok_or_else(|| OmniError::new(ErrorCode::NotFound, "容器内文件不存在"))?
@@ -1437,7 +1437,11 @@ impl DockerAdapter for LocalDockerAdapter {
                 OmniError::new(ErrorCode::Internal, "读取 tar 条目失败").with_cause(e.to_string())
             })?;
         let mut buf = Vec::new();
-        let limit = if max_bytes > 0 { max_bytes as usize } else { usize::MAX };
+        let limit = if max_bytes > 0 {
+            max_bytes as usize
+        } else {
+            usize::MAX
+        };
         let mut total = 0usize;
         let mut chunk = [0u8; 8192];
         loop {
@@ -1488,7 +1492,10 @@ impl DockerAdapter for LocalDockerAdapter {
                 OmniError::new(ErrorCode::Internal, "完成 tar 写入失败").with_cause(e.to_string())
             })?;
         }
-        let dir = std::path::Path::new(path).parent().map(|p| p.to_string_lossy().to_string()).unwrap_or_else(|| "/".to_string());
+        let dir = std::path::Path::new(path)
+            .parent()
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_else(|| "/".to_string());
         let options = UploadToContainerOptionsBuilder::default()
             .path(dir.as_str())
             .no_overwrite_dir_non_dir("true")
@@ -1537,7 +1544,11 @@ impl DockerAdapter for LocalDockerAdapter {
     }
 
     // ── Swarm ──
-    async fn swarm_init(&self, listen_addr: Option<&str>, advertise_addr: Option<&str>) -> OmniResult<String> {
+    async fn swarm_init(
+        &self,
+        listen_addr: Option<&str>,
+        advertise_addr: Option<&str>,
+    ) -> OmniResult<String> {
         let req = bollard::models::SwarmInitRequest {
             listen_addr: Some(listen_addr.unwrap_or("0.0.0.0:2377").to_string()),
             advertise_addr: advertise_addr.map(|s| s.to_string()),
@@ -1546,7 +1557,12 @@ impl DockerAdapter for LocalDockerAdapter {
         let id = self.docker.init_swarm(req).await.map_err(map_bollard)?;
         Ok(id)
     }
-    async fn swarm_join(&self, remote_addrs: Vec<String>, token: &str, listen_addr: Option<&str>) -> OmniResult<()> {
+    async fn swarm_join(
+        &self,
+        remote_addrs: Vec<String>,
+        token: &str,
+        listen_addr: Option<&str>,
+    ) -> OmniResult<()> {
         let req = bollard::models::SwarmJoinRequest {
             listen_addr: Some(listen_addr.unwrap_or("0.0.0.0:2377").to_string()),
             remote_addrs: Some(remote_addrs),
@@ -1559,65 +1575,94 @@ impl DockerAdapter for LocalDockerAdapter {
     async fn swarm_leave(&self, force: bool) -> OmniResult<()> {
         use bollard::query_parameters::LeaveSwarmOptionsBuilder;
         let opts = LeaveSwarmOptionsBuilder::default().force(force).build();
-        self.docker.leave_swarm(Some(opts)).await.map_err(map_bollard)?;
+        self.docker
+            .leave_swarm(Some(opts))
+            .await
+            .map_err(map_bollard)?;
         Ok(())
     }
     async fn swarm_inspect(&self) -> OmniResult<serde_json::Value> {
         let swarm = self.docker.inspect_swarm().await.map_err(map_bollard)?;
-        serde_json::to_value(&swarm).map_err(|e| OmniError::new(ErrorCode::Internal, "序列化 Swarm 信息失败").with_cause(e.to_string()))
+        serde_json::to_value(&swarm).map_err(|e| {
+            OmniError::new(ErrorCode::Internal, "序列化 Swarm 信息失败").with_cause(e.to_string())
+        })
     }
     async fn service_list(&self) -> OmniResult<Vec<DockerServiceSummary>> {
         let services = self.docker.list_services(None).await.map_err(map_bollard)?;
-        Ok(services.into_iter().map(|s| {
-            let spec = s.spec.unwrap_or_default();
-            let replicas = spec.mode.as_ref()
-                .and_then(|m| m.replicated.as_ref())
-                .and_then(|r| r.replicas)
-                .unwrap_or(1) as u64;
-            let mode_str = if spec.mode.as_ref().and_then(|m| m.global.as_ref()).is_some() {
-                "global".to_string()
-            } else {
-                format!("replicated/{}", replicas)
-            };
-            DockerServiceSummary {
-                id: s.id.unwrap_or_default(),
-                name: spec.name.unwrap_or_default(),
-                image: spec.task_template.as_ref()
-                    .and_then(|t| t.container_spec.as_ref())
-                    .and_then(|c| c.image.clone())
-                    .unwrap_or_default(),
-                mode: mode_str,
-                replicas,
-                running_replicas: replicas,
-                ports: Vec::new(),
-                created_at: String::new(),
-                updated_at: String::new(),
-            }
-        }).collect())
+        Ok(services
+            .into_iter()
+            .map(|s| {
+                let spec = s.spec.unwrap_or_default();
+                let replicas = spec
+                    .mode
+                    .as_ref()
+                    .and_then(|m| m.replicated.as_ref())
+                    .and_then(|r| r.replicas)
+                    .unwrap_or(1) as u64;
+                let mode_str = if spec.mode.as_ref().and_then(|m| m.global.as_ref()).is_some() {
+                    "global".to_string()
+                } else {
+                    format!("replicated/{}", replicas)
+                };
+                DockerServiceSummary {
+                    id: s.id.unwrap_or_default(),
+                    name: spec.name.unwrap_or_default(),
+                    image: spec
+                        .task_template
+                        .as_ref()
+                        .and_then(|t| t.container_spec.as_ref())
+                        .and_then(|c| c.image.clone())
+                        .unwrap_or_default(),
+                    mode: mode_str,
+                    replicas,
+                    running_replicas: replicas,
+                    ports: Vec::new(),
+                    created_at: String::new(),
+                    updated_at: String::new(),
+                }
+            })
+            .collect())
     }
     async fn service_create(&self, req: &DockerCreateServiceRequest) -> OmniResult<String> {
-        let ports: Vec<bollard::models::EndpointPortConfig> = req.ports.iter().filter_map(|p| {
-            let parts: Vec<&str> = p.split(':').collect();
-            if parts.len() >= 2 {
-                let host_port: i64 = parts[0].parse().ok()?;
-                let cp: Vec<&str> = parts[1].split('/').collect();
-                let container_port: i64 = cp[0].parse().ok()?;
-                let protocol = if cp.len() > 1 { cp[1].to_string() } else { "tcp".to_string() };
-                let proto = match protocol.as_str() {
-                    "udp" => Some(bollard::models::EndpointPortConfigProtocolEnum::UDP),
-                    _ => Some(bollard::models::EndpointPortConfigProtocolEnum::TCP),
-                };
-                Some(bollard::models::EndpointPortConfig {
-                    target_port: Some(container_port),
-                    published_port: Some(host_port),
-                    protocol: proto,
-                    publish_mode: Some(bollard::models::EndpointPortConfigPublishModeEnum::INGRESS),
-                    ..Default::default()
-                })
-            } else { None }
-        }).collect();
-        let endpoint_spec = if ports.is_empty() { None } else {
-            Some(bollard::models::EndpointSpec { ports: Some(ports), ..Default::default() })
+        let ports: Vec<bollard::models::EndpointPortConfig> = req
+            .ports
+            .iter()
+            .filter_map(|p| {
+                let parts: Vec<&str> = p.split(':').collect();
+                if parts.len() >= 2 {
+                    let host_port: i64 = parts[0].parse().ok()?;
+                    let cp: Vec<&str> = parts[1].split('/').collect();
+                    let container_port: i64 = cp[0].parse().ok()?;
+                    let protocol = if cp.len() > 1 {
+                        cp[1].to_string()
+                    } else {
+                        "tcp".to_string()
+                    };
+                    let proto = match protocol.as_str() {
+                        "udp" => Some(bollard::models::EndpointPortConfigProtocolEnum::UDP),
+                        _ => Some(bollard::models::EndpointPortConfigProtocolEnum::TCP),
+                    };
+                    Some(bollard::models::EndpointPortConfig {
+                        target_port: Some(container_port),
+                        published_port: Some(host_port),
+                        protocol: proto,
+                        publish_mode: Some(
+                            bollard::models::EndpointPortConfigPublishModeEnum::INGRESS,
+                        ),
+                        ..Default::default()
+                    })
+                } else {
+                    None
+                }
+            })
+            .collect();
+        let endpoint_spec = if ports.is_empty() {
+            None
+        } else {
+            Some(bollard::models::EndpointSpec {
+                ports: Some(ports),
+                ..Default::default()
+            })
         };
         let spec = bollard::models::ServiceSpec {
             name: Some(req.name.clone()),
@@ -1631,22 +1676,39 @@ impl DockerAdapter for LocalDockerAdapter {
                 ..Default::default()
             }),
             mode: Some(bollard::models::ServiceSpecMode {
-                replicated: Some(bollard::models::ServiceSpecModeReplicated { replicas: Some(req.replicas as i64) }),
+                replicated: Some(bollard::models::ServiceSpecModeReplicated {
+                    replicas: Some(req.replicas as i64),
+                }),
                 ..Default::default()
             }),
             endpoint_spec,
             ..Default::default()
         };
-        let resp = self.docker.create_service(spec, None).await.map_err(map_bollard)?;
+        let resp = self
+            .docker
+            .create_service(spec, None)
+            .await
+            .map_err(map_bollard)?;
         Ok(resp.id.unwrap_or_else(|| "created".to_string()))
     }
-    async fn service_update(&self, id: &str, replicas: Option<u64>, image: Option<&str>) -> OmniResult<()> {
-        let current = self.docker.inspect_service(id, None).await.map_err(map_bollard)?;
+    async fn service_update(
+        &self,
+        id: &str,
+        replicas: Option<u64>,
+        image: Option<&str>,
+    ) -> OmniResult<()> {
+        let current = self
+            .docker
+            .inspect_service(id, None)
+            .await
+            .map_err(map_bollard)?;
         let version = current.version.and_then(|v| v.index).unwrap_or(0);
         let mut spec = current.spec.unwrap_or_default();
         if let Some(r) = replicas {
             spec.mode = Some(bollard::models::ServiceSpecMode {
-                replicated: Some(bollard::models::ServiceSpecModeReplicated { replicas: Some(r as i64) }),
+                replicated: Some(bollard::models::ServiceSpecModeReplicated {
+                    replicas: Some(r as i64),
+                }),
                 ..Default::default()
             });
         }
@@ -1658,8 +1720,13 @@ impl DockerAdapter for LocalDockerAdapter {
             }
         }
         use bollard::query_parameters::UpdateServiceOptionsBuilder;
-        let opts = UpdateServiceOptionsBuilder::default().version(version as i32).build();
-        self.docker.update_service(id, spec, opts, None).await.map_err(map_bollard)?;
+        let opts = UpdateServiceOptionsBuilder::default()
+            .version(version as i32)
+            .build();
+        self.docker
+            .update_service(id, spec, opts, None)
+            .await
+            .map_err(map_bollard)?;
         Ok(())
     }
     async fn service_remove(&self, id: &str) -> OmniResult<()> {
@@ -1670,15 +1737,18 @@ impl DockerAdapter for LocalDockerAdapter {
         use bollard::query_parameters::LogsOptionsBuilder;
         use futures::StreamExt;
         let opts = LogsOptionsBuilder::default()
-            .stdout(true).stderr(true)
+            .stdout(true)
+            .stderr(true)
             .tail(tail.unwrap_or("200"))
             .build();
         let mut stream = self.docker.service_logs(id, Some(opts));
         let mut output = String::new();
         while let Some(Ok(log)) = stream.next().await {
             let bytes = match log {
-                bollard::container::LogOutput::StdOut { message } | bollard::container::LogOutput::StdErr { message }
-                | bollard::container::LogOutput::StdIn { message } | bollard::container::LogOutput::Console { message } => message,
+                bollard::container::LogOutput::StdOut { message }
+                | bollard::container::LogOutput::StdErr { message }
+                | bollard::container::LogOutput::StdIn { message }
+                | bollard::container::LogOutput::Console { message } => message,
             };
             output.push_str(&String::from_utf8_lossy(&bytes));
         }
@@ -1686,27 +1756,55 @@ impl DockerAdapter for LocalDockerAdapter {
     }
     async fn node_list(&self) -> OmniResult<Vec<DockerNodeSummary>> {
         let nodes = self.docker.list_nodes(None).await.map_err(map_bollard)?;
-        Ok(nodes.into_iter().map(|n| {
-            let desc = n.description.unwrap_or_default();
-            let status = n.status.unwrap_or_default();
-            let spec = n.spec.unwrap_or_default();
-            DockerNodeSummary {
-                id: n.id.unwrap_or_default(),
-                hostname: desc.hostname.unwrap_or_default(),
-                status: status.state.map(|s| format!("{:?}", s)).unwrap_or_else(|| "unknown".into()),
-                availability: spec.availability.map(|a| format!("{:?}", a)).unwrap_or_else(|| "unknown".into()),
-                role: spec.role.map(|r| format!("{:?}", r)).unwrap_or_else(|| "worker".into()),
-                engine_version: desc.engine.unwrap_or_default().engine_version.unwrap_or_default(),
-                addr: status.addr.unwrap_or_default(),
-                labels: spec.labels.unwrap_or_default().into_iter().map(|(k, v)| DockerKeyValue { key: k, value: v }).collect(),
-            }
-        }).collect())
+        Ok(nodes
+            .into_iter()
+            .map(|n| {
+                let desc = n.description.unwrap_or_default();
+                let status = n.status.unwrap_or_default();
+                let spec = n.spec.unwrap_or_default();
+                DockerNodeSummary {
+                    id: n.id.unwrap_or_default(),
+                    hostname: desc.hostname.unwrap_or_default(),
+                    status: status
+                        .state
+                        .map(|s| format!("{:?}", s))
+                        .unwrap_or_else(|| "unknown".into()),
+                    availability: spec
+                        .availability
+                        .map(|a| format!("{:?}", a))
+                        .unwrap_or_else(|| "unknown".into()),
+                    role: spec
+                        .role
+                        .map(|r| format!("{:?}", r))
+                        .unwrap_or_else(|| "worker".into()),
+                    engine_version: desc
+                        .engine
+                        .unwrap_or_default()
+                        .engine_version
+                        .unwrap_or_default(),
+                    addr: status.addr.unwrap_or_default(),
+                    labels: spec
+                        .labels
+                        .unwrap_or_default()
+                        .into_iter()
+                        .map(|(k, v)| DockerKeyValue { key: k, value: v })
+                        .collect(),
+                }
+            })
+            .collect())
     }
     async fn node_inspect(&self, id: &str) -> OmniResult<serde_json::Value> {
         let node = self.docker.inspect_node(id).await.map_err(map_bollard)?;
-        serde_json::to_value(&node).map_err(|e| OmniError::new(ErrorCode::Internal, "序列化节点信息失败").with_cause(e.to_string()))
+        serde_json::to_value(&node).map_err(|e| {
+            OmniError::new(ErrorCode::Internal, "序列化节点信息失败").with_cause(e.to_string())
+        })
     }
-    async fn node_update(&self, id: &str, availability: Option<&str>, labels: Option<Vec<DockerKeyValue>>) -> OmniResult<()> {
+    async fn node_update(
+        &self,
+        id: &str,
+        availability: Option<&str>,
+        labels: Option<Vec<DockerKeyValue>>,
+    ) -> OmniResult<()> {
         let current = self.docker.inspect_node(id).await.map_err(map_bollard)?;
         let version = current.version.and_then(|v| v.index).unwrap_or(0);
         let mut spec = current.spec.unwrap_or_default();
@@ -1720,31 +1818,53 @@ impl DockerAdapter for LocalDockerAdapter {
         }
         if let Some(lbls) = labels {
             let mut m = spec.labels.unwrap_or_default();
-            for l in lbls { m.insert(l.key, l.value); }
+            for l in lbls {
+                m.insert(l.key, l.value);
+            }
             spec.labels = Some(m);
         }
         use bollard::query_parameters::UpdateNodeOptionsBuilder;
-        let opts = UpdateNodeOptionsBuilder::default().version(version as i64).build();
-        self.docker.update_node(id, spec, opts).await.map_err(map_bollard)?;
+        let opts = UpdateNodeOptionsBuilder::default()
+            .version(version as i64)
+            .build();
+        self.docker
+            .update_node(id, spec, opts)
+            .await
+            .map_err(map_bollard)?;
         Ok(())
     }
     async fn node_remove(&self, id: &str, force: bool) -> OmniResult<()> {
         use bollard::query_parameters::DeleteNodeOptionsBuilder;
         let opts = DeleteNodeOptionsBuilder::default().force(force).build();
-        self.docker.delete_node(id, Some(opts)).await.map_err(map_bollard)?;
+        self.docker
+            .delete_node(id, Some(opts))
+            .await
+            .map_err(map_bollard)?;
         Ok(())
     }
     async fn stack_deploy(&self, _n: &str, _c: &str, _e: Option<Vec<String>>) -> OmniResult<()> {
-        Err(OmniError::new(ErrorCode::InvalidInput, "Stack deploy 需要 docker CLI，请通过 SSH 连接使用"))
+        Err(OmniError::new(
+            ErrorCode::InvalidInput,
+            "Stack deploy 需要 docker CLI，请通过 SSH 连接使用",
+        ))
     }
     async fn stack_list(&self) -> OmniResult<Vec<DockerStackSummary>> {
-        Err(OmniError::new(ErrorCode::InvalidInput, "Stack 操作需要 docker CLI，请通过 SSH 连接使用"))
+        Err(OmniError::new(
+            ErrorCode::InvalidInput,
+            "Stack 操作需要 docker CLI，请通过 SSH 连接使用",
+        ))
     }
     async fn stack_remove(&self, _n: &str) -> OmniResult<()> {
-        Err(OmniError::new(ErrorCode::InvalidInput, "Stack 操作需要 docker CLI，请通过 SSH 连接使用"))
+        Err(OmniError::new(
+            ErrorCode::InvalidInput,
+            "Stack 操作需要 docker CLI，请通过 SSH 连接使用",
+        ))
     }
     async fn stack_services(&self, _n: &str) -> OmniResult<Vec<DockerServiceSummary>> {
-        Err(OmniError::new(ErrorCode::InvalidInput, "Stack 操作需要 docker CLI，请通过 SSH 连接使用"))
+        Err(OmniError::new(
+            ErrorCode::InvalidInput,
+            "Stack 操作需要 docker CLI，请通过 SSH 连接使用",
+        ))
     }
 }
 

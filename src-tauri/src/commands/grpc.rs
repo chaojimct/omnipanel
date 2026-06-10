@@ -4,9 +4,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use tauri::State;
 
-use crate::protocol::grpc::{
-    GrpcCallRequest, GrpcCallResponse, GrpcConnectionConfig, GrpcSession,
-};
+use crate::protocol::grpc::{GrpcCallRequest, GrpcCallResponse, GrpcConnectionConfig, GrpcSession};
 use crate::state::AppState;
 
 static GRPC_COUNTER: AtomicU64 = AtomicU64::new(1);
@@ -39,19 +37,14 @@ pub async fn grpc_call(
 
 #[tauri::command]
 #[specta::specta]
-pub async fn grpc_close(
-    state: State<'_, AppState>,
-    connection_id: String,
-) -> Result<(), String> {
+pub async fn grpc_close(state: State<'_, AppState>, connection_id: String) -> Result<(), String> {
     state.grpc_sessions.lock().await.remove(&connection_id);
     Ok(())
 }
 
 #[tauri::command]
 #[specta::specta]
-pub async fn grpc_list_connections(
-    state: State<'_, AppState>,
-) -> Result<Vec<String>, String> {
+pub async fn grpc_list_connections(state: State<'_, AppState>) -> Result<Vec<String>, String> {
     let sessions = state.grpc_sessions.lock().await;
     Ok(sessions.keys().cloned().collect())
 }

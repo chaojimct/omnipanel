@@ -1,5 +1,5 @@
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use omnipanel_error::{ErrorCode, OmniError};
@@ -44,10 +44,7 @@ pub async fn workflow_save(
 /// 删除工作流（级联删除步骤和执行记录）。
 #[tauri::command]
 #[specta::specta]
-pub async fn workflow_delete(
-    state: State<'_, AppState>,
-    id: String,
-) -> Result<(), OmniError> {
+pub async fn workflow_delete(state: State<'_, AppState>, id: String) -> Result<(), OmniError> {
     let storage = state.storage.lock().await;
     storage.workflow_delete(&id)
 }
@@ -268,9 +265,13 @@ async fn execute_workflow_steps(
         );
 
         // Execute step based on type
-        let step_result =
-            execute_single_step(&step.step_type, &step.command, &previous_output, cancel_flag)
-                .await;
+        let step_result = execute_single_step(
+            &step.step_type,
+            &step.command,
+            &previous_output,
+            cancel_flag,
+        )
+        .await;
 
         let step_finished = now_ms();
 
@@ -434,10 +435,7 @@ async fn execute_docker_step(
 
 /// Execute a SQL query.
 /// The command field should contain the SQL query.
-async fn execute_sql_step(
-    command: &str,
-    previous_output: &str,
-) -> Result<String, OmniError> {
+async fn execute_sql_step(command: &str, previous_output: &str) -> Result<String, OmniError> {
     // Substitute {{previous_output}} placeholder if present
     let resolved_query = command.replace("{{previous_output}}", previous_output);
 
@@ -453,7 +451,13 @@ async fn execute_sql_step(
     #[cfg(not(target_os = "windows"))]
     let mut cmd = {
         let mut c = tokio::process::Command::new("sh");
-        c.args(["-c", &format!("sqlite3 ':memory:' '{}'", resolved_query.replace('\'', "'\\''"))]);
+        c.args([
+            "-c",
+            &format!(
+                "sqlite3 ':memory:' '{}'",
+                resolved_query.replace('\'', "'\\''")
+            ),
+        ]);
         c
     };
 

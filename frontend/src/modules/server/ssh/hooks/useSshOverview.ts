@@ -1,5 +1,6 @@
 import { useCallback, useEffect } from "react";
-import { commands } from "../../../../ipc/bindings";
+import { listen } from "@tauri-apps/api/event";
+import { commands, type SshProcessInfo } from "../../../../ipc/bindings";
 import { RESOURCE_TAG_KEYS } from "../../../../lib/resourceTags";
 import { persistResourceTag } from "../../../../stores/connectionStore";
 import { useSshStatsStore } from "../../../../stores/sshStatsStore";
@@ -32,24 +33,18 @@ export function useSshOverview(resourceId: string | null) {
               processes: result.data,
               updatedAt: Date.now(),
               refreshing: false,
-              error: null,
             });
           } else {
-            setOverview(resourceId, {
-              error: result.error?.message ?? "加载进程列表失败",
-              refreshing: false,
-            });
+            setOverview(resourceId, { refreshing: false });
           }
-        } catch (e) {
-          setOverview(resourceId, {
-            error: e instanceof Error ? e.message : String(e),
-            refreshing: false,
-          });
+        } catch {
+          setOverview(resourceId, { refreshing: false });
         }
         return;
       }
 
-      const hasCache = overview.phase === "ready" && overview.stats != null;
+      const snapshot = useSshHostStore.getState().getSnapshot(resourceId).overview;
+      const hasCache = snapshot.phase === "ready" && snapshot.stats != null;
       if (!opts?.silent && !hasCache) {
         setOverview(resourceId, { phase: "loading", error: null });
       } else if (opts?.silent || hasCache) {
@@ -57,40 +52,63 @@ export function useSshOverview(resourceId: string | null) {
       }
 
       try {
-        const result = await commands.sshPoolLoadOverview(resourceId);
-        if (result.status === "ok") {
-          useSshStatsStore.getState().setStats([result.data.stats]);
-          if (result.data.stats.osInfo?.trim()) {
+        const processesPromise = commands.sshPoolLoadProcesses(resourceId);
+        const statsPromise = commands.sshPoolFetchStats(resourceId);
+
+        const processResult = await processesPromise;
+        const processOk = processResult.status === "ok";
+        if (processOk) {
+          setOverview(resourceId, {
+            phase: "ready",
+            processes: processResult.data,
+            error: null,
+            updatedAt: Date.now(),
+            refreshing: true,
+          });
+        }
+
+        const statsResult = await statsPromise;
+        const statsOk = statsResult.status === "ok";
+        if (statsOk) {
+          useSshStatsStore.getState().setStats([statsResult.data]);
+          if (statsResult.data.osInfo?.trim()) {
             void persistResourceTag(
               resourceId,
               RESOURCE_TAG_KEYS.os,
-              result.data.stats.osInfo,
+              statsResult.data.osInfo,
             );
           }
           setOverview(resourceId, {
             phase: "ready",
-            stats: result.data.stats,
-            processes: result.data.processes,
+            stats: statsResult.data,
             error: null,
             updatedAt: Date.now(),
             refreshing: false,
           });
+        } else if (processOk) {
+          setOverview(resourceId, { phase: "ready", refreshing: false });
         } else {
           setOverview(resourceId, {
-            error: result.error?.message ?? "加载概览失败",
+            error: hasCache
+              ? null
+              : (processResult.error?.message ?? statsResult.error?.message ?? "加载概览失败"),
             phase: hasCache ? "ready" : "error",
             refreshing: false,
           });
         }
       } catch (e) {
         setOverview(resourceId, {
-          error: e instanceof Error ? e.message : String(e),
+          error: hasCache
+            ? null
+            : e instanceof Error
+              ? e.message
+              : String(e),
           phase: hasCache ? "ready" : "error",
           refreshing: false,
         });
       }
     },
-    [resourceId, overview.phase, overview.stats, setOverview],
+    [resourceId, setOverview],
   );
 
   useEffect(() => {
@@ -113,6 +131,26 @@ export function useSshOverview(resourceId: string | null) {
     }, 30_000);
     return () => clearInterval(interval);
   }, [resourceId, overview.phase, load]);
+
+  useEffect(() => {
+    if (!resourceId) return;
+    if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) return;
+
+    const unlistenPromise = listen<{ resourceId: string; processes: SshProcessInfo[] }>(
+      "ssh-process-ports",
+      (event) => {
+        if (event.payload.resourceId !== resourceId) return;
+        setOverview(resourceId, {
+          processes: event.payload.processes,
+          updatedAt: Date.now(),
+        });
+      },
+    );
+
+    return () => {
+      void unlistenPromise.then((unlisten) => unlisten());
+    };
+  }, [resourceId, setOverview]);
 
   useEffect(() => {
     if (!resourceId) return;

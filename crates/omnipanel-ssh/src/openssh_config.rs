@@ -27,13 +27,8 @@ pub fn default_ssh_dir() -> Option<PathBuf> {
 }
 
 /// OpenSSH 客户端默认 IdentityFile 顺序（与 `ssh_config` 一致）。
-const DEFAULT_IDENTITY_FILE_NAMES: &[&str] = &[
-    "id_rsa",
-    "id_dsa",
-    "id_ecdsa",
-    "id_ed25519",
-    "id_xmss",
-];
+const DEFAULT_IDENTITY_FILE_NAMES: &[&str] =
+    &["id_rsa", "id_dsa", "id_ecdsa", "id_ed25519", "id_xmss"];
 
 fn ssh_dir_skip_file_name(name: &str) -> bool {
     matches!(
@@ -111,10 +106,7 @@ pub fn discover_ssh_identity_file_in(ssh_dir: &Path) -> Option<PathBuf> {
         .map(|e| e.path())
         .filter(|p| p.is_file())
         .filter(|p| {
-            let name = p
-                .file_name()
-                .and_then(|n| n.to_str())
-                .unwrap_or_default();
+            let name = p.file_name().and_then(|n| n.to_str()).unwrap_or_default();
             !ssh_dir_skip_file_name(name)
         })
         .filter(|p| is_private_key_file(p))
@@ -376,7 +368,11 @@ pub fn ssh_config_to_connect_config(entry: &SshConfigEntry) -> OmniResult<crate:
     use crate::{SshAuth, SshConfig};
 
     let key_path = if entry.identity_file.is_some() {
-        Some(resolve_identity_file_path(entry)?.to_string_lossy().to_string())
+        Some(
+            resolve_identity_file_path(entry)?
+                .to_string_lossy()
+                .to_string(),
+        )
     } else {
         Some("auto".to_string())
     };
@@ -431,10 +427,7 @@ Host *
 
     #[test]
     fn discover_prefers_default_identity_names() {
-        let base = std::env::temp_dir().join(format!(
-            "omnipanel-ssh-test-{}",
-            std::process::id()
-        ));
+        let base = std::env::temp_dir().join(format!("omnipanel-ssh-test-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&base);
         std::fs::create_dir_all(&base).unwrap();
         std::fs::write(
@@ -449,17 +442,18 @@ Host *
         .unwrap();
 
         let found = discover_ssh_identity_file_in(&base).unwrap();
-        assert_eq!(found.file_name().and_then(|n| n.to_str()), Some("id_ed25519"));
+        assert_eq!(
+            found.file_name().and_then(|n| n.to_str()),
+            Some("id_ed25519")
+        );
 
         let _ = std::fs::remove_dir_all(&base);
     }
 
     #[test]
     fn discover_falls_back_to_custom_key() {
-        let base = std::env::temp_dir().join(format!(
-            "omnipanel-ssh-test-custom-{}",
-            std::process::id()
-        ));
+        let base =
+            std::env::temp_dir().join(format!("omnipanel-ssh-test-custom-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&base);
         std::fs::create_dir_all(&base).unwrap();
         std::fs::write(
@@ -469,17 +463,18 @@ Host *
         .unwrap();
 
         let found = discover_ssh_identity_file_in(&base).unwrap();
-        assert_eq!(found.file_name().and_then(|n| n.to_str()), Some("my_server"));
+        assert_eq!(
+            found.file_name().and_then(|n| n.to_str()),
+            Some("my_server")
+        );
 
         let _ = std::fs::remove_dir_all(&base);
     }
 
     #[test]
     fn discover_skips_pub_and_config() {
-        let base = std::env::temp_dir().join(format!(
-            "omnipanel-ssh-test-skip-{}",
-            std::process::id()
-        ));
+        let base =
+            std::env::temp_dir().join(format!("omnipanel-ssh-test-skip-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&base);
         std::fs::create_dir_all(&base).unwrap();
         std::fs::write(base.join("config"), "Host x").unwrap();

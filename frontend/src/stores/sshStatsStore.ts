@@ -103,14 +103,41 @@ export function useSshStats(resourceId: string | null): HostSystemStats | null {
 }
 
 export function formatBytes(bytes: number | null | undefined): string {
-  if (!bytes) return "0 B";
+  if (bytes == null || bytes <= 0) return "0 B";
   const units = ["B", "KB", "MB", "GB", "TB"];
   const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
   const val = bytes / 1024 ** i;
   return `${val.toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
 }
 
+/** 安全计算使用率百分比，total 无效时返回 0 */
+export function safePercent(
+  used: number | null | undefined,
+  total: number | null | undefined,
+): number {
+  if (total == null || total <= 0) return 0;
+  const u = used ?? 0;
+  return Math.min(100, Math.max(0, Math.round((u / total) * 100)));
+}
+
+/** 格式化使用率，total 无效时显示 — */
+export function formatUsagePercent(
+  used: number | null | undefined,
+  total: number | null | undefined,
+): string {
+  if (total == null || total <= 0) return "—";
+  return `${safePercent(used, total)}%`;
+}
+
+/** 格式化已用/总量，任一无效时显示 — */
+export function formatUsageBytes(
+  used: number | null | undefined,
+  total: number | null | undefined,
+): string {
+  if (total == null || total <= 0) return "—";
+  return `${formatBytes(used)} / ${formatBytes(total)}`;
+}
+
 export function formatPercent(used: number, total: number): string {
-  if (total === 0) return "0%";
-  return `${((used / total) * 100).toFixed(0)}%`;
+  return formatUsagePercent(used, total);
 }

@@ -152,8 +152,7 @@ impl Storage {
             .query_map(params, |row| {
                 let kind_str: String = row.get(1)?;
                 let tags_json: String = row.get(5)?;
-                let tags: Vec<String> =
-                    serde_json::from_str(&tags_json).unwrap_or_default();
+                let tags: Vec<String> = serde_json::from_str(&tags_json).unwrap_or_default();
                 Ok((
                     Connection {
                         id: row.get(0)?,

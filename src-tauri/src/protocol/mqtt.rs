@@ -96,11 +96,13 @@ impl MqttSession {
 
         // TLS configuration
         if config.use_tls.unwrap_or(false) {
-            if let (Some(ca_path), Some(cert_path), Some(key_path)) =
-                (&config.tls_ca_path, &config.tls_client_cert, &config.tls_client_key)
-            {
-                let ca = std::fs::read(ca_path)
-                    .map_err(|e| format!("Failed to read CA cert: {e}"))?;
+            if let (Some(ca_path), Some(cert_path), Some(key_path)) = (
+                &config.tls_ca_path,
+                &config.tls_client_cert,
+                &config.tls_client_key,
+            ) {
+                let ca =
+                    std::fs::read(ca_path).map_err(|e| format!("Failed to read CA cert: {e}"))?;
                 let client_cert = std::fs::read(cert_path)
                     .map_err(|e| format!("Failed to read client cert: {e}"))?;
                 let client_key = std::fs::read(key_path)
@@ -113,8 +115,8 @@ impl MqttSession {
                 mqttoptions.set_transport(rumqttc::Transport::tls_with_config(tls_config));
             } else if let Some(ca_path) = &config.tls_ca_path {
                 // CA-only TLS (server verification, no client cert)
-                let ca = std::fs::read(ca_path)
-                    .map_err(|e| format!("Failed to read CA cert: {e}"))?;
+                let ca =
+                    std::fs::read(ca_path).map_err(|e| format!("Failed to read CA cert: {e}"))?;
                 let tls_config = rumqttc::TlsConfiguration::Simple {
                     ca,
                     alpn: None,

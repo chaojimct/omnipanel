@@ -4,11 +4,11 @@ use tauri::ipc::Channel;
 use tauri::{Emitter, State};
 
 use crate::protocol::http::{self, HttpRequestConfig, HttpResponse};
+use crate::protocol::modbus::{self, ModbusConfig};
 use crate::protocol::mqtt::{self, MqttConfig, MqttMessage, MqttPublish, MqttSubscription};
 use crate::protocol::serial::{self, PortInfo, SerialConfig};
 use crate::protocol::sniffer::{self, CaptureStats, NetworkInterface, SnifferPacket};
 use crate::protocol::ws::{self, WsConfig, WsMessage};
-use crate::protocol::modbus::{self, ModbusConfig};
 use crate::state::AppState;
 use omnipanel_store::{HttpCollection, HttpHistoryEntry, SavedHttpRequest};
 
@@ -319,7 +319,10 @@ pub async fn mqtt_disconnect(state: State<'_, AppState>, id: String) -> Result<(
 
 #[tauri::command]
 #[specta::specta]
-pub async fn http_save_request(state: State<'_, AppState>, req: SavedHttpRequest) -> Result<(), String> {
+pub async fn http_save_request(
+    state: State<'_, AppState>,
+    req: SavedHttpRequest,
+) -> Result<(), String> {
     let storage = state.storage.lock().await;
     storage.http_save_request(&req).map_err(|e| e.to_string())
 }
@@ -374,14 +377,21 @@ pub async fn http_clear_history(state: State<'_, AppState>) -> Result<(), String
 
 #[tauri::command]
 #[specta::specta]
-pub async fn http_save_collection(state: State<'_, AppState>, col: HttpCollection) -> Result<(), String> {
+pub async fn http_save_collection(
+    state: State<'_, AppState>,
+    col: HttpCollection,
+) -> Result<(), String> {
     let storage = state.storage.lock().await;
-    storage.http_save_collection(&col).map_err(|e| e.to_string())
+    storage
+        .http_save_collection(&col)
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 #[specta::specta]
-pub async fn http_list_collections(state: State<'_, AppState>) -> Result<Vec<HttpCollection>, String> {
+pub async fn http_list_collections(
+    state: State<'_, AppState>,
+) -> Result<Vec<HttpCollection>, String> {
     let storage = state.storage.lock().await;
     storage.http_list_collections().map_err(|e| e.to_string())
 }
@@ -390,7 +400,9 @@ pub async fn http_list_collections(state: State<'_, AppState>) -> Result<Vec<Htt
 #[specta::specta]
 pub async fn http_delete_collection(state: State<'_, AppState>, id: String) -> Result<(), String> {
     let storage = state.storage.lock().await;
-    storage.http_delete_collection(&id).map_err(|e| e.to_string())
+    storage
+        .http_delete_collection(&id)
+        .map_err(|e| e.to_string())
 }
 
 // ──────────────────────────────────────────────
@@ -456,7 +468,11 @@ pub async fn modbus_connect(
 ) -> Result<String, String> {
     let id = format!("modbus-{}", MODBUS_COUNTER.fetch_add(1, Ordering::Relaxed));
     let session = modbus::ModbusSession::connect(config)?;
-    state.modbus_sessions.lock().await.insert(id.clone(), session);
+    state
+        .modbus_sessions
+        .lock()
+        .await
+        .insert(id.clone(), session);
     Ok(id)
 }
 
@@ -566,10 +582,7 @@ pub async fn modbus_write_multiple_registers(
 
 #[tauri::command]
 #[specta::specta]
-pub async fn modbus_disconnect(
-    state: State<'_, AppState>,
-    id: String,
-) -> Result<(), String> {
+pub async fn modbus_disconnect(state: State<'_, AppState>, id: String) -> Result<(), String> {
     let mut sessions = state.modbus_sessions.lock().await;
     let session = sessions.get_mut(&id).ok_or("Modbus session not found")?;
     session.disconnect()

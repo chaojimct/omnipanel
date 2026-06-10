@@ -41,10 +41,7 @@ pub async fn knowledge_save(
 /// 删除知识条目。
 #[tauri::command]
 #[specta::specta]
-pub async fn knowledge_delete(
-    state: State<'_, AppState>,
-    id: String,
-) -> Result<(), OmniError> {
+pub async fn knowledge_delete(state: State<'_, AppState>, id: String) -> Result<(), OmniError> {
     let storage = state.storage.lock().await;
     storage.delete_knowledge(&id)
 }
@@ -64,9 +61,7 @@ pub async fn knowledge_search(
 /// 列出所有不重复的 tag。
 #[tauri::command]
 #[specta::specta]
-pub async fn knowledge_tags(
-    state: State<'_, AppState>,
-) -> Result<Vec<String>, OmniError> {
+pub async fn knowledge_tags(state: State<'_, AppState>) -> Result<Vec<String>, OmniError> {
     let storage = state.storage.lock().await;
     storage.list_knowledge_tags()
 }

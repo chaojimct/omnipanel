@@ -171,7 +171,6 @@ fn safe_int_to_value(v: i64) -> Value {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use rusqlite::Connection;
@@ -187,8 +186,9 @@ mod tests {
             );
             CREATE INDEX idx_users_name ON users(name);
             INSERT INTO users (name, email, age) VALUES ('alice', 'alice@test.com', 30);
-            INSERT INTO users (name, email, age) VALUES ('bob', 'bob@test.com', 25);"
-        ).unwrap();
+            INSERT INTO users (name, email, age) VALUES ('bob', 'bob@test.com', 25);",
+        )
+        .unwrap();
         conn
     }
 
@@ -198,8 +198,11 @@ mod tests {
         let mut stmt = conn
             .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
             .unwrap();
-        let tables: Vec<String> = stmt.query_map([], |row| row.get(0)).unwrap()
-            .collect::<Result<Vec<_>, _>>().unwrap();
+        let tables: Vec<String> = stmt
+            .query_map([], |row| row.get(0))
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
         assert_eq!(tables.len(), 1);
         assert_eq!(tables[0], "users");
     }
@@ -208,13 +211,17 @@ mod tests {
     fn pragma_table_info_returns_columns() {
         let conn = test_conn();
         let mut stmt = conn.prepare("PRAGMA table_info('users')").unwrap();
-        let cols: Vec<(String, String, i32)> = stmt.query_map([], |row| {
-            Ok((
-                row.get::<_, String>(1)?,
-                row.get::<_, String>(2)?,
-                row.get::<_, i32>(5)?,
-            ))
-        }).unwrap().collect::<Result<Vec<_>, _>>().unwrap();
+        let cols: Vec<(String, String, i32)> = stmt
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, i32>(5)?,
+                ))
+            })
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
 
         assert_eq!(cols.len(), 4);
         assert_eq!(cols[0].0, "id");
@@ -228,9 +235,13 @@ mod tests {
     fn pragma_index_list_returns_indexes() {
         let conn = test_conn();
         let mut stmt = conn.prepare("PRAGMA index_list('users')").unwrap();
-        let indexes: Vec<(String, i32)> = stmt.query_map([], |row| {
-            Ok((row.get::<_, String>(1)?, row.get::<_, i32>(2)?))
-        }).unwrap().collect::<Result<Vec<_>, _>>().unwrap();
+        let indexes: Vec<(String, i32)> = stmt
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(1)?, row.get::<_, i32>(2)?))
+            })
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
 
         let idx = indexes.iter().find(|(name, _)| name == "idx_users_name");
         assert!(idx.is_some(), "idx_users_name should exist");
@@ -241,9 +252,11 @@ mod tests {
     fn pragma_index_info_returns_columns() {
         let conn = test_conn();
         let mut stmt = conn.prepare("PRAGMA index_info('idx_users_name')").unwrap();
-        let cols: Vec<String> = stmt.query_map([], |row| {
-            row.get(2)
-        }).unwrap().collect::<Result<Vec<_>, _>>().unwrap();
+        let cols: Vec<String> = stmt
+            .query_map([], |row| row.get(2))
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
 
         assert_eq!(cols, vec!["name".to_string()]);
     }
@@ -261,7 +274,11 @@ mod tests {
     #[test]
     fn insert_returns_rows_affected() {
         let conn = test_conn();
-        let result = super::run(&conn, "INSERT INTO users (name, email, age) VALUES ('charlie', 'c@test.com', 20)").unwrap();
+        let result = super::run(
+            &conn,
+            "INSERT INTO users (name, email, age) VALUES ('charlie', 'c@test.com', 20)",
+        )
+        .unwrap();
         assert_eq!(result.rows_affected, 1);
         assert!(result.columns.is_empty());
     }

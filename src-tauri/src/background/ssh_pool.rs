@@ -1,10 +1,11 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 use futures::future::join_all;
 use omnipanel_error::{ErrorCode, OmniError, OmniResult};
+use omnipanel_ssh::attach_ports;
 use omnipanel_ssh::{SshAuth, SshConfig, SshProcessInfo, SshSession};
 use omnipanel_store::Connection;
 use omnipanel_store::{ConnectionKind, Storage};
@@ -20,13 +21,14 @@ use crate::log_store::LogStore;
 const PROBE_TIMEOUT: Duration = Duration::from_secs(3);
 const STATS_CACHE_TTL: Duration = Duration::from_secs(5);
 const PROCESSES_CACHE_TTL: Duration = Duration::from_secs(30);
+const PORTS_CACHE_TTL: Duration = Duration::from_secs(60);
 const MONITOR_POLL_INTERVAL: Duration = Duration::from_secs(5);
 
 const STATS_SCRIPT: &str = r#"
 echo "load=$(cat /proc/loadavg | cut -d' ' -f1-3)";
 echo "cores=$(nproc)";
 echo "cpu=$(top -bn1 | grep 'Cpu(s)' | awk '{print $2+$4}')";
-echo "mem=$(free -b | grep Mem | awk '{print $2,$3,$4}')";
+echo "mem=$(awk '/^MemTotal:/ {total=$2*1024} /^MemAvailable:/ {avail=$2*1024} END {if (total>0) {used=total-avail; if (used<0) used=0; print total, used, avail} else print "0 0 0"}' /proc/meminfo 2>/dev/null || free -b | awk '/^Mem:/ {print $2, $3, $7; exit}')";
 echo "disk=$(df -B1 / | tail -1 | awk '{print $2,$3,$4}')";
 echo "net=$(awk 'NR>2 {rx+=$2; tx+=$10} END{print rx, tx}' /proc/net/dev 2>/dev/null)";
 echo "os=$(cat /etc/os-release | grep '^PRETTY_NAME=' | cut -d'"' -f2)"
@@ -41,6 +43,14 @@ pub struct PoolStatusEvent {
     pub resource_id: String,
     pub status: String,
     pub error: Option<String>,
+}
+
+/// 连接池 SSH 会话已建立/已释放（与 TCP 端口探测无关）。
+#[derive(Debug, Clone, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct PoolSessionEvent {
+    pub resource_id: String,
+    pub active: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Type)]
@@ -98,6 +108,14 @@ pub struct SshHostOverview {
     pub processes: Vec<SshProcessInfo>,
 }
 
+/// 后台端口补全完成后推送到前端（进程列表已合并端口）。
+#[derive(Debug, Clone, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct SshProcessPortsEvent {
+    pub resource_id: String,
+    pub processes: Vec<SshProcessInfo>,
+}
+
 // ── Pool internals ───────────────────────────────────────────────────────
 
 struct ConnSpec {
@@ -116,8 +134,10 @@ struct PoolEntry {
 struct CachedOverview {
     stats: HostSystemStats,
     processes: Vec<SshProcessInfo>,
+    ports_by_pid: std::collections::HashMap<u32, Vec<omnipanel_ssh::SshProcessPort>>,
     stats_at: Instant,
     processes_at: Instant,
+    ports_at: Instant,
 }
 
 /// SSH 连接池：后台 TCP 端口探测 + 按需建立会话（概览 / SFTP / 进程等）。
@@ -125,7 +145,9 @@ pub struct SshPool {
     entries: Arc<Mutex<HashMap<String, PoolEntry>>>,
     pool_sessions: Arc<Mutex<HashMap<String, Arc<SshSession>>>>,
     overview_cache: Arc<Mutex<HashMap<String, CachedOverview>>>,
+    ports_fill_inflight: Arc<Mutex<HashSet<String>>>,
     monitoring_subs: Arc<Mutex<HashMap<String, u32>>>,
+    app_handle: Arc<Mutex<Option<tauri::AppHandle>>>,
     log: LogStore,
     background_started: AtomicBool,
 }
@@ -137,7 +159,9 @@ impl SshPool {
             entries: Arc::new(Mutex::new(HashMap::new())),
             pool_sessions,
             overview_cache: Arc::new(Mutex::new(HashMap::new())),
+            ports_fill_inflight: Arc::new(Mutex::new(HashSet::new())),
             monitoring_subs: Arc::new(Mutex::new(HashMap::new())),
+            app_handle: Arc::new(Mutex::new(None)),
             log,
             background_started: AtomicBool::new(false),
         }
@@ -145,6 +169,7 @@ impl SshPool {
 
     /// 应用启动：从持久化存储加载 SSH 连接配置并启动后台健康检查。
     pub async fn start(&self, storage: Arc<Mutex<Storage>>, app_handle: tauri::AppHandle) {
+        *self.app_handle.lock().await = Some(app_handle.clone());
         self.log
             .log("ssh-pool", "info", "SSH 连接池初始化中…")
             .await;
@@ -295,8 +320,12 @@ impl SshPool {
             let mut monitor_interval = tokio::time::interval(MONITOR_POLL_INTERVAL);
             health_interval.tick().await;
             monitor_interval.tick().await;
-            log.log("ssh-pool", "info", "SSH 池后台循环已启动（健康检查 + 监控采集）")
-                .await;
+            log.log(
+                "ssh-pool",
+                "info",
+                "SSH 池后台循环已启动（健康检查 + 监控采集）",
+            )
+            .await;
             loop {
                 tokio::select! {
                     _ = health_interval.tick() => {
@@ -328,6 +357,12 @@ impl SshPool {
                 error: entry.error.clone(),
             })
             .collect()
+    }
+
+    /// 返回当前已建立 SSH 会话的主机 ID 列表。
+    pub async fn active_session_ids(&self) -> Vec<String> {
+        let pool = self.pool_sessions.lock().await;
+        pool.keys().cloned().collect()
     }
 
     /// 订阅持续监控采集（引用计数）。
@@ -411,8 +446,10 @@ impl SshPool {
                         let entry = cache.entry(resource_id.clone()).or_insert(CachedOverview {
                             stats: stats.clone(),
                             processes: Vec::new(),
+                            ports_by_pid: std::collections::HashMap::new(),
                             stats_at: now,
                             processes_at: now,
+                            ports_at: now - PORTS_CACHE_TTL - Duration::from_secs(1),
                         });
                         entry.stats = stats.clone();
                         entry.stats_at = now;
@@ -621,6 +658,7 @@ impl SshPool {
         self.log
             .log("ssh-pool", "info", &format!("SSH 会话已就绪: {name}"))
             .await;
+        self.emit_session(resource_id, true).await;
         Ok(session)
     }
 
@@ -636,6 +674,19 @@ impl SshPool {
                     &format!("已释放 SSH 会话: {resource_id}"),
                 )
                 .await;
+            self.emit_session(resource_id, false).await;
+        }
+    }
+
+    async fn emit_session(&self, resource_id: &str, active: bool) {
+        if let Some(handle) = self.app_handle.lock().await.clone() {
+            let _ = handle.emit(
+                "ssh-pool-session",
+                PoolSessionEvent {
+                    resource_id: resource_id.to_string(),
+                    active,
+                },
+            );
         }
     }
 
@@ -651,6 +702,108 @@ impl SshPool {
         entries.get(resource_id).map(|e| e.config.clone())
     }
 
+    async fn apply_cached_ports(
+        &self,
+        resource_id: &str,
+        processes: &mut [SshProcessInfo],
+    ) -> bool {
+        let now = Instant::now();
+        let cached_ports = {
+            let cache = self.overview_cache.lock().await;
+            cache.get(resource_id).and_then(|entry| {
+                if !entry.ports_by_pid.is_empty()
+                    && now.duration_since(entry.ports_at) < PORTS_CACHE_TTL
+                {
+                    Some(entry.ports_by_pid.clone())
+                } else {
+                    None
+                }
+            })
+        };
+
+        if let Some(ports) = cached_ports {
+            attach_ports(processes, &ports);
+            true
+        } else {
+            false
+        }
+    }
+
+    async fn ports_cache_fresh(&self, resource_id: &str) -> bool {
+        let now = Instant::now();
+        let cache = self.overview_cache.lock().await;
+        cache
+            .get(resource_id)
+            .map(|entry| {
+                !entry.ports_by_pid.is_empty()
+                    && now.duration_since(entry.ports_at) < PORTS_CACHE_TTL
+            })
+            .unwrap_or(false)
+    }
+
+    /// 端口缓存未命中时在后台采集，完成后通过 `ssh-process-ports` 事件推送。
+    async fn schedule_port_fill(&self, resource_id: &str) {
+        if self.ports_cache_fresh(resource_id).await {
+            return;
+        }
+
+        {
+            let mut inflight = self.ports_fill_inflight.lock().await;
+            if !inflight.insert(resource_id.to_string()) {
+                return;
+            }
+        }
+
+        let overview_cache = self.overview_cache.clone();
+        let ports_fill_inflight = self.ports_fill_inflight.clone();
+        let app_handle = self.app_handle.clone();
+        let config = self.get_ssh_config(resource_id).await;
+        let resource_id = resource_id.to_string();
+
+        tokio::spawn(async move {
+            let ports_by_pid = match config {
+                Some(config) => match SshSession::connect_no_shell(config).await {
+                    Ok(session) => session.collect_listen_ports().await.unwrap_or_default(),
+                    Err(_) => std::collections::HashMap::new(),
+                },
+                None => std::collections::HashMap::new(),
+            };
+            let now = Instant::now();
+
+            let processes = {
+                let mut cache = overview_cache.lock().await;
+                if let Some(entry) = cache.get_mut(&resource_id) {
+                    entry.ports_by_pid = ports_by_pid.clone();
+                    entry.ports_at = now;
+                    let mut procs = entry.processes.clone();
+                    if procs.is_empty() {
+                        None
+                    } else {
+                        attach_ports(&mut procs, &ports_by_pid);
+                        entry.processes = procs.clone();
+                        Some(procs)
+                    }
+                } else {
+                    None
+                }
+            };
+
+            if let Some(processes) = processes {
+                if let Some(handle) = app_handle.lock().await.as_ref() {
+                    let _ = handle.emit(
+                        "ssh-process-ports",
+                        &SshProcessPortsEvent {
+                            resource_id: resource_id.clone(),
+                            processes,
+                        },
+                    );
+                }
+            }
+
+            ports_fill_inflight.lock().await.remove(&resource_id);
+        });
+    }
+
     /// 建立（或复用）池会话，拉取概览数据并推送到前端（带短 TTL 缓存）。
     pub async fn load_overview(
         &self,
@@ -662,14 +815,14 @@ impl SshPool {
             let cache = self.overview_cache.lock().await;
             if let Some(entry) = cache.get(resource_id) {
                 let stats_fresh = now.duration_since(entry.stats_at) < STATS_CACHE_TTL;
-                let processes_fresh =
-                    now.duration_since(entry.processes_at) < PROCESSES_CACHE_TTL;
+                let processes_fresh = now.duration_since(entry.processes_at) < PROCESSES_CACHE_TTL;
                 if stats_fresh && processes_fresh {
-                    let _ = app_handle.emit("ssh-system-stats", std::slice::from_ref(&entry.stats));
-                    return Ok(SshHostOverview {
-                        stats: entry.stats.clone(),
-                        processes: entry.processes.clone(),
-                    });
+                    let stats = entry.stats.clone();
+                    let processes = entry.processes.clone();
+                    drop(cache);
+                    self.schedule_port_fill(resource_id).await;
+                    let _ = app_handle.emit("ssh-system-stats", std::slice::from_ref(&stats));
+                    return Ok(SshHostOverview { stats, processes });
                 }
             }
         }
@@ -684,45 +837,68 @@ impl SshPool {
 
         let session = self.ensure_session(resource_id).await?;
 
-        let (stats, processes) = {
+        let (stats_fresh, processes_fresh, cached_stats, cached_processes) = {
             let cache = self.overview_cache.lock().await;
             let cached = cache.get(resource_id);
-            let stats_fresh = cached
-                .map(|c| now.duration_since(c.stats_at) < STATS_CACHE_TTL)
-                .unwrap_or(false);
-            let processes_fresh = cached
-                .map(|c| now.duration_since(c.processes_at) < PROCESSES_CACHE_TTL)
-                .unwrap_or(false);
+            (
+                cached
+                    .map(|c| now.duration_since(c.stats_at) < STATS_CACHE_TTL)
+                    .unwrap_or(false),
+                cached
+                    .map(|c| now.duration_since(c.processes_at) < PROCESSES_CACHE_TTL)
+                    .unwrap_or(false),
+                cached.map(|c| c.stats.clone()),
+                cached.map(|c| c.processes.clone()),
+            )
+        };
 
-            let stats = if stats_fresh {
-                cached.unwrap().stats.clone()
-            } else {
-                self.collect_stats(&session, resource_id, &host_name)
-                    .await?
-            };
-
-            let processes = if processes_fresh {
-                cached.unwrap().processes.clone()
-            } else {
-                session.process_list().await?
-            };
-
-            (stats, processes)
+        let (stats, processes) = match (stats_fresh, processes_fresh) {
+            (true, true) => (
+                cached_stats.expect("stats cache"),
+                cached_processes.expect("process cache"),
+            ),
+            (true, false) => {
+                let mut processes = session.process_list_fast().await?;
+                self.apply_cached_ports(resource_id, &mut processes).await;
+                (cached_stats.expect("stats cache"), processes)
+            }
+            (false, true) => {
+                let stats = self
+                    .collect_stats(&session, resource_id, &host_name)
+                    .await?;
+                (stats, cached_processes.expect("process cache"))
+            }
+            (false, false) => {
+                let (stats, processes) = tokio::join!(
+                    self.collect_stats(&session, resource_id, &host_name),
+                    session.process_list_fast(),
+                );
+                let stats = stats?;
+                let mut processes = processes?;
+                self.apply_cached_ports(resource_id, &mut processes).await;
+                (stats, processes)
+            }
         };
 
         {
             let mut cache = self.overview_cache.lock().await;
-            let entry = cache.entry(resource_id.to_string()).or_insert(CachedOverview {
-                stats: stats.clone(),
-                processes: processes.clone(),
-                stats_at: now,
-                processes_at: now,
-            });
+            let entry = cache
+                .entry(resource_id.to_string())
+                .or_insert(CachedOverview {
+                    stats: stats.clone(),
+                    processes: processes.clone(),
+                    ports_by_pid: std::collections::HashMap::new(),
+                    stats_at: now,
+                    processes_at: now,
+                    ports_at: now - PORTS_CACHE_TTL - Duration::from_secs(1),
+                });
             entry.stats = stats.clone();
             entry.stats_at = now;
             entry.processes = processes.clone();
             entry.processes_at = now;
         }
+
+        self.schedule_port_fill(resource_id).await;
 
         let _ = app_handle.emit("ssh-system-stats", std::slice::from_ref(&stats));
 
@@ -732,15 +908,48 @@ impl SshPool {
     /// 独立刷新进程列表（概览页局部刷新）。
     pub async fn load_processes(&self, resource_id: &str) -> OmniResult<Vec<SshProcessInfo>> {
         let session = self.ensure_session(resource_id).await?;
-        let processes = session.process_list().await?;
+        let mut processes = session.process_list_fast().await?;
+        self.apply_cached_ports(resource_id, &mut processes).await;
         let now = Instant::now();
         {
             let mut cache = self.overview_cache.lock().await;
-            if let Some(entry) = cache.get_mut(resource_id) {
-                entry.processes = processes.clone();
-                entry.processes_at = now;
-            }
+            let entry = cache.entry(resource_id.to_string()).or_insert_with(|| {
+                let stale = now - STATS_CACHE_TTL - Duration::from_secs(1);
+                CachedOverview {
+                    stats: HostSystemStats {
+                        host_id: resource_id.to_string(),
+                        host_name: resource_id.to_string(),
+                        load: String::new(),
+                        cpu_cores: 0,
+                        cpu_usage: 0.0,
+                        memory: MemoryStats {
+                            total: 0,
+                            used: 0,
+                            available: 0,
+                        },
+                        disk: DiskStats {
+                            total: 0,
+                            used: 0,
+                            available: 0,
+                        },
+                        network: NetworkStats {
+                            rx_bytes: 0,
+                            tx_bytes: 0,
+                        },
+                        os_info: String::new(),
+                        timestamp: 0,
+                    },
+                    processes: Vec::new(),
+                    ports_by_pid: std::collections::HashMap::new(),
+                    stats_at: stale,
+                    processes_at: stale,
+                    ports_at: now - PORTS_CACHE_TTL - Duration::from_secs(1),
+                }
+            });
+            entry.processes = processes.clone();
+            entry.processes_at = now;
         }
+        self.schedule_port_fill(resource_id).await;
         Ok(processes)
     }
 
@@ -755,8 +964,7 @@ impl SshPool {
             let cache = self.overview_cache.lock().await;
             if let Some(entry) = cache.get(resource_id) {
                 if now.duration_since(entry.stats_at) < STATS_CACHE_TTL {
-                    let _ =
-                        app_handle.emit("ssh-system-stats", std::slice::from_ref(&entry.stats));
+                    let _ = app_handle.emit("ssh-system-stats", std::slice::from_ref(&entry.stats));
                     return Ok(entry.stats.clone());
                 }
             }
@@ -776,12 +984,16 @@ impl SshPool {
 
         {
             let mut cache = self.overview_cache.lock().await;
-            let entry = cache.entry(resource_id.to_string()).or_insert(CachedOverview {
-                stats: stats.clone(),
-                processes: Vec::new(),
-                stats_at: now,
-                processes_at: now,
-            });
+            let entry = cache
+                .entry(resource_id.to_string())
+                .or_insert(CachedOverview {
+                    stats: stats.clone(),
+                    processes: Vec::new(),
+                    ports_by_pid: std::collections::HashMap::new(),
+                    stats_at: now,
+                    processes_at: now,
+                    ports_at: now - PORTS_CACHE_TTL - Duration::from_secs(1),
+                });
             entry.stats = stats.clone();
             entry.stats_at = now;
         }
@@ -841,7 +1053,7 @@ impl SshPool {
             .and_then(|s| s.trim().parse().ok())
             .unwrap_or(0.0);
 
-        let memory = Self::parse_mem(map.get("mem").map(String::as_str).unwrap_or(""));
+        let memory = parse_memory_stats(map.get("mem").map(String::as_str).unwrap_or(""));
         let disk = Self::parse_disk(map.get("disk").map(String::as_str).unwrap_or(""));
         let network = Self::parse_net(map.get("net").map(String::as_str).unwrap_or(""));
         let os_info = map.get("os").cloned().unwrap_or_default();
@@ -864,19 +1076,7 @@ impl SshPool {
     }
 
     fn parse_mem(raw: &str) -> MemoryStats {
-        let parts: Vec<&str> = raw.split_whitespace().collect();
-        let total = parts.first().and_then(|s| s.parse().ok()).unwrap_or(0);
-        let used = parts.get(1).and_then(|s| s.parse().ok()).unwrap_or(0);
-        let available = parts
-            .get(3)
-            .or(parts.get(2))
-            .and_then(|s| s.parse().ok())
-            .unwrap_or(0);
-        MemoryStats {
-            total,
-            used,
-            available,
-        }
+        parse_memory_stats(raw)
     }
 
     fn parse_disk(raw: &str) -> DiskStats {
@@ -900,6 +1100,25 @@ impl SshPool {
     }
 }
 
+fn parse_memory_stats(raw: &str) -> MemoryStats {
+    let parts: Vec<&str> = raw.split_whitespace().collect();
+    let total: u64 = parts.first().and_then(|s| s.parse().ok()).unwrap_or(0);
+    let mut used: u64 = parts.get(1).and_then(|s| s.parse().ok()).unwrap_or(0);
+    let mut available: u64 = parts.get(2).and_then(|s| s.parse().ok()).unwrap_or(0);
+    if total > 0 {
+        if used == 0 && available > 0 && available <= total {
+            used = total.saturating_sub(available);
+        } else if available == 0 && used > 0 && used <= total {
+            available = total.saturating_sub(used);
+        }
+    }
+    MemoryStats {
+        total,
+        used,
+        available,
+    }
+}
+
 fn emit_status(
     app_handle: &tauri::AppHandle,
     resource_id: &str,
@@ -914,4 +1133,33 @@ fn emit_status(
             error: error.map(|s| s.into()),
         },
     );
+}
+
+#[cfg(test)]
+mod stats_tests {
+    use super::parse_memory_stats;
+
+    #[test]
+    fn parse_mem_three_column_line() {
+        let mem = parse_memory_stats("17179869184 8589934592 8589934592");
+        assert_eq!(mem.total, 17179869184);
+        assert_eq!(mem.used, 8589934592);
+        assert_eq!(mem.available, 8589934592);
+    }
+
+    #[test]
+    fn parse_mem_derives_used_from_total_and_available() {
+        let mem = parse_memory_stats("1000 0 400");
+        assert_eq!(mem.total, 1000);
+        assert_eq!(mem.used, 600);
+        assert_eq!(mem.available, 400);
+    }
+
+    #[test]
+    fn parse_mem_empty_returns_zero() {
+        let mem = parse_memory_stats("");
+        assert_eq!(mem.total, 0);
+        assert_eq!(mem.used, 0);
+        assert_eq!(mem.available, 0);
+    }
 }

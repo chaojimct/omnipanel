@@ -17,9 +17,7 @@ pub async fn set_proxy_config(
 /// Get the current proxy configuration (for backend use).
 #[tauri::command]
 #[specta::specta]
-pub async fn get_proxy_config(
-    state: State<'_, AppState>,
-) -> Result<ProxyConfig, String> {
+pub async fn get_proxy_config(state: State<'_, AppState>) -> Result<ProxyConfig, String> {
     Ok(state.proxy_config.lock().await.clone())
 }
 

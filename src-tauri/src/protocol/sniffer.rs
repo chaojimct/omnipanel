@@ -113,11 +113,15 @@ pub fn generate_sample_packets(count: usize) -> Vec<SnifferPacket> {
             let proto = protocols[i % protocols.len()];
             let src_ip = ips[i % ips.len()].to_string();
             let dst_ip = ips[(i + 2) % ips.len()].to_string();
-            let (src_port, dst_port) = if proto == "TCP" || proto == "UDP" || proto == "HTTP" || proto == "TLS" {
-                (Some(ports[i % ports.len()]), Some(ports[(i + 1) % ports.len()]))
-            } else {
-                (None, None)
-            };
+            let (src_port, dst_port) =
+                if proto == "TCP" || proto == "UDP" || proto == "HTTP" || proto == "TLS" {
+                    (
+                        Some(ports[i % ports.len()]),
+                        Some(ports[(i + 1) % ports.len()]),
+                    )
+                } else {
+                    (None, None)
+                };
             SnifferPacket {
                 id: i as u64 + 1,
                 timestamp: format!("12:{:02}:{:02}.{:03}", i / 60, i % 60, i * 7 % 1000),
@@ -127,7 +131,11 @@ pub fn generate_sample_packets(count: usize) -> Vec<SnifferPacket> {
                 src_port,
                 dst_port,
                 length: 64 + (i as u32 * 17 % 1400),
-                payload_hex: format!("4500{:04x}0000400040{:02x}", 64 + i, if proto == "TCP" { 6 } else { 17 }),
+                payload_hex: format!(
+                    "4500{:04x}0000400040{:02x}",
+                    64 + i,
+                    if proto == "TCP" { 6 } else { 17 }
+                ),
             }
         })
         .collect()
@@ -152,7 +160,13 @@ pub async fn start_capture(
     interface: String,
     filter: String,
 ) -> Result<String, String> {
-    let id = format!("sniffer-{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis());
+    let id = format!(
+        "sniffer-{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis()
+    );
     let mut session = SnifferSession::new(&interface, &filter);
     // Add some sample packets for demo
     let samples = generate_sample_packets(50);
@@ -164,10 +178,7 @@ pub async fn start_capture(
 }
 
 /// 停止抓包。
-pub async fn stop_capture(
-    sessions: &SnifferSessions,
-    capture_id: &str,
-) -> Result<(), String> {
+pub async fn stop_capture(sessions: &SnifferSessions, capture_id: &str) -> Result<(), String> {
     let mut sessions = sessions.lock().await;
     let session = sessions.get_mut(capture_id).ok_or("Capture not found")?;
     session.stop();

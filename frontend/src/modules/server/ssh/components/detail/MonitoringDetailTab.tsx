@@ -2,7 +2,6 @@ import { useEffect, useRef } from "react";
 import { useSshStats, type HostSystemStats } from "../../../../../stores/sshStatsStore";
 import { useSshMonitoring } from "../../hooks/useSshMonitoring";
 import { useI18n } from "../../../../../i18n";
-import { Button } from "../../../../../components/ui/Button";
 
 type Props = {
   activeResource: { id: string } | null;
@@ -144,8 +143,6 @@ export function MonitoringDetailTab({ activeResource }: Props) {
     cpuSeries,
     memSeries,
     netSeries,
-    enable,
-    disable,
     ingestStats,
   } = useSshMonitoring(rid);
   const prevStatsRef = useRef<HostSystemStats | null>(null);
@@ -169,19 +166,6 @@ export function MonitoringDetailTab({ activeResource }: Props) {
 
   return (
     <div className="monitor-panel">
-      <div className="monitor-toolbar">
-        <span className="monitor-toolbar-label">{t("ssh.monitoring.title")}</span>
-        {enabled ? (
-          <Button variant="secondary" size="sm" onClick={() => void disable()}>
-            {t("ssh.monitoring.pause")}
-          </Button>
-        ) : (
-          <Button variant="primary" size="sm" onClick={() => void enable()} disabled={!rid}>
-            {t("ssh.monitoring.start")}
-          </Button>
-        )}
-      </div>
-
       {!enabled && (
         <div className="monitor-hint">{t("ssh.monitoring.hint")}</div>
       )}

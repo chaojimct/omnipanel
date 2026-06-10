@@ -56,7 +56,11 @@ impl OllamaProvider {
     }
 
     /// Create an Ollama provider with a custom base URL and pre-configured client.
-    pub fn with_base_url_client(base_url: &str, models: Vec<ModelInfo>, client: Option<Client>) -> Self {
+    pub fn with_base_url_client(
+        base_url: &str,
+        models: Vec<ModelInfo>,
+        client: Option<Client>,
+    ) -> Self {
         Self {
             inner: OpenAiProvider::with_client("ollama", "ollama", base_url, models, client),
         }

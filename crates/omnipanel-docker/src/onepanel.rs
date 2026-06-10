@@ -18,14 +18,14 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     ContainerFilter, DockerAdapter, DockerBuildContext, DockerBuildResult, DockerComposeAction,
-    DockerComposeProject, DockerComposeRequest, DockerComposeResult,
-    DockerContainerAction, DockerContainerDetail, DockerContainerStats, DockerContainerSummary,
-    DockerCreateContainerRequest, DockerCreateNetworkRequest, DockerCreateVolumeRequest, DockerFileEntry,
-    DockerImageDetail, DockerImageHistoryLayer, DockerImageProgress, DockerImageSummary,
-    DockerKeyValue, DockerLogLine, DockerNetworkContainer, DockerNetworkDetail,
-    DockerNetworkSubnet, DockerNetworkSummary, DockerOverview, DockerProbe, DockerPruneResult,
-    DockerPruneVolumesResult, DockerPullResult, DockerVolumeDetail, DockerVolumeSummary,
-    DockerServiceSummary, DockerCreateServiceRequest, DockerNodeSummary, DockerStackSummary,
+    DockerComposeProject, DockerComposeRequest, DockerComposeResult, DockerContainerAction,
+    DockerContainerDetail, DockerContainerStats, DockerContainerSummary,
+    DockerCreateContainerRequest, DockerCreateNetworkRequest, DockerCreateServiceRequest,
+    DockerCreateVolumeRequest, DockerFileEntry, DockerImageDetail, DockerImageHistoryLayer,
+    DockerImageProgress, DockerImageSummary, DockerKeyValue, DockerLogLine, DockerNetworkContainer,
+    DockerNetworkDetail, DockerNetworkSubnet, DockerNetworkSummary, DockerNodeSummary,
+    DockerOverview, DockerProbe, DockerPruneResult, DockerPruneVolumesResult, DockerPullResult,
+    DockerServiceSummary, DockerStackSummary, DockerVolumeDetail, DockerVolumeSummary,
     model::DockerCapabilities, model::DockerConnectionStatus,
 };
 
@@ -75,11 +75,9 @@ impl OnePanelClient {
     }
 
     /// 发起 GET 鉴权请求并把 `data` 字段反序列化出来。
-    async fn get_json<T: for<'de> Deserialize<'de>>(
-        &self,
-        path: &str,
-    ) -> OmniResult<T> {
-        self.request::<(), T>(reqwest::Method::GET, path, None).await
+    async fn get_json<T: for<'de> Deserialize<'de>>(&self, path: &str) -> OmniResult<T> {
+        self.request::<(), T>(reqwest::Method::GET, path, None)
+            .await
     }
 
     /// 发起 POST 鉴权请求，把 `data` 字段反序列化出来。
@@ -88,7 +86,8 @@ impl OnePanelClient {
         path: &str,
         body: B,
     ) -> OmniResult<T> {
-        self.request::<B, T>(reqwest::Method::POST, path, Some(body)).await
+        self.request::<B, T>(reqwest::Method::POST, path, Some(body))
+            .await
     }
 
     async fn request<B, T>(
@@ -107,7 +106,8 @@ impl OnePanelClient {
             .timeout(std::time::Duration::from_secs(20))
             .build()
             .map_err(|e| {
-                OmniError::new(ErrorCode::Connection, "构造 HTTP 客户端失败").with_cause(e.to_string())
+                OmniError::new(ErrorCode::Connection, "构造 HTTP 客户端失败")
+                    .with_cause(e.to_string())
             })?;
         let mut req = client.request(method, &url);
         for (k, v) in self.auth_headers() {
@@ -126,11 +126,10 @@ impl OnePanelClient {
                 .with_cause(format!("{} ({})", e, url))
         })?;
         if !status.is_success() {
-            return Err(OmniError::new(
-                ErrorCode::Connection,
-                format!("1Panel HTTP {}", status),
-            )
-            .with_cause(format!("{}: {}", url, text)));
+            return Err(
+                OmniError::new(ErrorCode::Connection, format!("1Panel HTTP {}", status))
+                    .with_cause(format!("{}: {}", url, text)),
+            );
         }
         let parsed: OnePanelResponse<T> = serde_json::from_str(&text).map_err(|e| {
             OmniError::new(ErrorCode::Internal, "解析 1Panel 响应失败")
@@ -142,9 +141,9 @@ impl OnePanelClient {
                 format!("1Panel 业务错误: {}", parsed.message),
             ));
         }
-        parsed.data.ok_or_else(|| {
-            OmniError::new(ErrorCode::Internal, "1Panel 响应缺少 data 字段")
-        })
+        parsed
+            .data
+            .ok_or_else(|| OmniError::new(ErrorCode::Internal, "1Panel 响应缺少 data 字段"))
     }
 }
 
@@ -264,8 +263,7 @@ struct OnePanelContainer {
 
 impl OnePanelContainer {
     fn into_summary(self) -> DockerContainerSummary {
-        let running = self.state.eq_ignore_ascii_case("running")
-            || self.status.starts_with("Up");
+        let running = self.state.eq_ignore_ascii_case("running") || self.status.starts_with("Up");
         let ports = self
             .ports
             .split(',')
@@ -274,11 +272,9 @@ impl OnePanelContainer {
                 if mapping.is_empty() {
                     None
                 } else {
-                    let (host_part, proto) =
-                        mapping.rsplit_once('/').unwrap_or((mapping, "tcp"));
+                    let (host_part, proto) = mapping.rsplit_once('/').unwrap_or((mapping, "tcp"));
                     if let Some((host, private)) = host_part.split_once("->") {
-                        let (ip, public) =
-                            host.rsplit_once(':').unwrap_or(("0.0.0.0", host));
+                        let (ip, public) = host.rsplit_once(':').unwrap_or(("0.0.0.0", host));
                         Some(crate::model::DockerPort {
                             private_port: private.trim().parse().unwrap_or(0),
                             public_port: public.trim().parse().ok(),
@@ -376,14 +372,23 @@ impl DockerAdapter for OnePanelAdapter {
     async fn overview(&self) -> OmniResult<DockerOverview> {
         let containers: Vec<OnePanelContainer> = self
             .client
-            .post_json("/api/v2/containers/search", serde_json::json!({ "page": 1, "pageSize": 200 }))
+            .post_json(
+                "/api/v2/containers/search",
+                serde_json::json!({ "page": 1, "pageSize": 200 }),
+            )
             .await
             .map_err(|e| e.with_cause("列出 1Panel 容器失败"))?;
         let total = containers.len() as u32;
-        let running = containers.iter().filter(|c| c.state.eq_ignore_ascii_case("running")).count() as u32;
+        let running = containers
+            .iter()
+            .filter(|c| c.state.eq_ignore_ascii_case("running"))
+            .count() as u32;
         let images: Vec<OnePanelImage> = self
             .client
-            .post_json("/api/v2/images/search", serde_json::json!({ "page": 1, "pageSize": 200 }))
+            .post_json(
+                "/api/v2/images/search",
+                serde_json::json!({ "page": 1, "pageSize": 200 }),
+            )
             .await
             .unwrap_or_default();
         Ok(DockerOverview {
@@ -405,7 +410,10 @@ impl DockerAdapter for OnePanelAdapter {
     ) -> OmniResult<Vec<DockerContainerSummary>> {
         let raw: Vec<OnePanelContainer> = self
             .client
-            .post_json("/api/v2/containers/search", serde_json::json!({ "page": 1, "pageSize": 500 }))
+            .post_json(
+                "/api/v2/containers/search",
+                serde_json::json!({ "page": 1, "pageSize": 500 }),
+            )
             .await
             .map_err(|e| e.with_cause("列出 1Panel 容器失败"))?;
         let mut out: Vec<DockerContainerSummary> = raw
@@ -421,7 +429,10 @@ impl DockerAdapter for OnePanelAdapter {
     async fn inspect_container(&self, id: &str) -> OmniResult<DockerContainerDetail> {
         let v: serde_json::Value = self
             .client
-            .post_json("/api/v2/containers/inspect", serde_json::json!({ "id": id }))
+            .post_json(
+                "/api/v2/containers/inspect",
+                serde_json::json!({ "id": id }),
+            )
             .await
             .map_err(|e| e.with_cause("1Panel inspect 失败"))?;
         // 直接走 SSH/本地时 inspect 字段更丰富；1Panel 仅保证基础字段。返回
@@ -461,11 +472,7 @@ impl DockerAdapter for OnePanelAdapter {
         })
     }
 
-    async fn container_action(
-        &self,
-        id: &str,
-        action: DockerContainerAction,
-    ) -> OmniResult<()> {
+    async fn container_action(&self, id: &str, action: DockerContainerAction) -> OmniResult<()> {
         let op = match action {
             DockerContainerAction::Start => "start",
             DockerContainerAction::Stop => "stop",
@@ -486,14 +493,12 @@ impl DockerAdapter for OnePanelAdapter {
     }
 
     async fn create_container(&self, _req: &DockerCreateContainerRequest) -> OmniResult<String> {
-        Err(OmniError::not_found("1Panel 暂不支持直接创建容器，请通过 Compose 或面板操作"))
+        Err(OmniError::not_found(
+            "1Panel 暂不支持直接创建容器，请通过 Compose 或面板操作",
+        ))
     }
 
-    async fn container_logs(
-        &self,
-        id: &str,
-        tail: i64,
-    ) -> OmniResult<Vec<DockerLogLine>> {
+    async fn container_logs(&self, id: &str, tail: i64) -> OmniResult<Vec<DockerLogLine>> {
         let v: serde_json::Value = self
             .client
             .post_json(
@@ -505,7 +510,11 @@ impl DockerAdapter for OnePanelAdapter {
         let text = v
             .as_str()
             .map(|s| s.to_string())
-            .or_else(|| v.get("data").and_then(|x| x.as_str()).map(|s| s.to_string()))
+            .or_else(|| {
+                v.get("data")
+                    .and_then(|x| x.as_str())
+                    .map(|s| s.to_string())
+            })
             .unwrap_or_default();
         Ok(text
             .lines()
@@ -519,7 +528,10 @@ impl DockerAdapter for OnePanelAdapter {
     async fn list_images(&self) -> OmniResult<Vec<DockerImageSummary>> {
         let raw: Vec<OnePanelImage> = self
             .client
-            .post_json("/api/v2/images/search", serde_json::json!({ "page": 1, "pageSize": 500 }))
+            .post_json(
+                "/api/v2/images/search",
+                serde_json::json!({ "page": 1, "pageSize": 500 }),
+            )
             .await
             .map_err(|e| e.with_cause("1Panel 列出镜像失败"))?;
         Ok(raw.into_iter().map(OnePanelImage::into_summary).collect())
@@ -565,7 +577,10 @@ impl DockerAdapter for OnePanelAdapter {
     async fn list_compose_projects(&self) -> OmniResult<Vec<DockerComposeProject>> {
         let raw: Vec<serde_json::Value> = self
             .client
-            .post_json("/api/v2/compose/search", serde_json::json!({ "page": 1, "pageSize": 200 }))
+            .post_json(
+                "/api/v2/compose/search",
+                serde_json::json!({ "page": 1, "pageSize": 200 }),
+            )
             .await
             .map_err(|e| e.with_cause("1Panel 列出 Compose 失败"))?;
         let mut projects = Vec::new();
@@ -580,8 +595,14 @@ impl DockerAdapter for OnePanelAdapter {
             }
             projects.push(DockerComposeProject {
                 name,
-                working_dir: v.get("path").and_then(|x| x.as_str()).map(|s| s.to_string()),
-                config_files: v.get("file").and_then(|x| x.as_str()).map(|s| s.to_string()),
+                working_dir: v
+                    .get("path")
+                    .and_then(|x| x.as_str())
+                    .map(|s| s.to_string()),
+                config_files: v
+                    .get("file")
+                    .and_then(|x| x.as_str())
+                    .map(|s| s.to_string()),
                 service_count: 0,
                 container_count: 0,
                 running_container_count: 0,
@@ -666,16 +687,35 @@ impl DockerAdapter for OnePanelAdapter {
     async fn list_networks(&self) -> OmniResult<Vec<DockerNetworkSummary>> {
         let raw: Vec<serde_json::Value> = self
             .client
-            .post_json("/api/v2/networks/search", serde_json::json!({ "page": 1, "pageSize": 200 }))
+            .post_json(
+                "/api/v2/networks/search",
+                serde_json::json!({ "page": 1, "pageSize": 200 }),
+            )
             .await
             .map_err(|e| e.with_cause("1Panel 列出网络失败"))?;
         Ok(raw
             .into_iter()
             .map(|v| DockerNetworkSummary {
-                id: v.get("id").and_then(|x| x.as_str()).unwrap_or_default().to_string(),
-                name: v.get("name").and_then(|x| x.as_str()).unwrap_or_default().to_string(),
-                driver: v.get("driver").and_then(|x| x.as_str()).unwrap_or_default().to_string(),
-                scope: v.get("scope").and_then(|x| x.as_str()).unwrap_or_default().to_string(),
+                id: v
+                    .get("id")
+                    .and_then(|x| x.as_str())
+                    .unwrap_or_default()
+                    .to_string(),
+                name: v
+                    .get("name")
+                    .and_then(|x| x.as_str())
+                    .unwrap_or_default()
+                    .to_string(),
+                driver: v
+                    .get("driver")
+                    .and_then(|x| x.as_str())
+                    .unwrap_or_default()
+                    .to_string(),
+                scope: v
+                    .get("scope")
+                    .and_then(|x| x.as_str())
+                    .unwrap_or_default()
+                    .to_string(),
                 internal: v.get("internal").and_then(|x| x.as_bool()).unwrap_or(false),
                 created_at: 0,
             })
@@ -700,7 +740,10 @@ impl DockerAdapter for OnePanelAdapter {
 
     async fn remove_network(&self, name: &str) -> OmniResult<()> {
         self.client
-            .post_json("/api/v2/networks/remove", serde_json::json!({ "name": name }))
+            .post_json(
+                "/api/v2/networks/remove",
+                serde_json::json!({ "name": name }),
+            )
             .await
             .map(|_: serde_json::Value| ())
             .map_err(|e| e.with_cause("1Panel 删除网络失败"))
@@ -739,15 +782,30 @@ impl DockerAdapter for OnePanelAdapter {
     async fn list_volumes(&self) -> OmniResult<Vec<DockerVolumeSummary>> {
         let raw: Vec<serde_json::Value> = self
             .client
-            .post_json("/api/v2/volumes/search", serde_json::json!({ "page": 1, "pageSize": 200 }))
+            .post_json(
+                "/api/v2/volumes/search",
+                serde_json::json!({ "page": 1, "pageSize": 200 }),
+            )
             .await
             .map_err(|e| e.with_cause("1Panel 列出卷失败"))?;
         Ok(raw
             .into_iter()
             .map(|v| DockerVolumeSummary {
-                name: v.get("name").and_then(|x| x.as_str()).unwrap_or_default().to_string(),
-                driver: v.get("driver").and_then(|x| x.as_str()).unwrap_or_default().to_string(),
-                mountpoint: v.get("mountpoint").and_then(|x| x.as_str()).unwrap_or_default().to_string(),
+                name: v
+                    .get("name")
+                    .and_then(|x| x.as_str())
+                    .unwrap_or_default()
+                    .to_string(),
+                driver: v
+                    .get("driver")
+                    .and_then(|x| x.as_str())
+                    .unwrap_or_default()
+                    .to_string(),
+                mountpoint: v
+                    .get("mountpoint")
+                    .and_then(|x| x.as_str())
+                    .unwrap_or_default()
+                    .to_string(),
                 created_at: 0,
                 size_bytes: -1,
                 in_use: false,
@@ -821,10 +879,7 @@ impl DockerAdapter for OnePanelAdapter {
                     .map(|c| DockerNetworkSubnet {
                         subnet: c.get("subnet").and_then(|x| x.as_str()).map(String::from),
                         gateway: c.get("gateway").and_then(|x| x.as_str()).map(String::from),
-                        ip_range: c
-                            .get("ipRange")
-                            .and_then(|x| x.as_str())
-                            .map(String::from),
+                        ip_range: c.get("ipRange").and_then(|x| x.as_str()).map(String::from),
                     })
                     .collect()
             })
@@ -907,7 +962,10 @@ impl DockerAdapter for OnePanelAdapter {
     async fn inspect_volume(&self, name: &str) -> OmniResult<DockerVolumeDetail> {
         let raw: Vec<serde_json::Value> = self
             .client
-            .post_json("/api/v2/volumes/search", serde_json::json!({ "page": 1, "pageSize": 500 }))
+            .post_json(
+                "/api/v2/volumes/search",
+                serde_json::json!({ "page": 1, "pageSize": 500 }),
+            )
             .await
             .map_err(|e| e.with_cause("1Panel 查询卷详情失败"))?;
         let item = raw
@@ -969,10 +1027,19 @@ impl DockerAdapter for OnePanelAdapter {
         Err(not_supported("写入容器内文件"))
     }
 
-    async fn swarm_init(&self, _listen_addr: Option<&str>, _advertise_addr: Option<&str>) -> OmniResult<String> {
+    async fn swarm_init(
+        &self,
+        _listen_addr: Option<&str>,
+        _advertise_addr: Option<&str>,
+    ) -> OmniResult<String> {
         Err(not_supported("Swarm 初始化"))
     }
-    async fn swarm_join(&self, _remote_addrs: Vec<String>, _token: &str, _listen_addr: Option<&str>) -> OmniResult<()> {
+    async fn swarm_join(
+        &self,
+        _remote_addrs: Vec<String>,
+        _token: &str,
+        _listen_addr: Option<&str>,
+    ) -> OmniResult<()> {
         Err(not_supported("Swarm 加入"))
     }
     async fn swarm_leave(&self, _force: bool) -> OmniResult<()> {
@@ -987,7 +1054,12 @@ impl DockerAdapter for OnePanelAdapter {
     async fn service_create(&self, _req: &DockerCreateServiceRequest) -> OmniResult<String> {
         Err(not_supported("Swarm 服务管理"))
     }
-    async fn service_update(&self, _id: &str, _replicas: Option<u64>, _image: Option<&str>) -> OmniResult<()> {
+    async fn service_update(
+        &self,
+        _id: &str,
+        _replicas: Option<u64>,
+        _image: Option<&str>,
+    ) -> OmniResult<()> {
         Err(not_supported("Swarm 服务管理"))
     }
     async fn service_remove(&self, _id: &str) -> OmniResult<()> {
@@ -1002,13 +1074,23 @@ impl DockerAdapter for OnePanelAdapter {
     async fn node_inspect(&self, _id: &str) -> OmniResult<serde_json::Value> {
         Err(not_supported("Swarm 节点管理"))
     }
-    async fn node_update(&self, _id: &str, _availability: Option<&str>, _labels: Option<Vec<DockerKeyValue>>) -> OmniResult<()> {
+    async fn node_update(
+        &self,
+        _id: &str,
+        _availability: Option<&str>,
+        _labels: Option<Vec<DockerKeyValue>>,
+    ) -> OmniResult<()> {
         Err(not_supported("Swarm 节点管理"))
     }
     async fn node_remove(&self, _id: &str, _force: bool) -> OmniResult<()> {
         Err(not_supported("Swarm 节点管理"))
     }
-    async fn stack_deploy(&self, _name: &str, _compose_content: &str, _env: Option<Vec<String>>) -> OmniResult<()> {
+    async fn stack_deploy(
+        &self,
+        _name: &str,
+        _compose_content: &str,
+        _env: Option<Vec<String>>,
+    ) -> OmniResult<()> {
         Err(not_supported("Stack 管理"))
     }
     async fn stack_list(&self) -> OmniResult<Vec<DockerStackSummary>> {

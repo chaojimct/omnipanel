@@ -6,9 +6,9 @@ use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
 use omnipanel_error::{ErrorCode, OmniError};
 use omnipanel_ssh::{
-    default_ssh_dir, list_ssh_private_key_paths, ssh_public_key_meta, SftpEntry, SshConfig,
-    SshConfigEntry, SshEvent, SshProcessInfo, SshSession, SshSink, find_ssh_config_entry,
-    load_ssh_config_hosts, ssh_config_to_connect_config,
+    SftpEntry, SshConfig, SshConfigEntry, SshEvent, SshProcessInfo, SshSession, SshSink,
+    default_ssh_dir, find_ssh_config_entry, list_ssh_private_key_paths, load_ssh_config_hosts,
+    ssh_config_to_connect_config, ssh_public_key_meta,
 };
 use omnipanel_store::{Connection, ConnectionKind};
 use serde::Serialize;
@@ -158,6 +158,15 @@ pub async fn ssh_pool_get_statuses(
     Ok(state.ssh_pool.get_statuses().await)
 }
 
+/// 获取当前已建立 SSH 会话的主机 ID 列表。
+#[tauri::command]
+#[specta::specta]
+pub async fn ssh_pool_get_active_sessions(
+    state: State<'_, AppState>,
+) -> Result<Vec<String>, OmniError> {
+    Ok(state.ssh_pool.active_session_ids().await)
+}
+
 /// 开启持续监控采集（后端后台轮询并推送 stats）。
 #[tauri::command]
 #[specta::specta]
@@ -189,6 +198,22 @@ pub async fn ssh_pool_load_processes(
     resource_id: String,
 ) -> Result<Vec<SshProcessInfo>, OmniError> {
     state.ssh_pool.load_processes(&resource_id).await
+}
+
+/// 强制终止远程进程（默认 SIGKILL）。
+#[tauri::command]
+#[specta::specta]
+pub async fn ssh_pool_kill_process(
+    state: State<'_, AppState>,
+    resource_id: String,
+    pid: u32,
+    signal: Option<u32>,
+) -> Result<(), OmniError> {
+    let session = pool_session(&state, &resource_id).await?;
+    let sig = signal.unwrap_or(9);
+    let cmd = format!("kill -s {sig} {pid} 2>/dev/null || kill -{sig} {pid}");
+    session.exec_command(&cmd).await?;
+    Ok(())
 }
 
 /// 列出远端目录。
@@ -508,7 +533,12 @@ pub async fn ssh_create_tunnel(
         "local" => TunnelType::Local,
         "remote" => TunnelType::Remote,
         "dynamic" => TunnelType::Dynamic,
-        _ => return Err(OmniError::new(ErrorCode::InvalidInput, format!("未知隧道类型: {tunnel_type}"))),
+        _ => {
+            return Err(OmniError::new(
+                ErrorCode::InvalidInput,
+                format!("未知隧道类型: {tunnel_type}"),
+            ));
+        }
     };
 
     // Get the SSH config for this connection to build the tunnel command
@@ -518,8 +548,9 @@ pub async fn ssh_create_tunnel(
         .ok_or_else(|| OmniError::new(ErrorCode::NotFound, "SSH 连接不存在"))?;
     drop(storage);
 
-    let ssh_config: SshConfig = serde_json::from_str(&conn.config)
-        .map_err(|e| OmniError::new(ErrorCode::InvalidInput, "SSH 配置解析失败").with_cause(e.to_string()))?;
+    let ssh_config: SshConfig = serde_json::from_str(&conn.config).map_err(|e| {
+        OmniError::new(ErrorCode::InvalidInput, "SSH 配置解析失败").with_cause(e.to_string())
+    })?;
 
     let flag = match ttype {
         TunnelType::Local => "-L",
@@ -527,7 +558,14 @@ pub async fn ssh_create_tunnel(
         TunnelType::Dynamic => "-D",
     };
 
-    let bind_addr = format!("{}:{local_port}", if matches!(ttype, TunnelType::Dynamic) { "" } else { "127.0.0.1" });
+    let bind_addr = format!(
+        "{}:{local_port}",
+        if matches!(ttype, TunnelType::Dynamic) {
+            ""
+        } else {
+            "127.0.0.1"
+        }
+    );
     let forward_spec = match ttype {
         TunnelType::Dynamic => format!("{bind_addr}"),
         _ => format!("{bind_addr}:{remote_host}:{remote_port}"),
@@ -541,10 +579,14 @@ pub async fn ssh_create_tunnel(
         host = ssh_config.host,
     );
 
-    let tunnel_id = format!("tunnel_{}_{}", connection_id, std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis());
+    let tunnel_id = format!(
+        "tunnel_{}_{}",
+        connection_id,
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis()
+    );
 
     // Store tunnel info in app state
     let now = std::time::SystemTime::now()
@@ -564,7 +606,11 @@ pub async fn ssh_create_tunnel(
     };
 
     // Store in tunnels map
-    state.ssh_tunnels.lock().await.insert(tunnel_id, info.clone());
+    state
+        .ssh_tunnels
+        .lock()
+        .await
+        .insert(tunnel_id, info.clone());
 
     tracing::info!(cmd = %ssh_cmd, "创建 SSH 隧道");
     Ok(info)
@@ -590,9 +636,7 @@ pub async fn ssh_close_tunnel(
 /// 列出活跃隧道。
 #[tauri::command]
 #[specta::specta]
-pub async fn ssh_list_tunnels(
-    state: State<'_, AppState>,
-) -> Result<Vec<SshTunnelInfo>, OmniError> {
+pub async fn ssh_list_tunnels(state: State<'_, AppState>) -> Result<Vec<SshTunnelInfo>, OmniError> {
     let tunnels = state.ssh_tunnels.lock().await;
     Ok(tunnels.values().cloned().collect())
 }
@@ -679,9 +723,8 @@ pub async fn ssh_read_key_public(name: String) -> Result<Option<String>, OmniErr
     if !pub_path.is_file() {
         return Ok(None);
     }
-    let content = std::fs::read_to_string(&pub_path).map_err(|e| {
-        OmniError::new(ErrorCode::Io, "读取公钥文件失败").with_cause(e.to_string())
-    })?;
+    let content = std::fs::read_to_string(&pub_path)
+        .map_err(|e| OmniError::new(ErrorCode::Io, "读取公钥文件失败").with_cause(e.to_string()))?;
     Ok(Some(content))
 }
 
@@ -696,14 +739,20 @@ pub async fn ssh_generate_key(
 ) -> Result<SshKeyInfo, OmniError> {
     let home = home_dir()?;
     let ssh_dir = home.join(".ssh");
-    std::fs::create_dir_all(&ssh_dir)
-        .map_err(|e| OmniError::new(ErrorCode::Io, "创建 .ssh 目录失败").with_cause(e.to_string()))?;
+    std::fs::create_dir_all(&ssh_dir).map_err(|e| {
+        OmniError::new(ErrorCode::Io, "创建 .ssh 目录失败").with_cause(e.to_string())
+    })?;
 
     let algo = match key_type.as_str() {
         "ed25519" => "ed25519",
         "rsa" => "rsa",
         "ecdsa" => "ecdsa",
-        _ => return Err(OmniError::new(ErrorCode::InvalidInput, format!("不支持的密钥类型: {key_type}"))),
+        _ => {
+            return Err(OmniError::new(
+                ErrorCode::InvalidInput,
+                format!("不支持的密钥类型: {key_type}"),
+            ));
+        }
     };
 
     let filename = format!("id_{algo}");
@@ -723,14 +772,13 @@ pub async fn ssh_generate_key(
     }
     cmd.arg("-q");
 
-    let output = cmd.output()
-        .map_err(|e| OmniError::new(ErrorCode::Ssh, "运行 ssh-keygen 失败").with_cause(e.to_string()))?;
+    let output = cmd.output().map_err(|e| {
+        OmniError::new(ErrorCode::Ssh, "运行 ssh-keygen 失败").with_cause(e.to_string())
+    })?;
 
     if !output.status.success() {
-        return Err(OmniError::new(
-            ErrorCode::Ssh,
-            "ssh-keygen 执行失败",
-        ).with_cause(String::from_utf8_lossy(&output.stderr).to_string()));
+        return Err(OmniError::new(ErrorCode::Ssh, "ssh-keygen 执行失败")
+            .with_cause(String::from_utf8_lossy(&output.stderr).to_string()));
     }
 
     Ok(ssh_key_info_from_path(&key_path).unwrap_or(SshKeyInfo {
@@ -745,14 +793,12 @@ pub async fn ssh_generate_key(
 /// 导入 SSH 私钥（写入 ~/.ssh/ 目录）。
 #[tauri::command]
 #[specta::specta]
-pub async fn ssh_import_key(
-    name: String,
-    private_key: String,
-) -> Result<SshKeyInfo, OmniError> {
+pub async fn ssh_import_key(name: String, private_key: String) -> Result<SshKeyInfo, OmniError> {
     let home = home_dir()?;
     let ssh_dir = home.join(".ssh");
-    std::fs::create_dir_all(&ssh_dir)
-        .map_err(|e| OmniError::new(ErrorCode::Io, "创建 .ssh 目录失败").with_cause(e.to_string()))?;
+    std::fs::create_dir_all(&ssh_dir).map_err(|e| {
+        OmniError::new(ErrorCode::Io, "创建 .ssh 目录失败").with_cause(e.to_string())
+    })?;
 
     let key_path = ssh_dir.join(&name);
     std::fs::write(&key_path, &private_key)
@@ -765,9 +811,13 @@ pub async fn ssh_import_key(
         let _ = std::fs::set_permissions(&key_path, std::fs::Permissions::from_mode(0o600));
     }
 
-    let key_type = if private_key.contains("ed25519") { "ed25519" }
-        else if private_key.contains("RSA") { "rsa" }
-        else { "openssh" };
+    let key_type = if private_key.contains("ed25519") {
+        "ed25519"
+    } else if private_key.contains("RSA") {
+        "rsa"
+    } else {
+        "openssh"
+    };
 
     Ok(SshKeyInfo {
         name,
