@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   flexRender,
   getCoreRowModel,
@@ -8,6 +8,7 @@ import {
 } from "@tanstack/react-table";
 
 import { Button } from "../../components/ui/Button";
+import { useI18n } from "../../i18n";
 import { type DbColumnMeta } from "./api";
 
 export type TableDataGridProps = {
@@ -50,6 +51,7 @@ function isNearRowBottom(target: HTMLElement, clientY: number): boolean {
 }
 
 export function TableDataGrid({ columns, rows, totalRows, page, pageSize, loading, onPageChange, columnMeta, onCellEdit, dirtyRowKeys, cellOverrides }: TableDataGridProps) {
+  const { t } = useI18n();
   const [rowHeights, setRowHeights] = useState<Record<number, number>>({});
   const [resizingRow, setResizingRow] = useState<number | null>(null);
   const [resizeHintRow, setResizeHintRow] = useState<number | null>(null);
@@ -64,13 +66,38 @@ export function TableDataGrid({ columns, rows, totalRows, page, pageSize, loadin
     startX: number;
     startWidth: number;
   } | null>(null);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const savedScrollRef = useRef({ left: 0, top: 0 });
+  const restoreScrollAfterPageChangeRef = useRef(false);
+
+  const handlePageChange = useCallback(
+    (nextPage: number) => {
+      const el = wrapRef.current;
+      if (el) {
+        savedScrollRef.current = { left: el.scrollLeft, top: el.scrollTop };
+      }
+      restoreScrollAfterPageChangeRef.current = true;
+      onPageChange(nextPage);
+    },
+    [onPageChange],
+  );
+
+  useLayoutEffect(() => {
+    if (!restoreScrollAfterPageChangeRef.current) return;
+    restoreScrollAfterPageChangeRef.current = false;
+    const el = wrapRef.current;
+    if (!el) return;
+    const { left, top } = savedScrollRef.current;
+    el.scrollLeft = left;
+    el.scrollTop = top;
+  }, [page, rows]);
 
   useEffect(() => {
     setRowHeights({});
     setResizingRow(null);
     setResizeHintRow(null);
     dragRef.current = null;
-  }, [columns, rows]);
+  }, [columns]);
 
   const columnMetaMap = useMemo(() => {
     if (!columnMeta) return null;
@@ -181,6 +208,7 @@ export function TableDataGrid({ columns, rows, totalRows, page, pageSize, loadin
   return (
     <>
     <div
+      ref={wrapRef}
       className={`db-data-table-wrap${resizingRow !== null ? " db-data-table-wrap--resizing" : ""}${table.getState().columnSizingInfo?.isResizingColumn ? " db-data-table-wrap--col-resizing" : ""}`}
     >
       <table className="db-data-table">
@@ -303,8 +331,19 @@ export function TableDataGrid({ columns, rows, totalRows, page, pageSize, loadin
           variant="ghost"
           size="sm"
           disabled={page <= 0 || loading}
-          onClick={() => onPageChange(page - 1)}
-          title="Previous page"
+          onClick={() => handlePageChange(0)}
+          title={t("database.results.paginationFirst")}
+          aria-label={t("database.results.paginationFirst")}
+        >
+          «
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          disabled={page <= 0 || loading}
+          onClick={() => handlePageChange(page - 1)}
+          title={t("database.results.paginationPrev")}
+          aria-label={t("database.results.paginationPrev")}
         >
           ‹
         </Button>
@@ -317,10 +356,21 @@ export function TableDataGrid({ columns, rows, totalRows, page, pageSize, loadin
           variant="ghost"
           size="sm"
           disabled={page >= totalPages - 1 || loading}
-          onClick={() => onPageChange(page + 1)}
-          title="Next page"
+          onClick={() => handlePageChange(page + 1)}
+          title={t("database.results.paginationNext")}
+          aria-label={t("database.results.paginationNext")}
         >
           ›
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          disabled={page >= totalPages - 1 || loading}
+          onClick={() => handlePageChange(totalPages - 1)}
+          title={t("database.results.paginationLast")}
+          aria-label={t("database.results.paginationLast")}
+        >
+          »
         </Button>
       </div>
     </div>

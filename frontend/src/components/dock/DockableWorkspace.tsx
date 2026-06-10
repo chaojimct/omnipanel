@@ -23,7 +23,7 @@ export interface DockableWorkspaceProps {
   onActiveTabChange: (tabId: string) => void;
   onCloseTab: (tabId: string) => void;
   savedLayout: LayoutBase | null;
-  onSavedLayoutChange: (layout: LayoutBase) => void;
+  onSavedLayoutChange: (layout: LayoutBase | null) => void;
   renderPanel: (tabId: string) => ReactNode;
   className?: string;
   emptyContent?: ReactNode;
@@ -101,17 +101,15 @@ export function DockableWorkspace({
     [savedLayout, tabIds, activeTabId],
   );
 
-  // 仅标题变更时 layout 引用不变，克隆一份以触发 rc-dock reload（不可用 updateTab，会触发 changeLayout 死循环）
-  const layoutForRcDock = useMemo(
-    () => JSON.parse(JSON.stringify(layout)) as LayoutBase,
-    [layout, tabsLabelSignature],
-  );
+  const layoutForRcDock = useMemo(() => {
+    const base = layout ?? createDefaultRcLayout(tabIds, activeTabId);
+    return JSON.parse(JSON.stringify(base)) as LayoutBase;
+  }, [layout, tabsLabelSignature, tabIds, activeTabId]);
 
-  // 新增/关闭 tab 时合并布局并持久化；受控模式下须保持 layout 引用稳定，避免每次 render 触发 reload
+  // 新增/关闭 tab 时合并布局并持久化；无 tab 时 layout 为 null，须与 savedLayout 同步一次后停止
   useEffect(() => {
-    if (layout !== savedLayout) {
-      onSavedLayoutChange(layout);
-    }
+    if (layout === savedLayout) return;
+    onSavedLayoutChange(layout);
   }, [layout, savedLayout, onSavedLayoutChange]);
 
   // rc-dock 关闭按钮需 drag-ignore，避免点击 × 时误触发 Tab 拖拽
