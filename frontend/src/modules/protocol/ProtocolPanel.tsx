@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { useTopbarTabs } from "../../hooks/useTopbarTabs";
 import { useI18n } from "../../i18n";
 import { SidebarWorkspace } from "../../components/ui/SidebarWorkspace";
@@ -15,6 +16,8 @@ const PROTOCOLS: ProtocolKind[] = ["http", "ws", "mqtt", "serial", "grpc", "snif
 
 export function ProtocolPanel() {
   const { t } = useI18n();
+  const location = useLocation();
+  const isActiveRoute = location.pathname === "/protocol";
   const [active, setActive] = useState<ProtocolKind>("http");
 
   const topbarTabs = useMemo(
@@ -29,7 +32,7 @@ export function ProtocolPanel() {
 
   useTopbarTabs(topbarTabs, {
     onSelect: (id) => setActive(id as ProtocolKind),
-  }, { mode: "segment" });
+  }, { mode: "segment", enabled: isActiveRoute });
 
   const renderPanel = () => {
     switch (active) {

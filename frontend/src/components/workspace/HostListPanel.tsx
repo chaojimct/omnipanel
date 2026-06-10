@@ -21,6 +21,7 @@ import {
   getLinkedConnectionIds,
   parsePanelConfig,
 } from "../../modules/server/panel/serverConnection";
+import { SSH_PATH } from "../../modules/server/ssh/constants";
 import type { Connection } from "../../ipc/bindings";
 
 const HOST_ICON = (
@@ -35,8 +36,6 @@ interface HostListPanelProps {
   resources: WorkspaceResource[];
   onConnect?: (hostId: string) => void;
 }
-
-const SSH_PATH = "/server";
 
 function HostPanelBadge({ sshId }: { sshId: string }) {
   const { t } = useI18n();

@@ -1,5 +1,4 @@
 import { BrowserRouter, Routes, Route, useLocation, useNavigate } from "react-router-dom";
-import { useServerViewStore } from "./stores/serverViewStore";
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { Sidebar } from "./components/shell/Sidebar";
 import { Topbar } from "./components/shell/Topbar";
@@ -17,7 +16,7 @@ import { TerminalPanel } from "./modules/terminal/TerminalPanel";
 import { DatabasePanel } from "./modules/database/DatabasePanel";
 import { DockerPanel } from "./modules/docker/DockerPanel";
 import { ServerPanel } from "./modules/server/ServerPanel";
-import { SshRedirect } from "./modules/server/SshRedirect";
+import { SshPanel } from "./modules/server/SshPanel";
 import { ProtocolPanel } from "./modules/protocol/ProtocolPanel";
 import { WorkflowPanel } from "./modules/workflow/WorkflowPanel";
 import { KnowledgePanel } from "./modules/knowledge/KnowledgePanel";
@@ -68,7 +67,7 @@ function TopbarPageActions() {
     );
   }
 
-  if (path === "/server" && useServerViewStore.getState().viewTab === "terminal") {
+  if (path === "/ssh") {
     return (
       <Button
         variant="primary"
@@ -122,7 +121,8 @@ function TopbarPageActions() {
   return null;
 }
 
-const TOPBAR_TAB_ROUTES = ["/terminal", "/database", "/docker", "/server", "/tasks", "/protocol"];
+/** 会在顶栏注册 Tab 的路由；不含 SSH / 服务器等无顶栏 Tab 的模块 */
+const TOPBAR_TAB_ROUTES = ["/terminal", "/database", "/docker", "/tasks", "/protocol"];
 
 function AppShell() {
   useAiDrawerShortcut();
@@ -130,8 +130,10 @@ function AppShell() {
   const navigate = useNavigate();
   const title = getRouteTitle(location.pathname);
   const isTerminal = location.pathname === "/terminal";
+  const isDocker = location.pathname === "/docker";
   const [otherRoutesMounted, setOtherRoutesMounted] = useState(!isTerminal);
   const [terminalMounted, setTerminalMounted] = useState(isTerminal);
+  const [dockerMounted, setDockerMounted] = useState(isDocker);
   const aiDisplayMode = useSettingsStore((s) => s.aiDisplayMode);
   const drawerOpen = useAiStore((s) => s.drawerOpen);
   const setActivePath = useWorkspaceStore((state) => state.setActivePath);
@@ -151,6 +153,12 @@ function AppShell() {
       setTerminalMounted(true);
     }
   }, [isTerminal]);
+
+  useEffect(() => {
+    if (isDocker) {
+      setDockerMounted(true);
+    }
+  }, [isDocker]);
 
   useEffect(() => {
     setActivePath(location.pathname);
@@ -239,14 +247,17 @@ function AppShell() {
               <div className={`route-panel${isTerminal ? " route-panel--active" : ""}`}>
                 {terminalMounted && <TerminalPanel />}
               </div>
-              <div className={`route-panel${!isTerminal ? " route-panel--active" : ""}`}>
+              <div className={`route-panel${isDocker ? " route-panel--active" : ""}`}>
+                {dockerMounted && <DockerPanel />}
+              </div>
+              <div className={`route-panel${!isTerminal && !isDocker ? " route-panel--active" : ""}`}>
                 {otherRoutesMounted && (
                   <Routes>
                     <Route path="/" element={<Dashboard />} />
                     <Route path="/terminal" element={null} />
-                    <Route path="/ssh" element={<SshRedirect />} />
+                    <Route path="/ssh" element={<SshPanel />} />
                     <Route path="/database" element={<DatabasePanel />} />
-                    <Route path="/docker" element={<DockerPanel />} />
+                    <Route path="/docker" element={null} />
                     <Route path="/server" element={<ServerPanel />} />
                     <Route path="/protocol" element={<ProtocolPanel />} />
                     <Route path="/workflow" element={<WorkflowPanel />} />

@@ -1,4 +1,52 @@
-/** Docker 模块共用线性图标（14×14，与 design/docker.html 一致） */
+/** Docker 模块共用线性图标（14×14，与 Sidebar / design 一致） */
+
+type IconProps = { size?: number };
+
+/** 侧栏同款 Docker 标识（容器堆 + 波浪） */
+export function DockerWhaleIcon({ size = 14 }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" width={size} height={size}>
+      <rect x="2" y="7" width="6" height="5" rx="1" />
+      <rect x="10" y="7" width="6" height="5" rx="1" />
+      <rect x="18" y="7" width="4" height="5" rx="1" />
+      <rect x="6" y="2" width="6" height="5" rx="1" />
+      <path d="M2 17h20c0 2.76-4.48 5-10 5S2 19.76 2 17z" />
+    </svg>
+  );
+}
+
+/** 单个容器/包裹图标（列表行用，避免双矩形被误读为 ∞） */
+export function ContainerIcon({ size = 14 }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width={size} height={size}>
+      <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+      <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
+      <line x1="12" y1="22.08" x2="12" y2="12" />
+    </svg>
+  );
+}
+
+/** 镜像统计 */
+export function ImageLayersIcon({ size = 14 }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width={size} height={size}>
+      <rect x="3" y="3" width="18" height="18" rx="2" />
+      <circle cx="8.5" cy="8.5" r="1.5" fill="currentColor" stroke="none" />
+      <path d="M21 15l-5-5L5 21" />
+    </svg>
+  );
+}
+
+/** Compose 堆叠 */
+export function ComposeStackIcon({ size = 14 }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width={size} height={size}>
+      <path d="M12 2L2 7l10 5 10-5-10-5z" />
+      <path d="M2 12l10 5 10-5" />
+      <path d="M2 17l10 5 10-5" />
+    </svg>
+  );
+}
 
 export function TrashIcon() {
   return (

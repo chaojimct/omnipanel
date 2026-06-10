@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
+import { useLocation } from "react-router-dom";
 import { useTaskStore, initTaskProgressListener } from "../../stores/taskStore";
 import { useTopbarTabs } from "../../hooks/useTopbarTabs";
 import { useI18n } from "../../i18n";
@@ -433,10 +434,13 @@ export function TasksPanel() {
     [tab, t, activeTasks.length, draftTasks.length]
   );
 
+  const location = useLocation();
+  const isActiveRoute = location.pathname === "/tasks";
+
   useTopbarTabs(
     topbarTabs,
     { onSelect: (id) => setTab(id as TaskTab) },
-    { mode: "segment" }
+    { mode: "segment", enabled: isActiveRoute }
   );
 
   // 事件处理

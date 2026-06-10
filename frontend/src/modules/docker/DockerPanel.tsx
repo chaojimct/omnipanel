@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useActionStore } from "../../stores/actionStore";
-import { useServerViewStore } from "../../stores/serverViewStore";
 import { useAiStore } from "../../stores/aiStore";
 import { useTopbarTabs } from "../../hooks/useTopbarTabs";
 import { useI18n } from "../../i18n";
@@ -30,6 +29,10 @@ import { SwarmPanel } from "./SwarmPanel";
 import { formatDockerTime } from "./format";
 import {
   CloseIcon,
+  ComposeStackIcon,
+  ContainerIcon,
+  DockerWhaleIcon,
+  ImageLayersIcon,
   PlayIcon,
   PushIcon,
   RestartIcon,
@@ -77,6 +80,8 @@ const SOURCE_LABEL: Record<string, string> = {
 
 export function DockerPanel() {
   const { t } = useI18n();
+  const location = useLocation();
+  const isActiveRoute = location.pathname === "/docker";
   const navigate = useNavigate();
   const enqueueAction = useActionStore((s) => s.enqueueAction);
   const setAiDraft = useAiStore((s) => s.setDraftPrompt);
@@ -115,6 +120,7 @@ export function DockerPanel() {
     writeContainerFile,
     connectionsLoading,
     dataLoading,
+    dataRefreshing,
     error,
     refresh,
     containerAction,
@@ -133,7 +139,6 @@ export function DockerPanel() {
   const [query, setQuery] = useState("");
   const [searchInput, setSearchInput] = useState("");
   const [errorDismissed, setErrorDismissed] = useState(false);
-  const [switching, setSwitching] = useState(false);
   const [confirm, setConfirm] = useState<ConfirmState | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [drawerId, setDrawerId] = useState<string | null>(null);
@@ -170,10 +175,10 @@ export function DockerPanel() {
       onSelect: (id) => selectConnection(id),
       onAdd: () => setShowAddConn(true),
     },
-    { mode: "connection", showAddTab: true, addTabTitle: "添加 Docker 连接" }
+    { mode: "connection", showAddTab: true, addTabTitle: "添加 Docker 连接", enabled: isActiveRoute }
   );
 
-  // 切换连接时复位本地视图状态。
+  // 切换连接时复位本地视图状态（数据在 hook 内后台加载，无全屏遮罩）。
   useEffect(() => {
     setDrawerId(null);
     setTab("containers");
@@ -181,17 +186,19 @@ export function DockerPanel() {
     setQuery("");
     setSearchInput("");
     setErrorDismissed(false);
-    setSwitching(true);
     setSelectedContainers(new Set());
     setSelectedImages(new Set());
   }, [selectedConnectionId]);
 
-  // Clear switching overlay when data finishes loading
+  // 从其他模块切回 Docker 时静默刷新，保留当前 UI 状态。
+  const onDockerRouteRef = useRef(location.pathname === "/docker");
   useEffect(() => {
-    if (switching && !dataLoading) {
-      setSwitching(false);
+    const onDocker = location.pathname === "/docker";
+    if (onDocker && !onDockerRouteRef.current) {
+      refresh();
     }
-  }, [dataLoading, switching]);
+    onDockerRouteRef.current = onDocker;
+  }, [location.pathname, refresh]);
 
   // Search debounce
   useEffect(() => {
@@ -377,15 +384,7 @@ export function DockerPanel() {
 
   return (
     <>
-      <div className="docker-layout" style={{ position: "relative" }}>
-        {/* Switching Overlay */}
-        {switching && (
-          <div className="docker-switch-overlay">
-            <div className="docker-switch-spinner" />
-            <span>正在连接…</span>
-          </div>
-        )}
-
+      <div className="docker-layout">
         {/* 连接头部 */}
         {selectedConnection && (
           <div className="docker-conn-header">
@@ -403,8 +402,8 @@ export function DockerPanel() {
                 <span className="text-muted text-xs">Engine {selectedConnection.engineVersion}</span>
               )}
             </div>
-            <Button variant="secondary" size="sm" onClick={refresh} disabled={dataLoading}>
-              {dataLoading ? "刷新中…" : "刷新"}
+            <Button variant="secondary" size="sm" onClick={refresh} disabled={dataRefreshing}>
+              {dataRefreshing ? "刷新中…" : "刷新"}
             </Button>
           </div>
         )}
@@ -516,7 +515,7 @@ export function DockerPanel() {
                   </div>
                   {filteredContainers.length === 0 ? (
                     <div className="docker-empty" style={{ minHeight: 120 }}>
-                      {dataLoading ? "加载中…" : <EmptyState icon="📦" title="暂无容器" desc="创建或拉取一个容器开始使用" />}
+                      {dataLoading && containers.length === 0 ? "加载中…" : <EmptyState icon="📦" title="暂无容器" desc="创建或拉取一个容器开始使用" />}
                     </div>
                   ) : (
                     filteredContainers.map((container, idx) => (
@@ -531,7 +530,7 @@ export function DockerPanel() {
                         </div>
                         <div className="container-name">
                           <div className="container-icon" style={{ color: container.running ? "var(--success)" : "var(--muted)" }}>
-                            <BoxIcon />
+                            <ContainerIcon />
                           </div>
                           <div>
                             <div className="container-title">{container.name}</div>
@@ -627,7 +626,7 @@ export function DockerPanel() {
                   <span></span>
                 </div>
                 {images.length === 0 ? (
-                  <div className="docker-empty" style={{ minHeight: 120 }}>{dataLoading ? "加载中…" : <EmptyState icon="🖼️" title="暂无镜像" desc="拉取或构建镜像" />}</div>
+                  <div className="docker-empty" style={{ minHeight: 120 }}>{dataLoading && images.length === 0 ? "加载中…" : <EmptyState icon="🖼️" title="暂无镜像" desc="拉取或构建镜像" />}</div>
                 ) : (
                   images.map((img, idx) => (
                     <div
@@ -691,7 +690,7 @@ export function DockerPanel() {
               <div className="container-list">
                 {composeProjects.length === 0 ? (
                   <div className="docker-empty" style={{ minHeight: 120 }}>
-                    {dataLoading ? "加载中…" : <EmptyState icon="🐳" title="未识别到 Compose 项目" />}
+                    {dataLoading && composeProjects.length === 0 ? "加载中…" : <EmptyState icon="🐳" title="未识别到 Compose 项目" />}
                   </div>
                 ) : (
                   composeProjects.map((proj) => (
@@ -1029,10 +1028,10 @@ function StatCard({ color, value, label, icon }: { color: string; value: number;
   const bg = `var(--${color}-soft)`;
   const fg = `var(--${color})`;
   const icons = {
-    running: <BoxIcon />,
-    stopped: <BoxIcon />,
-    images: <ImageStatIcon />,
-    compose: <ComposeStatIcon />,
+    running: <DockerWhaleIcon />,
+    stopped: <DockerWhaleIcon />,
+    images: <ImageLayersIcon />,
+    compose: <ComposeStackIcon />,
   };
   return (
     <div className="docker-stat">
@@ -1118,7 +1117,7 @@ function ContainerDrawer({
           <>
             <div className="drawer-header">
               <div className="container-icon" style={{ color: "var(--success)", width: 28, height: 28, display: "grid", placeItems: "center", background: "var(--success-soft)", borderRadius: "var(--r-sm)" }}>
-                <BoxIcon />
+                <ContainerIcon />
               </div>
               <h2>{detail?.summary.name ?? "加载中…"}</h2>
               {detail && (
@@ -1235,10 +1234,9 @@ function ContainerDrawer({
                       <span className="v">{hostLabel ?? "—"}</span>
                     </div>
                     <div className="flex gap-2" style={{ flexWrap: "wrap", marginTop: "var(--sp-2)" }}>
-                      <Button variant="secondary" size="sm" onClick={() => {
-                        useServerViewStore.getState().setViewTab("terminal");
-                        onNavigate("/server");
-                      }}>打开 SSH</Button>
+                      <Button variant="secondary" size="sm" onClick={() => onNavigate("/ssh")}>
+                        打开 SSH
+                      </Button>
                       <Button variant="secondary" size="sm" onClick={() => onNavigate("/server")}>查看服务器</Button>
                       <Button variant="secondary" size="sm" onClick={() => onSendToAi(detail)}>发送给 AI 分析</Button>
                     </div>
@@ -1336,27 +1334,3 @@ function ConfirmModal({ confirm, onCancel }: { confirm: ConfirmState; onCancel: 
   );
 }
 
-// --- 图标 ---
-function BoxIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
-      <rect x="2" y="7" width="6" height="5" rx="1" />
-      <rect x="10" y="7" width="6" height="5" rx="1" />
-    </svg>
-  );
-}
-function ImageStatIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
-      <rect x="3" y="3" width="18" height="18" rx="2" />
-    </svg>
-  );
-}
-function ComposeStatIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
-      <circle cx="12" cy="12" r="10" />
-      <path d="M12 6v6l4 2" />
-    </svg>
-  );
-}

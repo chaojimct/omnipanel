@@ -16,7 +16,7 @@ export const enUS: TranslationDict = {
   },
   agent: {
     title: "AI Agent",
-    description: "Filesystem agent powered by deepagents",
+    description: "AI agent with file, terminal, and tool-calling capabilities",
     conversations: "Conversations",
     newChat: "New Chat",
     noConversations: "No conversations yet",
@@ -659,6 +659,9 @@ export const enUS: TranslationDict = {
       monitoring: "Monitoring",
     },
     connect: "Connect",
+    empty: {
+      selectHost: "No SSH connections yet. Add a host with + on the left, or sync from ~/.ssh/config",
+    },
     tunnels: {
       label: "Port Forwarding",
       create: "Create Tunnel",
@@ -870,8 +873,8 @@ export const enUS: TranslationDict = {
     empty: {
       title: "No Servers",
       description: 'Click the "+" button or the button below to add a server.',
-      selectServer: "Select a host on the left to view installed apps.",
-      noPanelConfig: "This host has no panel configured. Edit the host and fill in panel settings.",
+      selectServer: "Select a server on the left to view installed apps.",
+      noPanelConfig: "This server has no panel connection. Add one and fill in panel settings.",
     },
     placeholder: "{name} is ready. Server management features coming soon.",
     apps: {

@@ -54,7 +54,10 @@ interface DockerWorkspaceState {
   filePath: string;
   fileContainerId: string | null;
   connectionsLoading: boolean;
+  /** 首次加载或无缓存数据时为 true，会显示列表占位「加载中」 */
   dataLoading: boolean;
+  /** 后台刷新中为 true，仅用于刷新按钮状态，不遮挡内容 */
+  dataRefreshing: boolean;
   error: string | null;
 }
 
@@ -85,12 +88,15 @@ export function useDockerWorkspace() {
     fileContainerId: null,
     connectionsLoading: true,
     dataLoading: false,
+    dataRefreshing: false,
     error: null,
   });
 
   // 用 ref 保存当前选中连接与镜像列表，避免闭包捕获过期值。
   const selectedRef = useRef<string | null>(null);
   selectedRef.current = state.selectedConnectionId;
+  const loadedConnectionsRef = useRef<Set<string>>(new Set());
+  const prevConnectionRef = useRef<string | null>(null);
   const imagesRef = useRef<DockerImageSummary[]>([]);
   imagesRef.current = state.images;
 
@@ -113,16 +119,34 @@ export function useDockerWorkspace() {
   }, []);
 
   /** 加载选中连接的探测、总览、容器、镜像、Compose。 */
-  const loadConnectionData = useCallback(async (connectionId: string) => {
-    setState((s) => ({ ...s, dataLoading: true, error: null }));
+  const loadConnectionData = useCallback(async (connectionId: string, options?: { silent?: boolean }) => {
+    const silent = options?.silent ?? false;
+    setState((s) => ({
+      ...s,
+      error: null,
+      dataLoading: silent ? s.dataLoading : true,
+      dataRefreshing: silent ? true : s.dataRefreshing,
+    }));
+
+    const finishLoading = (patch: Partial<DockerWorkspaceState>) => {
+      setState((s) => ({
+        ...s,
+        ...patch,
+        dataLoading: false,
+        dataRefreshing: false,
+      }));
+    };
 
     // 先探测连通性。
     let probe: DockerProbe | null = null;
     try {
       probe = await unwrap(commands.dockerProbeConnection(connectionId));
     } catch (e) {
-      setState((s) => ({
-        ...s,
+      if (silent) {
+        setState((s) => ({ ...s, dataRefreshing: false, error: String(e) }));
+        return;
+      }
+      finishLoading({
         probe: null,
         overview: null,
         containers: [],
@@ -131,13 +155,15 @@ export function useDockerWorkspace() {
         networks: [],
         volumes: [],
         files: [],
-        dataLoading: false,
         error: String(e),
-      }));
+      });
       return;
     }
 
-    if (selectedRef.current !== connectionId) return;
+    if (selectedRef.current !== connectionId) {
+      setState((s) => ({ ...s, dataLoading: false, dataRefreshing: false }));
+      return;
+    }
 
     // 把探测得到的状态/版本回填到连接列表。
     setState((s) => ({
@@ -157,17 +183,24 @@ export function useDockerWorkspace() {
     }));
 
     if (probe.status === "offline") {
-      setState((s) => ({
-        ...s,
+      if (silent) {
+        setState((s) => ({
+          ...s,
+          probe,
+          dataRefreshing: false,
+          error: probe?.warningMessage ?? "Docker 未安装或未启动",
+        }));
+        return;
+      }
+      finishLoading({
         overview: null,
         containers: [],
         images: [],
         composeProjects: [],
         networks: [],
         volumes: [],
-        dataLoading: false,
         error: probe?.warningMessage ?? "Docker 未安装或未启动",
-      }));
+      });
       return;
     }
 
@@ -181,17 +214,19 @@ export function useDockerWorkspace() {
       unwrap(commands.dockerListVolumes(connectionId)).catch(() => []),
     ]);
 
-    if (selectedRef.current !== connectionId) return;
-    setState((s) => ({
-      ...s,
+    if (selectedRef.current !== connectionId) {
+      setState((s) => ({ ...s, dataLoading: false, dataRefreshing: false }));
+      return;
+    }
+    loadedConnectionsRef.current.add(connectionId);
+    finishLoading({
       overview,
       containers,
       images,
       composeProjects,
       networks,
       volumes,
-      dataLoading: false,
-    }));
+    });
   }, []);
 
   // 初始化加载连接列表。
@@ -201,9 +236,31 @@ export function useDockerWorkspace() {
 
   // 选中连接变化时加载数据。
   useEffect(() => {
-    if (state.selectedConnectionId) {
-      void loadConnectionData(state.selectedConnectionId);
+    const id = state.selectedConnectionId;
+    if (!id) return;
+
+    const switched =
+      prevConnectionRef.current !== null && prevConnectionRef.current !== id;
+    prevConnectionRef.current = id;
+
+    if (switched) {
+      setState((s) => ({
+        ...s,
+        probe: null,
+        overview: null,
+        containers: [],
+        images: [],
+        composeProjects: [],
+        networks: [],
+        volumes: [],
+        files: [],
+        filePath: "/",
+        fileContainerId: null,
+      }));
     }
+
+    const silent = loadedConnectionsRef.current.has(id);
+    void loadConnectionData(id, { silent });
   }, [state.selectedConnectionId, loadConnectionData]);
 
   const selectConnection = useCallback((id: string) => {
@@ -212,7 +269,7 @@ export function useDockerWorkspace() {
 
   const refresh = useCallback(() => {
     const id = selectedRef.current;
-    if (id) void loadConnectionData(id);
+    if (id) void loadConnectionData(id, { silent: true });
   }, [loadConnectionData]);
 
   /** 仅刷新容器列表（动作后轻量刷新）。 */

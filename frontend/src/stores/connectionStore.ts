@@ -221,19 +221,17 @@ export async function syncFromOpenSshConfig(): Promise<SshConfigSyncResult | nul
   }
 }
 
-/** SSH 模块主机列表：仅展示持久化存储中的 SSH 连接。 */
+/** SSH 模块主机列表：仅展示持久化存储中的 SSH 连接，无 demo 占位。 */
 export function useSshHostResources(): WorkspaceResource[] {
   const connections = useConnectionStore((state) => state.connections);
-  const loaded = useConnectionStore((state) => state.loaded);
 
-  return useMemo(() => {
-    const stored = connections
-      .filter((c) => c.kind === "ssh")
-      .map(connectionToResource);
-    if (stored.length > 0) return stored;
-    if (loaded) return SEED_RESOURCES.filter((r) => r.type === "ssh");
-    return [];
-  }, [connections, loaded]);
+  return useMemo(
+    () =>
+      connections
+        .filter((c) => c.kind === "ssh")
+        .map(connectionToResource),
+    [connections],
+  );
 }
 
 /** 服务器模块列表：仅展示持久化存储中的 Panel 连接。 */

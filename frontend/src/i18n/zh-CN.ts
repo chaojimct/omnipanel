@@ -14,7 +14,7 @@ export const zhCN = {
   },
   agent: {
     title: "AI 智能体",
-    description: "基于 deepagents 框架的文件系统智能体",
+    description: "支持文件读写、终端执行等工具调用的 AI 智能体",
     conversations: "对话",
     newChat: "新建对话",
     noConversations: "暂无对话",
@@ -655,6 +655,9 @@ export const zhCN = {
       monitoring: "监控",
     },
     connect: "连接",
+    empty: {
+      selectHost: "暂无 SSH 连接，点击左侧 + 添加主机，或从 ~/.ssh/config 同步",
+    },
     tunnels: {
       label: "端口映射",
       create: "创建隧道",
@@ -866,8 +869,8 @@ export const zhCN = {
     empty: {
       title: "暂无服务器",
       description: '点击"+"按钮或下方按钮添加服务器。',
-      selectServer: "在左侧选择一台主机以查看已安装应用。",
-      noPanelConfig: "该主机尚未配置面板，请在主机菜单中编辑并填写面板信息。",
+      selectServer: "在左侧选择一台服务器以查看已安装应用。",
+      noPanelConfig: "该服务器尚未配置面板连接，请点击添加并填写面板信息。",
     },
     placeholder: "{name} 已就绪。服务器管理功能即将上线。",
     apps: {

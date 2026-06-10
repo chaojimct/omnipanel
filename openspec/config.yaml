@@ -1,20 +1,137 @@
 schema: spec-driven
 
-# Project context (optional)
-# This is shown to AI when creating artifacts.
-# Add your tech stack, conventions, style guides, domain knowledge, etc.
-# Example:
-#   context: |
-#     Tech stack: TypeScript, React, Node.js
-#     We use conventional commits
-#     Domain: e-commerce platform
+# 项目上下文 — 生成 proposal / design / specs / tasks 时注入 AI
+context: |
+  ## 产品定位
 
-# Per-artifact rules (optional)
-# Add custom rules for specific artifacts.
-# Example:
-#   rules:
-#     proposal:
-#       - Keep proposals under 500 words
-#       - Always include a "Non-goals" section
-#     tasks:
-#       - Break tasks into chunks of max 2 hours
+  OmniPanel 是 AI 原生的跨平台个人工程工作台（桌面 Tauri 应用），愿景是让每位 coder 的电脑里
+  有一个统一的工程驾驶舱：终端、SSH、数据库、Docker、服务器、协议调试、工作流与 AI 共享同一
+  任务上下文，本地优先、专业可信、高密度且美观。
+
+  产品原则：All in One，小而全而优而美。不是工具集合，而是围绕工作区的上下文贯通系统。
+  详细需求见仓库根目录 PRD.md；架构与协作约定见 docs/ARCHITECTURE.md。
+
+  ## 技术栈
+
+  - 应用框架：Tauri 2.x（Rust 后端 + WebView 前端）
+  - 前端：React 18 + TypeScript + Vite + React Router + Zustand
+  - 终端：xterm.js（前端）+ portable-pty（后端），base64 事件回流 + scrollback 快照恢复
+  - SSH：russh + russh-sftp（ring 后端）
+  - 数据库：omnipanel-db（DbDriver trait），MySQL/PostgreSQL 走 sqlx，SQLite 走 rusqlite
+  - Docker：omnipanel-docker + bollard
+  - AI：omnipanel-ai（AiProvider trait），支持 OpenAI/Anthropic/本地模型/CLI Agent
+  - 存储：omnipanel-store（rusqlite + keyring 凭据，SQLCipher feature 可选）
+  - IPC：tauri-specta 自动生成 frontend/src/ipc/bindings.ts，禁止手写命令字符串
+  - 错误：统一 OmniError { code, kind, message, cause }
+
+  ## 架构分层（必须遵守）
+
+  - frontend/src/modules/<feature>：功能 UI，模块间不互相 import，跨模块走 store/事件
+  - src-tauri/src/commands/：薄桥接层，只做命令注册、参数桥接、事件 emit，不写业务逻辑
+  - crates/：按领域拆分（store/exec/ssh/db/docker/ai/core/error），crate 间单向依赖、禁止环依赖
+  - 扩展点一律走 trait（AiProvider、DbDriver、Executor 等）
+
+  ## 设计系统（原型：design/）
+
+  视觉基于 OpenCode 暖色暗色主题，参考 design/design-system.html 与 design/css/omnipanel.css。
+  实现 tokens 在 frontend/src/styles/tokens.css。
+
+  - 背景：--bg #201d1d，--surface #302c2c
+  - 强调色：--accent #007aff；语义色 success/warn/danger
+  - 字体：UI 用 system-ui + 微软雅黑/PingFang；代码/终端用 Berkeley Mono / JetBrains Mono
+  - 布局：56px 折叠侧栏 + Topbar + StatusBar + 模块内容区；Ctrl+K 全局命令面板
+  - 交互：扁平层级、克制动效、高信息密度、环境标签（dev/test/staging/prod）强提醒
+  - 原型页面：design/terminal.html、ssh.html、database.html、docker.html、server.html、
+    protocol.html、workflow.html、knowledge.html、tasks.html、settings.html
+
+  ## 功能模块与路由
+
+  | 路由 | 模块 | 说明 |
+  |------|------|------|
+  | / | Dashboard | 工作区首页、最近现场 |
+  | /terminal | Terminal | 本地终端，多标签 + 分屏 |
+  | /database | Database | SQL 编辑器、表结构、数据网格、工具箱 |
+  | /docker | Docker | 容器/镜像/Compose/网络/卷/文件 + 资源监控 |
+  | /server | Server | SSH 主机管理、SFTP、隧道、面板（1Panel/宝塔） |
+  | /protocol | Protocol Lab | HTTP/WebSocket/MQTT/串口/抓包 |
+  | /workflow | Workflow | 工作流/脚本库（骨架） |
+  | /knowledge | Knowledge | 知识库/故障案例（骨架） |
+  | /tasks | Tasks | 长任务中心 |
+  | /settings | Settings | 模型、快捷键、主题、i18n |
+
+  ## 当前实现进度（2026-06）
+
+  **Phase 0 完成**：Tauri + React 骨架、Shell（Sidebar/Topbar/StatusBar/CommandPalette）、
+  路由、Dock 工作区、i18n（zh-CN 默认 + en-US）、设计 tokens。
+
+  **已落地（可用或接近可用）**
+  - 终端：xterm.js 集成、portable-pty、多标签、分屏工作区、危险命令确认、会话快照恢复
+  - SSH：连接/断开、交互 shell（复用 terminal-output）、SFTP、主机概览/进程、隧道、
+    OpenSSH config 导入、与终端模块联动
+  - Docker：后端四种来源（本地 Engine / 远程 Engine / SSH 宿主机 / 1Panel 面板）全功能；
+    前端 6 子页签 + 连接对话框 + 资源监控 + Exec 终端
+  - 数据库：前端较完整（连接对话框、Monaco SQL 编辑器、表结构浏览、单元格编辑、工具箱）；
+    后端 omnipanel-db + commands/database.rs 已有 MySQL/PG 连接与 schema 查询，仍在深化
+  - 服务器/面板：1Panel、宝塔 API 适配，应用列表、连接管理
+  - AI：AiDrawer/AiDock、多模型配置、命令建议、快捷键
+  - 全局：统一 Connection 模型（conn_*）、执行引擎 exec、操作草稿箱/风险确认、任务 store
+  - 协议实验室：HTTP/MQTT/Serial/Sniffer 面板 UI 骨架
+
+  **进行中 / 待深化**
+  - Database 模块后端能力对齐前端（NL2SQL、导入导出、生产库保护、DbDriver 全面接入）
+  - 工作流、知识库、Blocks 终端、上下文快照、审计日志的后端化
+  - 协议实验室后端连通与 AI 操作链（计划→确认→执行→回放）
+  - GPU 终端渲染、alacritty_terminal VT 状态化 — 远期可选，非 MVP 阻塞项
+
+  ## 路线图（PRD）
+
+  - Phase 1 (M1-M4)：终端 + SSH + 基础 AI + 工作区 — 进行中
+  - Phase 2 (M5-M7)：数据库客户端 — 当前重点
+  - Phase 3 (M8-M10)：Docker + 服务器（Docker 已提前大量完成）
+  - Phase 4 (M11-M13)：Blocks、工作流、协议深度、AI 操作链、更多 DB
+  - Phase 5 (M14-M15)：打磨发布 v1.0
+  - Phase 5.5+：Companion 手机端、团队 Hub — 远期
+
+  ## 安全与体验基线
+
+  - 凭据只存系统 keyring，库内仅存 credential_ref，绝不明文落盘
+  - 生产环境（prod 标签）操作必须二次确认；危险命令（rm -rf 等）拦截
+  - AI 只建议不越权；高风险动作经 ExecutionEngine 确认并写 audit_log
+  - 用户可见文案走 useI18n，默认简体中文；Git 提交用约定式提交（中文描述）
+
+  ## 性能目标（终端）
+
+  - 吞吐量 >500MB/s（cat 大文件）、输入延迟 <5ms、单标签 <20MB、VT 兼容 >98%
+
+# 各产物类型的生成规则
+rules:
+  proposal:
+    - 使用简体中文撰写
+    - 必须包含「目标」「非目标（Non-goals）」「背景与动机」「成功标准」四节
+    - 明确标注影响的 Phase 与模块路由（如 database、/database）
+    - 涉及生产环境或数据修改时，必须提及环境标签与确认策略
+    - 引用 PRD 章节编号时注明出处，避免重复 PRD 全文
+
+  design:
+    - 使用简体中文撰写
+    - 必须说明前后端边界：哪些逻辑放 crate、哪些放 commands 桥接、哪些放 frontend module
+    - 新增 IPC 命令需说明 specta 类型与 bindings 生成方式
+    - UI 变更需对齐 design/ 原型与 tokens.css，说明复用的 components/ui 组件
+    - 给出至少一个 ASCII 架构或数据流图
+    - 标注与现有模块的联动点（如 SSH→Docker、DB→AI NL2SQL）
+    - 不引入 PRD 未规划的重型依赖；优先扩展现有 trait/crate
+
+  specs:
+    - 需求描述使用 SHALL/MUST 规范语气
+    - 每个 Requirement 至少一个 Scenario，格式 WHEN/THEN（可选 GIVEN）
+    - 能力命名与 frontend/src/modules 目录及路由保持一致（kebab-case）
+    - 涉及凭据、审计、生产环境的 Scenario 必须单独列出
+    - Delta spec 使用 ADDED/MODIFIED/REMOVED/RENAMED 四段，便于 sync-specs 合并
+
+  tasks:
+    - 使用简体中文，任务粒度控制在 1–2 小时可完成
+    - 按「后端 crate → Tauri commands → 前端 module → 测试/联调」顺序排列
+    - 每个任务注明目标文件或目录（如 crates/omnipanel-db/、frontend/src/modules/database/）
+    - 包含至少一项验证方式（cargo test、vitest、或手动验收步骤）
+    - 不混合无关模块；Database 任务不与 Docker 任务混在同一 unchecked 组
+    - 前端任务提醒：文案走 i18n、IPC 走 bindings、不跨 module import
