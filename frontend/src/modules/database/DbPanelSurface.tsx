@@ -36,9 +36,7 @@ export function DbPanelSurface({ tab }: DbPanelSurfaceProps) {
   const isPreviewTab = !!(preview?.connId);
   const hasSqlQueryOutput = !isPreviewTab && !!(tabState.result || tabState.error);
 
-  const databasesForActiveConn = ws.activeConn
-    ? ws.databasesByConnId[ws.activeConn.id] ?? []
-    : [];
+  const databasesForActiveConn = ws.databasesForActiveConn;
 
   const dismissSqlResults = () => {
     ws.updateSqlTabState(tab.id, { result: null, error: null, elapsed: null });
@@ -107,14 +105,16 @@ export function DbPanelSurface({ tab }: DbPanelSurfaceProps) {
   const resultsContent = (
     <div className="results-area db-sql-results">
       <div className="results-header">
-        <h3>{isPreviewTab ? tab.label : t("database.results.preview")}</h3>
+        <h3 style={{ marginRight: "auto" }}>
+          {isPreviewTab ? tab.label : t("database.results.preview")}
+        </h3>
         {isPreviewTab && canRefresh && (
           <Button
             variant="icon"
             style={{ marginLeft: "var(--sp-2)" }}
             title="Refresh"
             disabled={preview!.loading}
-            onClick={() => ws.refreshTablePreview(tab.id, preview!.connId!, preview!.dbName!, preview!.tableName!)}
+            onClick={() => ws.requestTabAction({ kind: "refresh", tabId: tab.id })}
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
               <path d="M23 4v6h-6M1 20v-6h6" />
@@ -130,6 +130,64 @@ export function DbPanelSurface({ tab }: DbPanelSurfaceProps) {
             {preview!.totalRows.toLocaleString()}
           </span>
         )}
+        {isPreviewTab && preview?.data && !preview.loading && canRefresh && (
+          <Button
+            variant="icon"
+            style={{ marginLeft: "var(--sp-2)" }}
+            title={t("database.results.exportCsv")}
+            aria-label={t("database.results.exportCsv")}
+            onClick={(e) => {
+              ws.openExportMenu(e.clientX, e.clientY, tab.id);
+            }}
+          >
+            <svg
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.6"
+              width="14"
+              height="14"
+              aria-hidden
+            >
+              <path d="M8 1.5v9" strokeLinecap="round" />
+              <path d="M4.5 7L8 10.5 11.5 7" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M2.5 13h11" strokeLinecap="round" />
+            </svg>
+          </Button>
+        )}
+        {isPreviewTab && (() => {
+          const dirtyCount = Object.keys(ws.tabDirtyRows[tab.id] ?? {}).length;
+          const isCommitting = ws.committingTabs.has(tab.id);
+          return (
+            <span className="db-toolbar-icon-button-wrap" style={{ marginLeft: "var(--sp-2)" }}>
+              <Button
+                variant={dirtyCount > 0 ? "primary" : "icon"}
+                style={{ position: "relative" }}
+                disabled={dirtyCount === 0 || isCommitting}
+                onClick={() => {
+                  ws.commitTabDirty(tab.id).catch(() => {});
+                }}
+                title={t("database.results.commitDirty", { count: dirtyCount })}
+                aria-label={t("database.results.commitDirty", { count: dirtyCount })}
+              >
+                <svg
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.6"
+                  width="14"
+                  height="14"
+                  aria-hidden
+                >
+                  <path d="M3 8.5l3 3 7-7" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </Button>
+              {dirtyCount > 0 && !isCommitting && (
+                <span className="db-toolbar-badge" aria-hidden>{dirtyCount}</span>
+              )}
+            </span>
+          );
+        })()}
         {!isPreviewTab && (
           <span className="results-meta">
             {t("database.results.meta", {
@@ -142,7 +200,6 @@ export function DbPanelSurface({ tab }: DbPanelSurfaceProps) {
         {mode === "sql" && hasSqlQueryOutput && (
           <Button
             variant="icon"
-            style={{ marginLeft: "auto" }}
             title={t("database.results.close")}
             aria-label={t("database.results.close")}
             onClick={dismissSqlResults}
@@ -205,9 +262,9 @@ export function DbPanelSurface({ tab }: DbPanelSurfaceProps) {
             loading={false}
             columnMeta={colMeta}
             onCellEdit={(cellInfo) => ws.handleCellEdit(tab.id, cellInfo)}
-            onPageChange={(page) =>
-              ws.goToPage(tab.id, preview.connId!, preview.dbName!, preview.tableName!, page)
-            }
+            dirtyRowKeys={new Set(Object.keys(ws.tabDirtyRows[tab.id] ?? {}))}
+            cellOverrides={ws.tabDirtyRows[tab.id]}
+            onPageChange={(page) => ws.requestTabAction({ kind: "page", tabId: tab.id, page })}
           />
         ) : null
       ) : (
