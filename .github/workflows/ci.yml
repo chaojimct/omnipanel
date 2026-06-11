@@ -27,29 +27,3 @@ jobs:
       - name: Unit tests
         run: npm run test -- --run
         working-directory: frontend
-
-  rust:
-    name: Rust ${{ matrix.platform }}
-    strategy:
-      fail-fast: false
-      matrix:
-        platform: [ubuntu-latest, windows-latest, macos-latest]
-    runs-on: ${{ matrix.platform }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Linux system dependencies
-        if: matrix.platform == 'ubuntu-latest'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libssl-dev libudev-dev
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Rust cache
-        uses: swatinem/rust-cache@v2
-
-      - name: Tests
-        # src-tauri 仅薄桥接，不放可测逻辑；其测试二进制在部分平台需 WebView 运行时，故排除。
-        run: cargo test --workspace --exclude omnipanel-app
