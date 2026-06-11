@@ -1,10 +1,8 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { useAiStore } from "../../stores/aiStore";
 import { useTopbarStore } from "../../stores/topbarStore";
 import { useI18n } from "../../i18n";
-import { formatShortcut, useShortcutsStore } from "../../stores/shortcutsStore";
 import type { ReactNode } from "react";
-import { useEffect, useRef, useState, useCallback, useMemo } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { TopbarTabs } from "../ui/TopbarTabs";
 
 interface TopbarProps {
@@ -19,7 +17,6 @@ export function Topbar({ title, children }: TopbarProps) {
   const showAddTab = useTopbarStore((state) => state.showAddTab);
   const addTabTitle = useTopbarStore((state) => state.addTabTitle);
   const handlers = useTopbarStore((state) => state.handlers);
-  const showGlobalAiButton = true;
 
   const handleMinimize = async () => {
     await getCurrentWindow().minimize();
@@ -41,16 +38,6 @@ export function Topbar({ title, children }: TopbarProps) {
     window.dispatchEvent(new CustomEvent("toggle-notif-drawer"));
   };
 
-  const handleAi = () => {
-    useAiStore.getState().toggleDrawer();
-  };
-
-  const aiDrawerOpen = useAiStore((state) => state.drawerOpen);
-  const aiKeysOverride = useShortcutsStore((s) => s.overrides["toggle-ai"]);
-  const aiShortcutLabel = useMemo(
-    () => formatShortcut(aiKeysOverride ?? ["Mod", "`"]),
-    [aiKeysOverride]
-  );
   const [isMaximized, setIsMaximized] = useState(false);
   const spacerDragRef = useRef<{ startX: number; startY: number } | null>(null);
 

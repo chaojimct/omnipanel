@@ -51,7 +51,7 @@ export async function getOmniAgent(config: OmniModelConfig): Promise<OmniAgent> 
   const agent = createAgent({
     model: await getOmniChatModel(config),
     tools: [],
-    prompt: OMNI_SYSTEM_PROMPT,
+    systemPrompt: OMNI_SYSTEM_PROMPT,
   });
 
   cachedAgent = { key, agent };
