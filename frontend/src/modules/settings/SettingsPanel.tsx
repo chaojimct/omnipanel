@@ -29,6 +29,7 @@ import { ShortcutRecorder } from "../../components/settings/ShortcutRecorder";
 import { AddModelDialog } from "../../components/settings/AddModelDialog";
 import { ProviderModelList } from "../../components/settings/ProviderModelList";
 import { Button } from "../../components/ui/Button";
+import { ModuleEmptyState } from "../../components/ui/ModuleEmptyState";
 import { Select } from "../../components/ui/Select";
 import { useI18n } from "../../i18n";
 import { commands } from "../../ipc/bindings";
@@ -392,9 +393,11 @@ function AiModelsSection() {
 
         {providers.length === 0 ? (
           <div className="ai-models-empty">
-            <div className="ai-models-empty-icon">🤖</div>
-            <div className="ai-models-empty-title">{t("settings.aiModels.empty.title")}</div>
-            <div className="ai-models-empty-desc">{t("settings.aiModels.empty.desc")}</div>
+            <ModuleEmptyState
+              preset="robot"
+              title={t("settings.aiModels.empty.title")}
+              desc={t("settings.aiModels.empty.desc")}
+            />
             <Button
               variant="secondary"
               size="sm"

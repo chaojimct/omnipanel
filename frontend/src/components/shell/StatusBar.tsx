@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { useActionStore } from "../../stores/actionStore";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
+import { useStatusBarStore } from "../../stores/statusBarStore";
 import { workspaceResources, getResourceById, type EnvironmentTag } from "../../lib/resourceRegistry";
 import { useI18n } from "../../i18n";
 
@@ -10,6 +11,7 @@ export function StatusBar() {
   const location = useLocation();
   const activeResourceId = useWorkspaceStore((state) => state.activeResourceId);
   const actions = useActionStore((state) => state.actions);
+  const statusHint = useStatusBarStore((state) => state.hint);
   const [time, setTime] = useState(() => new Date().toLocaleTimeString("zh-CN", { hour12: false }));
 
   const onlineCount = workspaceResources.filter((resource) => ["online", "running"].includes(resource.status)).length;
@@ -83,6 +85,12 @@ export function StatusBar() {
       </span>
       <span className="statusbar-item">{t("shell.statusbar.runningTasks", { count: runningCount })}</span>
       <span className="statusbar-item">{t("shell.statusbar.pendingConfirm", { count: blockedCount })}</span>
+      {statusHint && (
+        <span className="statusbar-item">
+          <span className="statusbar-dot yellow" />
+          {statusHint}
+        </span>
+      )}
       <span className="statusbar-spacer"></span>
       <span className="statusbar-item" style={{ color: "var(--meta)" }}>
         {t("shell.statusbar.commandPaletteHint")}

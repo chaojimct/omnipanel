@@ -944,6 +944,9 @@ export const enUS: TranslationDict = {
   docker: {
     empty: {
       localEngine: "Cannot connect to the local Docker Engine. Start Docker Desktop or the local Docker service, then retry.",
+      startDocker: "Start Docker",
+      startingDocker: "Starting Docker…",
+      startFailed: "Failed to start Docker",
     },
     toolbar: {
       hint: "Containers, logs, Compose and server context in one place.",
@@ -952,6 +955,7 @@ export const enUS: TranslationDict = {
       running: "Running",
       stopped: "Stopped",
       images: "Images",
+      compose: "Compose",
       volumes: "Volumes",
     },
     sidebar: {

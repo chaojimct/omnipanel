@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { ModuleEmptyState } from "../../components/ui/ModuleEmptyState";
 import { Button } from "../../components/ui/Button";
 import { FormDialog } from "../../components/ui/FormDialog";
 import { Select } from "../../components/ui/Select";
@@ -57,7 +58,7 @@ export function DockerNetworksTab({ networks, canManage, onRefresh, onCreate, on
         <span></span>
       </div>
       {networks.length === 0 ? (
-        <div className="docker-empty" style={{ minHeight: 120 }}>暂无网络</div>
+        <ModuleEmptyState preset="network" title="暂无网络" />
       ) : (
           networks.map((n) => (
             <div

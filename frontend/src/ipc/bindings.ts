@@ -57,6 +57,10 @@ export const commands = {
 	dockerListConnections: () => typedError<DockerConnectionInfo[], OmniError_Serialize>(__TAURI_INVOKE("docker_list_connections")),
 	/**  探测连接连通性与能力。 */
 	dockerProbeConnection: (connectionId: string) => typedError<DockerProbe, OmniError_Serialize>(__TAURI_INVOKE("docker_probe_connection", { connectionId })),
+	/**  本地 Docker Engine 安装与运行状态（仅本机）。 */
+	dockerGetLocalEngineStatus: () => typedError<DockerLocalEngineStatus, OmniError_Serialize>(__TAURI_INVOKE("docker_get_local_engine_status")),
+	/**  一键启动本地 Docker Desktop（已安装但未运行时）。 */
+	dockerStartLocalEngine: () => typedError<null, OmniError_Serialize>(__TAURI_INVOKE("docker_start_local_engine")),
 	/**  连接总览统计。 */
 	dockerGetOverview: (connectionId: string) => typedError<DockerOverview, OmniError_Serialize>(__TAURI_INVOKE("docker_get_overview", { connectionId })),
 	/**  `docker system df` 磁盘占用汇总。 */
@@ -741,6 +745,18 @@ export type DockerImageSummary = {
 export type DockerKeyValue = {
 	key: string,
 	value: string,
+};
+
+/**  本地 Docker Engine / Desktop 安装与运行状态。 */
+export type DockerLocalEngineStatus = {
+	/**  是否检测到 Docker Desktop / Engine 已安装。 */
+	installed: boolean,
+	/**  是否已通过 socket/pipe 连通。 */
+	running: boolean,
+	/**  是否支持应用内一键启动（通常为 Docker Desktop）。 */
+	canStart: boolean,
+	/**  安装类型：`docker-desktop` / `docker-engine` / `none`。 */
+	installKind: string,
 };
 
 /**  日志行。 */

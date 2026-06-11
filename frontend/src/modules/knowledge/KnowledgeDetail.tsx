@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
@@ -6,7 +6,27 @@ import Editor from "@monaco-editor/react";
 import { useKnowledgeStore } from "../../stores/knowledgeStore";
 import { useI18n } from "../../i18n";
 import { Select } from "../../components/ui/Select";
+import { ModuleEmptyState } from "../../components/ui/ModuleEmptyState";
+import {
+  IconBarChart,
+  IconClipboard,
+  IconClock,
+  IconGlobe,
+  IconMessage,
+  IconPaperclip,
+  IconPencil,
+  IconShield,
+} from "../../components/ui/Icons";
 import type { KnowledgeEntry } from "../../ipc/bindings";
+
+function MetaItem({ icon: Icon, children }: { icon: typeof IconClipboard; children: ReactNode }) {
+  return (
+    <span className="knowledge-detail-meta-item">
+      <Icon size={12} className="meta-inline-icon" />
+      {children}
+    </span>
+  );
+}
 
 function formatDate(dateVal: number | string | null | undefined): string {
   if (dateVal == null) return "—";
@@ -103,11 +123,7 @@ export function KnowledgeDetail() {
   if (!selectedEntry && !editingEntry) {
     return (
       <div className="knowledge-detail">
-        <div className="knowledge-empty">
-          <div className="knowledge-empty-icon">📚</div>
-          <div className="knowledge-empty-title">{t("knowledge.noEntries")}</div>
-          <div className="knowledge-empty-desc">{t("knowledge.createFirst")}</div>
-        </div>
+        <ModuleEmptyState preset="book" title={t("knowledge.noEntries")} desc={t("knowledge.createFirst")} />
       </div>
     );
   }
@@ -240,37 +256,36 @@ export function KnowledgeDetail() {
       </div>
       <div className="knowledge-detail-body">
         <div className="knowledge-detail-meta">
-          <span className="knowledge-detail-meta-item">
-            📋 {t("knowledge.type")}: {t(`knowledge.types.${entry.kind}`) ?? entry.kind}
-          </span>
-          <span className="knowledge-detail-meta-item">
-            🛡️ {t("knowledge.riskLevel")}:{" "}
-            {t(`knowledge.risks.${entry.riskLevel}`) ?? entry.riskLevel}
-          </span>
+          <MetaItem icon={IconClipboard}>
+            {t("knowledge.type")}: {t(`knowledge.types.${entry.kind}`) ?? entry.kind}
+          </MetaItem>
+          <MetaItem icon={IconShield}>
+            {t("knowledge.riskLevel")}: {t(`knowledge.risks.${entry.riskLevel}`) ?? entry.riskLevel}
+          </MetaItem>
           {entry.source && (
-            <span className="knowledge-detail-meta-item">
-              📎 {t("knowledge.source")}: {entry.source}
-            </span>
+            <MetaItem icon={IconPaperclip}>
+              {t("knowledge.source")}: {entry.source}
+            </MetaItem>
           )}
           {entry.language && (
-            <span className="knowledge-detail-meta-item">
-              💬 {t("knowledge.language")}: {entry.language}
-            </span>
+            <MetaItem icon={IconMessage}>
+              {t("knowledge.language")}: {entry.language}
+            </MetaItem>
           )}
           {entry.envTag && (
-            <span className="knowledge-detail-meta-item">
-              🌐 {t("knowledge.envTag")}: {entry.envTag}
-            </span>
+            <MetaItem icon={IconGlobe}>
+              {t("knowledge.envTag")}: {entry.envTag}
+            </MetaItem>
           )}
-          <span className="knowledge-detail-meta-item">
-            📊 {t("knowledge.usageCount")}: {entry.usageCount}
-          </span>
-          <span className="knowledge-detail-meta-item">
-            🕐 {t("knowledge.createdAt")}: {formatDate(entry.createdAt)}
-          </span>
-          <span className="knowledge-detail-meta-item">
-            ✏️ {t("knowledge.updatedAt")}: {formatDate(entry.updatedAt)}
-          </span>
+          <MetaItem icon={IconBarChart}>
+            {t("knowledge.usageCount")}: {entry.usageCount}
+          </MetaItem>
+          <MetaItem icon={IconClock}>
+            {t("knowledge.createdAt")}: {formatDate(entry.createdAt)}
+          </MetaItem>
+          <MetaItem icon={IconPencil}>
+            {t("knowledge.updatedAt")}: {formatDate(entry.updatedAt)}
+          </MetaItem>
         </div>
         <div className="knowledge-detail-content">
           <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]}>

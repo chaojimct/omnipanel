@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { commands } from "../../../../../ipc/bindings";
 import { Button } from "../../../../../components/ui/Button";
+import { FileEntryIcon } from "../../../../../components/ui/FileEntryIcon";
 import { useSshDetailNavigationStore } from "../../../../../stores/sshDetailNavigationStore";
 import { useI18n } from "../../../../../i18n";
 import { pathToRemoteDir } from "../../utils/parseCommandPaths";
@@ -379,7 +380,7 @@ export function SftpDetailTab({ activeResource }: Props) {
                     >
                       <td className="sftp-col-name">
                         <span className={`sftp-icon ${entry.isDir ? "sftp-icon-dir" : "sftp-icon-file"}`}>
-                          {entry.isDir ? "📁" : "📄"}
+                          <FileEntryIcon type={entry.isDir ? "dir" : "file"} size={14} />
                         </span>
                         <span className={entry.isDir ? "sftp-name-dir" : "sftp-name-file"}>{entry.name}</span>
                       </td>

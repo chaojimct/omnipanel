@@ -58,7 +58,7 @@ export function ServerPanel() {
 
   const [showDialog, setShowDialog] = useState(false);
   const [editPanelConnection, setEditPanelConnection] = useState<Connection | undefined>();
-  const [tab, setTab] = useServerWorkspaceTabState(activeServerId);
+  const [tab, setTab] = useServerWorkspaceTabState();
   const topbarTabs = useServerWorkspaceTabs(tab);
 
   useTopbarTabs(

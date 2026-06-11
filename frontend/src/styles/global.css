@@ -6825,8 +6825,11 @@
     }
 
     .sftp-icon {
-        font-size: 14px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
         flex-shrink: 0;
+        color: var(--muted);
     }
 
     .sftp-col-size {
@@ -9814,8 +9817,20 @@
         gap: var(--sp-4);
     }
 
-    .docker-overview-refresh-hint {
-        margin-top: calc(-1 * var(--sp-2));
+    .docker-overview-stats {
+        padding: 0;
+        border-bottom: none;
+        flex-shrink: 0;
+    }
+
+    .docker-overview-stats .docker-stat {
+        flex: 1;
+        min-width: 120px;
+        padding: var(--sp-3) var(--sp-4);
+    }
+
+    .docker-overview-stats .docker-stat .stat-val {
+        font-size: 18px;
     }
 
     .docker-overview-section {
@@ -9878,8 +9893,14 @@
 
     .docker-overview-stat-grid {
         display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
+        grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: var(--sp-3);
+    }
+
+    @media (min-width: 960px) {
+        .docker-overview-stat-grid {
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+        }
     }
 
     .docker-overview-stat-card {
@@ -9984,6 +10005,14 @@
         margin-top: var(--sp-3);
         padding-top: var(--sp-3);
         border-top: 1px solid var(--border);
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .docker-main .container-card,
+        .docker-main .docker-stat,
+        .docker-main .docker-overview-stat-card {
+            transition: none;
+        }
     }
 
     @media (max-width: 960px) {
@@ -10134,6 +10163,9 @@
     }
 
     .container-card .container-title {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
         font-size: 13px;
         font-weight: 500;
     }
@@ -10412,25 +10444,12 @@
         border-bottom-color: var(--accent);
     }
 
-    .docker-tab-content-animate {
+    .docker-tab-content {
         flex: 1;
         min-height: 0;
         display: flex;
         flex-direction: column;
         overflow: hidden;
-        animation: dockerTabFadeIn 0.2s ease-out;
-    }
-
-    @keyframes dockerTabFadeIn {
-        from {
-            opacity: 0;
-            transform: translateY(6px);
-        }
-
-        to {
-            opacity: 1;
-            transform: translateY(0);
-        }
     }
 
     .container-card.container-card-5,
@@ -13271,7 +13290,9 @@
     }
 
     .knowledge-card-kind {
-        font-size: 10px;
+        display: inline-flex;
+        align-items: center;
+        color: var(--muted);
     }
 
     .knowledge-card-risk {
@@ -13505,9 +13526,7 @@
     }
 
     .knowledge-empty-icon {
-        font-size: 40px;
-        opacity: 0.6;
-        margin-bottom: var(--sp-2);
+        display: none;
     }
 
     .knowledge-empty-title {
@@ -14201,9 +14220,7 @@
     }
 
     .ai-models-empty-icon {
-        font-size: 40px;
-        opacity: 0.5;
-        margin-bottom: var(--sp-3);
+        display: none;
     }
 
     .ai-models-empty-title {
@@ -15540,8 +15557,8 @@
 }
 
 .docker-error-icon {
-    font-size: 16px;
     flex-shrink: 0;
+    color: var(--warning, #e5a100);
 }
 
 .docker-error-text {
@@ -15576,23 +15593,6 @@
 }
 
 /* ====== Tab Content Transition (legacy — animation lives in @layer components) ====== */
-
-/* ====== List Item Enter Animation ====== */
-@keyframes listItemEnter {
-    from {
-        opacity: 0;
-        transform: translateX(-12px);
-    }
-
-    to {
-        opacity: 1;
-        transform: translateX(0);
-    }
-}
-
-.docker-list-item {
-    animation: listItemEnter 0.25s ease-out both;
-}
 
 /* ====== Toast Animation ====== */
 @keyframes toastIn {
@@ -15697,7 +15697,8 @@
 }
 
 /* ====== Empty State ====== */
-.docker-empty-state {
+.docker-empty-state,
+.module-empty-state {
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -15705,21 +15706,36 @@
     padding: 48px 24px;
     gap: 8px;
     animation: emptyFadeIn 0.4s ease-out;
+    text-align: center;
 }
 
-.docker-empty-icon {
-    font-size: 48px;
-    margin-bottom: 8px;
-    opacity: 0.8;
+.docker-empty-icon,
+.module-empty-state__icon-wrap {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    background: color-mix(in srgb, var(--fg) 4%, transparent);
+    border: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 4px;
+    color: var(--muted);
 }
 
-.docker-empty-title {
+.module-empty-state__icon {
+    opacity: 0.9;
+}
+
+.docker-empty-title,
+.module-empty-state__title {
     font-size: 15px;
     color: var(--fg);
     font-weight: 500;
 }
 
-.docker-empty-desc {
+.docker-empty-desc,
+.module-empty-state__desc {
     font-size: 13px;
     color: var(--muted);
 }
@@ -15826,14 +15842,43 @@
 }
 
 .knowledge-detail-empty-icon {
-    font-size: 40px;
-    opacity: 0.5;
+    display: none;
 }
 
 .knowledge-tab-icon {
-    font-size: 14px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     width: 20px;
-    text-align: center;
+    color: var(--muted);
+}
+
+.knowledge-kind-icon,
+.file-entry-icon,
+.proto-inline-icon,
+.task-source-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    color: currentColor;
+}
+
+.knowledge-detail-meta-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.meta-inline-icon {
+    flex-shrink: 0;
+    color: var(--muted);
+}
+
+.knowledge-card-score {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
 }
 
 /* ─── Database workspace dock ─────────────────────────────────────── */

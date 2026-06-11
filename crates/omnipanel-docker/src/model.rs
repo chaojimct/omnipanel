@@ -743,3 +743,17 @@ pub struct DockerStackSummary {
     pub orchestrator: String,
     pub namespace: String,
 }
+
+/// 本地 Docker Engine / Desktop 安装与运行状态。
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct DockerLocalEngineStatus {
+    /// 是否检测到 Docker Desktop / Engine 已安装。
+    pub installed: bool,
+    /// 是否已通过 socket/pipe 连通。
+    pub running: bool,
+    /// 是否支持应用内一键启动（通常为 Docker Desktop）。
+    pub can_start: bool,
+    /// 安装类型：`docker-desktop` / `docker-engine` / `none`。
+    pub install_kind: String,
+}

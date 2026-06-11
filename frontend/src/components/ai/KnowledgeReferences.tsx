@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { KnowledgeKindIcon } from "../ui/KnowledgeKindIcon";
+import { IconBook } from "../ui/Icons";
 
 /** Parsed knowledge search result item from the AI tool call result JSON. */
 interface KnowledgeRefItem {
@@ -34,12 +36,6 @@ export function KnowledgeReferences({ result }: { result: string }) {
     ai: "AI 知识",
   };
 
-  const kindIcons: Record<string, string> = {
-    snippet: "📋",
-    case: "🔧",
-    ai: "🤖",
-  };
-
   const riskColors: Record<string, string> = {
     safe: "text-success",
     readonly: "text-info",
@@ -59,7 +55,7 @@ export function KnowledgeReferences({ result }: { result: string }) {
         className="flex items-center gap-2 w-full px-3 py-1.5 text-xs text-fg-2 hover:bg-surface-hover transition-colors"
         onClick={() => setExpanded(!expanded)}
       >
-        <span>📚</span>
+        <IconBook size={14} className="knowledge-kind-icon" />
         <span className="font-medium">知识库参考</span>
         <span className="text-meta">({items.length} 条结果)</span>
         <span className="text-muted ml-auto">{expanded ? "▾" : "▸"}</span>
@@ -69,7 +65,7 @@ export function KnowledgeReferences({ result }: { result: string }) {
           {items.map((item) => (
             <div key={item.id} className="px-3 py-2 text-xs">
               <div className="flex items-center gap-2 mb-1">
-                <span>{kindIcons[item.kind] || "📄"}</span>
+                <KnowledgeKindIcon kind={item.kind} size={12} />
                 <span className="font-medium text-fg">{item.title}</span>
                 <span className="text-meta text-[10px]">
                   {kindLabels[item.kind] || item.kind}

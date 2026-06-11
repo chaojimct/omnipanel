@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { useI18n } from "../../i18n";
 import { Select } from "../../components/ui/Select";
 import { SidebarSecondary } from "../../components/ui/SidebarSecondary";
+import { IconFolder } from "../../components/ui/Icons";
 
 interface KVPair {
   key: string;
@@ -406,7 +407,7 @@ export function HttpPanel() {
             onClick={() => setActiveCollectionId(null)}
             className={`proto-context-item${activeCollectionId === null ? " is-active" : ""}`}
           >
-            📁 {t("protocol.http.allRequests") || "All Requests"}
+            <IconFolder size={14} className="proto-inline-icon" /> {t("protocol.http.allRequests") || "All Requests"}
           </div>
 
           {collections.map((col) => (
@@ -417,7 +418,7 @@ export function HttpPanel() {
                 style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}
               >
                 <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  📁 {col.name}
+                  <IconFolder size={14} className="proto-inline-icon" /> {col.name}
                 </span>
                 <span
                   onClick={(e) => { e.stopPropagation(); deleteCollection(col.id); }}

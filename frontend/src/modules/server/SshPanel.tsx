@@ -4,6 +4,7 @@ import { SidebarWorkspace } from "../../components/ui/SidebarWorkspace";
 import { WorkspaceEmptyPage } from "../../components/ui/WorkspaceEmptyPage";
 import { HostListPanel } from "../../components/workspace/HostListPanel";
 import { useTopbarTabs } from "../../hooks/useTopbarTabs";
+import { usePersistedModuleTab } from "../../hooks/usePersistedModuleTab";
 import { useI18n } from "../../i18n";
 import { HostDetailPanel } from "./ssh/components/HostDetailPanel";
 import { KeysModuleView } from "./ssh/components/KeysModuleView";
@@ -12,12 +13,13 @@ import { useSshManager } from "./ssh/hooks/useSshManager";
 import { useSshHostResources } from "../../stores/connectionStore";
 
 type SshWorkspaceTab = "hosts" | "tunnels" | "keys";
+const SSH_WORKSPACE_TABS: SshWorkspaceTab[] = ["hosts", "tunnels", "keys"];
 
 export function SshPanel() {
   const { t } = useI18n();
   const location = useLocation();
   const isActiveRoute = location.pathname === "/ssh";
-  const [workspaceTab, setWorkspaceTab] = useState<SshWorkspaceTab>("hosts");
+  const [workspaceTab, setWorkspaceTab] = usePersistedModuleTab("ssh-workspace", "hosts", SSH_WORKSPACE_TABS);
   const sshResources = useSshHostResources();
   const ctx = useSshManager();
 

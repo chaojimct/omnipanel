@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { Select } from "../../components/ui/Select";
+import { ModuleEmptyState } from "../../components/ui/ModuleEmptyState";
+import { FileEntryIcon } from "../../components/ui/FileEntryIcon";
 import type { DockerContainerSummary, DockerFileEntry } from "../../ipc/bindings";
 
 interface DockerFilesTabProps {
@@ -65,9 +67,9 @@ export function DockerFilesTab({ containers, files, filePath, fileContainerId, o
         )}
       </div>
       {!fileContainerId ? (
-        <div className="docker-empty" style={{ minHeight: 120 }}>请先选择一个容器</div>
+        <ModuleEmptyState preset="container" title="请先选择一个容器" />
       ) : files.length === 0 ? (
-        <div className="docker-empty" style={{ minHeight: 120 }}>空目录</div>
+        <ModuleEmptyState preset="folder" title="空目录" />
       ) : (
         <div className="container-list">
           <div className="list-header file-row">
@@ -83,7 +85,10 @@ export function DockerFilesTab({ containers, files, filePath, fileContainerId, o
               style={{ cursor: "pointer" }}
               onClick={() => void onEnter(f)}
             >
-              <div className="container-title">{f.isDir ? "📁" : f.isSymlink ? "🔗" : "📄"} {f.name}</div>
+              <div className="container-title">
+                <FileEntryIcon type={f.isDir ? "dir" : f.isSymlink ? "symlink" : "file"} />
+                <span>{f.name}</span>
+              </div>
               <div className="text-sm text-muted">{f.isDir ? "-" : formatBytes(f.sizeBytes)}</div>
               <div className="text-sm text-muted">{(f.mode & 0o7777).toString(8).padStart(4, "0")}</div>
               <div className="text-sm text-muted">{f.isDir ? "目录" : f.isSymlink ? "符号链接" : "文件"}</div>

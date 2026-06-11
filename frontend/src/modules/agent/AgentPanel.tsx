@@ -5,6 +5,7 @@ import { useI18n } from "../../i18n";
 import { Button } from "../../components/ui/Button";
 
 import { SidebarWorkspace } from "../../components/ui/SidebarWorkspace";
+import { ModuleEmptyState } from "../../components/ui/ModuleEmptyState";
 
 import { AiModelSelect } from "../../components/ai/AiModelSelect";
 
@@ -436,11 +437,7 @@ export function AgentPanel() {
 
             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", color: "var(--meta)" }}>
 
-              <div style={{ fontSize: "32px", marginBottom: "var(--sp-2)" }}>🤖</div>
-
-              <div style={{ fontSize: "13px", marginBottom: "var(--sp-1)" }}>{t("agent.title")}</div>
-
-              <div style={{ fontSize: "12px" }}>{t("agent.description")}</div>
+              <ModuleEmptyState preset="robot" title={t("agent.title")} desc={t("agent.description")} />
 
             </div>
 

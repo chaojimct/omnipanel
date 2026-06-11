@@ -1,11 +1,7 @@
 import type { KnowledgeEntry } from "../../ipc/bindings";
 import { useI18n } from "../../i18n";
-
-const KIND_ICONS: Record<string, string> = {
-  snippet: "📄",
-  case: "🔧",
-  ai: "🤖",
-};
+import { KnowledgeKindIcon } from "../../components/ui/KnowledgeKindIcon";
+import { IconLightning } from "../../components/ui/Icons";
 
 function relativeTime(dateVal: number | string | null | undefined): string {
   if (dateVal == null) return "—";
@@ -39,7 +35,9 @@ export function KnowledgeCard({ entry, selected, onClick, score }: KnowledgeCard
       onClick={onClick}
     >
       <div className="knowledge-card-header">
-        <span className="knowledge-card-kind">{KIND_ICONS[entry.kind] ?? "📄"}</span>
+        <span className="knowledge-card-kind">
+          <KnowledgeKindIcon kind={entry.kind} size={12} />
+        </span>
         <span className="knowledge-card-title">{entry.title}</span>
         <span className={`knowledge-card-risk ${entry.riskLevel}`}>
           {t(`knowledge.risks.${entry.riskLevel}`) ?? entry.riskLevel}
@@ -65,7 +63,7 @@ export function KnowledgeCard({ entry, selected, onClick, score }: KnowledgeCard
           <>
             <span>·</span>
             <span className="knowledge-card-score" title="相关性评分">
-              ⚡ {score}
+              <IconLightning size={11} /> {score}
             </span>
           </>
         )}

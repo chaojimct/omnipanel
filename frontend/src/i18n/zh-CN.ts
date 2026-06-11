@@ -904,6 +904,9 @@ export const zhCN = {
   docker: {
     empty: {
       localEngine: "无法连接本地 Docker Engine。请启动 Docker Desktop 或本机 Docker 服务后重试。",
+      startDocker: "启动 Docker",
+      startingDocker: "正在启动 Docker…",
+      startFailed: "启动 Docker 失败",
     },
     toolbar: {
       hint: "容器、日志、Compose 与服务器上下文统一管理。",
@@ -912,6 +915,7 @@ export const zhCN = {
       running: "运行中",
       stopped: "已停止",
       images: "镜像",
+      compose: "Compose",
       volumes: "卷",
     },
     sidebar: {

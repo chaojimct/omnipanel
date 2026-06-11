@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { useActionStore } from "../../stores/actionStore";
 import { useAiStore } from "../../stores/aiStore";
 import { useConnectionStore } from "../../stores/connectionStore";
+import { useStatusBarStore } from "../../stores/statusBarStore";
 import { useTopbarTabs } from "../../hooks/useTopbarTabs";
 import { useI18n } from "../../i18n";
 import {
@@ -26,6 +27,8 @@ import { Button } from "../../components/ui/Button";
 import { SidebarWorkspace } from "../../components/ui/SidebarWorkspace";
 import { DockerSidebar } from "../../components/workspace/DockerSidebar";
 import { WorkspaceEmptyPage } from "../../components/ui/WorkspaceEmptyPage";
+import { ModuleEmptyState } from "../../components/ui/ModuleEmptyState";
+import { IconAlertTriangle } from "../../components/ui/Icons";
 import type { DockerComposeAction } from "../../ipc/bindings";
 import { CreateContainerDialog } from "./CreateContainerDialog";
 import { DockerOverviewTab } from "./DockerOverviewTab";
@@ -33,10 +36,7 @@ import { SwarmPanel } from "./SwarmPanel";
 import { formatDockerTime } from "./format";
 import {
   CloseIcon,
-  ComposeStackIcon,
   ContainerIcon,
-  DockerWhaleIcon,
-  ImageLayersIcon,
   PlayIcon,
   PushIcon,
   RestartIcon,
@@ -49,8 +49,12 @@ import type {
   Connection,
   DockerContainerDetail,
   DockerContainerSummary,
+  DockerLocalEngineStatus,
 } from "../../ipc/bindings";
-import { useDockerWorkspaceTabs, type DockerWorkspaceTab } from "./dockerWorkspaceTabs";
+import { commands } from "../../ipc/bindings";
+import { DOCKER_LOCAL_CONNECTION_ID, isBuiltinLocalDockerConnection } from "./constants";
+import { useDockerWorkspaceTabs, type DockerWorkspaceTab, DOCKER_WORKSPACE_TABS } from "./dockerWorkspaceTabs";
+import { usePersistedModuleTab } from "../../hooks/usePersistedModuleTab";
 
 interface ConfirmState {
   title: string;
@@ -139,7 +143,7 @@ export function DockerPanel() {
     scanSshDockerHosts,
   } = docker;
 
-  const [tab, setTab] = useState<DockerWorkspaceTab>("overview");
+  const [tab, setTab] = usePersistedModuleTab("docker", "overview", DOCKER_WORKSPACE_TABS);
   const [filter, setFilter] = useState<ContainerFilter>("all");
   const [query, setQuery] = useState("");
   const [searchInput, setSearchInput] = useState("");
@@ -158,6 +162,9 @@ export function DockerPanel() {
   const [showCreateContainer, setShowCreateContainer] = useState(false);
   const [selectedContainers, setSelectedContainers] = useState<Set<string>>(new Set());
   const [selectedImages, setSelectedImages] = useState<Set<string>>(new Set());
+  const [localEngineStatus, setLocalEngineStatus] = useState<DockerLocalEngineStatus | null>(null);
+  const [startingLocalEngine, setStartingLocalEngine] = useState(false);
+  const startPollRef = useRef<number | null>(null);
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -175,16 +182,49 @@ export function DockerPanel() {
   };
 
   const handleDeleteDockerConnection = async (connectionId: string) => {
+    if (isBuiltinLocalDockerConnection(connectionId)) return;
     if (!window.confirm(t("docker.sidebar.deleteConfirm"))) return;
     await removeStoredConnection(connectionId);
     void reloadConnections();
     showToast(t("docker.sidebar.deleted"));
   };
 
-  // 切换连接时复位抽屉/筛选等本地 UI（业务数据在 hook 内按连接缓存，先展示再静默刷新）。
+  const handleStartLocalEngine = async () => {
+    setStartingLocalEngine(true);
+    const res = await commands.dockerStartLocalEngine();
+    if (res.status === "error") {
+      setStartingLocalEngine(false);
+      showToast(res.error.message || t("docker.empty.startFailed"));
+      return;
+    }
+
+    let attempts = 0;
+    const poll = window.setInterval(async () => {
+      attempts += 1;
+      await refresh();
+      const statusRes = await commands.dockerGetLocalEngineStatus();
+      const running =
+        statusRes.status === "ok"
+          ? statusRes.data.running
+          : probe?.status === "online";
+      if (running || attempts >= 45) {
+        window.clearInterval(poll);
+        startPollRef.current = null;
+        setStartingLocalEngine(false);
+        if (statusRes.status === "ok") {
+          setLocalEngineStatus(statusRes.data);
+        }
+        if (!running && attempts >= 45) {
+          showToast(t("docker.empty.localEngine"));
+        }
+      }
+    }, 2000);
+    startPollRef.current = poll;
+  };
+
+  // 切换连接时复位抽屉/筛选等本地 UI（顶栏 Tab 与业务数据按模块/连接缓存保留）。
   useEffect(() => {
     setDrawerId(null);
-    setTab("overview");
     setFilter("all");
     setQuery("");
     setSearchInput("");
@@ -355,9 +395,34 @@ export function DockerPanel() {
   const isLocalEngine = selectedConnection?.source === "local-engine";
   const showLocalEngineWelcome =
     isLocalEngine &&
+    selectedConnectionId === DOCKER_LOCAL_CONNECTION_ID &&
     !connectionsLoading &&
     !dataLoading &&
     (isOffline || Boolean(error));
+
+  useEffect(() => {
+    if (!showLocalEngineWelcome) {
+      setLocalEngineStatus(null);
+      return;
+    }
+    let cancelled = false;
+    void commands.dockerGetLocalEngineStatus().then((res) => {
+      if (!cancelled && res.status === "ok") {
+        setLocalEngineStatus(res.data);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [showLocalEngineWelcome]);
+
+  useEffect(() => {
+    return () => {
+      if (startPollRef.current != null) {
+        window.clearInterval(startPollRef.current);
+      }
+    };
+  }, []);
 
   const workspaceTopbarTabs = useDockerWorkspaceTabs(tab);
   const showWorkspace =
@@ -373,6 +438,16 @@ export function DockerPanel() {
     },
     { mode: "segment", enabled: isActiveRoute && showWorkspace },
   );
+
+  useEffect(() => {
+    const setHint = useStatusBarStore.getState().setHint;
+    if (isActiveRoute && dataRefreshing) {
+      setHint(t("docker.overview.refreshing"));
+    } else {
+      setHint(null);
+    }
+    return () => setHint(null);
+  }, [isActiveRoute, dataRefreshing, t]);
 
   const toggleContainerSelect = (id: string) => {
     setSelectedContainers((prev) => {
@@ -491,9 +566,21 @@ export function DockerPanel() {
           <WorkspaceEmptyPage
             prompt={t("docker.empty.localEngine")}
             actions={
-              <Button variant="secondary" size="sm" onClick={refresh}>
-                {t("common.refresh")}
-              </Button>
+              <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
+                {localEngineStatus?.canStart ? (
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    disabled={startingLocalEngine}
+                    onClick={() => void handleStartLocalEngine()}
+                  >
+                    {startingLocalEngine ? t("docker.empty.startingDocker") : t("docker.empty.startDocker")}
+                  </Button>
+                ) : null}
+                <Button variant="secondary" size="sm" disabled={startingLocalEngine} onClick={refresh}>
+                  {t("common.refresh")}
+                </Button>
+              </div>
             }
           />
         ) : isOffline ? (
@@ -504,31 +591,16 @@ export function DockerPanel() {
           </div>
         ) : (
           <>
-            {/* 统计（概览页自带统计，此处仅在其他 Tab 展示） */}
-            {tab !== "overview" && (
-            <div className="docker-stats">
-              <StatCard color="success" value={overview?.summary.containersRunning ?? counts.running} label={t("docker.stats.running")} icon="running" />
-              <StatCard color="muted" value={overview?.summary.containersStopped ?? counts.stopped} label={t("docker.stats.stopped")} icon="stopped" />
-              <StatCard color="accent" value={overview?.summary.images ?? images.length} label={t("docker.stats.images")} icon="images" />
-              <StatCard color="warn" value={composeProjects.length} label="Compose" icon="compose" />
-              <div className="docker-stats-actions">
-                <Button variant="secondary" size="sm" onClick={refresh} disabled={dataRefreshing}>
-                  {dataRefreshing ? t("server.refreshing") : t("server.refresh")}
-                </Button>
-              </div>
-            </div>
-            )}
-
             {/* Error Banner */}
             {error && !isOffline && !errorDismissed && (
               <div className="docker-error-banner">
-                <span className="docker-error-icon">⚠</span>
+                <IconAlertTriangle size={16} className="docker-error-icon" />
                 <span className="docker-error-text">{error}</span>
                 <button className="docker-error-dismiss" onClick={() => setErrorDismissed(true)}>×</button>
               </div>
             )}
 
-            <div key={tab} className="docker-tab-content-animate">
+            <div key={tab} className="docker-tab-content">
             {tab === "overview" && (
               <DockerOverviewTab
                 overview={overview}
@@ -541,8 +613,6 @@ export function DockerPanel() {
                 composeProjects={composeProjects}
                 networks={networks}
                 volumes={volumes}
-                dataLoading={dataLoading}
-                dataRefreshing={dataRefreshing}
                 canManage={probe?.capabilities?.canManageContainers ?? false}
                 onNavigateTab={setTab}
                 onEditConnection={() => selectedConnection && handleEditDockerConnection(selectedConnection)}
@@ -596,14 +666,20 @@ export function DockerPanel() {
                   </div>
                   {filteredContainers.length === 0 ? (
                     <div className="docker-empty" style={{ minHeight: 120 }}>
-                      {dataLoading && containers.length === 0 ? "加载中…" : <EmptyState icon="📦" title="暂无容器" desc="创建或拉取一个容器开始使用" />}
+                      {dataLoading && containers.length === 0 ? "加载中…" : (
+                        <ModuleEmptyState
+                          preset="container"
+                          title="暂无容器"
+                          desc="创建或拉取一个容器开始使用"
+                        />
+                      )}
                     </div>
                   ) : (
-                    filteredContainers.map((container, idx) => (
+                    filteredContainers.map((container) => (
                       <div
                         key={container.id}
-                        className="container-card container-card-5 docker-list-item"
-                        style={!container.running ? { opacity: 0.65, animationDelay: `${idx * 0.03}s` } : { animationDelay: `${idx * 0.03}s` }}
+                        className="container-card container-card-5"
+                        style={!container.running ? { opacity: 0.65 } : undefined}
                         onClick={() => setDrawerId(container.id)}
                       >
                         <div className="col-check" onClick={(e) => e.stopPropagation()}>
@@ -707,13 +783,16 @@ export function DockerPanel() {
                   <span></span>
                 </div>
                 {images.length === 0 ? (
-                  <div className="docker-empty" style={{ minHeight: 120 }}>{dataLoading && images.length === 0 ? "加载中…" : <EmptyState icon="🖼️" title="暂无镜像" desc="拉取或构建镜像" />}</div>
+                  <div className="docker-empty" style={{ minHeight: 120 }}>
+                    {dataLoading && images.length === 0 ? "加载中…" : (
+                      <ModuleEmptyState preset="image" title="暂无镜像" desc="拉取或构建镜像" />
+                    )}
+                  </div>
                 ) : (
                   images.map((img, idx) => (
                     <div
                       key={`${img.id}-${img.repository}-${img.tag}-${idx}`}
-                      className="container-card image-row docker-list-item"
-                      style={{ animationDelay: `${idx * 0.03}s` }}
+                      className="container-card image-row"
                       onClick={() => setImageDrawerId(img.id)}
                     >
                       <div className="col-check" onClick={(e) => e.stopPropagation()}>
@@ -771,7 +850,9 @@ export function DockerPanel() {
               <div className="container-list">
                 {composeProjects.length === 0 ? (
                   <div className="docker-empty" style={{ minHeight: 120 }}>
-                    {dataLoading && composeProjects.length === 0 ? "加载中…" : <EmptyState icon="🐳" title="未识别到 Compose 项目" />}
+                    {dataLoading && composeProjects.length === 0 ? "加载中…" : (
+                      <ModuleEmptyState preset="compose" title="未识别到 Compose 项目" />
+                    )}
                   </div>
                 ) : (
                   composeProjects.map((proj) => (
@@ -1079,58 +1160,6 @@ export function DockerPanel() {
 
       {toast && <div className="docker-toast">{toast}</div>}
     </>
-  );
-}
-
-function EmptyState({ icon, title, desc }: { icon: string; title: string; desc?: string }) {
-  return (
-    <div className="docker-empty-state">
-      <div className="docker-empty-icon">{icon}</div>
-      <div className="docker-empty-title">{title}</div>
-      {desc && <div className="docker-empty-desc">{desc}</div>}
-    </div>
-  );
-}
-
-function useCountUp(target: number, duration = 600) {
-  const [value, setValue] = useState(0);
-  const prevRef = useRef(0);
-  useEffect(() => {
-    const start = performance.now();
-    const from = prevRef.current;
-    const tick = (now: number) => {
-      const progress = Math.min((now - start) / duration, 1);
-      const eased = 1 - Math.pow(1 - progress, 3);
-      const current = Math.round(from + (target - from) * eased);
-      setValue(current);
-      if (progress < 1) requestAnimationFrame(tick);
-      else prevRef.current = target;
-    };
-    requestAnimationFrame(tick);
-  }, [target, duration]);
-  return value;
-}
-
-function StatCard({ color, value, label, icon }: { color: string; value: number; label: string; icon: "running" | "stopped" | "images" | "compose" }) {
-  const animatedValue = useCountUp(value);
-  const bg = `var(--${color}-soft)`;
-  const fg = `var(--${color})`;
-  const icons = {
-    running: <DockerWhaleIcon />,
-    stopped: <DockerWhaleIcon />,
-    images: <ImageLayersIcon />,
-    compose: <ComposeStackIcon />,
-  };
-  return (
-    <div className="docker-stat">
-      <div className="stat-icon" style={{ background: bg, color: fg }}>
-        {icons[icon]}
-      </div>
-      <div className="stat-info">
-        <span className="stat-val">{animatedValue}</span>
-        <span className="stat-label">{label}</span>
-      </div>
-    </div>
   );
 }
 

@@ -1,5 +1,6 @@
 import { useState, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { IconCheckCircle, IconXCircle } from "../../components/ui/Icons";
 
 interface GrpcCallResponse {
   response_json: string;
@@ -166,8 +167,13 @@ export function GrpcPanel() {
               <div style={{ fontFamily: "monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                 {h.method}
               </div>
-              <div style={{ color: "var(--muted)", fontSize: 10, marginTop: 2 }}>
-                {h.grpcStatus === 0 ? "✅" : "❌"} {h.durationMs}ms · {h.timestamp.toLocaleTimeString()}
+              <div style={{ color: "var(--muted)", fontSize: 10, marginTop: 2, display: "flex", alignItems: "center", gap: 4 }}>
+                {h.grpcStatus === 0 ? (
+                  <IconCheckCircle size={12} className="text-success" />
+                ) : (
+                  <IconXCircle size={12} className="text-danger" />
+                )}
+                {h.durationMs}ms · {h.timestamp.toLocaleTimeString()}
               </div>
             </div>
           ))}

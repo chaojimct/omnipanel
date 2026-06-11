@@ -8,6 +8,7 @@
 
 mod compose;
 pub mod local;
+pub mod local_engine;
 pub mod model;
 pub mod onepanel;
 pub mod ssh;
@@ -18,6 +19,7 @@ use std::sync::Arc;
 
 pub use compose::aggregate_compose;
 pub use local::{DockerExecOutput, DockerExecSession, LocalDockerAdapter};
+pub use local_engine::{local_engine_status, start_local_engine};
 pub use model::*;
 pub use onepanel::{OnePanelAdapter, OnePanelClient};
 pub use ssh::SshDockerAdapter;

@@ -3,16 +3,11 @@ import { useKnowledgeStore, type KnowledgeTab } from "../../stores/knowledgeStor
 import { useI18n } from "../../i18n";
 import { Button } from "../../components/ui/Button";
 import { SidebarWorkspace } from "../../components/ui/SidebarWorkspace";
+import { ModuleEmptyState } from "../../components/ui/ModuleEmptyState";
+import { KnowledgeKindIcon } from "../../components/ui/KnowledgeKindIcon";
 import { KnowledgeCard } from "./KnowledgeCard";
 import { KnowledgeDetail } from "./KnowledgeDetail";
 import { CreateEntryDialog } from "./CreateEntryDialog";
-
-const TAB_ICONS: Record<KnowledgeTab, string> = {
-  all: "📚",
-  snippet: "📄",
-  case: "🔧",
-  ai: "🤖",
-};
 
 export function KnowledgePanel() {
   const { t } = useI18n();
@@ -78,7 +73,9 @@ export function KnowledgePanel() {
             className={`knowledge-category-tab ${activeTab === tab ? "active" : ""}`}
             onClick={() => setActiveTab(tab)}
           >
-            <span className="knowledge-tab-icon">{TAB_ICONS[tab]}</span>
+            <span className="knowledge-tab-icon">
+              <KnowledgeKindIcon kind={tab} size={14} />
+            </span>
             <span>{t(`knowledge.nav.${tab}`)}</span>
           </div>
         ))}
@@ -165,15 +162,11 @@ export function KnowledgePanel() {
                   ))}
 
               {!isLoading && displayEntries.length === 0 && (
-                <div className="knowledge-empty">
-                  <div className="knowledge-empty-icon">📚</div>
-                  <div className="knowledge-empty-title">
-                    {searchQuery.trim() ? t("knowledge.noResults") : t("knowledge.noEntries")}
-                  </div>
-                  {!searchQuery.trim() && (
-                    <div className="knowledge-empty-desc">{t("knowledge.createFirst")}</div>
-                  )}
-                </div>
+                <ModuleEmptyState
+                  preset="book"
+                  title={searchQuery.trim() ? t("knowledge.noResults") : t("knowledge.noEntries")}
+                  desc={!searchQuery.trim() ? t("knowledge.createFirst") : undefined}
+                />
               )}
 
               {isLoading && (
@@ -188,10 +181,7 @@ export function KnowledgePanel() {
             {selectedEntryId ? (
               <KnowledgeDetail />
             ) : (
-              <div className="knowledge-detail-empty">
-                <div className="knowledge-detail-empty-icon">📝</div>
-                <div className="text-muted">{t("knowledge.selectEntry")}</div>
-              </div>
+              <ModuleEmptyState preset="document" title={t("knowledge.selectEntry")} />
             )}
           </div>
         </div>

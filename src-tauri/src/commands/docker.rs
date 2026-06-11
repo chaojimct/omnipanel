@@ -18,9 +18,10 @@ use omnipanel_docker::{
     DockerCreateNetworkRequest, DockerCreateServiceRequest, DockerCreateVolumeRequest,
     DockerFileEntry, DockerImageDetail, DockerImageHistoryLayer, DockerImageProgress,
     DockerImageSummary, DockerLogLine, DockerNetworkDetail, DockerNetworkSummary,
-    DockerNodeSummary, DockerOverview, DockerProbe, DockerPruneResult, DockerPruneVolumesResult,
+    DockerLocalEngineStatus, DockerNodeSummary, DockerOverview, DockerProbe, DockerPruneResult, DockerPruneVolumesResult,
     DockerPullResult, DockerServiceSummary, DockerStackSummary, DockerSystemDiskUsage,
     DockerVolumeDetail, DockerVolumeSummary, LocalDockerAdapter, OnePanelAdapter, OnePanelClient, SshDockerAdapter,
+    local_engine_status, start_local_engine,
     bollard,
 };
 use omnipanel_error::{ErrorCode, OmniError};
@@ -290,6 +291,20 @@ pub async fn docker_probe_connection(
     connection_id: String,
 ) -> Result<DockerProbe, OmniError> {
     resolve_adapter(&state, &connection_id).await?.probe().await
+}
+
+/// 本地 Docker Engine 安装与运行状态（仅本机）。
+#[tauri::command]
+#[specta::specta]
+pub async fn docker_get_local_engine_status() -> Result<DockerLocalEngineStatus, OmniError> {
+    Ok(local_engine_status().await)
+}
+
+/// 一键启动本地 Docker Desktop（已安装但未运行时）。
+#[tauri::command]
+#[specta::specta]
+pub async fn docker_start_local_engine() -> Result<(), OmniError> {
+    start_local_engine()
 }
 
 /// 连接总览统计。

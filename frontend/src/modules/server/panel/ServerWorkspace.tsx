@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
-import { useLocation } from "react-router-dom";
+import { useMemo } from "react";
 import { useI18n } from "../../../i18n";
+import { usePersistedModuleTab } from "../../../hooks/usePersistedModuleTab";
 import type { ServerEntry } from "./serverConnection";
 import { ServerInstalledApps } from "./ServerInstalledApps";
 import { ServerMonitorTab } from "./tabs/ServerMonitorTab";
@@ -71,12 +71,16 @@ export function useServerWorkspaceTabs(activeTab: ServerWorkspaceTab) {
   );
 }
 
-export function useServerWorkspaceTabState(serverId: string | null) {
-  const [tab, setTab] = useState<ServerWorkspaceTab>("monitor");
-
-  useEffect(() => {
-    setTab("monitor");
-  }, [serverId]);
-
-  return [tab, setTab] as const;
+export function useServerWorkspaceTabState() {
+  const validTabs: ServerWorkspaceTab[] = [
+    "monitor",
+    "processes",
+    "apps",
+    "websites",
+    "databases",
+    "certificates",
+    "cronjobs",
+    "logs",
+  ];
+  return usePersistedModuleTab("server", "monitor", validTabs);
 }

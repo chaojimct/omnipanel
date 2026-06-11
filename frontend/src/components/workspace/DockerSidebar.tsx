@@ -3,6 +3,7 @@ import { useI18n } from "../../i18n";
 import { Button } from "../ui/Button";
 import { ContextMenu, type ContextMenuItem } from "../ui/ContextMenu";
 import type { DockerConnectionInfo } from "../../ipc/bindings";
+import { isBuiltinLocalDockerConnection } from "../../modules/docker/constants";
 
 const SOURCE_LABEL: Record<string, string> = {
   "local-engine": "本地 Engine",
@@ -51,6 +52,7 @@ export function DockerSidebar({
   );
 
   const handleContextMenu = (e: React.MouseEvent, connection: DockerConnectionInfo) => {
+    if (isBuiltinLocalDockerConnection(connection.connectionId)) return;
     e.preventDefault();
     setCtxPos({ x: e.clientX, y: e.clientY });
     setCtxConnection(connection);

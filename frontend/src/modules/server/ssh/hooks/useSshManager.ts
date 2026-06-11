@@ -1,11 +1,12 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSshHostResources } from "../../../../stores/connectionStore";
 import { useWorkspaceStore } from "../../../../stores/workspaceStore";
 import { useActionStore } from "../../../../stores/actionStore";
 import { useTerminalStore } from "../../../../stores/terminalStore";
 import { useI18n } from "../../../../i18n";
-import { SSH_PATH } from "../constants";
+import { usePersistedModuleTab } from "../../../../hooks/usePersistedModuleTab";
+import { SSH_PATH, DETAIL_TABS } from "../constants";
 import { getProfile } from "../data/hostProfiles";
 import { SSH_KEYS } from "../data/sshKeys";
 import type { DetailTab, HostSignal, LaunchPreset } from "../types";
@@ -21,7 +22,7 @@ export function useSshManager() {
   const setTerminalTab = useTerminalStore((s) => s.setActiveTab);
   const terminalTabs = useTerminalStore((s) => s.tabs);
 
-  const [detailTab, setDetailTab] = useState<DetailTab>("overview");
+  const [detailTab, setDetailTab] = usePersistedModuleTab("ssh-detail", "overview", DETAIL_TABS);
 
   const sshResources = useSshHostResources();
   const activeResource = useMemo(() => {
@@ -111,12 +112,6 @@ export function useSshManager() {
       selectResource("", SSH_PATH);
     }
   }, [sshResources, selectResource]);
-
-  useEffect(() => {
-    if (activeResource?.id) {
-      setDetailTab("overview");
-    }
-  }, [activeResource?.id]);
 
   const queueSshAction = useCallback(
     (title: string, description: string, command?: string) => {

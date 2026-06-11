@@ -29,6 +29,16 @@ const navPaths = [
     ),
   },
   {
+    path: "/ssh",
+    key: "shell.nav.ssh",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+        <rect x="2" y="3" width="20" height="14" rx="2" />
+        <path d="M8 21h8M12 17v4" />
+      </svg>
+    ),
+  },
+  {
     path: "/docker",
     key: "shell.nav.docker",
     icon: (
@@ -38,16 +48,6 @@ const navPaths = [
         <rect x="18" y="7" width="4" height="5" rx="1" />
         <rect x="6" y="2" width="6" height="5" rx="1" />
         <path d="M2 17h20c0 2.76-4.48 5-10 5S2 19.76 2 17z" />
-      </svg>
-    ),
-  },
-  {
-    path: "/ssh",
-    key: "shell.nav.ssh",
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-        <rect x="2" y="3" width="20" height="14" rx="2" />
-        <path d="M8 21h8M12 17v4" />
       </svg>
     ),
   },

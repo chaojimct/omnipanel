@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { useI18n } from "../../i18n";
 import { Button } from "../../components/ui/Button";
+import { DockerStatsBar } from "./DockerStatCards";
 import type {
   DockerComposeProject,
   DockerConnectionInfo,
@@ -63,8 +64,6 @@ interface Props {
   composeProjects: DockerComposeProject[];
   networks: DockerNetworkSummary[];
   volumes: DockerVolumeSummary[];
-  dataLoading: boolean;
-  dataRefreshing: boolean;
   canManage: boolean;
   onNavigateTab: (tab: DockerWorkspaceTab) => void;
   onEditConnection: () => void;
@@ -89,8 +88,6 @@ export function DockerOverviewTab({
   composeProjects,
   networks,
   volumes,
-  dataLoading,
-  dataRefreshing,
   canManage,
   onNavigateTab,
   onEditConnection,
@@ -163,49 +160,34 @@ export function DockerOverviewTab({
 
   const resourceCards = useMemo(
     () => [
-      { tab: "compose" as const, label: t("docker.tabs.compose"), value: composeProjects.length },
-      { tab: null, label: t("docker.overview.composeTemplates"), value: null },
-      { tab: "images" as const, label: t("docker.tabs.images"), value: images.length },
-      { tab: null, label: t("docker.overview.registries"), value: null },
       { tab: "networks" as const, label: t("docker.tabs.networks"), value: networks.length },
       { tab: "volumes" as const, label: t("docker.tabs.volumes"), value: volumes.length },
+      { tab: null, label: t("docker.overview.composeTemplates"), value: null },
+      { tab: null, label: t("docker.overview.registries"), value: null },
     ],
-    [composeProjects.length, images.length, networks.length, volumes.length, t],
+    [networks.length, volumes.length, t],
   );
 
-  const totalContainers = overview?.summary.containersTotal ?? containersTotal;
-  const runningContainers = overview?.summary.containersRunning ?? containersRunning;
+  const runningCount = overview?.summary.containersRunning ?? containersRunning;
+  const stoppedCount =
+    overview?.summary.containersStopped ??
+    Math.max((overview?.summary.containersTotal ?? containersTotal) - runningCount, 0);
+  const imageCount = overview?.summary.images ?? images.length;
 
   return (
     <div className="docker-overview">
-      {dataRefreshing && (
-        <div className="docker-overview-refresh-hint text-muted text-xs">
-          {t("docker.overview.refreshing")}
-        </div>
-      )}
-
-      <section className="docker-overview-section">
-        <div className="docker-overview-section-head">
-          <h3 className="docker-overview-section-title">{t("docker.tabs.containers")}</h3>
-          <div className="docker-overview-badges">
-            <span className="badge badge-muted">
-              {t("docker.filters.all")} {totalContainers}
-            </span>
-            <span className="badge badge-accent">
-              {t("docker.filters.running")} {runningContainers}
-            </span>
-          </div>
-        </div>
-        <button
-          type="button"
-          className="docker-overview-hero"
-          onClick={() => onNavigateTab("containers")}
-        >
-          <span className="docker-overview-hero-value">
-            {dataLoading && totalContainers === 0 ? "…" : totalContainers}
-          </span>
-        </button>
-      </section>
+      <DockerStatsBar
+        running={runningCount}
+        stopped={stoppedCount}
+        images={imageCount}
+        compose={composeProjects.length}
+        labels={{
+          running: t("docker.stats.running"),
+          stopped: t("docker.stats.stopped"),
+          images: t("docker.stats.images"),
+          compose: t("docker.stats.compose"),
+        }}
+      />
 
       <div className="docker-overview-stat-grid">
         {resourceCards.map((card) => (

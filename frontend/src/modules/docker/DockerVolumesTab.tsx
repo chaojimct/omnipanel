@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { ModuleEmptyState } from "../../components/ui/ModuleEmptyState";
 import { Button } from "../../components/ui/Button";
 import { FormDialog } from "../../components/ui/FormDialog";
 import type { DockerVolumeSummary, DockerCreateVolumeRequest } from "../../ipc/bindings";
@@ -80,7 +81,7 @@ export function DockerVolumesTab({ volumes, canManage, onRefresh, onCreate, onRe
         <span></span>
       </div>
       {volumes.length === 0 ? (
-        <div className="docker-empty" style={{ minHeight: 120 }}>暂无卷</div>
+        <ModuleEmptyState preset="volume" title="暂无卷" />
       ) : (
           volumes.map((v) => (
             <div

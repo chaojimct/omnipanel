@@ -44,6 +44,8 @@ fn export_ipc_bindings() {
         commands::panel::panel_bt_test_connection,
         commands::docker::docker_list_connections,
         commands::docker::docker_probe_connection,
+        commands::docker::docker_get_local_engine_status,
+        commands::docker::docker_start_local_engine,
         commands::docker::docker_get_overview,
         commands::docker::docker_get_system_disk_usage,
         commands::docker::docker_list_containers,
@@ -388,6 +390,8 @@ pub fn run() {
             // Docker（容器工作区）
             commands::docker::docker_list_connections,
             commands::docker::docker_probe_connection,
+            commands::docker::docker_get_local_engine_status,
+            commands::docker::docker_start_local_engine,
             commands::docker::docker_get_overview,
             commands::docker::docker_get_system_disk_usage,
             commands::docker::docker_list_containers,

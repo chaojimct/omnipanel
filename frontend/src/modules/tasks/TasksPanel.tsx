@@ -12,6 +12,7 @@ import type {
   TaskSource,
   SaveTaskRequest,
 } from "../../ipc/bindings";
+import { IconRobot, IconSettings, IconUser } from "../../components/ui/Icons";
 
 type TaskTab = "active" | "drafts" | "history";
 
@@ -70,12 +71,12 @@ function riskBadge(risk: TaskRisk) {
 }
 
 function sourceBadge(source: TaskSource, _t: (k: string) => string) {
-  const map: Record<TaskSource, string> = {
-    user: "👤",
-    ai: "🤖",
-    system: "⚙️",
-  };
-  return <span title={source}>{map[source] ?? source}</span>;
+  const icons = {
+    user: <IconUser size={12} />,
+    ai: <IconRobot size={12} />,
+    system: <IconSettings size={12} />,
+  } as const;
+  return <span className="task-source-icon" title={source}>{icons[source] ?? source}</span>;
 }
 
 function formatDuration(startMs: number | null, endMs: number | null): string {

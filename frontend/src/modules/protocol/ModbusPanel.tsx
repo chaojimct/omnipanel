@@ -1,6 +1,7 @@
 import { useState, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Select } from "../../components/ui/Select";
+import { IconClipboard, IconPencil } from "../../components/ui/Icons";
 
 type RegisterType = "coils" | "discrete_inputs" | "holding_registers" | "input_registers";
 
@@ -172,7 +173,9 @@ export function ModbusPanel() {
 
         {/* Write */}
         <div style={{ ...STYLE.section, flex: 1 }}>
-          <div style={STYLE.title}>✏️ Write Register</div>
+          <div style={{ ...STYLE.title, display: "flex", alignItems: "center", gap: 6 }}>
+            <IconPencil size={14} /> Write Register
+          </div>
           <div style={STYLE.row}>
             <span style={STYLE.label}>Type</span>
             <Select
@@ -198,7 +201,9 @@ export function ModbusPanel() {
 
       {/* Result */}
       <div style={STYLE.section}>
-        <div style={STYLE.title}>📋 Result</div>
+        <div style={{ ...STYLE.title, display: "flex", alignItems: "center", gap: 6 }}>
+          <IconClipboard size={14} /> Result
+        </div>
         <div style={STYLE.resultBox}>{result || "No data yet..."}</div>
       </div>
     </div>
