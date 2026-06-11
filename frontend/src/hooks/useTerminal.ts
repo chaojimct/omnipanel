@@ -1,6 +1,11 @@
 import { useEffect, useRef, type RefObject } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { commands, type SshConfig } from "../ipc/bindings";
+import {
+  commands,
+  type SshAuth_Serialize,
+  type SshConfig_Deserialize,
+  type SshConfig_Serialize,
+} from "../ipc/bindings";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { Terminal, type IDisposable, type ITheme } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
@@ -86,6 +91,28 @@ function isRemotePane(sessionId: string): boolean {
   return findPaneById(sessionId)?.type === "remote";
 }
 
+/** 持久化配置为 serde 扁平 tag 形态，IPC invoke 需 specta Deserialize 形态。 */
+function toSshConnectConfig(config: SshConfig_Serialize): SshConfig_Deserialize {
+  const auth = config.auth as SshAuth_Serialize;
+  if (auth.type === "password") {
+    return {
+      ...config,
+      auth: { password: { type: "password", password: auth.password } },
+    };
+  }
+  return {
+    ...config,
+    auth: {
+      privateKey: {
+        type: "privateKey",
+        pem: auth.pem,
+        keyPath: auth.keyPath,
+        passphrase: auth.passphrase,
+      },
+    },
+  };
+}
+
 /** 远程 pane 走 SSH（ssh_connect），本地 pane 走本地 PTY（create_terminal）。 */
 async function createBackendSession(sessionId: string, cols: number, rows: number): Promise<string> {
   const pane = findPaneById(sessionId);
@@ -103,13 +130,13 @@ async function createBackendSession(sessionId: string, cols: number, rows: numbe
     if (!conn) {
       throw new Error("未找到对应的 SSH 连接配置，请先在 SSH 管理中添加连接");
     }
-    let config: SshConfig;
+    let config: SshConfig_Serialize;
     try {
-      config = JSON.parse(conn.config || "{}") as SshConfig;
+      config = JSON.parse(conn.config || "{}") as SshConfig_Serialize;
     } catch {
       throw new Error("SSH 连接配置解析失败");
     }
-    const res = await commands.sshConnect(config, cols, rows);
+    const res = await commands.sshConnect(toSshConnectConfig(config), cols, rows);
     if (res.status === "ok") return res.data;
     throw new Error(res.error.message);
   }

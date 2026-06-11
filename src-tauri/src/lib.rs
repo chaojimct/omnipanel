@@ -115,6 +115,8 @@ fn export_ipc_bindings() {
         commands::ssh::sftp_upload,
         commands::ssh::sftp_mkdir,
         commands::ssh::sftp_remove,
+        commands::ssh::sftp_rename,
+        commands::ssh::sftp_chmod,
         commands::ssh::ssh_list_config_hosts,
         commands::ssh::ssh_sync_config_hosts,
         commands::ssh::ssh_connect_config_host,

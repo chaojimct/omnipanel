@@ -314,10 +314,10 @@ fn find_local_socket_token(line: &str) -> Option<(String, u16)> {
         if token == "*:*" {
             continue;
         }
-        if let Some((addr, port)) = parse_host_port(token) {
-            if port > 0 {
-                return Some((addr, port));
-            }
+        if let Some((addr, port)) = parse_host_port(token)
+            && port > 0
+        {
+            return Some((addr, port));
         }
     }
     None
