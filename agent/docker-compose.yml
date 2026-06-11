@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  agent:
+    build: .
+    container_name: omnipanel-agent
+    ports:
+      - "3100:3100"
+    environment:
+      - NODE_ENV=production
+      - AGENT_NAME=OmniPanel Agent
+      - MODEL_PROVIDER=openai
+      - MODEL_NAME=gpt-4o-mini
+      - MODEL_API_KEY=${MODEL_API_KEY}
+      - ACP_HOST=0.0.0.0
+      - ACP_PORT=3100
+      - ACP_AUTH_ENABLED=false
+      - MEMORY_ENABLED=true
+      - LOG_LEVEL=info
+    volumes:
+      - ./logs:/app/logs
+      - ./config:/app/config
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3100/api/health"]
+      interval: 30s
+      timeout: 3s
+      start_period: 5s
+      retries: 3

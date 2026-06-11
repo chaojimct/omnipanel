@@ -1,0 +1,45 @@
+{
+  "agent": {
+    "name": "OmniPanel Agent",
+    "description": "An intelligent AI agent for the OmniPanel ecosystem",
+    "capabilities": [
+      "task_execution",
+      "conversation",
+      "code_generation",
+      "data_analysis",
+      "file_operation",
+      "web_search"
+    ]
+  },
+  "model": {
+    "provider": "openai",
+    "modelName": "gpt-4o-mini",
+    "temperature": 0.7,
+    "maxTokens": 4096
+  },
+  "acp": {
+    "host": "0.0.0.0",
+    "port": 3100,
+    "auth": {
+      "enabled": false
+    },
+    "cors": {
+      "enabled": true,
+      "origins": ["*"]
+    }
+  },
+  "memory": {
+    "enabled": true,
+    "maxHistory": 100
+  },
+  "logging": {
+    "level": "info",
+    "file": {
+      "enabled": true,
+      "errorPath": "logs/error.log",
+      "combinedPath": "logs/combined.log",
+      "maxSize": 5242880,
+      "maxFiles": 5
+    }
+  }
+}
