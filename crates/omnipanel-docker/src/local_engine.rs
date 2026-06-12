@@ -137,7 +137,7 @@ pub async fn local_engine_status() -> DockerLocalEngineStatus {
 
 /// 尝试启动本地 Docker Desktop（或 Linux 上的 docker-desktop 服务）。
 pub fn start_local_engine() -> OmniResult<()> {
-    let (installed, install_kind, can_start) = detect_installation();
+    let (installed, _install_kind, can_start) = detect_installation();
     if !installed {
         return Err(OmniError::new(
             ErrorCode::NotFound,
