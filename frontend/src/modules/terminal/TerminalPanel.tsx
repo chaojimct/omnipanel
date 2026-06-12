@@ -46,6 +46,12 @@ export function TerminalPanel() {
   const reconnectKeysRef = useRef(reconnectKeys);
   reconnectKeysRef.current = reconnectKeys;
 
+  /**
+   * 处于"重新连接中"的 tab 集合。点击刷新按钮时加入，连接尝试结束
+   * （status 离开 connecting）时自动移除——以此驱动加载动画的显示。
+   */
+  const [reconnectingTabs, setReconnectingTabs] = useState<Record<string, boolean>>({});
+
   const workspaceActiveResourceId = useWorkspaceStore(
     (state) => state.activeResourceId,
   );
@@ -208,7 +214,31 @@ export function TerminalPanel() {
     clearPaneBackendPending(tabId);
     disposeTabBackendSessions(tabId);
     setReconnectKeys((prev) => ({ ...prev, [tabId]: (prev[tabId] ?? 0) + 1 }));
+    setReconnectingTabs((prev) => ({ ...prev, [tabId]: true }));
   }, []);
+
+  // 当一个 tab 状态从 connecting 落到 connected / disconnected，
+  // 视为"重新连接尝试已结束"，关闭加载动画。
+  useEffect(() => {
+    setReconnectingTabs((prev) => {
+      let changed = false;
+      const next: Record<string, boolean> = {};
+      for (const tabId of Object.keys(prev)) {
+        if (!prev[tabId]) continue;
+        const tab = tabs.find((item) => item.id === tabId);
+        if (!tab) {
+          changed = true;
+          continue;
+        }
+        if (tab.status === "connecting") {
+          next[tabId] = true;
+        } else {
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [tabs]);
 
   const renderDockPanel = useCallback(
     (tabId: string) => {
@@ -217,6 +247,7 @@ export function TerminalPanel() {
       const resource = resolveResourceById(tab.session.resourceId) ?? null;
       const isActive = tabId === activeTabId;
       const reconnectKey = reconnectKeys[tabId] ?? 0;
+      const isReconnecting = reconnectingTabs[tabId] === true;
 
       return (
         <TerminalTabPaneView
@@ -232,6 +263,7 @@ export function TerminalPanel() {
           occupiedResourceIds={occupiedResourceIds}
           onReconnect={() => handleReconnect(tabId)}
           reconnectKey={reconnectKey}
+          isReconnecting={isReconnecting}
         />
       );
     },
@@ -245,6 +277,7 @@ export function TerminalPanel() {
       paneServerOptions,
       occupiedResourceIds,
       reconnectKeys,
+      reconnectingTabs,
       setActiveTab,
     ],
   );

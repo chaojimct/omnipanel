@@ -638,6 +638,7 @@ export const enUS: TranslationDict = {
     },
     reconnect: {
       tooltip: "Reconnect (close backend session and create a new one)",
+      loading: "Reconnecting…",
     },
     context: {
       title: "Terminal Context",

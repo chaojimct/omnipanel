@@ -34,6 +34,8 @@ type CommonProps = {
   onReconnect?: () => void;
   /** 强制重建 TerminalView 的计数器（自增即生效）。 */
   reconnectKey?: number;
+  /** 正在执行用户发起的重新连接：覆盖层显示加载动画。 */
+  isReconnecting?: boolean;
 };
 
 function ReconnectIcon() {
@@ -70,6 +72,7 @@ function PaneViewBody(
     onServerChange,
     onReconnect,
     reconnectKey,
+    isReconnecting,
     currentResourceId,
   }: CommonProps & { currentResourceId: string },
   ref: React.ForwardedRef<TerminalPaneViewHandle>,
@@ -119,7 +122,7 @@ function PaneViewBody(
         )}
         <button
           type="button"
-          className="term-pane-reconnect drag-ignore"
+          className={`term-pane-reconnect drag-ignore${isReconnecting ? " is-loading" : ""}`}
           onClick={(e) => {
             // 阻止事件冒泡到 .term-pane 的 onMouseDown，避免抢占 focus
             e.stopPropagation();
@@ -129,7 +132,7 @@ function PaneViewBody(
           onMouseDown={(e) => e.stopPropagation()}
           title={t("terminal.reconnect.tooltip")}
           aria-label={t("terminal.reconnect.tooltip")}
-          disabled={!onReconnect}
+          disabled={!onReconnect || isReconnecting}
         >
           <ReconnectIcon />
         </button>
@@ -144,6 +147,16 @@ function PaneViewBody(
           onSenderChange={onSenderChange}
           reconnectKey={reconnectKey}
         />
+        {isReconnecting && (
+          <div className="term-pane-loading" role="status" aria-live="polite">
+            <div className="term-pane-loading__inner">
+              <div className="term-pane-loading__spinner" aria-hidden />
+              <span className="term-pane-loading__text">
+                {t("terminal.reconnect.loading")}
+              </span>
+            </div>
+          </div>
+        )}
       </div>
       <CommandInput ref={cmdRef} onSend={onSendCommand} />
     </div>

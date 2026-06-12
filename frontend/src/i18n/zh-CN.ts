@@ -634,6 +634,7 @@ export const zhCN = {
     },
     reconnect: {
       tooltip: "重新连接（关闭当前后端会话并重建）",
+      loading: "正在重新连接…",
     },
     context: {
       title: "终端上下文",
