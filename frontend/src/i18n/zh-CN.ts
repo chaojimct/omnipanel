@@ -335,6 +335,17 @@ export const zhCN = {
       expandWorkspace: "展开工作区",
       collapseWorkspace: "收起工作区",
     },
+    workspacePopover: {
+      title: "工作区",
+      newWorkspace: "新建工作区",
+      namePlaceholder: "新工作区名称",
+      nameRequired: "名称不能为空",
+      nameDuplicate: "已存在同名工作区",
+      create: "创建",
+      cancel: "取消",
+      delete: "删除工作区",
+      cannotDeleteLast: "至少保留一个工作区",
+    },
     workspacePanel: {
       resources: "资源",
       welcomePrompt: "从其他模块拖入面板到此自由布局，或切换到模块继续工作",

@@ -1,7 +1,26 @@
-import { useCallback, useEffect, useRef, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import type { OnPanelResize, PanelImperativeHandle } from "react-resizable-panels";
 import { DockWorkspace } from "../dock";
 import { useBottomPanelStore } from "../../stores/bottomPanelStore";
+
+/** 底部工作区可拖拽的最大高度占窗口高度比例 */
+const BOTTOM_PANEL_MAX_HEIGHT_RATIO = 0.6;
+
+function useBottomPanelMaxHeightPx(): number {
+  const [maxPx, setMaxPx] = useState(() =>
+    Math.floor(window.innerHeight * BOTTOM_PANEL_MAX_HEIGHT_RATIO),
+  );
+
+  useEffect(() => {
+    const update = () => {
+      setMaxPx(Math.floor(window.innerHeight * BOTTOM_PANEL_MAX_HEIGHT_RATIO));
+    };
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
+  }, []);
+
+  return maxPx;
+}
 
 export interface SidebarBottomProps {
   /** 主内容区 */
@@ -30,9 +49,11 @@ export function SidebarBottom({
   sidebar,
   sidebarSizePx = 220,
   sidebarMinPx = 160,
-  sidebarMaxPx = 420,
+  sidebarMaxPx: sidebarMaxPxProp,
   className,
 }: SidebarBottomProps) {
+  const computedMaxPx = useBottomPanelMaxHeightPx();
+  const sidebarMaxPx = sidebarMaxPxProp ?? computedMaxPx;
   const bottomPanelRef = useRef<PanelImperativeHandle | null>(null);
   const expandSignal = useBottomPanelStore((state) => state.expandSignal);
   const collapseSignal = useBottomPanelStore((state) => state.collapseSignal);

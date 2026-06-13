@@ -216,6 +216,10 @@
     background: var(--bg-hover);
 }
 
+.workspace-bottom-titlebar-btn--exit-fullscreen {
+    margin-right: var(--sp-1);
+}
+
 .workspace-bottom-fullscreen-shell {
     flex: 1;
     min-height: 0;
@@ -3347,11 +3351,23 @@
         min-height: 0;
     }
 
+    .workspace-popover-row {
+        display: flex;
+        align-items: stretch;
+        gap: 2px;
+        margin-bottom: 2px;
+    }
+
+    .workspace-popover-row:last-child {
+        margin-bottom: 0;
+    }
+
     .workspace-popover-item {
         display: flex;
         align-items: center;
         gap: 8px;
-        width: 100%;
+        flex: 1;
+        min-width: 0;
         padding: 7px 10px;
         border: none;
         border-radius: var(--r-sm);
@@ -3398,6 +3414,31 @@
 
     .workspace-popover-item-check {
         flex-shrink: 0;
+    }
+
+    .workspace-popover-delete {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 28px;
+        flex-shrink: 0;
+        border: none;
+        border-radius: var(--r-sm);
+        background: transparent;
+        color: var(--meta);
+        cursor: pointer;
+        opacity: 0;
+        transition: opacity 0.1s, background 0.1s, color 0.1s;
+    }
+
+    .workspace-popover-row:hover .workspace-popover-delete,
+    .workspace-popover-row:focus-within .workspace-popover-delete {
+        opacity: 1;
+    }
+
+    .workspace-popover-delete:hover {
+        background: color-mix(in oklch, var(--danger) 12%, transparent);
+        color: var(--danger);
     }
 
     .workspace-popover-footer {

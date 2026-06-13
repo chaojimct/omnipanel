@@ -7,7 +7,9 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { useWorkspaceStore, type WorkspaceInfo } from "../../stores/workspaceStore";
+import { useWorkspaceBottomDockStore } from "../../stores/workspaceBottomDockStore";
 import { useBottomPanelStore } from "../../stores/bottomPanelStore";
+import { useI18n } from "../../i18n";
 
 interface WorkspacePopoverProps {
   anchorRef: RefObject<HTMLElement | null>;
@@ -21,10 +23,15 @@ function isPopoverNode(target: EventTarget | null): boolean {
 }
 
 export function WorkspacePopover({ anchorRef, onClose }: WorkspacePopoverProps) {
+  const { t } = useI18n();
   const workspaces = useWorkspaceStore((state) => state.workspaces);
   const currentId = useWorkspaceStore((state) => state.workspace.id);
   const switchWorkspace = useWorkspaceStore((state) => state.switchWorkspace);
   const addWorkspace = useWorkspaceStore((state) => state.addWorkspace);
+  const removeWorkspace = useWorkspaceStore((state) => state.removeWorkspace);
+  const removeWorkspaceData = useWorkspaceBottomDockStore(
+    (state) => state.removeWorkspaceData,
+  );
   const requestExpand = useBottomPanelStore((state) => state.requestExpand);
 
   const panelRef = useRef<HTMLDivElement>(null);
@@ -34,6 +41,8 @@ export function WorkspacePopover({ anchorRef, onClose }: WorkspacePopoverProps) 
   const [draftName, setDraftName] = useState("");
   const [draftError, setDraftError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const canDelete = workspaces.length > 1;
 
   useLayoutEffect(() => {
     setReady(false);
@@ -92,11 +101,11 @@ export function WorkspacePopover({ anchorRef, onClose }: WorkspacePopoverProps) 
   function commitCreate() {
     const trimmed = draftName.trim();
     if (!trimmed) {
-      setDraftError("名称不能为空");
+      setDraftError(t("shell.workspacePopover.nameRequired"));
       return;
     }
     if (workspaces.some((w) => w.name === trimmed)) {
-      setDraftError("已存在同名工作区");
+      setDraftError(t("shell.workspacePopover.nameDuplicate"));
       return;
     }
     addWorkspace(trimmed);
@@ -113,6 +122,15 @@ export function WorkspacePopover({ anchorRef, onClose }: WorkspacePopoverProps) 
     switchWorkspace(target.id);
     requestExpand();
     onClose();
+  }
+
+  function handleDelete(target: WorkspaceInfo, event: React.MouseEvent) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!canDelete) return;
+    removeWorkspaceData(target.id);
+    if (!removeWorkspace(target.id)) return;
+    requestExpand();
   }
 
   function startCreating() {
@@ -133,14 +151,15 @@ export function WorkspacePopover({ anchorRef, onClose }: WorkspacePopoverProps) 
           visibility: ready ? "visible" : "hidden",
         }}
         role="dialog"
-        aria-label="工作区"
+        aria-label={t("shell.workspacePopover.title")}
       >
-        <div className="workspace-popover-header">工作区</div>
+        <div className="workspace-popover-header">{t("shell.workspacePopover.title")}</div>
         <ul className="workspace-popover-list" role="listbox">
           {workspaces.map((ws) => {
             const active = ws.id === currentId;
+            const deleteLabel = t("shell.workspacePopover.delete");
             return (
-              <li key={ws.id}>
+              <li key={ws.id} className="workspace-popover-row">
                 <button
                   type="button"
                   className={`workspace-popover-item${active ? " workspace-popover-item--active" : ""}`}
@@ -165,6 +184,31 @@ export function WorkspacePopover({ anchorRef, onClose }: WorkspacePopoverProps) 
                     </svg>
                   )}
                 </button>
+                {canDelete ? (
+                  <button
+                    type="button"
+                    className="workspace-popover-delete"
+                    title={deleteLabel}
+                    aria-label={deleteLabel}
+                    onClick={(event) => handleDelete(ws, event)}
+                  >
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      width="12"
+                      height="12"
+                      aria-hidden
+                    >
+                      <polyline points="3 6 5 6 21 6" />
+                      <path d="M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2" />
+                      <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />
+                      <line x1="10" y1="11" x2="10" y2="17" />
+                      <line x1="14" y1="11" x2="14" y2="17" />
+                    </svg>
+                  </button>
+                ) : null}
               </li>
             );
           })}
@@ -176,7 +220,7 @@ export function WorkspacePopover({ anchorRef, onClose }: WorkspacePopoverProps) 
                 ref={inputRef}
                 type="text"
                 className="workspace-popover-input"
-                placeholder="新工作区名称"
+                placeholder={t("shell.workspacePopover.namePlaceholder")}
                 value={draftName}
                 onChange={(e) => {
                   setDraftName(e.target.value);
@@ -195,7 +239,7 @@ export function WorkspacePopover({ anchorRef, onClose }: WorkspacePopoverProps) 
                 type="button"
                 className="workspace-popover-confirm"
                 onClick={commitCreate}
-                aria-label="创建"
+                aria-label={t("shell.workspacePopover.create")}
               >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" width="12" height="12" aria-hidden>
                   <polyline points="20 6 9 17 4 12" />
@@ -209,7 +253,7 @@ export function WorkspacePopover({ anchorRef, onClose }: WorkspacePopoverProps) 
                   setDraftName("");
                   setDraftError(null);
                 }}
-                aria-label="取消"
+                aria-label={t("shell.workspacePopover.cancel")}
               >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="12" height="12" aria-hidden>
                   <line x1="18" y1="6" x2="6" y2="18" />
@@ -227,7 +271,7 @@ export function WorkspacePopover({ anchorRef, onClose }: WorkspacePopoverProps) 
                 <line x1="12" y1="5" x2="12" y2="19" />
                 <line x1="5" y1="12" x2="19" y2="12" />
               </svg>
-              新建工作区
+              {t("shell.workspacePopover.newWorkspace")}
             </button>
           )}
           {draftError && <div className="workspace-popover-error">{draftError}</div>}

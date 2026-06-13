@@ -31,10 +31,13 @@ import {
   transferPanelToTarget,
   unregisterDockviewInstance,
 } from "../../lib/dockviewRegistry";
+import { syncTabGroupsByPanelType } from "./dockTabGroups";
 
 export interface DockableTab {
   id: string;
   label: string;
+  /** 面板类型：同模块面板共享类型，用于 tab group 折叠 */
+  panelType: string;
   closable?: boolean;
 }
 
@@ -62,6 +65,10 @@ export interface DockableWorkspaceProps {
   dockScope?: string;
   /** 是否接受其他 dockview 拖入的 panel */
   acceptExternalDrops?: boolean;
+  /** 自定义 tab group chip 标签与颜色 */
+  resolveTabGroupMeta?: (
+    panelType: string,
+  ) => Partial<{ label: string; color: string }> | undefined;
 }
 
 interface PanelParams {
@@ -99,6 +106,7 @@ export function DockableWorkspace({
   createPanelRequest,
   dockScope,
   acceptExternalDrops = false,
+  resolveTabGroupMeta,
 }: DockableWorkspaceProps) {
   const apiRef = useRef<DockviewApi | null>(null);
   const viewIdRef = useRef<string | null>(null);
@@ -128,6 +136,21 @@ export function DockableWorkspace({
   onTabContextMenuRef.current = onTabContextMenu;
   const tabsRef = useRef(tabs);
   tabsRef.current = tabs;
+  const resolveTabGroupMetaRef = useRef(resolveTabGroupMeta);
+  resolveTabGroupMetaRef.current = resolveTabGroupMeta;
+
+  const syncTabGroups = useCallback((api: DockviewApi, manageLock = true) => {
+    if (manageLock) isSyncingRef.current = true;
+    try {
+      syncTabGroupsByPanelType(
+        api,
+        tabsRef.current,
+        resolveTabGroupMetaRef.current,
+      );
+    } finally {
+      if (manageLock) isSyncingRef.current = false;
+    }
+  }, []);
 
   // 单组件：所有 panel 共享一个 React 组件，渲染内容靠 params.tabId
   const components = useMemo(
@@ -265,6 +288,7 @@ export function DockableWorkspace({
         isSyncingRef.current = false;
       }
       layoutLoadedRef.current = true;
+      syncTabGroups(api);
       if (acceptExternalDropsRef.current) {
         ensureExternalDropTarget(api);
       }
@@ -306,10 +330,11 @@ export function DockableWorkspace({
       isSyncingRef.current = false;
     }
     layoutLoadedRef.current = true;
+    syncTabGroups(api);
     if (acceptExternalDropsRef.current) {
       ensureExternalDropTarget(api);
     }
-  }, []);
+  }, [syncTabGroups]);
 
   // 同步 tab 变更（添加/删除/重命名）
   useEffect(() => {
@@ -370,10 +395,11 @@ export function DockableWorkspace({
           }
         }
       }
+      syncTabGroups(api, false);
     } finally {
       isSyncingRef.current = false;
     }
-  }, [tabs]);
+  }, [tabs, syncTabGroups]);
 
   // 同步 activeTabId
   useEffect(() => {
@@ -423,7 +449,10 @@ export function DockableWorkspace({
       apiRef.current.clear();
     }
     lastWrittenLayoutRef.current = savedLayout;
-  }, [savedLayout]);
+    if (apiRef.current) {
+      syncTabGroups(apiRef.current);
+    }
+  }, [savedLayout, syncTabGroups]);
 
   const disposablesRef = useRef<Array<{ dispose: () => void }>>([]);
 
@@ -453,6 +482,15 @@ export function DockableWorkspace({
           onActiveTabChangeRef.current(panel.id);
         }
       });
+      const scheduleTabGroupSync = () => {
+        if (!layoutLoadedRef.current) return;
+        queueMicrotask(() => {
+          if (!apiRef.current || isSyncingRef.current) return;
+          syncTabGroups(apiRef.current);
+        });
+      };
+      const addDisposable = api.onDidAddPanel(() => scheduleTabGroupSync());
+      const moveDisposable = api.onDidMovePanel(() => scheduleTabGroupSync());
 
       const scope = dockScopeRef.current;
       if (scope) {
@@ -501,6 +539,8 @@ export function DockableWorkspace({
         layoutDisposable,
         removeDisposable,
         activeDisposable,
+        addDisposable,
+        moveDisposable,
         ...externalDisposables,
       ];
 
@@ -519,7 +559,7 @@ export function DockableWorkspace({
         }
       }
     },
-    [activeTabId, applyInitialLayout],
+    [activeTabId, applyInitialLayout, syncTabGroups],
   );
 
   // 卸载时清理

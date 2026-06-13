@@ -1204,7 +1204,11 @@ export function DatabasePanel() {
     () =>
       workspaceTabs
         .filter((tab) => !isOriginDocked("database", tab.id))
-        .map((tab) => ({ id: tab.id, label: tab.label })),
+        .map((tab) => ({
+          id: tab.id,
+          label: tab.label,
+          panelType: "database",
+        })),
     [workspaceTabs, isOriginDocked],
   );
 

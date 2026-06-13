@@ -49,6 +49,8 @@ interface WorkspaceState {
   addWorkspace: (name: string, description?: string) => WorkspaceInfo;
   /** 切换到已存在的工作区；找不到时返回 false。 */
   switchWorkspace: (id: string) => boolean;
+  /** 删除工作区；至少保留一个时返回 false。 */
+  removeWorkspace: (id: string) => boolean;
 }
 
 function environmentToRisk(environment: EnvironmentTag): WorkspaceContextSnapshot["riskLevel"] {
@@ -132,6 +134,23 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         const target = get().workspaces.find((w) => w.id === id);
         if (!target) return false;
         set({ workspace: target });
+        return true;
+      },
+
+      removeWorkspace: (id) => {
+        const state = get();
+        if (state.workspaces.length <= 1) return false;
+        const index = state.workspaces.findIndex((w) => w.id === id);
+        if (index < 0) return false;
+        const nextWorkspaces = state.workspaces.filter((w) => w.id !== id);
+        const nextWorkspace =
+          state.workspace.id === id
+            ? nextWorkspaces[Math.min(index, nextWorkspaces.length - 1)]
+            : state.workspace;
+        set({
+          workspaces: nextWorkspaces,
+          workspace: nextWorkspace,
+        });
         return true;
       },
     }),

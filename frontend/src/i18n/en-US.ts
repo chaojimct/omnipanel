@@ -339,6 +339,17 @@ export const enUS: TranslationDict = {
       expandWorkspace: "Expand workspace",
       collapseWorkspace: "Collapse workspace",
     },
+    workspacePopover: {
+      title: "Workspaces",
+      newWorkspace: "New workspace",
+      namePlaceholder: "Workspace name",
+      nameRequired: "Name is required",
+      nameDuplicate: "A workspace with this name already exists",
+      create: "Create",
+      cancel: "Cancel",
+      delete: "Delete workspace",
+      cannotDeleteLast: "At least one workspace must remain",
+    },
     workspacePanel: {
       resources: "Resources",
       welcomePrompt: "Drag panels from other modules here to arrange freely, or switch modules to continue",

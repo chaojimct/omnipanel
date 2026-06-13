@@ -17,3 +17,11 @@ export {
   diffRemovedPanelIds,
   normalizeDockLayout,
 } from "./dockViewLayout";
+export {
+  DOCK_PANEL_TYPES,
+  PANEL_TYPE_PARAM,
+  getTabGroupMeta,
+  type DockPanelType,
+  type TabGroupMeta,
+} from "./dockPanelType";
+export { syncTabGroupsByPanelType } from "./dockTabGroups";

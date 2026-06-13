@@ -15,6 +15,7 @@ export function WorkspaceBottomTitleBar({
   const { t } = useI18n();
   const workspaceName = useWorkspaceStore((state) => state.workspace.name);
   const enterFullscreen = useBottomPanelStore((state) => state.enterFullscreen);
+  const exitFullscreen = useBottomPanelStore((state) => state.exitFullscreen);
   const [isMaximized, setIsMaximized] = useState(false);
   const spacerDragRef = useRef<{ startX: number; startY: number } | null>(null);
 
@@ -96,7 +97,30 @@ export function WorkspaceBottomTitleBar({
 
       <div className="workspace-bottom-titlebar-actions" data-tauri-drag-region="false">
         {showWinControls ? (
-          <div className="win-controls">
+          <>
+            <button
+              type="button"
+              className="workspace-bottom-titlebar-btn workspace-bottom-titlebar-btn--exit-fullscreen"
+              title={t("shell.workspacePanel.exitFullscreen")}
+              aria-label={t("shell.workspacePanel.exitFullscreen")}
+              onClick={exitFullscreen}
+            >
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                width="14"
+                height="14"
+                aria-hidden
+              >
+                <path d="M4 14H9v5" />
+                <path d="M20 10h-5V5" />
+                <path d="M14 10l7-7" />
+                <path d="M3 21l7-7" />
+              </svg>
+            </button>
+            <div className="win-controls">
             <button
               className="win-btn minimize"
               title={t("shell.topbar.minimize")}
@@ -128,6 +152,7 @@ export function WorkspaceBottomTitleBar({
               </svg>
             </button>
           </div>
+          </>
         ) : (
           <button
             type="button"

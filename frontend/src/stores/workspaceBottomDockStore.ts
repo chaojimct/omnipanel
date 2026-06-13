@@ -15,11 +15,21 @@ export interface WorkspaceDockTab {
   id: string;
   label: string;
   kind: WorkspaceDockTabKind;
+  /** 面板类型：同源模块面板共享类型，用于 tab group 折叠 */
+  panelType?: string;
   /** 来源 dock 实例 scope（如 terminal / database） */
   originScope?: string;
   /** 来源模块中的原始 panel / tab id */
   originPanelId?: string;
   closable?: boolean;
+}
+
+/** 解析工作区 dock tab 的面板类型 */
+export function resolveWorkspaceDockPanelType(tab: WorkspaceDockTab): string {
+  if (tab.panelType) return tab.panelType;
+  if (tab.kind === "welcome") return "welcome";
+  if (tab.originScope) return tab.originScope;
+  return "unknown";
 }
 
 export function welcomeTabId(workspaceId: string): string {
@@ -31,6 +41,7 @@ export function createWelcomeTab(workspace: WorkspaceInfo): WorkspaceDockTab {
     id: welcomeTabId(workspace.id),
     label: workspace.name,
     kind: "welcome",
+    panelType: "welcome",
     closable: true,
   };
 }
@@ -88,6 +99,8 @@ interface WorkspaceBottomDockState {
   ) => WorkspaceDockTab;
   removeTab: (workspaceId: string, workspace: WorkspaceInfo, tabId: string) => void;
   isOriginDocked: (scope: string, originPanelId: string) => boolean;
+  /** 删除工作区时清理底部 dock 持久化数据 */
+  removeWorkspaceData: (workspaceId: string) => void;
 }
 
 export const useWorkspaceBottomDockStore = create<WorkspaceBottomDockState>()(
@@ -128,6 +141,7 @@ export const useWorkspaceBottomDockStore = create<WorkspaceBottomDockState>()(
         const nextTab: WorkspaceDockTab = {
           ...tab,
           kind: "mirrored",
+          panelType: tab.panelType ?? tab.originScope ?? "unknown",
           closable: tab.closable !== false,
         };
         set((state) => {
@@ -193,6 +207,36 @@ export const useWorkspaceBottomDockStore = create<WorkspaceBottomDockState>()(
       isOriginDocked: (scope, originPanelId) => {
         const list = get().dockedOriginByScope[scope] ?? [];
         return list.includes(originPanelId);
+      },
+
+      removeWorkspaceData: (workspaceId) => {
+        set((state) => {
+          const tabs = state.tabsByWorkspace[workspaceId] ?? [];
+          const dockedOriginByScope = { ...state.dockedOriginByScope };
+          for (const tab of tabs) {
+            if (!tab.originScope || !tab.originPanelId) continue;
+            const list = (dockedOriginByScope[tab.originScope] ?? []).filter(
+              (id) => id !== tab.originPanelId,
+            );
+            if (list.length === 0) {
+              delete dockedOriginByScope[tab.originScope];
+            } else {
+              dockedOriginByScope[tab.originScope] = list;
+            }
+          }
+          const tabsByWorkspace = { ...state.tabsByWorkspace };
+          const layoutByWorkspace = { ...state.layoutByWorkspace };
+          const activeTabByWorkspace = { ...state.activeTabByWorkspace };
+          delete tabsByWorkspace[workspaceId];
+          delete layoutByWorkspace[workspaceId];
+          delete activeTabByWorkspace[workspaceId];
+          return {
+            tabsByWorkspace,
+            layoutByWorkspace,
+            activeTabByWorkspace,
+            dockedOriginByScope,
+          };
+        });
       },
     }),
     {
