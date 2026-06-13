@@ -6,11 +6,22 @@ export {
   DockableWorkspace,
   type DockableTab,
   type DockableWorkspaceProps,
-  type RcDockSavedLayout,
+  type DockviewSavedLayout,
 } from "./DockableWorkspace";
+export type { SerializedDockview } from "dockview-core";
 export {
-  collectTabIds,
-  createDefaultRcLayout,
-  mergeTabsIntoRcLayout,
-  removeTabFromRcLayout,
-} from "./dockRcLayout";
+  collectPanelIds,
+  createDefaultLayout,
+  mergePanelsIntoLayout,
+  removePanelFromLayout,
+  diffRemovedPanelIds,
+  normalizeDockLayout,
+} from "./dockViewLayout";
+export {
+  DOCK_PANEL_TYPES,
+  PANEL_TYPE_PARAM,
+  getTabGroupMeta,
+  type DockPanelType,
+  type TabGroupMeta,
+} from "./dockPanelType";
+export { syncTabGroupsByPanelType } from "./dockTabGroups";
