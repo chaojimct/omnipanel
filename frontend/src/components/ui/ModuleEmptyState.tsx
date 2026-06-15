@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { ReactElement, ReactNode } from "react";
 import {
   IconBook,
   IconCompose,
@@ -29,7 +29,7 @@ export type EmptyStatePreset =
 
 const PRESET_ICONS: Record<
   EmptyStatePreset,
-  (props: { size?: number; className?: string }) => JSX.Element
+  (props: { size?: number; className?: string }) => ReactElement
 > = {
   container: IconContainer,
   image: IconImage,

@@ -6,6 +6,7 @@ pub mod debug;
 pub mod docker;
 pub mod exec;
 pub mod fileio;
+pub mod file_manager;
 pub mod grpc;
 pub mod knowledge;
 pub mod log;

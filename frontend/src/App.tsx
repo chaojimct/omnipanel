@@ -36,6 +36,7 @@ import { WorkflowPanel } from "./modules/workflow/WorkflowPanel";
 import { KnowledgePanel } from "./modules/knowledge/KnowledgePanel";
 import { TasksPanel } from "./modules/tasks/TasksPanel";
 import { SettingsPanel } from "./modules/settings/SettingsPanel";
+import { FilesPanel } from "./modules/files/FilesPanel";
 import { useAiStore } from "./stores/aiStore";
 import { useAiDrawerShortcut } from "./hooks/useAiDrawerShortcut";
 import { useBottomWorkspaceShortcut } from "./hooks/useBottomWorkspaceShortcut";
@@ -331,6 +332,7 @@ function AppShell() {
                       <Route path="/workflow" element={<WorkflowPanel />} />
                       <Route path="/knowledge" element={<KnowledgePanel />} />
                       <Route path="/tasks" element={<TasksPanel />} />
+                      <Route path="/files" element={<FilesPanel />} />
                       <Route path="/settings" element={<SettingsPanel />} />
                     </Routes>
                   )}

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { useLocation } from "react-router-dom";
 import { SidebarWorkspace } from "../../components/ui/SidebarWorkspace";
 import { WorkspaceEmptyPage } from "../../components/ui/WorkspaceEmptyPage";

@@ -82,7 +82,10 @@ pub async fn conn_delete(state: State<'_, AppState>, id: String) -> Result<(), O
 /// 测试连接连通性。当前支持 database（MySQL）；其余类型将在对应里程碑接入。
 #[tauri::command]
 #[specta::specta]
-pub async fn conn_test(connection: Connection) -> Result<String, OmniError> {
+pub async fn conn_test(
+    state: State<'_, AppState>,
+    connection: Connection,
+) -> Result<String, OmniError> {
     match connection.kind {
         ConnectionKind::Database => {
             let db_config: DbConnectionConfig =
@@ -122,6 +125,9 @@ pub async fn conn_test(connection: Connection) -> Result<String, OmniError> {
                     "不支持的面板类型：{other}"
                 ))),
             }
+        }
+        ConnectionKind::File => {
+            crate::commands::file_manager::file_test_connection_config(&state, &connection).await
         }
         other => Err(OmniError::new(
             ErrorCode::InvalidInput,

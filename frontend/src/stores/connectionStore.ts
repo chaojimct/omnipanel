@@ -44,6 +44,7 @@ const KIND_TO_TYPE: Record<ConnectionKind, ResourceType> = {
   docker: "docker",
   protocol: "protocol",
   panel: "server",
+  file: "file",
 };
 
 const VALID_ENV_TAGS: EnvironmentTag[] = ["prod", "staging", "dev", "local", "unknown"];
@@ -84,12 +85,13 @@ export function resolveResourceById(id: string | null | undefined): WorkspaceRes
 /** 将后端 Connection 映射为前端展示用的 WorkspaceResource。 */
 export function connectionToResource(connection: Connection): WorkspaceResource {
   const type = KIND_TO_TYPE[connection.kind] ?? "server";
+  const modulePath = type === "file" ? "/files" : `/${type}`;
   return {
     id: connection.id,
     type,
     name: connection.name,
     subtitle: deriveSubtitle(connection),
-    modulePath: `/${type}`,
+    modulePath,
     environment: normalizeEnv(connection.envTag),
     status: "idle",
     group: normalizeSshGroup(connection.group),

@@ -72,6 +72,8 @@ pub struct AppState {
     pub running_workflows: Arc<Mutex<HashMap<String, Arc<std::sync::atomic::AtomicBool>>>>,
     /// 正在运行的任务后台句柄（按 taskId 索引），用于 task_stop 取消。
     pub running_tasks: Arc<Mutex<HashMap<String, tokio::task::JoinHandle<()>>>>,
+    /// 文件管理器独立 SFTP 会话（按 file 连接 id 索引）。
+    pub file_sftp_sessions: Arc<Mutex<HashMap<String, Arc<SshSession>>>>,
     /// 网络代理配置（由前端通用设置同步而来）。
     pub proxy_config: Arc<Mutex<ProxyConfig>>,
 }
@@ -118,6 +120,7 @@ impl AppState {
             ssh_tunnels: Arc::new(Mutex::new(HashMap::new())),
             running_workflows: Arc::new(Mutex::new(HashMap::new())),
             running_tasks: Arc::new(Mutex::new(HashMap::new())),
+            file_sftp_sessions: Arc::new(Mutex::new(HashMap::new())),
             proxy_config: Arc::new(Mutex::new(ProxyConfig::default())),
         }
     }

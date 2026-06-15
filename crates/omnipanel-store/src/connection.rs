@@ -12,6 +12,7 @@ pub enum ConnectionKind {
     Docker,
     Panel,
     Protocol,
+    File,
 }
 
 impl ConnectionKind {
@@ -22,6 +23,7 @@ impl ConnectionKind {
             ConnectionKind::Docker => "docker",
             ConnectionKind::Panel => "panel",
             ConnectionKind::Protocol => "protocol",
+            ConnectionKind::File => "file",
         }
     }
 
@@ -32,6 +34,7 @@ impl ConnectionKind {
             "docker" => Ok(ConnectionKind::Docker),
             "panel" => Ok(ConnectionKind::Panel),
             "protocol" => Ok(ConnectionKind::Protocol),
+            "file" => Ok(ConnectionKind::File),
             other => Err(OmniError::new(
                 ErrorCode::InvalidInput,
                 format!("未知连接类型: {other}"),

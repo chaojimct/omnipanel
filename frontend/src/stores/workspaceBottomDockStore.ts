@@ -62,7 +62,7 @@ function ensureWorkspaceTabs(
 
 /** 组件侧派生 tabs 时使用；勿放入 zustand selector。 */
 export function resolveWorkspaceTabs(
-  workspace: WorkspaceInfo,
+  _workspace: WorkspaceInfo,
   tabs: WorkspaceDockTab[] | undefined,
 ): WorkspaceDockTab[] {
   const list = tabs ? [...tabs] : [];
@@ -72,7 +72,7 @@ export function resolveWorkspaceTabs(
 }
 
 export function resolveWorkspaceActiveTabId(
-  workspace: WorkspaceInfo,
+  _workspace: WorkspaceInfo,
   tabs: WorkspaceDockTab[],
   activeTabId: string | undefined,
 ): string {
@@ -138,7 +138,7 @@ export const useWorkspaceBottomDockStore = create<WorkspaceBottomDockState>()(
           activeTabByWorkspace: { ...state.activeTabByWorkspace, [workspaceId]: tabId },
         })),
 
-      addMirroredTab: (workspaceId, workspace, tab) => {
+      addMirroredTab: (workspaceId, _workspace, tab) => {
         const nextTab: WorkspaceDockTab = {
           ...tab,
           kind: "mirrored",
@@ -168,7 +168,7 @@ export const useWorkspaceBottomDockStore = create<WorkspaceBottomDockState>()(
         return nextTab;
       },
 
-      removeTab: (workspaceId, workspace, tabId) => {
+      removeTab: (workspaceId, _workspace, tabId) => {
         set((state) => {
           const current = state.tabsByWorkspace[workspaceId] ?? [];
           const removed = current.find((tab) => tab.id === tabId);
@@ -279,7 +279,7 @@ export const useWorkspaceBottomDockStore = create<WorkspaceBottomDockState>()(
 );
 
 export function buildDefaultWorkspaceLayout(
-  workspace: WorkspaceInfo,
+  _workspace: WorkspaceInfo,
   tabs: WorkspaceDockTab[],
   activeTabId: string,
 ): SerializedDockview {

@@ -11,7 +11,8 @@ export type ResourceType =
   | "database"
   | "docker"
   | "server"
-  | "protocol";
+  | "protocol"
+  | "file";
 
 export type EnvironmentTag = "prod" | "staging" | "dev" | "local" | "unknown";
 
@@ -47,6 +48,7 @@ export const RESOURCE_TYPE_LABELS: Record<ResourceType, string> = {
   docker: "容器",
   server: "服务器",
   protocol: "协议",
+  file: "文件",
 };
 
 /** 空态占位数据（fallback）。真实连接来自 connectionStore；后端无数据时用于展示。 */

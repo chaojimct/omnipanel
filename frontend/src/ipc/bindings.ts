@@ -260,6 +260,28 @@ export const commands = {
 	 *  绕开范围限制，调用方必须已通过 save dialog 拿到用户明确授权的路径。
 	 */
 	writeTextFile: (path: string, contents: string) => typedError<string, string>(__TAURI_INVOKE("write_text_file", { path, contents })),
+	/**  列出文件管理器可用连接（含内置本机）。 */
+	fileListConnections: () => typedError<FileManagerConnectionInfo[], OmniError_Serialize>(__TAURI_INVOKE("file_list_connections")),
+	/**  保存文件连接（凭据写入 Vault）。 */
+	fileSaveConnection: (connection: Connection, secret: string | null) => typedError<Connection, OmniError_Serialize>(__TAURI_INVOKE("file_save_connection", { connection, secret })),
+	/**  测试文件连接。 */
+	fileTestConnection: (connectionId: string) => typedError<string, OmniError_Serialize>(__TAURI_INVOKE("file_test_connection", { connectionId })),
+	/**  列出目录内容。 */
+	fileListDir: (connectionId: string, path: string) => typedError<FileEntry[], OmniError_Serialize>(__TAURI_INVOKE("file_list_dir", { connectionId, path })),
+	/**  读取文件内容（字节）。 */
+	fileReadFile: (connectionId: string, path: string, maxBytes: number | null) => typedError<number[], OmniError_Serialize>(__TAURI_INVOKE("file_read_file", { connectionId, path, maxBytes })),
+	/**  上传文件（覆盖）。 */
+	fileUploadFile: (connectionId: string, path: string, data: number[]) => typedError<null, OmniError_Serialize>(__TAURI_INVOKE("file_upload_file", { connectionId, path, data })),
+	/**  下载文件到本地路径。 */
+	fileDownloadFile: (connectionId: string, remotePath: string, localPath: string) => typedError<null, OmniError_Serialize>(__TAURI_INVOKE("file_download_file", { connectionId, remotePath, localPath })),
+	/**  创建目录。 */
+	fileMkdir: (connectionId: string, path: string) => typedError<null, OmniError_Serialize>(__TAURI_INVOKE("file_mkdir", { connectionId, path })),
+	/**  重命名文件/目录。 */
+	fileRename: (connectionId: string, oldPath: string, newPath: string) => typedError<null, OmniError_Serialize>(__TAURI_INVOKE("file_rename", { connectionId, oldPath, newPath })),
+	/**  删除文件/目录。 */
+	fileDelete: (connectionId: string, path: string) => typedError<null, OmniError_Serialize>(__TAURI_INVOKE("file_delete", { connectionId, path })),
+	/**  本机常用目录快捷路径。 */
+	fileLocalQuickPaths: () => typedError<FileQuickPaths, OmniError_Serialize>(__TAURI_INVOKE("file_local_quick_paths")),
 	checkUpdate: () => typedError<UpdateInfo, string>(__TAURI_INVOKE("check_update")),
 	installUpdate: () => typedError<null, string>(__TAURI_INVOKE("install_update")),
 	/**  列出知识条目（可选按 kind / tag 过滤）。 */
@@ -437,7 +459,7 @@ export type Connection = {
 };
 
 /**  连接类型。统一覆盖工作站内所有可持久化的连接资源。 */
-export type ConnectionKind = "ssh" | "database" | "docker" | "panel" | "protocol";
+export type ConnectionKind = "ssh" | "database" | "docker" | "panel" | "protocol" | "file";
 
 /**  创建数据库参数。name 必填；charset 可选，留空时使用服务器默认。 */
 export type CreateDatabaseArgs = {
@@ -1007,6 +1029,35 @@ export type ErrorCode =
 "io";
 
 export type ExecutionStatus = "running" | "completed" | "failed" | "cancelled";
+
+/**  文件条目（统一模型）。 */
+export type FileEntry = {
+	name: string,
+	path: string,
+	/**  `file` | `dir` */
+	kind: string,
+	size: number | null,
+	modified: number | null,
+	permissions: string | null,
+};
+
+/**  文件管理器连接摘要。 */
+export type FileManagerConnectionInfo = {
+	id: string,
+	name: string,
+	/**  local | ftp | sftp | s3 */
+	protocol: string,
+	status: string,
+	group: string,
+};
+
+/**  本机常用目录快捷路径。 */
+export type FileQuickPaths = {
+	home: string,
+	desktop: string,
+	documents: string,
+	downloads: string,
+};
 
 /**  gRPC 调用请求。 */
 export type GrpcCallRequest = {

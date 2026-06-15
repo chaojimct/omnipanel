@@ -101,9 +101,9 @@ export function SidebarBottom({
     syncOpenState();
   }, [collapseSignal, syncOpenState]);
 
-  const handleBottomPanelResize = useCallback<OnPanelResize>(() => {
+  const handleBottomPanelResize = useCallback(() => {
     syncOpenState();
-  }, [syncOpenState]);
+  }, [syncOpenState]) as OnPanelResize;
 
   return (
     <DockWorkspace

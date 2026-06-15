@@ -9,7 +9,7 @@ import { usePersistedModuleTab } from "../../../../hooks/usePersistedModuleTab";
 import { SSH_PATH, DETAIL_TABS } from "../constants";
 import { getProfile } from "../data/hostProfiles";
 import { SSH_KEYS } from "../data/sshKeys";
-import type { DetailTab, HostSignal, LaunchPreset } from "../types";
+import type { HostSignal, LaunchPreset } from "../types";
 
 export function useSshManager() {
   const { t } = useI18n();
