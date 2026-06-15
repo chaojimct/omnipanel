@@ -60,6 +60,8 @@ struct FileConnConfig {
     user: String,
     #[serde(default, rename = "rootPath")]
     root_path: String,
+    /// FTPS TLS 开关（当前预留字段，后续接入显式 FTPS）。
+    #[allow(dead_code)]
     #[serde(default)]
     tls: bool,
     #[serde(default, rename = "sshConnectionId")]

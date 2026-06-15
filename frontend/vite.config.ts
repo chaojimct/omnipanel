@@ -1,10 +1,12 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { createRequire } from "node:module";
 import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 
 const frontendRoot = path.dirname(fileURLToPath(import.meta.url));
+const requireFromFrontend = createRequire(import.meta.url);
 
 const shimsDir = path.resolve(frontendRoot, "src/shims");
 
@@ -16,7 +18,7 @@ export default defineConfig({
       { find: "@repo-logo", replacement: path.resolve(frontendRoot, "../logo") },
       {
         find: "standardwebhooks-cjs",
-        replacement: path.resolve(frontendRoot, "node_modules/standardwebhooks/dist/index.js"),
+        replacement: requireFromFrontend.resolve("standardwebhooks/dist/index.js"),
       },
       { find: "standardwebhooks", replacement: path.join(shimsDir, "standardwebhooks.ts") },
     ],
