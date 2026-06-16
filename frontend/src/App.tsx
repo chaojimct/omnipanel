@@ -137,12 +137,13 @@ function TopbarPageActions() {
   return null;
 }
 
-/** 会在顶栏注册 Tab 的路由；不含 SSH / 服务器等无顶栏 Tab 的模块 */
+/** 原在顶栏注册 Tab 的路由（Tab 已迁入各模块 DockableWorkspace） */
 const TOPBAR_TAB_ROUTES = [
   "/terminal",
   "/database",
   "/docker",
   "/ssh",
+  "/server",
   "/tasks",
   "/protocol",
 ];
@@ -268,7 +269,7 @@ function AppShell() {
         className={`workspace${isBottomFullscreen ? " workspace--bottom-fullscreen" : ""}`}
         style={{ "--ai-dock-w": dockWidth } as React.CSSProperties}
       >
-        <Topbar title={title}>
+        <Topbar title={title} hidden>
           <TopbarPageActions />
         </Topbar>
         <div className="workspace-body">

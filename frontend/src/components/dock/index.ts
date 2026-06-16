@@ -8,6 +8,11 @@ export {
   type DockableWorkspaceProps,
   type DockviewSavedLayout,
 } from "./DockableWorkspace";
+export {
+  ModuleSegmentDock,
+  type ModuleSegmentDockProps,
+  type ModuleSegmentTab,
+} from "./ModuleSegmentDock";
 export type { SerializedDockview } from "dockview-core";
 export {
   collectPanelIds,

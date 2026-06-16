@@ -1,5 +1,5 @@
 import type { DockviewApi } from "dockview-react";
-import type { DockableTab } from "./DockableWorkspace";
+import type { DockableTab } from "./dockableTab";
 import { getTabGroupMeta, PANEL_TYPE_PARAM } from "./dockPanelType";
 
 function supportsTabGroups(

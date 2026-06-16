@@ -2,33 +2,24 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useTopbarStore } from "../../stores/topbarStore";
 import { useI18n } from "../../i18n";
 import type { ReactNode } from "react";
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useCallback } from "react";
 import { TopbarTabs } from "../ui/TopbarTabs";
+import { WinControls } from "./WinControls";
 
 interface TopbarProps {
   title: string;
   children?: ReactNode;
+  /** 隐藏顶栏（终端等模块改用 dockview tab 栏时） */
+  hidden?: boolean;
 }
 
-export function Topbar({ title, children }: TopbarProps) {
+export function Topbar({ title, children, hidden = false }: TopbarProps) {
   const { t } = useI18n();
   const tabs = useTopbarStore((state) => state.tabs);
   const tabMode = useTopbarStore((state) => state.tabMode);
   const showAddTab = useTopbarStore((state) => state.showAddTab);
   const addTabTitle = useTopbarStore((state) => state.addTabTitle);
   const handlers = useTopbarStore((state) => state.handlers);
-
-  const handleMinimize = async () => {
-    await getCurrentWindow().minimize();
-  };
-
-  const handleMaximize = async () => {
-    await getCurrentWindow().toggleMaximize();
-  };
-
-  const handleClose = async () => {
-    await getCurrentWindow().close();
-  };
 
   const handleSearch = () => {
     window.dispatchEvent(new CustomEvent("toggle-cmd-palette"));
@@ -38,7 +29,6 @@ export function Topbar({ title, children }: TopbarProps) {
     window.dispatchEvent(new CustomEvent("toggle-notif-drawer"));
   };
 
-  const [isMaximized, setIsMaximized] = useState(false);
   const spacerDragRef = useRef<{ startX: number; startY: number } | null>(null);
 
   const onSpacerMouseDown = useCallback((e: React.MouseEvent) => {
@@ -65,17 +55,6 @@ export function Topbar({ title, children }: TopbarProps) {
     };
   }, []);
 
-  useEffect(() => {
-    const win = getCurrentWindow();
-    const update = async () => setIsMaximized(await win.isMaximized());
-    update();
-    let unlisten: (() => void) | undefined;
-    (async () => {
-      unlisten = await win.onResized(update);
-    })();
-    return () => unlisten?.();
-  }, []);
-
   const handleDoubleClick = async (event: React.MouseEvent) => {
     const target = event.target as HTMLElement;
     if (target.closest(".win-controls") || target.closest(".topbar-btn") || target.closest(".topbar-actions")) {
@@ -90,7 +69,7 @@ export function Topbar({ title, children }: TopbarProps) {
   };
 
   return (
-    <div className="topbar" onDoubleClick={handleDoubleClick}>
+    <div className={`topbar${hidden ? " topbar--hidden" : ""}`} onDoubleClick={handleDoubleClick}>
       <span className="topbar-title" data-tauri-drag-region>
         {title}
       </span>
@@ -123,30 +102,7 @@ export function Topbar({ title, children }: TopbarProps) {
             </svg>
           </button>
 
-          <div className="win-controls">
-            <button className="win-btn minimize" title={t("shell.topbar.minimize")} onClick={handleMinimize}>
-              <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-                <path d="M0 5h10" stroke="currentColor" strokeWidth="1.2" />
-              </svg>
-            </button>
-            <button className="win-btn maximize" title={isMaximized ? t("shell.topbar.restore") : t("shell.topbar.maximize")} onClick={handleMaximize}>
-              {isMaximized ? (
-                <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-                  <rect x="0.5" y="0.5" width="5.5" height="5.5" stroke="currentColor" strokeWidth="1.2" />
-                  <rect x="4" y="4" width="5.5" height="5.5" fill="var(--bg)" stroke="currentColor" strokeWidth="1.2" />
-                </svg>
-              ) : (
-                <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-                  <rect x="0.5" y="0.5" width="9" height="9" stroke="currentColor" strokeWidth="1.2" />
-                </svg>
-              )}
-            </button>
-            <button className="win-btn close" title={t("shell.topbar.close")} onClick={handleClose}>
-              <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-                <path d="M0 0l10 10M10 0L0 10" stroke="currentColor" strokeWidth="1.2" />
-              </svg>
-            </button>
-          </div>
+          <WinControls />
         </div>
       </div>
     </div>
