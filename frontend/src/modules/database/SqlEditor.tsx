@@ -24,6 +24,8 @@ interface SqlEditorProps {
   /** 当前上下文中的库表结构（通常仅含当前选中的数据库）。 */
   schemas?: DatabaseSchema[];
   readOnly?: boolean;
+  /** 在只读模式下高亮匹配的搜索词（用于 ScopedSearch 宿主内的 Monaco）。 */
+  highlightQuery?: string;
 }
 
 const THEME_DEFINITIONS: Record<string, MonacoEditor.IStandaloneThemeData> = {
@@ -153,9 +155,11 @@ export function SqlEditor({
   onCursorOffsetChange,
   schemas = [],
   readOnly = false,
+  highlightQuery = "",
 }: SqlEditorProps) {
   const disposables = useRef<IDisposable[]>([]);
   const editorRef = useRef<MonacoEditor.IStandaloneCodeEditor | null>(null);
+  const highlightDecorationsRef = useRef<string[]>([]);
   const onRunRef = useRef(onRun);
   const onCursorOffsetChangeRef = useRef(onCursorOffsetChange);
   const readOnlyRef = useRef(readOnly);
@@ -333,6 +337,41 @@ export function SqlEditor({
       disposables.current = [];
     };
   }, []);
+
+  useEffect(() => {
+    const editor = editorRef.current;
+    if (!editor) {
+      return;
+    }
+    const model = editor.getModel();
+    if (!model) {
+      return;
+    }
+
+    const needle = highlightQuery.trim();
+    if (!needle) {
+      highlightDecorationsRef.current = editor.deltaDecorations(
+        highlightDecorationsRef.current,
+        [],
+      );
+      return;
+    }
+
+    const matches = model.findMatches(needle, false, false, false, null, false);
+    highlightDecorationsRef.current = editor.deltaDecorations(
+      highlightDecorationsRef.current,
+      matches.map((match) => ({
+        range: match.range,
+        options: {
+          inlineClassName: "scoped-search-monaco-match",
+          overviewRuler: {
+            color: "var(--warn)",
+            position: 1,
+          },
+        },
+      })),
+    );
+  }, [value, highlightQuery]);
 
   return (
     <div className="sql-monaco-editor" data-open-mode={openMode}>

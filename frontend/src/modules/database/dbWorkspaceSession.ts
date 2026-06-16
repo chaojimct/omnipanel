@@ -1,5 +1,5 @@
 import type { SqlTabState, TablePreviewState } from "./dbWorkspaceState";
-import type { SqlWorkspaceTab } from "./workspaceTabs";
+import type { DbWorkspaceTab } from "./workspaceTabs";
 
 export interface DbSqlTabStateSnapshot {
   sql: string;
@@ -17,7 +17,7 @@ export interface DbTablePreviewMetaSnapshot {
 
 /** 数据库模块右侧 dock 工作区会话（不含查询结果、脏数据等运行时状态）。 */
 export interface DbWorkspaceSessionSnapshot {
-  tabs: SqlWorkspaceTab[];
+  tabs: DbWorkspaceTab[];
   activeTabId: string;
   sqlTabStates: Record<string, DbSqlTabStateSnapshot>;
   tablePreviewMeta: Record<string, DbTablePreviewMetaSnapshot>;
@@ -31,17 +31,28 @@ export function sanitizeWorkspaceSession(
     return null;
   }
 
-  const tabIds = new Set(session.tabs.map((tab) => tab.id));
+  const tabs = session.tabs.filter((tab) => {
+    if (tab.kind === "sql") return true;
+    if (tab.kind === "database") {
+      return Boolean(tab.connId && tab.dbName);
+    }
+    return false;
+  });
+  if (tabs.length === 0) {
+    return null;
+  }
+
+  const tabIds = new Set(tabs.map((tab) => tab.id));
   let activeTabId = session.activeTabId;
   if (!tabIds.has(activeTabId)) {
-    activeTabId = session.tabs[0].id;
+    activeTabId = tabs[0].id;
   }
 
   const pick = <T,>(record: Record<string, T>): Record<string, T> =>
     Object.fromEntries(Object.entries(record).filter(([key]) => tabIds.has(key)));
 
   return {
-    tabs: session.tabs,
+    tabs,
     activeTabId,
     sqlTabStates: pick(session.sqlTabStates ?? {}),
     tablePreviewMeta: pick(session.tablePreviewMeta ?? {}),
@@ -50,7 +61,7 @@ export function sanitizeWorkspaceSession(
 }
 
 export function buildWorkspaceSessionSnapshot(params: {
-  tabs: SqlWorkspaceTab[];
+  tabs: DbWorkspaceTab[];
   activeTabId: string;
   sqlTabStates: Record<string, SqlTabState>;
   tablePreviews: Record<string, TablePreviewState>;

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { useI18n } from "../../i18n";
 import { Button } from "../../components/ui/Button";
+import { ScopedSearch } from "../../components/ui/ScopedSearch";
 import {
   type DbConnectionConfig,
   connectionMatchesGroup,
@@ -96,6 +97,8 @@ interface TreeNodeProps {
   iconUrl?: string | null;
   reorderScope?: string;
   reorderName?: string;
+  onMetaClick?: () => void;
+  metaTitle?: string;
 }
 
 function SchemaLoadMoreButton({
@@ -139,6 +142,8 @@ function TreeNode({
   iconUrl,
   reorderScope,
   reorderName,
+  onMetaClick,
+  metaTitle,
 }: TreeNodeProps) {
   const { type, label } = item;
   const indent = depth * 16 + 8;
@@ -243,7 +248,22 @@ function TreeNode({
       </span>
       {isPk && <span className="tree-badge tree-badge--pk">PK</span>}
       {isFk && <span className="tree-badge tree-badge--fk">FK</span>}
-      {meta && <span className="tree-meta">{meta}</span>}
+      {meta && (
+        <span
+          className={`tree-meta${onMetaClick ? " tree-meta--clickable" : ""}`}
+          title={metaTitle}
+          onClick={
+            onMetaClick
+              ? (event) => {
+                  event.stopPropagation();
+                  onMetaClick();
+                }
+              : undefined
+          }
+        >
+          {meta}
+        </span>
+      )}
     </div>
   );
 }
@@ -293,6 +313,16 @@ export type SchemaTableSelection = {
   connection: DbConnectionConfig;
 };
 
+export type SchemaDatabaseSelection = {
+  connId: string;
+  dbName: string;
+  connection: DbConnectionConfig;
+};
+
+export function makeDatabaseNodeId(connId: string, dbName: string) {
+  return `db:${connId}:${dbName}`;
+}
+
 interface SchemaBrowserProps {
   groups: DbConnectionGroup[];
   activeGroupId?: string;
@@ -303,9 +333,11 @@ interface SchemaBrowserProps {
   onSelectConnection?: (connId: string) => void;
   onNewQuery?: () => void;
   onSelectTable?: (selection: SchemaTableSelection) => void;
+  onSelectDatabase?: (selection: SchemaDatabaseSelection) => void;
   onContextTable?: (selection: SchemaTableSelection, event: ReactMouseEvent) => void;
   onContextConnection?: (connId: string, event: ReactMouseEvent) => void;
   activeTableKey?: string | null;
+  activeDatabaseKey?: string | null;
   refreshToken?: number;
 }
 
@@ -319,9 +351,11 @@ export function SchemaBrowser({
   onSelectConnection,
   onNewQuery,
   onSelectTable,
+  onSelectDatabase,
   onContextTable,
   onContextConnection,
   activeTableKey = null,
+  activeDatabaseKey = null,
   refreshToken = 0,
 }: SchemaBrowserProps) {
   const { t } = useI18n();
@@ -346,7 +380,6 @@ export function SchemaBrowser({
     null
   );
   const sidebarRef = useRef<HTMLDivElement>(null);
-  const searchInputRef = useRef<HTMLInputElement>(null);
   const schemaTreeRef = useRef<HTMLDivElement>(null);
   const connectionsRef = useRef(connections);
   const loadingDatabasesRef = useRef(new Set<string>());
@@ -864,41 +897,8 @@ export function SchemaBrowser({
       .find((conn) => conn.config.id === filterDialogTable.connId)
       ?.databases?.find((db) => db.name === filterDialogTable.dbName);
 
-  const focusSearchInput = useCallback(() => {
-    if (filterDialogConnId !== null || filterDialogTable !== null) return;
-    searchInputRef.current?.focus({ preventScroll: true });
-  }, [filterDialogConnId, filterDialogTable]);
-
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key !== "Escape" || !search.trim()) return;
-      if (filterDialogConnId !== null || filterDialogTable !== null) return;
-
-      const panel = sidebarRef.current;
-      const tree = schemaTreeRef.current;
-      if (!panel) return;
-
-      const inSidebar =
-        panel.contains(document.activeElement) ||
-        panel.matches(":hover") ||
-        (tree !== null &&
-          (tree === document.activeElement ||
-            tree.contains(document.activeElement) ||
-            tree.matches(":hover")));
-      if (!inSidebar) return;
-
-      e.preventDefault();
-      e.stopPropagation();
-      setSearch("");
-      searchInputRef.current?.focus({ preventScroll: true });
-    };
-
-    window.addEventListener("keydown", onKeyDown, true);
-    return () => window.removeEventListener("keydown", onKeyDown, true);
-  }, [search, filterDialogConnId, filterDialogTable]);
-
   return (
-    <div className="schema-panel" ref={sidebarRef} onMouseEnter={focusSearchInput}>
+    <div className="schema-panel" ref={sidebarRef}>
       <div className="schema-header">
         <h3>{t("database.sidebar.title")}</h3>
         {onCreateGroup && (
@@ -934,23 +934,14 @@ export function SchemaBrowser({
           </Button>
         )}
       </div>
-      <div className="schema-search">
-        <input
-          ref={searchInputRef}
-          className="input input-search"
-          placeholder={t("database.sidebar.search")}
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          style={{ width: "100%", fontSize: "11px" }}
-        />
-      </div>
-      <div
-        className="schema-tree"
-        ref={schemaTreeRef}
-        tabIndex={-1}
-        onMouseEnter={focusSearchInput}
-        onFocus={focusSearchInput}
+      <ScopedSearch
+        className="schema-tree-scoped-search"
+        value={search}
+        onChange={setSearch}
+        placeholder={t("database.sidebar.search")}
+        enabled={filterDialogConnId === null && filterDialogTable === null}
       >
+        <div className="schema-tree" ref={schemaTreeRef} tabIndex={-1}>
         {loading && (
           <div style={{ padding: "12px 16px", fontSize: "12px", color: "var(--text-secondary, #8e8e93)" }}>
             {t("common.loading")}
@@ -1031,6 +1022,16 @@ export function SchemaBrowser({
                         : `${totalCount} DB`
                       : conn.config.db_type
                 }
+                onMetaClick={
+                  conn.databases && !conn.loadingDatabases && totalCount > 0
+                    ? () => setFilterDialogConnId(conn.config.id)
+                    : undefined
+                }
+                metaTitle={
+                  conn.databases && !conn.loadingDatabases && totalCount > 0
+                    ? t("database.sidebar.filterDisplay")
+                    : undefined
+                }
                 hasChildren
               />
               {connExpanded && conn.databasesError && (
@@ -1046,16 +1047,6 @@ export function SchemaBrowser({
                     {t("database.sidebar.noDatabases")}
                   </div>
                 )}
-              {connExpanded && !conn.loadingDatabases && totalCount > 0 && (
-                <button
-                  type="button"
-                  className="schema-filter-btn"
-                  onClick={() => setFilterDialogConnId(conn.config.id)}
-                >
-                  {t("database.sidebar.filterDisplay")}
-                  {isFiltered ? ` (${visibleCount}/${totalCount})` : ""}
-                </button>
-              )}
               {connExpanded &&
                 !conn.loadingDatabases &&
                 visibleCount === 0 &&
@@ -1067,7 +1058,7 @@ export function SchemaBrowser({
               {connExpanded &&
                 !conn.loadingDatabases &&
                 pagedDatabases.visible.map((db) => {
-                  const dbId = `db:${conn.config.id}:${db.name}`;
+                  const dbId = makeDatabaseNodeId(conn.config.id, db.name);
                   const dbExpanded = expandedNodeIds.has(dbId);
                   const allTables = db.tables ?? [];
                   const tableFilter = tableFilters[makeTableFilterKey(conn.config.id, db.name)];
@@ -1087,6 +1078,24 @@ export function SchemaBrowser({
                         onToggle={() => toggle(dbId)}
                         reorderScope={conn.config.id}
                         reorderName={db.name}
+                        active={activeDatabaseKey === dbId}
+                        onLabelClick={() => {
+                          if (!dbExpanded) {
+                            toggle(dbId);
+                          } else {
+                            void (async () => {
+                              const config = await ensureDatabasesLoaded(conn.config.id);
+                              if (config) {
+                                await ensureTablesLoaded(conn.config.id, db.name, config);
+                              }
+                            })();
+                          }
+                          onSelectDatabase?.({
+                            connId: conn.config.id,
+                            dbName: db.name,
+                            connection: conn.config,
+                          });
+                        }}
                         meta={
                           db.loadingTables
                             ? t("common.loading")
@@ -1097,6 +1106,20 @@ export function SchemaBrowser({
                                   ? `${tableVisibleCount}/${tableTotalCount} tables`
                                   : `${tableTotalCount} tables`
                                 : undefined
+                        }
+                        onMetaClick={
+                          db.tables && !db.loadingTables && tableTotalCount > 0
+                            ? () =>
+                                setFilterDialogTable({
+                                  connId: conn.config.id,
+                                  dbName: db.name,
+                                })
+                            : undefined
+                        }
+                        metaTitle={
+                          db.tables && !db.loadingTables && tableTotalCount > 0
+                            ? t("database.sidebar.filterDisplay")
+                            : undefined
                         }
                         hasChildren
                       />
@@ -1125,18 +1148,6 @@ export function SchemaBrowser({
                             {t("database.sidebar.noTables")}
                           </div>
                         )}
-                      {dbExpanded && !db.loadingTables && tableTotalCount > 0 && (
-                        <button
-                          type="button"
-                          className="schema-filter-btn schema-filter-btn--depth-2"
-                          onClick={() =>
-                            setFilterDialogTable({ connId: conn.config.id, dbName: db.name })
-                          }
-                        >
-                          {t("database.sidebar.filterDisplay")}
-                          {isTableFiltered ? ` (${tableVisibleCount}/${tableTotalCount})` : ""}
-                        </button>
-                      )}
                       {dbExpanded &&
                         !db.loadingTables &&
                         tableVisibleCount === 0 &&
@@ -1367,6 +1378,7 @@ export function SchemaBrowser({
           );
         })}
       </div>
+      </ScopedSearch>
 
       {filterDialogConn && filterDialogConn.databases && (
         <DatabaseFilterDialog

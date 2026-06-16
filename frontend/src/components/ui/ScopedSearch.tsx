@@ -1,0 +1,247 @@
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+import { useI18n } from "../../i18n";
+import {
+  applyScopedSearchHighlights,
+  clearScopedSearchHighlights,
+} from "./scopedSearchHighlight";
+import { registerScopedSearch } from "./scopedSearchRegistry";
+
+export interface ScopedSearchProps {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  className?: string;
+  /** 为 false 时不响应 Ctrl/Cmd+F */
+  enabled?: boolean;
+  children: ReactNode;
+}
+
+interface ScopedSearchContextValue {
+  query: string;
+}
+
+const ScopedSearchContext = createContext<ScopedSearchContextValue | null>(null);
+
+/** 当前 ScopedSearch 宿主内的搜索词（无上下文时为空字符串）。 */
+export function useScopedSearchQuery(): string {
+  return useContext(ScopedSearchContext)?.query ?? "";
+}
+
+interface ScopedSearchTextProps {
+  text: string;
+  className?: string;
+}
+
+/**
+ * 在 React 树内按搜索词高亮文本（用于不便走 DOM 扫描的场景）。
+ * 宿主已启用 ScopedSearch 时，普通文本节点也会自动高亮，此组件为可选补充。
+ */
+export function ScopedSearchText({ text, className }: ScopedSearchTextProps) {
+  const query = useScopedSearchQuery().trim();
+  if (!query) {
+    return <span className={className}>{text}</span>;
+  }
+
+  const queryLower = query.toLowerCase();
+  const textLower = text.toLowerCase();
+  const parts: ReactNode[] = [];
+  let lastIndex = 0;
+  let matchIndex = textLower.indexOf(queryLower, lastIndex);
+  let key = 0;
+
+  while (matchIndex >= 0) {
+    if (matchIndex > lastIndex) {
+      parts.push(<span key={key++}>{text.slice(lastIndex, matchIndex)}</span>);
+    }
+    parts.push(
+      <mark key={key++} className="scoped-search-mark">
+        {text.slice(matchIndex, matchIndex + query.length)}
+      </mark>,
+    );
+    lastIndex = matchIndex + query.length;
+    matchIndex = textLower.indexOf(queryLower, lastIndex);
+  }
+
+  if (lastIndex < text.length) {
+    parts.push(<span key={key++}>{text.slice(lastIndex)}</span>);
+  }
+
+  return <span className={className}>{parts}</span>;
+}
+
+/**
+ * 区域搜索：默认隐藏，在宿主区域内 hover / 聚焦时按 Ctrl+F（Mac: ⌘F）在右上方显示搜索框。
+ * 搜索词非空时，自动在宿主内容区高亮匹配文本（Monaco 等编辑器区域除外）。
+ */
+export function ScopedSearch({
+  value,
+  onChange,
+  placeholder,
+  className,
+  enabled = true,
+  children,
+}: ScopedSearchProps) {
+  const { t } = useI18n();
+  const inputId = useId();
+  const hostRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [visible, setVisible] = useState(false);
+  const enabledRef = useRef(enabled);
+  const visibleRef = useRef(visible);
+  const applyingHighlightRef = useRef(false);
+
+  enabledRef.current = enabled;
+  visibleRef.current = visible;
+
+  const contextValue = useMemo<ScopedSearchContextValue>(
+    () => ({ query: value }),
+    [value],
+  );
+
+  const focusInput = useCallback(() => {
+    requestAnimationFrame(() => {
+      const input = inputRef.current;
+      if (!input) {
+        return;
+      }
+      input.focus({ preventScroll: true });
+      input.select();
+    });
+  }, []);
+
+  const closeSearch = useCallback(() => {
+    onChange("");
+    setVisible(false);
+  }, [onChange]);
+
+  const openSearch = useCallback(() => {
+    setVisible(true);
+    focusInput();
+  }, [focusInput]);
+
+  useEffect(() => {
+    return registerScopedSearch({
+      getRoot: () => hostRef.current,
+      isEnabled: () => enabledRef.current,
+      isVisible: () => visibleRef.current,
+      onActivate: openSearch,
+      onEscape: closeSearch,
+    });
+  }, [openSearch, closeSearch]);
+
+  useLayoutEffect(() => {
+    const root = contentRef.current;
+    if (!root) {
+      return;
+    }
+
+    let observer: MutationObserver | null = null;
+    let rafId = 0;
+
+    const apply = () => {
+      observer?.disconnect();
+      applyingHighlightRef.current = true;
+      applyScopedSearchHighlights(root, value);
+      applyingHighlightRef.current = false;
+      if (value.trim() && observer) {
+        observer.observe(root, {
+          childList: true,
+          subtree: true,
+          characterData: true,
+        });
+      }
+    };
+
+    apply();
+
+    if (!value.trim()) {
+      return () => {
+        cancelAnimationFrame(rafId);
+        clearScopedSearchHighlights(root);
+      };
+    }
+
+    observer = new MutationObserver(() => {
+      if (applyingHighlightRef.current) {
+        return;
+      }
+      cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(apply);
+    });
+
+    observer.observe(root, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+    });
+
+    return () => {
+      cancelAnimationFrame(rafId);
+      observer?.disconnect();
+      clearScopedSearchHighlights(root);
+    };
+  }, [value, children]);
+
+  return (
+    <ScopedSearchContext.Provider value={contextValue}>
+      <div
+        ref={hostRef}
+        className={`scoped-search-host${className ? ` ${className}` : ""}`}
+      >
+        {visible && (
+          <div className="scoped-search-bar" role="search">
+            <label className="scoped-search-bar__label" htmlFor={inputId}>
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                width="12"
+                height="12"
+                aria-hidden
+              >
+                <circle cx="11" cy="11" r="8" />
+                <path d="m21 21-4.3-4.3" />
+              </svg>
+            </label>
+            <input
+              id={inputId}
+              ref={inputRef}
+              type="search"
+              className="scoped-search-bar__input"
+              value={value}
+              onChange={(e) => onChange(e.target.value)}
+              placeholder={placeholder}
+              spellCheck={false}
+              autoComplete="off"
+            />
+            <button
+              type="button"
+              className="scoped-search-bar__close"
+              onClick={closeSearch}
+              aria-label={t("ui.scopedSearch.close")}
+              title={t("ui.scopedSearch.close")}
+            >
+              ×
+            </button>
+          </div>
+        )}
+        <div ref={contentRef} className="scoped-search-content">
+          {children}
+        </div>
+      </div>
+    </ScopedSearchContext.Provider>
+  );
+}

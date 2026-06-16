@@ -1,9 +1,9 @@
 import type { DbWorkspaceContextValue } from "../contexts/DbWorkspaceContext";
-import type { SqlWorkspaceTab } from "../modules/database/workspaceTabs";
+import type { DbWorkspaceTab } from "../modules/database/workspaceTabs";
 
 export interface MirroredDbTabSnapshot {
   ctx: DbWorkspaceContextValue;
-  tab: SqlWorkspaceTab;
+  tab: DbWorkspaceTab;
 }
 
 let mirrorContext: DbWorkspaceContextValue | null = null;
@@ -70,6 +70,7 @@ function buildMirroredTabRevision(ctx: DbWorkspaceContextValue, tabId: string): 
     mode: ctx.tabModes[tabId],
     dirty: ctx.tabDirtyRows[tabId],
     committing: ctx.committingTabs.has(tabId),
+    activeTableKey: ctx.activeTableKey,
     activeConnId: ctx.activeConn?.id ?? null,
     databasesForActiveConn: ctx.databasesForActiveConn,
     schemaLoadingKey: ctx.schemaLoadingKey,
