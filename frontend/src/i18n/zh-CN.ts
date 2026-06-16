@@ -268,6 +268,8 @@ export const zhCN = {
     clear: "清空",
     empty: "暂无日志",
     lineCount: "{count} 条日志",
+    copySelection: "复制选中",
+    copyAll: "复制全部",
   },
   resourceTags: {
     section: "资源标签",
@@ -1143,6 +1145,9 @@ export const zhCN = {
       images: "镜像",
       compose: "Compose",
       volumes: "卷",
+    },
+    logs: {
+      waiting: "等待日志输出…",
     },
     sidebar: {
       title: "Docker",

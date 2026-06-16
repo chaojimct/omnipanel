@@ -272,6 +272,8 @@ export const enUS: TranslationDict = {
     clear: "Clear",
     empty: "No logs",
     lineCount: "{count} log entries",
+    copySelection: "Copy selection",
+    copyAll: "Copy all",
   },
   resourceTags: {
     section: "Resource Tags",
@@ -1184,6 +1186,9 @@ export const enUS: TranslationDict = {
       images: "Images",
       compose: "Compose",
       volumes: "Volumes",
+    },
+    logs: {
+      waiting: "Waiting for log output…",
     },
     sidebar: {
       title: "Docker",

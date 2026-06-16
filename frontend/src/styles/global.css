@@ -10506,6 +10506,9 @@
         min-height: 0;
         padding: var(--sp-2) var(--sp-3);
         box-sizing: border-box;
+        -webkit-user-select: text;
+        user-select: text;
+        cursor: text;
     }
 
     .log-viewer-panel__xterm-host .xterm {
@@ -13452,9 +13455,36 @@
         overflow: hidden;
     }
 
+    .docker-drawer-tab-panel {
+        display: flex;
+        flex-direction: column;
+        min-height: 360px;
+    }
+
     .docker-exec-drawer-section[hidden],
     .docker-drawer-tab-panel[hidden] {
         display: none !important;
+    }
+
+    .docker-drawer-logs.log-viewer-panel {
+        flex: 1;
+        min-height: 360px;
+        height: 360px;
+        border: 1px solid var(--border);
+        border-radius: var(--r-sm);
+        overflow: hidden;
+        background: var(--bg-deeper);
+    }
+
+    .docker-drawer-logs .log-viewer-panel__xterm {
+        flex: 1;
+        min-height: 0;
+    }
+
+    .docker-drawer-logs .log-viewer-panel__xterm-host {
+        -webkit-user-select: text;
+        user-select: text;
+        cursor: text;
     }
 
     /* ══════════════════════════════════════════════════════════════════════

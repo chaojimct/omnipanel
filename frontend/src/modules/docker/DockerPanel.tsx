@@ -26,6 +26,7 @@ import { DockerVolumeDrawer } from "./DockerVolumeDrawer";
 import { DockerComposeDrawer } from "./DockerComposeDrawer";
 import { DockerFileEditor } from "./DockerFileEditor";
 import { Button } from "../../components/ui/Button";
+import { LogViewer } from "../../components/ui/LogViewer";
 import { SidebarWorkspace } from "../../components/ui/SidebarWorkspace";
 import { DetailPanelModeToggle, DetailPanelShell } from "../../components/ui/DetailPanelShell";
 import { DockerSidebar } from "../../components/workspace/DockerSidebar";
@@ -1552,7 +1553,11 @@ function ContainerDrawerBody({
 
         {!loading && detail && logsMounted && (
           <div className="drawer-section docker-drawer-tab-panel" hidden={drawerTab !== "logs"}>
-            <LogsView connectionId={connectionId} containerId={containerId} />
+            <LogsView
+              connectionId={connectionId}
+              containerId={containerId}
+              visible={drawerTab === "logs"}
+            />
           </div>
         )}
 
@@ -1589,40 +1594,48 @@ function ContainerDrawerBody({
   );
 }
 
-function LogsView({ connectionId, containerId }: { connectionId: string | null; containerId: string | null }) {
+function LogsView({
+  connectionId,
+  containerId,
+  visible,
+}: {
+  connectionId: string | null;
+  containerId: string | null;
+  visible: boolean;
+}) {
+  const { t } = useI18n();
   const [follow, setFollow] = useState(true);
   const { lines, streaming, error } = useContainerLogStream(connectionId, containerId, true, follow);
-  const scrollRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    if (follow && scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
-  }, [lines, follow]);
+  const logText = useMemo(
+    () => lines.map((line) => line.message).join("\n"),
+    [lines],
+  );
 
   return (
-    <div className="drawer-section">
-      <div className="flex items-center gap-2" style={{ marginBottom: 8 }}>
-        <h4 style={{ margin: 0 }}>日志</h4>
-        <span className="text-muted text-xs">{streaming ? "跟随中…" : "已结束"}</span>
-        <label className="text-xs flex items-center gap-1" style={{ marginLeft: "auto", cursor: "pointer" }}>
-          <input type="checkbox" checked={follow} onChange={(e) => setFollow(e.target.checked)} />
-          自动滚动
-        </label>
-      </div>
-      {error && <div className="text-danger text-sm" style={{ marginBottom: 6 }}>{error}</div>}
-      <div className="log-viewer" ref={scrollRef} style={{ maxHeight: 360, overflow: "auto" }}>
-        {lines.length === 0 ? (
-          <div className="text-muted text-sm">{streaming ? "等待日志输出…" : "暂无日志"}</div>
-        ) : (
-          lines.map((line, i) => (
-            <div key={i} className="log-line">
-              <span className={line.stream === "stderr" ? "level-error" : "level-info"}>{line.message}</span>
-            </div>
-          ))
-        )}
-      </div>
-    </div>
+    <LogViewer
+      className="docker-drawer-logs"
+      text={logText}
+      streaming
+      visible={visible}
+      autoScroll={follow}
+      copyOnSelect
+      loading={streaming && lines.length === 0}
+      loadingText={t("docker.logs.waiting")}
+      emptyText={streaming ? t("docker.logs.waiting") : t("logViewer.empty")}
+      error={error}
+      toolbar={
+        <>
+          <h4 style={{ margin: 0, fontSize: 13 }}>日志</h4>
+          <span className="text-muted text-xs">{streaming ? "跟随中…" : "已结束"}</span>
+          <label className="text-xs flex items-center gap-1 log-viewer-panel__hint" style={{ marginLeft: "auto", cursor: "pointer" }}>
+            <input type="checkbox" checked={follow} onChange={(e) => setFollow(e.target.checked)} />
+            自动滚动
+          </label>
+        </>
+      }
+      footer={<span className="log-viewer-panel__footer-text">{t("logViewer.lineCount", { count: lines.length })}</span>}
+    />
   );
 }
 

@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useRef, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Terminal, type ITheme } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { useI18n } from "../../i18n";
+import { ContextMenu, type ContextMenuItem } from "./ContextMenu";
 
 export interface LogViewerProps {
   /** 日志全文，写入 xterm 展示 */
@@ -16,7 +17,26 @@ export interface LogViewerProps {
   onClear?: () => void | Promise<void>;
   showClear?: boolean;
   autoScroll?: boolean;
+  /** 流式追加模式：text 仅增长时在末尾增量写入，避免整页重绘 */
+  streaming?: boolean;
+  /** 选中即复制到剪贴板 */
+  copyOnSelect?: boolean;
+  /** Tab 隐藏/显示切换时触发 refit（hidden 期间容器尺寸为 0） */
+  visible?: boolean;
   className?: string;
+}
+
+function normalizeLogNewlines(text: string): string {
+  return text.replace(/\r?\n/g, "\r\n");
+}
+
+function readAllTerminalText(term: Terminal): string {
+  const buf = term.buffer.active;
+  const lines: string[] = [];
+  for (let i = 0; i < buf.length; i++) {
+    lines.push(buf.getLine(i)?.translateToString(true) ?? "");
+  }
+  return lines.join("\n");
 }
 
 function readLogTerminalTheme(): ITheme {
@@ -62,6 +82,9 @@ export function LogViewer({
   onClear,
   showClear,
   autoScroll = true,
+  streaming = false,
+  copyOnSelect = true,
+  visible = true,
   className,
 }: LogViewerProps) {
   const { t } = useI18n();
@@ -70,6 +93,12 @@ export function LogViewer({
   const fitRef = useRef<FitAddon | null>(null);
   const autoScrollRef = useRef(autoScroll);
   const lastTextRef = useRef<string | null>(null);
+  const visibleRef = useRef(visible);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
+
+  useEffect(() => {
+    visibleRef.current = visible;
+  }, [visible]);
 
   const canClear = showClear ?? Boolean(onClear);
   const showToolbar = Boolean(toolbar) || canClear;
@@ -95,6 +124,7 @@ export function LogViewer({
       theme: readLogTerminalTheme(),
       allowTransparency: true,
     });
+    (term.options as typeof term.options & { copyOnSelect?: boolean }).copyOnSelect = copyOnSelect;
     const fitAddon = new FitAddon();
     term.loadAddon(fitAddon);
     term.open(el);
@@ -109,11 +139,19 @@ export function LogViewer({
     const scrollDisposable = term.onScroll(onScroll);
 
     const resizeObserver = new ResizeObserver(() => {
+      if (!visibleRef.current) return;
       fitAddon.fit();
     });
     resizeObserver.observe(el);
 
+    const onContextMenu = (event: MouseEvent) => {
+      event.preventDefault();
+      setContextMenu({ x: event.clientX, y: event.clientY });
+    };
+    el.addEventListener("contextmenu", onContextMenu);
+
     return () => {
+      el.removeEventListener("contextmenu", onContextMenu);
       scrollDisposable.dispose();
       resizeObserver.disconnect();
       term.dispose();
@@ -121,26 +159,51 @@ export function LogViewer({
       fitRef.current = null;
       lastTextRef.current = null;
     };
-  }, []);
+  }, [copyOnSelect]);
+
+  useEffect(() => {
+    if (!visible) return;
+    const term = termRef.current;
+    const fitAddon = fitRef.current;
+    if (!term || !fitAddon) return;
+
+    const frame = requestAnimationFrame(() => {
+      fitAddon.fit();
+      term.refresh(0, Math.max(term.rows - 1, 0));
+      if (autoScrollRef.current) {
+        term.scrollToBottom();
+      }
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [visible]);
 
   useEffect(() => {
     const term = termRef.current;
     if (!term) return;
     if (lastTextRef.current === text) return;
 
+    const prev = lastTextRef.current ?? "";
     const stickToBottom = autoScrollRef.current && (lastTextRef.current === null || isTerminalAtBottom(term));
     lastTextRef.current = text;
 
+    const finishWrite = () => {
+      if (stickToBottom) {
+        term.scrollToBottom();
+        autoScrollRef.current = true;
+      }
+    };
+
+    if (streaming && prev && text.startsWith(prev) && text.length > prev.length) {
+      const delta = text.slice(prev.length);
+      term.write(normalizeLogNewlines(delta), finishWrite);
+      return;
+    }
+
     term.reset();
     if (text) {
-      term.write(text.replace(/\r?\n/g, "\r\n"), () => {
-        if (stickToBottom) {
-          term.scrollToBottom();
-          autoScrollRef.current = true;
-        }
-      });
+      term.write(normalizeLogNewlines(text), finishWrite);
     }
-  }, [text]);
+  }, [text, streaming]);
 
   const handleClear = useCallback(() => {
     const term = termRef.current;
@@ -150,6 +213,39 @@ export function LogViewer({
     }
     void onClear?.();
   }, [onClear]);
+
+  const copySelection = useCallback(async () => {
+    const term = termRef.current;
+    if (!term?.hasSelection()) return;
+    await navigator.clipboard.writeText(term.getSelection());
+  }, []);
+
+  const copyAll = useCallback(async () => {
+    const term = termRef.current;
+    if (!term) return;
+    const payload = text || readAllTerminalText(term);
+    if (!payload) return;
+    await navigator.clipboard.writeText(payload);
+  }, [text]);
+
+  const contextMenuItems = useMemo((): ContextMenuItem[] => {
+    const term = termRef.current;
+    const hasSelection = Boolean(term?.hasSelection());
+    return [
+      {
+        id: "copy-selection",
+        label: t("logViewer.copySelection"),
+        disabled: !hasSelection,
+        onClick: () => void copySelection(),
+      },
+      {
+        id: "copy-all",
+        label: t("logViewer.copyAll"),
+        disabled: !text,
+        onClick: () => void copyAll(),
+      },
+    ];
+  }, [contextMenu, copyAll, copySelection, t, text]);
 
   const panelClass = className ? `log-viewer-panel ${className}` : "log-viewer-panel";
 
@@ -178,6 +274,13 @@ export function LogViewer({
         ) : null}
       </div>
       {footer ? <div className="log-viewer-panel__footer">{footer}</div> : null}
+      {contextMenu ? (
+        <ContextMenu
+          items={contextMenuItems}
+          position={contextMenu}
+          onClose={() => setContextMenu(null)}
+        />
+      ) : null}
     </div>
   );
 }
