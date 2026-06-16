@@ -459,8 +459,6 @@ export function DockerPanel() {
     () => workspaceTopbarTabs.map(({ id, label }) => ({ id, label })),
     [workspaceTopbarTabs],
   );
-  const showTopbarTabs =
-    isActiveRoute && !connectionsLoading && connections.length > 0 && !!selectedConnectionId;
 
   useEffect(() => {
     const setHint = useStatusBarStore.getState().setHint;
@@ -547,6 +545,13 @@ export function DockerPanel() {
 
   return (
     <>
+      <ModuleSegmentDock
+        className="docker-module-dock"
+        tabs={dockerSegmentTabs}
+        activeTabId={tab}
+        onActiveTabChange={(id) => setTab(id as DockerWorkspaceTab)}
+        enabled={isActiveRoute}
+        renderPanel={(tabId) => (
       <RightSidebarWorkspace
         sidebar={
           drawerId && !drawerPopout ? (
@@ -638,14 +643,6 @@ export function DockerPanel() {
           <div className="docker-empty">请选择一个 Docker 连接</div>
         ) : (
           <>
-            <ModuleSegmentDock
-              className="docker-module-dock"
-              tabs={dockerSegmentTabs}
-              activeTabId={tab}
-              onActiveTabChange={(id) => setTab(id as DockerWorkspaceTab)}
-              enabled={showTopbarTabs}
-              renderPanel={(tabId) => (
-                <>
             {isOffline && !showLocalEngineWelcome && (
               <div className="docker-empty" style={{ minHeight: 80, padding: "16px 0" }}>
                 <div className="docker-empty-title">Docker 未安装或未启动</div>
@@ -1121,15 +1118,14 @@ export function DockerPanel() {
               )
             )}
             </div>
-                </>
-              )}
-            />
           </>
         )}
           </div>
         </div>
         </SidebarWorkspace>
       </RightSidebarWorkspace>
+        )}
+      />
 
       <SubWindow
         open={Boolean(drawerId) && drawerPopout}
