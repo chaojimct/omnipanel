@@ -1,0 +1,80 @@
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import { useEffect, useState } from "react";
+import { useI18n } from "../../i18n";
+
+interface WinControlsProps {
+  className?: string;
+}
+
+export function WinControls({ className }: WinControlsProps) {
+  const { t } = useI18n();
+  const [isMaximized, setIsMaximized] = useState(false);
+
+  useEffect(() => {
+    const win = getCurrentWindow();
+    const update = async () => setIsMaximized(await win.isMaximized());
+    update();
+    let unlisten: (() => void) | undefined;
+    (async () => {
+      unlisten = await win.onResized(update);
+    })();
+    return () => unlisten?.();
+  }, []);
+
+  const handleMinimize = async () => {
+    await getCurrentWindow().minimize();
+  };
+
+  const handleMaximize = async () => {
+    await getCurrentWindow().toggleMaximize();
+  };
+
+  const handleClose = async () => {
+    await getCurrentWindow().close();
+  };
+
+  return (
+    <div
+      className={`win-controls${className ? ` ${className}` : ""}`}
+      data-tauri-drag-region="false"
+    >
+      <button
+        type="button"
+        className="win-btn minimize"
+        title={t("shell.topbar.minimize")}
+        onClick={handleMinimize}
+      >
+        <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+          <path d="M0 5h10" stroke="currentColor" strokeWidth="1.2" />
+        </svg>
+      </button>
+      <button
+        type="button"
+        className="win-btn maximize"
+        title={isMaximized ? t("shell.topbar.restore") : t("shell.topbar.maximize")}
+        onClick={handleMaximize}
+      >
+        {isMaximized ? (
+          <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+            <rect x="0.5" y="0.5" width="5.5" height="5.5" stroke="currentColor" strokeWidth="1.2" />
+            <rect x="4" y="4" width="5.5" height="5.5" fill="var(--bg)" stroke="currentColor" strokeWidth="1.2" />
+          </svg>
+        ) : (
+          <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+            <rect x="0.5" y="0.5" width="9" height="9" stroke="currentColor" strokeWidth="1.2" />
+          </svg>
+        )}
+      </button>
+      <button
+        type="button"
+        className="win-btn close"
+        title={t("shell.topbar.close")}
+        onClick={handleClose}
+      >
+        <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+          <path d="M0 0l10 10M10 0L0 10" stroke="currentColor" strokeWidth="1.2" />
+        </svg>
+      </button>
+    </div>
+  );
+}

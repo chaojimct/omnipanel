@@ -1178,6 +1178,8 @@
     grid-template-rows: 1fr;
     height: 100vh;
     width: 100vw;
+    /* 与 dockview .dv-tabs-and-actions-container 共用高度 */
+    --shell-dv-tab-bar-h: var(--topbar-h);
 }
 
 .workspace {
@@ -1317,11 +1319,36 @@
     flex-direction: column;
     overflow: hidden;
     position: relative;
-    --dv-tabs-and-actions-container-font-size: 12px;
+    --dv-tabs-and-actions-container-font-size: 13px;
     --dv-tabs-and-actions-container-height: 32px;
     --dv-sash-color: transparent;
     --dv-active-sash-color: var(--accent);
     --dv-drag-over-background-color: var(--accent-soft);
+}
+
+/* 须在 dockview 根节点覆盖 themeDark 内置变量，写在 .dockable-workspace 上不会向下生效 */
+.dockable-workspace .dockable-workspace__dockview,
+.dockable-workspace .dockable-workspace__dockview.dockview-theme-dark,
+.dockable-workspace .dockview-theme-dark {
+    --dv-group-view-background-color: var(--bg);
+    --dv-tabs-and-actions-container-background-color: var(--bg);
+    --dv-activegroup-visiblepanel-tab-background-color: var(--bg);
+    --dv-activegroup-hiddenpanel-tab-background-color: var(--bg);
+    --dv-inactivegroup-visiblepanel-tab-background-color: var(--bg);
+    --dv-inactivegroup-hiddenpanel-tab-background-color: var(--bg);
+    --dv-tab-divider-color: var(--bg);
+    --dv-activegroup-visiblepanel-tab-color: var(--fg-2);
+    --dv-activegroup-hiddenpanel-tab-color: var(--fg);
+    --dv-inactivegroup-visiblepanel-tab-color: var(--fg-2);
+    --dv-inactivegroup-hiddenpanel-tab-color: var(--muted);
+}
+
+/* 模块分段 Tab（原 topbar segment） */
+.module-segment-dock.dockable-workspace {
+    flex: 1;
+    min-height: 0;
+    height: 100%;
+    width: 100%;
 }
 
 .dockable-workspace__dockview {
@@ -1330,12 +1357,18 @@
     min-width: 0;
 }
 
-/* dockview tab 栏与面板区域 */
+/* dockview tab 栏与面板区域（视觉对齐 .topbar-tab / .topbar-tabs） */
 .dockable-workspace .dv-tabs-and-actions-container {
-    background: var(--bg-deeper);
+    background: var(--bg);
     border-bottom: 1px solid var(--border);
-    padding: 0 var(--sp-2);
     align-items: stretch;
+    padding: 0;
+    gap: 0;
+    box-sizing: border-box;
+}
+
+.dockable-workspace .dv-tabs-and-actions-container .dv-void-container {
+    flex-grow: 0;
 }
 
 .dockable-workspace .dv-left-actions-container {
@@ -1344,9 +1377,18 @@
     align-self: stretch;
     height: 100%;
     flex-shrink: 0;
+    margin-left: var(--sp-1);
 }
 
-.dockable-workspace .dv-left-actions-container .dock-panel-add-btn {
+.dockable-workspace .dv-left-actions-container .topbar-tab-add-wrap {
+    display: flex;
+    align-items: center;
+    height: 100%;
+    margin-left: 0;
+}
+
+.dockable-workspace .dv-left-actions-container .dock-panel-add-btn,
+.dockable-workspace .dv-left-actions-container .topbar-tab-add {
     height: 100%;
     width: calc(var(--dv-tabs-and-actions-container-height) - 2px);
     min-height: 0;
@@ -1354,19 +1396,72 @@
     border-radius: 0;
 }
 
+/* Tab 项 — 对齐 .topbar-tab（结构：.dv-tab > .dv-default-tab；背景由 dockview + 上方 --dv-* 变量控制） */
 .dockable-workspace .dv-default-tab {
-    font-size: 12px;
-    font-weight: 500;
-    color: var(--muted);
+    display: inline-flex;
+    align-items: center;
+    gap: var(--sp-2);
+    padding: 0 var(--sp-4);
+    height: 100%;
+    min-height: 0;
+    font-size: var(--dv-tabs-and-actions-container-font-size);
+    font-weight: 400;
+    color: var(--fg-2);
+    border: none;
+    border-bottom: 2px solid transparent;
+    border-radius: 0;
+    background: transparent;
+    white-space: nowrap;
+    flex-shrink: 0;
+    cursor: pointer;
+    box-sizing: border-box;
+    transition: color 0.12s, border-color 0.12s, background-color 0.12s;
 }
 
-.dockable-workspace .dv-default-tab.dv-active-tab,
-.dockable-workspace .dv-default-tab.dv-tab-dragging {
+.dockable-workspace .dv-tab .dv-default-tab:hover {
     color: var(--fg);
 }
 
-.dockable-workspace .dv-default-tab.dv-active-tab {
-    border-bottom: 2px solid var(--accent);
+.dockable-workspace .dv-tab.dv-active-tab .dv-default-tab,
+.dockable-workspace .dv-tab.dv-tab-dragging .dv-default-tab {
+    color: var(--fg);
+    border-bottom-color: var(--accent);
+}
+
+/* 关闭按钮 — 放大点击区域与图标 */
+.dockable-workspace .dv-tab.dv-inactive-tab .dv-default-tab .dv-default-tab-action {
+    visibility: visible;
+}
+
+.dockable-workspace .dv-default-tab .dv-default-tab-action {
+    width: 20px;
+    height: 20px;
+    min-width: 20px;
+    min-height: 20px;
+    padding: 0;
+    display: grid;
+    place-items: center;
+    border-radius: var(--r-sm);
+    opacity: 0;
+    transition: opacity 0.12s, background 0.12s;
+}
+
+.dockable-workspace .dv-default-tab .dv-default-tab-action svg {
+    width: 14px;
+    height: 14px;
+}
+
+.dockable-workspace .dv-tab.dv-active-tab .dv-default-tab .dv-default-tab-action {
+    opacity: 0.75;
+}
+
+.dockable-workspace .dv-tab .dv-default-tab:hover .dv-default-tab-action {
+    opacity: 0.75;
+}
+
+.dockable-workspace .dv-default-tab .dv-default-tab-action:hover {
+    opacity: 1;
+    background: var(--surface-hover);
 }
 
 /* Tab 栏在底部：激活指示条改到顶边，分隔线改到 Tab 栏上方 */
@@ -1375,16 +1470,22 @@
     border-top: 1px solid var(--border);
 }
 
-.dockable-workspace.dock-header-bottom .dv-default-tab.dv-active-tab {
+.dockable-workspace.dock-header-bottom .dv-tab .dv-default-tab {
     border-bottom: none;
-    border-top: 2px solid var(--accent);
+    border-top: 2px solid transparent;
+}
+
+.dockable-workspace.dock-header-bottom .dv-tab.dv-active-tab .dv-default-tab,
+.dockable-workspace.dock-header-bottom .dv-tab.dv-tab-dragging .dv-default-tab {
+    border-bottom-color: transparent;
+    border-top-color: var(--accent);
 }
 
 .dock-tab-header-inner {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    max-width: 200px;
+    gap: var(--sp-2);
+    max-width: 220px;
     min-width: 0;
 }
 
@@ -1394,12 +1495,33 @@
     white-space: nowrap;
 }
 
+/* 会话状态点（topbar 风格 tab） */
+.dockable-workspace .topbar-tab-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    background: var(--meta);
+}
+
+.dockable-workspace .topbar-tab-dot.online,
+.dockable-workspace .topbar-tab-dot.connected {
+    background: var(--success);
+}
+
+.dockable-workspace .topbar-tab-dot.connecting {
+    background: var(--warn);
+}
+
+.dockable-workspace .topbar-tab-dot.offline {
+    background: var(--danger);
+}
+
 /* 侧栏 Tab（left/right）：仅图标，收窄宽度 */
 .dockable-workspace.dock-header-left .dv-tabs-and-actions-container,
 .dockable-workspace.dock-header-right .dv-tabs-and-actions-container {
     width: 36px;
     min-width: 36px;
-    padding: var(--sp-1) 0;
 }
 
 .dockable-workspace.dock-header-left .dock-tab-header-inner,
@@ -1410,6 +1532,73 @@
 
 .dockable-workspace .dv-content-container {
     background: var(--bg);
+}
+
+/* windowControl：tab 栏与 topbar 同高，右侧拖拽区 + 窗口控制按钮 */
+.dockable-workspace.dock-window-control {
+    --dv-tabs-and-actions-container-height: var(--shell-dv-tab-bar-h);
+    --dv-tabs-and-actions-container-font-size: 14px;
+}
+
+.dockable-workspace.dock-window-control .dockable-workspace__dockview,
+.dockable-workspace.dock-window-control .dockable-workspace__dockview.dockview-theme-dark,
+.dockable-workspace.dock-window-control .dockview-theme-dark {
+    --dv-tabs-and-actions-container-height: var(--shell-dv-tab-bar-h);
+}
+
+.dockable-workspace.dock-window-control .dv-tabs-and-actions-container {
+    height: var(--shell-dv-tab-bar-h);
+    min-height: var(--shell-dv-tab-bar-h);
+    max-height: var(--shell-dv-tab-bar-h);
+}
+
+.dockable-workspace.dock-window-control .dv-default-tab .dv-default-tab-action {
+    width: 16px;
+    height: 16px;
+    min-width: 16px;
+    min-height: 16px;
+}
+
+.dockable-workspace.dock-window-control .dv-default-tab .dv-default-tab-action svg {
+    width: 16px;
+    height: 16px;
+}
+
+.dockable-workspace.dock-window-control .dv-right-actions-container {
+    display: flex;
+    flex: 1;
+    min-width: 0;
+    height: 100%;
+    align-items: stretch;
+    align-self: stretch;
+}
+
+.dockable-workspace.dock-window-control .dock-window-title-actions {
+    display: flex;
+    flex: 1;
+    min-width: 0;
+    height: 100%;
+    align-items: stretch;
+}
+
+.dockable-workspace.dock-window-control .dock-window-drag-spacer {
+    flex: 1;
+    min-width: 32px;
+    height: 100%;
+    cursor: default;
+}
+
+.dockable-workspace.dock-window-control .dock-window-title-actions .win-controls {
+    flex-shrink: 0;
+    margin-left: 0;
+    height: 100%;
+    align-items: stretch;
+}
+
+.dockable-workspace.dock-window-control .dock-window-title-actions .win-btn {
+    height: 100%;
+    min-height: 0;
+    width: 46px;
 }
 
 .dockable-workspace .dock-panel-add-btn,
@@ -1801,7 +1990,35 @@
     background: var(--bg);
 }
 
-/* 终端模块工作区（顶栏 session Tab + 单面板切换，无 dockview） */
+/* 终端模块工作区（tab 样式继承 .dockable-workspace，此处仅覆盖布局/背景） */
+.term-workspace-dock.dockable-workspace {
+    flex: 1;
+    min-height: 0;
+    height: 100%;
+    background: var(--bg-deeper);
+}
+
+.term-workspace-dock--empty {
+    flex: 1;
+    min-height: 0;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-deeper);
+}
+
+.term-workspace-dock .dv-content-container {
+    background: var(--bg-deeper);
+}
+
+.term-workspace-dock .dock-pane-surface {
+    height: 100%;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+/* 旧版终端工作区（保留供迁移参考，已由 dockview 替代） */
 .term-workspace {
     flex: 1;
     min-height: 0;
@@ -1861,6 +2078,7 @@
 .advance-terminal-side {
     min-width: 0;
     min-height: 0;
+    flex: 1;
     background: var(--bg);
     border-left: 1px solid var(--border);
     display: flex;
@@ -1868,7 +2086,7 @@
     overflow: hidden;
 }
 
-.advance-terminal-side-dock {
+.advance-terminal-side-dock.dockable-workspace {
     flex: 1;
     min-height: 0;
     min-width: 0;
@@ -1884,7 +2102,7 @@
 
 .advance-terminal-side-dock .dv-tabs-and-actions-container {
     flex-shrink: 0;
-    background: var(--bg-deeper);
+    background: var(--bg);
 }
 
 .advance-terminal-side-dock .advance-terminal-monitor-stack {
@@ -2193,9 +2411,9 @@
     min-height: 0;
 }
 
-.db-workspace.dock-header-bottom .dv-tabs-and-actions-container {
+.db-workspace .dv-tabs-and-actions-container {
     flex-shrink: 0;
-    background: var(--bg-deeper);
+    background: var(--bg);
 }
 
 .db-workspace .db-dock-pane {
@@ -3012,6 +3230,10 @@
         flex-shrink: 0;
         gap: var(--sp-3);
         min-width: 0;
+    }
+
+    .topbar--hidden {
+        display: none;
     }
 
     .topbar-title {

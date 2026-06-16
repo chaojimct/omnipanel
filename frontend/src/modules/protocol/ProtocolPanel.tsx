@@ -1,8 +1,8 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useLocation } from "react-router-dom";
-import { useTopbarTabs } from "../../hooks/useTopbarTabs";
 import { useI18n } from "../../i18n";
 import { SidebarWorkspace } from "../../components/ui/SidebarWorkspace";
+import { ModuleSegmentDock } from "../../components/dock";
 import { HttpPanel } from "./HttpPanel";
 import { WsPanel } from "./WsPanel";
 import { MqttPanel } from "./MqttPanel";
@@ -20,42 +20,38 @@ export function ProtocolPanel() {
   const isActiveRoute = location.pathname === "/protocol";
   const [active, setActive] = useState<ProtocolKind>("http");
 
-  const topbarTabs = useMemo(
+  const segmentTabs = useMemo(
     () =>
       PROTOCOLS.map((id) => ({
         id,
         label: t(`protocol.tabs.${id}`),
-        active: active === id,
       })),
-    [active, t]
+    [t],
   );
 
-  useTopbarTabs(topbarTabs, {
-    onSelect: (id) => setActive(id as ProtocolKind),
-  }, { mode: "segment", enabled: isActiveRoute });
-
-  const renderPanel = () => {
-    switch (active) {
-      case "http":
-        return <HttpPanel />;
-      case "ws":
-        return <WsPanel />;
-      case "mqtt":
-        return <MqttPanel />;
-      case "serial":
-        return <SerialPanel />;
-      case "grpc":
-        return <GrpcPanel />;
-      case "sniffer":
-        return <SnifferPanel />;
-      case "modbus":
-        return <ModbusPanel />;
-    }
-  };
+  const renderPanel = useCallback((tabId: string) => {
+    const protocol = tabId as ProtocolKind;
+    return (
+      <SidebarWorkspace sidebar={<ProtocolContextSidebar protocol={protocol} />}>
+        {protocol === "http" && <HttpPanel />}
+        {protocol === "ws" && <WsPanel />}
+        {protocol === "mqtt" && <MqttPanel />}
+        {protocol === "serial" && <SerialPanel />}
+        {protocol === "grpc" && <GrpcPanel />}
+        {protocol === "sniffer" && <SnifferPanel />}
+        {protocol === "modbus" && <ModbusPanel />}
+      </SidebarWorkspace>
+    );
+  }, []);
 
   return (
-    <SidebarWorkspace sidebar={<ProtocolContextSidebar protocol={active} />}>
-      {renderPanel()}
-    </SidebarWorkspace>
+    <ModuleSegmentDock
+      className="protocol-module-dock"
+      tabs={segmentTabs}
+      activeTabId={active}
+      onActiveTabChange={(id) => setActive(id as ProtocolKind)}
+      enabled={isActiveRoute}
+      renderPanel={renderPanel}
+    />
   );
 }

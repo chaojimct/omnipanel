@@ -3,6 +3,7 @@ import {
   useEffect,
   useMemo,
   useRef,
+  useState,
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
 } from "react";
@@ -34,23 +35,27 @@ import {
 } from "../../lib/dockviewRegistry";
 import { syncTabGroupsByPanelType, clearTabGroups } from "./dockTabGroups";
 import { DockTabHeader } from "./DockTabHeader";
+import { TopbarStyleDockTabHeader } from "./TopbarStyleDockTabHeader";
+import { TopbarTabAddButton } from "../ui/TopbarTabAddButton";
+import type { TopbarAddMenuItem } from "../../stores/topbarStore";
+import type { TopbarTabDef } from "../../stores/topbarStore";
 import { syncPanelTabParams, tabParamsFromDockableTab } from "./dockTabParams";
 import type { DockTabIconKind } from "./DockTabIcon";
+import { DockWindowTitleActions } from "./DockWindowTitleActions";
 import {
   syncGroupHeaderPosition,
   type DockHeaderPosition,
 } from "./dockHeaderPosition";
+import type { DockableTab } from "./dockableTab";
 
-export interface DockableTab {
-  id: string;
-  label: string;
-  /** 面板类型：同模块面板共享类型，用于 tab group 折叠 */
-  panelType: string;
-  closable?: boolean;
-  /** Tab 图标（窄侧栏仅显示图标，完整标题走 tooltip） */
-  icon?: DockTabIconKind;
-  /** 悬停提示；默认使用 label */
-  tooltip?: string;
+export type { DockableTab } from "./dockableTab";
+
+export interface DockAddTabConfig {
+  show?: boolean;
+  title?: string;
+  onAdd?: () => void;
+  menuItems?: TopbarAddMenuItem[];
+  onMenuSelect?: (id: string) => void;
 }
 
 export interface DockableWorkspaceProps {
@@ -89,6 +94,12 @@ export interface DockableWorkspaceProps {
   defaultHeaderPosition?: DockHeaderPosition;
   /** 为 false 时不按 panelType 折叠为 tab group（数据库等同类型多 Tab 需直接展示） */
   enableTabGroups?: boolean;
+  /** topbar 风格 tab 栏（终端 session tab） */
+  tabStyle?: "default" | "topbar";
+  /** 右侧「+」新建 tab / 菜单（与顶栏 TopbarTabs 行为一致） */
+  addTabConfig?: DockAddTabConfig;
+  /** 布局变化时在首个 panel 所在 group 的 tab 栏右侧嵌入窗口拖拽区与控制按钮 */
+  windowControl?: boolean;
 }
 
 interface PanelParams {
@@ -96,6 +107,9 @@ interface PanelParams {
   label?: string;
   icon?: DockTabIconKind;
   tooltip?: string;
+  status?: TopbarTabDef["status"];
+  /** 递增以触发 panel 内容重渲染（renderPanel 通过 ref 注入，需靠 params 变更通知 dockview） */
+  contentRev?: number;
 }
 
 const COMPONENT_NAME = "dockable-content";
@@ -134,7 +148,13 @@ export function DockableWorkspace({
   resolveTabGroupMeta,
   defaultHeaderPosition = "top",
   enableTabGroups = true,
+  tabStyle = "default",
+  addTabConfig,
+  windowControl = false,
 }: DockableWorkspaceProps) {
+  const [windowControlsGroupId, setWindowControlsGroupId] = useState<string | null>(
+    null,
+  );
   const apiRef = useRef<DockviewApi | null>(null);
   const viewIdRef = useRef<string | null>(null);
   const transferredOutRef = useRef(new Set<string>());
@@ -143,6 +163,8 @@ export function DockableWorkspace({
   const pendingSavedLayoutRef = useRef<SerializedDockview | null>(savedLayout);
   // 跟踪最近一次主动写回 store 的布局；useEffect 用它来识别"自己写回去"vs"外部变更"
   const lastWrittenLayoutRef = useRef<SerializedDockview | null>(null);
+  /** 上一轮 effect 见到的 savedLayout prop；区分「始终 null」与「外部主动清空持久化布局」 */
+  const prevSavedLayoutPropRef = useRef<SerializedDockview | null | undefined>(undefined);
 
   // 回调 ref —— 避免 children 重渲染
   const renderPanelRef = useRef(renderPanel);
@@ -173,6 +195,27 @@ export function DockableWorkspace({
   defaultHeaderPositionRef.current = defaultHeaderPosition;
   const enableTabGroupsRef = useRef(enableTabGroups);
   enableTabGroupsRef.current = enableTabGroups;
+  const windowControlRef = useRef(windowControl);
+  windowControlRef.current = windowControl;
+  const windowControlsGroupIdRef = useRef(windowControlsGroupId);
+  windowControlsGroupIdRef.current = windowControlsGroupId;
+
+  const syncWindowControlsHost = useCallback((api: DockviewApi) => {
+    if (!windowControlRef.current) {
+      setWindowControlsGroupId((prev) => (prev === null ? prev : null));
+      return;
+    }
+    const firstPanel = api.panels[0];
+    const nextGroupId = firstPanel?.group?.id ?? null;
+    setWindowControlsGroupId((prev) => (prev === nextGroupId ? prev : nextGroupId));
+  }, []);
+
+  const syncWindowControlsHostRef = useRef(syncWindowControlsHost);
+  syncWindowControlsHostRef.current = syncWindowControlsHost;
+  const tabStyleRef = useRef(tabStyle);
+  tabStyleRef.current = tabStyle;
+  const addTabConfigRef = useRef(addTabConfig);
+  addTabConfigRef.current = addTabConfig;
 
   const syncTabGroups = useCallback((api: DockviewApi, manageLock = true) => {
     if (manageLock) isSyncingRef.current = true;
@@ -192,7 +235,24 @@ export function DockableWorkspace({
     }
   }, []);
 
-  // 单组件：所有 panel 共享一个 React 组件，渲染内容靠 params.tabId
+  const bumpPanelContentRev = useCallback((api: DockviewApi) => {
+    isSyncingRef.current = true;
+    try {
+      for (const tab of tabsRef.current) {
+        const panel = api.getPanel(tab.id);
+        if (!panel) continue;
+        const current = (panel.api.getParameters() ?? {}) as PanelParams;
+        panel.api.updateParameters({
+          ...current,
+          contentRev: (current.contentRev ?? 0) + 1,
+        });
+      }
+    } finally {
+      isSyncingRef.current = false;
+    }
+  }, []);
+
+  // 单组件：所有 panel 共享一个 React 组件，渲染内容靠 params.tabId + contentRev
   const components = useMemo(
     () => ({
       [COMPONENT_NAME]: (props: IDockviewPanelProps<PanelParams>) => (
@@ -203,6 +263,13 @@ export function DockableWorkspace({
     }),
     [],
   );
+
+  // renderPanel 变更时 bump contentRev，否则 dockview 不会重绘 panel 内容
+  useEffect(() => {
+    const api = apiRef.current;
+    if (!api || !layoutLoadedRef.current) return;
+    bumpPanelContentRev(api);
+  }, [renderPanel, bumpPanelContentRev]);
 
   // 自定义 tab：元数据通过 panel params 同步，确保图标/标题更新能触发重渲染
   const defaultTabComponent = useCallback(
@@ -220,6 +287,15 @@ export function DockableWorkspace({
             onCtx(e, tabId, index >= 0 ? index : 0);
           }
         : undefined;
+      if (tabStyleRef.current === "topbar") {
+        return (
+          <TopbarStyleDockTabHeader
+            {...props}
+            closable={closable}
+            onContextMenu={handleContextMenu}
+          />
+        );
+      }
       return (
         <DockTabHeader
           {...props}
@@ -231,9 +307,30 @@ export function DockableWorkspace({
     [],
   );
 
-  // 头部左侧：通过 dockview API 新建面板
+  const rightHeaderActions = useCallback(
+    (props: IDockviewHeaderActionsProps) => {
+      if (!windowControlRef.current) return null;
+      if (props.group.id !== windowControlsGroupIdRef.current) return null;
+      return <DockWindowTitleActions />;
+    },
+    [windowControlsGroupId],
+  );
+
+  // dockview DOM 顺序：tabs → leftActions → void → rightActions
+  // 「+」放在 leftActions，紧贴在 tabs 后面
   const leftHeaderActions = useCallback(
     (props: IDockviewHeaderActionsProps) => {
+      const addCfg = addTabConfigRef.current;
+      if (addCfg?.show && (addCfg.onAdd || (addCfg.menuItems?.length ?? 0) > 0)) {
+        return (
+          <TopbarTabAddButton
+            title={addCfg.title}
+            menuItems={addCfg.menuItems}
+            onAdd={addCfg.onAdd}
+            onMenuSelect={addCfg.onMenuSelect}
+          />
+        );
+      }
       if (!createPanelRequestRef.current) return null;
       return (
         <button
@@ -350,6 +447,8 @@ export function DockableWorkspace({
       if (acceptExternalDropsRef.current) {
         ensureExternalDropTarget(api);
       }
+      bumpPanelContentRev(api);
+      syncWindowControlsHostRef.current(api);
       return;
     }
     isSyncingRef.current = true;
@@ -389,7 +488,9 @@ export function DockableWorkspace({
     if (acceptExternalDropsRef.current) {
       ensureExternalDropTarget(api);
     }
-  }, [syncTabGroups]);
+    bumpPanelContentRev(api);
+    syncWindowControlsHostRef.current(api);
+  }, [syncTabGroups, bumpPanelContentRev]);
 
   // 同步 tab 变更（添加/删除/重命名）
   useEffect(() => {
@@ -450,6 +551,7 @@ export function DockableWorkspace({
       syncTabGroups(api, false);
     } finally {
       isSyncingRef.current = false;
+      syncWindowControlsHostRef.current(api);
     }
   }, [tabs, syncTabGroups]);
 
@@ -515,8 +617,18 @@ export function DockableWorkspace({
         }
       }
     } else {
-      apiRef.current.clear();
+      // savedLayout 为 null 时：仅当外部曾传入非 null 布局再置 null 才清空。
+      // 避免 onReady 已创建默认面板后，本 effect 因 savedLayout 恒为 null 误调 clear()。
+      const prevProp = prevSavedLayoutPropRef.current;
+      if (prevProp !== undefined && prevProp !== null) {
+        try {
+          apiRef.current.clear();
+        } catch {
+          // 忽略
+        }
+      }
     }
+    prevSavedLayoutPropRef.current = savedLayout;
     lastWrittenLayoutRef.current = savedLayout;
     if (apiRef.current) {
       syncTabGroups(apiRef.current);
@@ -531,7 +643,12 @@ export function DockableWorkspace({
       const api = event.api;
       apiRef.current = api;
 
+      // 避免 onReady 重复触发时重复订阅
+      for (const d of disposablesRef.current) d.dispose();
+      disposablesRef.current = [];
+
       const layoutDisposable = api.onDidLayoutChange(() => {
+        syncWindowControlsHostRef.current(apiRef.current ?? api);
         if (isSyncingRef.current || !layoutLoadedRef.current) return;
         const raw = api.toJSON();
         const next = normalizeDockLayout(raw) ?? raw;
@@ -539,6 +656,7 @@ export function DockableWorkspace({
         onSavedLayoutChangeRef.current(next);
       });
       const removeDisposable = api.onDidRemovePanel((panel: IDockviewPanel) => {
+        syncWindowControlsHostRef.current(apiRef.current ?? api);
         if (isSyncingRef.current) return;
         if (transferredOutRef.current.delete(panel.id)) return;
         // 若该 panel 仍出现在外部 tabs 中 => 用户主动关闭
@@ -558,8 +676,14 @@ export function DockableWorkspace({
           syncTabGroups(apiRef.current);
         });
       };
-      const addDisposable = api.onDidAddPanel(() => scheduleTabGroupSync());
-      const moveDisposable = api.onDidMovePanel(() => scheduleTabGroupSync());
+      const addDisposable = api.onDidAddPanel(() => {
+        syncWindowControlsHostRef.current(apiRef.current ?? api);
+        scheduleTabGroupSync();
+      });
+      const moveDisposable = api.onDidMovePanel(() => {
+        syncWindowControlsHostRef.current(apiRef.current ?? api);
+        scheduleTabGroupSync();
+      });
 
       const scope = dockScopeRef.current;
       if (scope) {
@@ -637,6 +761,7 @@ export function DockableWorkspace({
       ];
 
       applyInitialLayout(api);
+      syncWindowControlsHostRef.current(api);
 
       // 同步当前 active tab
       if (activeTabId) {
@@ -680,7 +805,7 @@ export function DockableWorkspace({
   return (
     <div
       ref={wrapperRef}
-      className={`dockable-workspace dock-header-${defaultHeaderPosition}${className ? ` ${className}` : ""}`}
+      className={`dockable-workspace dock-header-${defaultHeaderPosition}${windowControl ? " dock-window-control" : ""}${className ? ` ${className}` : ""}`}
     >
       <DockErrorBoundary>
         {tabs.length === 0 && emptyContent ? (
@@ -693,7 +818,10 @@ export function DockableWorkspace({
           components={components}
           defaultTabComponent={defaultTabComponent}
           leftHeaderActionsComponent={
-            createPanelRequest ? leftHeaderActions : undefined
+            createPanelRequest || addTabConfig?.show ? leftHeaderActions : undefined
+          }
+          rightHeaderActionsComponent={
+            windowControl ? rightHeaderActions : undefined
           }
           noPanelsOverlay={acceptExternalDrops ? "emptyGroup" : undefined}
           theme={themeDark}

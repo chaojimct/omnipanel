@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { useLocation } from "react-router-dom";
 import {
   useTerminalStore,
@@ -12,13 +12,22 @@ import {
 } from "../../stores/connectionStore";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { useI18n } from "../../i18n";
-import { useTopbarTabs } from "../../hooks/useTopbarTabs";
 import type { TopbarTabDef } from "../../stores/topbarStore";
 import { navigateToPath } from "../../lib/terminalSession";
 import { LOCAL_TERMINAL_RESOURCE_ID } from "./paneResource";
 import { TerminalTabDockPane } from "./TerminalTabDockPane";
 import { clearTerminalPaneSender } from "./terminalPaneSenders";
 import { useWorkspaceBottomDockStore } from "../../stores/workspaceBottomDockStore";
+import { DockableWorkspace } from "../../components/dock";
+import {
+  removeTabFromTerminalLayout,
+  useTerminalDockLayoutStore,
+} from "../../stores/terminalDockLayoutStore";
+import { ContextMenu } from "../../components/ui/ContextMenu";
+import {
+  buildTabCloseMenuItems,
+  type TabContextMenuAction,
+} from "../../components/ui/contextMenuItems";
 
 function tabLabel(tab: TerminalTab, fallbackName?: string) {
   const resource = resolveResourceById(tab.session.resourceId);
@@ -47,6 +56,9 @@ export function TerminalPanel() {
   const addLocalTerminalTab = useTerminalStore((state) => state.addLocalTerminalTab);
   const sshHosts = useSshHostResources();
 
+  const dockLayout = useTerminalDockLayoutStore((state) => state.savedLayout);
+  const setDockLayout = useTerminalDockLayoutStore((state) => state.setSavedLayout);
+
   const workspaceActiveResourceId = useWorkspaceStore(
     (state) => state.activeResourceId,
   );
@@ -57,8 +69,16 @@ export function TerminalPanel() {
 
   const isOriginDocked = useWorkspaceBottomDockStore((s) => s.isOriginDocked);
 
+  const [ctxMenu, setCtxMenu] = useState<{
+    x: number;
+    y: number;
+    tabId: string;
+    index: number;
+  } | null>(null);
+
   // 进入模块时若没有任何 Tab，则自动建一个本地终端
   useEffect(() => {
+    if (!isActiveRoute) return;
     if (tabs.length === 0) {
       const id = openOrFocusLocalTab(workspaceActiveResource?.name ?? "本地终端");
       setActiveTab(id);
@@ -67,7 +87,14 @@ export function TerminalPanel() {
     if (!activeTabId || !tabs.some((tab) => tab.id === activeTabId)) {
       setActiveTab(tabs[0].id);
     }
-  }, [tabs, activeTabId, openOrFocusLocalTab, setActiveTab, workspaceActiveResource?.name]);
+  }, [
+    isActiveRoute,
+    tabs,
+    activeTabId,
+    openOrFocusLocalTab,
+    setActiveTab,
+    workspaceActiveResource?.name,
+  ]);
 
   const activeTab = useMemo(
     () => tabs.find((tab) => tab.id === activeTabId) ?? tabs[0] ?? null,
@@ -92,9 +119,11 @@ export function TerminalPanel() {
       clearTerminalPaneSender(id);
       clearPaneBackendPending(id);
       disposeTabBackendSessions(id);
+      const currentLayout = useTerminalDockLayoutStore.getState().savedLayout;
+      setDockLayout(removeTabFromTerminalLayout(currentLayout, id));
       removeTab(id);
     },
-    [removeTab],
+    [removeTab, setDockLayout],
   );
 
   const visibleTabs = useMemo(
@@ -102,16 +131,16 @@ export function TerminalPanel() {
     [tabs, isOriginDocked],
   );
 
-  const topbarTabs = useMemo(
+  const dockTabs = useMemo(
     () =>
       visibleTabs.map((tab) => ({
         id: tab.id,
         label: tabLabel(tab),
-        active: tab.id === activeTabId,
+        panelType: "terminal-session",
         closable: true,
         status: topbarTabStatus(tab.status),
       })),
-    [visibleTabs, activeTabId],
+    [visibleTabs],
   );
 
   const addMenuItems = useMemo(
@@ -171,45 +200,110 @@ export function TerminalPanel() {
     ],
   );
 
-  useTopbarTabs(
-    topbarTabs,
-    {
-      onSelect: setActiveTab,
-      onClose: handleCloseTab,
+  const handleDockTabContextMenu = useCallback(
+    (event: ReactMouseEvent, tabId: string, index: number) => {
+      event.preventDefault();
+      setCtxMenu({ x: event.clientX, y: event.clientY, tabId, index });
+    },
+    [],
+  );
+
+  const handleContextAction = useCallback(
+    (action: TabContextMenuAction) => {
+      if (!ctxMenu) return;
+      if (action === "rename") {
+        setCtxMenu(null);
+        return;
+      }
+      const idx = ctxMenu.index;
+      const tabList = visibleTabs;
+      if (action === "close") {
+        handleCloseTab(ctxMenu.tabId);
+      } else if (action === "closeLeft") {
+        for (let i = idx - 1; i >= 0; i--) handleCloseTab(tabList[i].id);
+      } else if (action === "closeRight") {
+        for (let i = tabList.length - 1; i > idx; i--) handleCloseTab(tabList[i].id);
+      } else if (action === "closeOthers") {
+        for (let i = tabList.length - 1; i >= 0; i--) {
+          if (i !== idx) handleCloseTab(tabList[i].id);
+        }
+      } else if (action === "closeAll") {
+        for (let i = tabList.length - 1; i >= 0; i--) handleCloseTab(tabList[i].id);
+      }
+      setCtxMenu(null);
+    },
+    [ctxMenu, handleCloseTab, visibleTabs],
+  );
+
+  const renderDockPanel = useCallback(
+    (tabId: string) => (
+      <TerminalTabDockPane
+        tabId={tabId}
+        isActive={tabId === activeTabId}
+        onActivate={() => setActiveTab(tabId)}
+      />
+    ),
+    [activeTabId, setActiveTab],
+  );
+
+  const addTabConfig = useMemo(
+    () => ({
+      show: isActiveRoute,
+      title: t("shell.topbar.newTab"),
       onAdd: handleTopbarAdd,
+      menuItems: addMenuItems,
+      onMenuSelect: handleTopbarAddMenuSelect,
+    }),
+    [
       addMenuItems,
-      onAddMenuSelect: handleTopbarAddMenuSelect,
-    },
-    {
-      mode: "session",
-      showAddTab: true,
-      addTabTitle: t("shell.topbar.newTab"),
-      enabled: isActiveRoute,
-    },
+      handleTopbarAdd,
+      handleTopbarAddMenuSelect,
+      isActiveRoute,
+      t,
+    ],
   );
 
   if (visibleTabs.length === 0) {
     return (
-      <div className="term-workspace">
+      <div className="term-workspace-dock term-workspace-dock--empty">
         <div className="term-workspace__empty">{t("terminal.newSession.local")}</div>
       </div>
     );
   }
 
   return (
-    <div className="term-workspace">
-      {visibleTabs.map((tab) => (
-        <div
-          key={tab.id}
-          className={`term-workspace-pane${tab.id === activeTabId ? " is-active" : ""}`}
-        >
-          <TerminalTabDockPane
-            tabId={tab.id}
-            isActive={tab.id === activeTabId}
-            onActivate={() => setActiveTab(tab.id)}
-          />
-        </div>
-      ))}
-    </div>
+    <>
+      <DockableWorkspace
+        className="term-workspace-dock"
+        dockScope="terminal"
+        tabStyle="topbar"
+        enableTabGroups={false}
+        tabs={dockTabs}
+        activeTabId={activeTabId ?? visibleTabs[0]?.id ?? ""}
+        onActiveTabChange={setActiveTab}
+        onCloseTab={handleCloseTab}
+        savedLayout={dockLayout}
+        onSavedLayoutChange={setDockLayout}
+        renderPanel={renderDockPanel}
+        onTabContextMenu={handleDockTabContextMenu}
+        addTabConfig={addTabConfig}
+        windowControl
+        emptyContent={
+          <div className="term-workspace__empty">{t("terminal.newSession.local")}</div>
+        }
+      />
+      {ctxMenu && (
+        <ContextMenu
+          items={buildTabCloseMenuItems(
+            t,
+            visibleTabs.length,
+            ctxMenu.index,
+            handleContextAction,
+          )}
+          position={{ x: ctxMenu.x, y: ctxMenu.y }}
+          onClose={() => setCtxMenu(null)}
+        />
+      )}
+    </>
   );
 }

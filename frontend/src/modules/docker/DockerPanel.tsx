@@ -5,7 +5,7 @@ import { useAiStore } from "../../stores/aiStore";
 import { useConnectionStore } from "../../stores/connectionStore";
 import { useDockerTopbarStore } from "../../stores/dockerTopbarStore";
 import { useStatusBarStore } from "../../stores/statusBarStore";
-import { useTopbarTabs } from "../../hooks/useTopbarTabs";
+import { ModuleSegmentDock } from "../../components/dock";
 import { useI18n } from "../../i18n";
 import {
   useContainerLogStream,
@@ -463,16 +463,12 @@ export function DockerPanel() {
   }, []);
 
   const workspaceTopbarTabs = useDockerWorkspaceTabs(tab);
+  const dockerSegmentTabs = useMemo(
+    () => workspaceTopbarTabs.map(({ id, label }) => ({ id, label })),
+    [workspaceTopbarTabs],
+  );
   const showTopbarTabs =
     isActiveRoute && !connectionsLoading && connections.length > 0 && !!selectedConnectionId;
-
-  useTopbarTabs(
-    workspaceTopbarTabs,
-    {
-      onSelect: (id) => setTab(id as DockerWorkspaceTab),
-    },
-    { mode: "segment", enabled: showTopbarTabs },
-  );
 
   useEffect(() => {
     const setRefresh = useDockerTopbarStore.getState().setRefresh;
@@ -637,6 +633,14 @@ export function DockerPanel() {
           <div className="docker-empty">请选择一个 Docker 连接</div>
         ) : (
           <>
+            <ModuleSegmentDock
+              className="docker-module-dock"
+              tabs={dockerSegmentTabs}
+              activeTabId={tab}
+              onActiveTabChange={(id) => setTab(id as DockerWorkspaceTab)}
+              enabled={showTopbarTabs}
+              renderPanel={(tabId) => (
+                <>
             {isOffline && !showLocalEngineWelcome && (
               <div className="docker-empty" style={{ minHeight: 80, padding: "16px 0" }}>
                 <div className="docker-empty-title">Docker 未安装或未启动</div>
@@ -678,8 +682,8 @@ export function DockerPanel() {
               </div>
             )}
 
-            <div key={tab} className="docker-tab-content">
-            {tab === "overview" && showLocalEngineWelcome && (
+            <div key={tabId} className="docker-tab-content">
+            {tabId === "overview" && showLocalEngineWelcome && (
               <WorkspaceEmptyPage
                 prompt={t("docker.empty.localEngine")}
                 actions={
@@ -701,7 +705,7 @@ export function DockerPanel() {
                 }
               />
             )}
-            {tab === "overview" && !showLocalEngineWelcome && (
+            {tabId === "overview" && !showLocalEngineWelcome && (
               <DockerOverviewTab
                 overview={overview}
                 systemDiskUsage={systemDiskUsage}
@@ -722,7 +726,7 @@ export function DockerPanel() {
               />
             )}
 
-            {tab === "containers" && (
+            {tabId === "containers" && (
               <>
                 {isOffline ? (
                   <ModuleEmptyState preset="container" title="Docker 未连接" desc={probe?.warningMessage ?? "请先启动 Docker Engine"} />
@@ -856,7 +860,7 @@ export function DockerPanel() {
               </>
             )}
 
-            {tab === "images" && (
+            {tabId === "images" && (
               isOffline ? (
                 <ModuleEmptyState preset="image" title="Docker 未连接" desc={probe?.warningMessage ?? "请先启动 Docker Engine"} />
               ) : (
@@ -966,7 +970,7 @@ export function DockerPanel() {
               )
             )}
 
-            {tab === "compose" && (
+            {tabId === "compose" && (
               isOffline ? (
                 <ModuleEmptyState preset="compose" title="Docker 未连接" desc={probe?.warningMessage ?? "请先启动 Docker Engine"} />
               ) : (
@@ -1052,7 +1056,7 @@ export function DockerPanel() {
               )
             )}
 
-            {tab === "networks" && (
+            {tabId === "networks" && (
               isOffline ? (
                 <ModuleEmptyState preset="network" title="Docker 未连接" desc={probe?.warningMessage ?? "请先启动 Docker Engine"} />
               ) : (
@@ -1075,7 +1079,7 @@ export function DockerPanel() {
               )
             )}
 
-            {tab === "volumes" && (
+            {tabId === "volumes" && (
               isOffline ? (
                 <ModuleEmptyState preset="volume" title="Docker 未连接" desc={probe?.warningMessage ?? "请先启动 Docker Engine"} />
               ) : (
@@ -1103,7 +1107,7 @@ export function DockerPanel() {
               )
             )}
 
-            {tab === "files" && (
+            {tabId === "files" && (
               isOffline ? (
                 <ModuleEmptyState preset="file" title="Docker 未连接" desc={probe?.warningMessage ?? "请先启动 Docker Engine"} />
               ) : (
@@ -1129,7 +1133,7 @@ export function DockerPanel() {
               )
             )}
 
-            {tab === "swarm" && selectedConnectionId && (
+            {tabId === "swarm" && selectedConnectionId && (
               isOffline ? (
                 <ModuleEmptyState preset="container" title="Docker 未连接" desc={probe?.warningMessage ?? "请先启动 Docker Engine"} />
               ) : (
@@ -1137,6 +1141,9 @@ export function DockerPanel() {
               )
             )}
             </div>
+                </>
+              )}
+            />
           </>
         )}
           </div>
