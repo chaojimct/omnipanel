@@ -15,6 +15,9 @@ export const enUS: TranslationDict = {
     },
   },
   knowledge: {
+    tabs: {
+      library: "Knowledge Base",
+    },
     categories: "Categories",
     tags: "Tags",
     nav: {
@@ -424,6 +427,9 @@ export const enUS: TranslationDict = {
     file: "Files",
   },
   files: {
+    tabs: {
+      browser: "File Manager",
+    },
     loading: "Loading…",
     empty: "Empty folder",
     groups: {
@@ -748,6 +754,9 @@ export const enUS: TranslationDict = {
     },
   },
   dashboard: {
+    tabs: {
+      home: "Home",
+    },
     recentWorkspaces: "Recent Workspaces",
     new: "New",
     open: "Open",
@@ -1451,6 +1460,21 @@ export const enUS: TranslationDict = {
       copyOnSelect: "Copy on Select",
       copyOnSelectDesc: "Automatically copy selected text to clipboard",
     },
+    data: {
+      title: "Data & Backup",
+      description: "Manage local data, clear layout cache, or remove user-created content.",
+      clearCacheLabel: "Clear App Cache",
+      clearCacheDesc: "Reset dock split layouts, module tab memory, shortcut overrides, and sidebar selection habits. Connections and settings are kept.",
+      clearCacheBtn: "Clear Cache",
+      clearCacheConfirm: "This clears layout and UI habit cache (dock splits, module tabs, shortcut overrides, etc.). Settings and connections are not removed. Continue?",
+      clearCacheDone: "App cache cleared. Some UI changes apply after switching modules.",
+      clearUserDataLabel: "Clear User Data",
+      clearUserDataDesc: "Delete user-created data across modules: connections, terminal sessions, tasks, workflows, knowledge, AI models and chats. This cannot be undone.",
+      clearUserDataBtn: "Clear User Data",
+      clearUserDataConfirm: "This permanently deletes all user-created data (connections, tasks, workflows, terminal tabs, AI config, etc.). Built-in local connections are kept. Continue?",
+      clearUserDataDone: "User data cleared.",
+      clearing: "Working…",
+    },
     update: {
       checkLabel: "Check for Updates",
       checkDesc: "Automatically check for new versions on startup",
@@ -1827,6 +1851,10 @@ export const enUS: TranslationDict = {
     },
   },
   workflow: {
+    tabs: {
+      workflows: "Workflows",
+      history: "Execution History",
+    },
     sections: {
       scripts: { group: "Scripts", label: "Quick Scripts" },
       templates: { group: "Scripts", label: "Command Templates" },

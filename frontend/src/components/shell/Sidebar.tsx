@@ -2,6 +2,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { startTransition } from "react";
 import type { ReactNode } from "react";
 import { useAiStore } from "../../stores/aiStore";
+import { useSettingsUiStore } from "../../stores/settingsUiStore";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { useI18n } from "../../i18n";
 import { AppLogo } from "../ui/AppLogo";
@@ -122,6 +123,8 @@ export function Sidebar() {
   const location = useLocation();
   const setActivePath = useWorkspaceStore((s) => s.setActivePath);
   const drawerOpen = useAiStore((s) => s.drawerOpen);
+  const settingsOpen = useSettingsUiStore((s) => s.open);
+  const openSettings = useSettingsUiStore((s) => s.openSettings);
 
   const isActive = (path: string) => {
     if (path === "/") return location.pathname === "/";
@@ -180,9 +183,9 @@ export function Sidebar() {
 
       <button
         type="button"
-        className={`sidebar-item${isActive("/settings") ? " active" : ""}`}
+        className={`sidebar-item${settingsOpen ? " active" : ""}`}
         title={t("shell.nav.settings")}
-        onClick={() => go("/settings")}
+        onClick={() => openSettings()}
       >
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
           <circle cx="12" cy="12" r="3" />

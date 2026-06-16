@@ -35,7 +35,9 @@ import { ProtocolPanel } from "./modules/protocol/ProtocolPanel";
 import { WorkflowPanel } from "./modules/workflow/WorkflowPanel";
 import { KnowledgePanel } from "./modules/knowledge/KnowledgePanel";
 import { TasksPanel } from "./modules/tasks/TasksPanel";
-import { SettingsPanel } from "./modules/settings/SettingsPanel";
+import { SettingsWindow } from "./components/settings/SettingsWindow";
+import { useSettingsShortcut } from "./hooks/useSettingsShortcut";
+import { useSettingsUiStore } from "./stores/settingsUiStore";
 import { FilesPanel } from "./modules/files/FilesPanel";
 import { useAiStore } from "./stores/aiStore";
 import { useAiDrawerShortcut } from "./hooks/useAiDrawerShortcut";
@@ -179,17 +181,21 @@ const TOPBAR_TAB_ROUTES = [
 function AppShell() {
   useAiDrawerShortcut();
   useBottomWorkspaceShortcut();
+  useSettingsShortcut();
   const location = useLocation();
   const navigate = useNavigate();
   const title = getRouteTitle(location.pathname);
+  const openSettings = useSettingsUiStore((s) => s.openSettings);
   const isTerminal = location.pathname === "/terminal";
   const isDocker = location.pathname === "/docker";
+  const isDashboard = location.pathname === "/";
   const [otherRoutesMounted, setOtherRoutesMounted] = useState(!isTerminal);
   const [terminalMounted, setTerminalMounted] = useState(isTerminal);
   const [dockerMounted, setDockerMounted] = useState(isDocker);
   const aiDisplayMode = useSettingsStore((s) => s.aiDisplayMode);
   const drawerOpen = useAiStore((s) => s.drawerOpen);
   const setActivePath = useWorkspaceStore((state) => state.setActivePath);
+  const workspaceActivePath = useWorkspaceStore((state) => state.activePath);
   const confirmAction = useActionStore((state) => state.confirmAction);
   const cancelAction = useActionStore((state) => state.cancelAction);
   const pendingRiskActionId = useActionStore(
@@ -216,8 +222,23 @@ function AppShell() {
   }, [isDocker]);
 
   useEffect(() => {
+    if (location.pathname !== "/settings") return;
+    openSettings();
+    const fallback =
+      workspaceActivePath && workspaceActivePath !== "/settings"
+        ? workspaceActivePath
+        : "/terminal";
+    navigate(fallback, { replace: true });
+  }, [location.pathname, navigate, openSettings, workspaceActivePath]);
+
+  useEffect(() => {
     setActivePath(location.pathname);
   }, [location.pathname, setActivePath]);
+
+  useEffect(() => {
+    if (location.pathname !== "/") return;
+    useBottomPanelStore.getState().requestCollapse();
+  }, [location.pathname]);
 
   useEffect(() => {
     if (!TOPBAR_TAB_ROUTES.includes(location.pathname)) {
@@ -290,6 +311,40 @@ function AppShell() {
     };
   }, [handleResizeMouseMove, handleResizeMouseUp]);
 
+  const routePanels = (
+    <div className="content-routes">
+      <div
+        className={`route-panel${isTerminal ? " route-panel--active" : ""}`}
+      >
+        {terminalMounted && <TerminalPanel />}
+      </div>
+      <div
+        className={`route-panel${isDocker ? " route-panel--active" : ""}`}
+      >
+        {dockerMounted && <DockerPanel />}
+      </div>
+      <div
+        className={`route-panel${!isTerminal && !isDocker ? " route-panel--active" : ""}`}
+      >
+        {otherRoutesMounted && (
+          <Routes>
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/terminal" element={null} />
+            <Route path="/ssh" element={<SshPanel />} />
+            <Route path="/database" element={<DatabasePanel />} />
+            <Route path="/docker" element={null} />
+            <Route path="/server" element={<ServerPanel />} />
+            <Route path="/protocol" element={<ProtocolPanel />} />
+            <Route path="/workflow" element={<WorkflowPanel />} />
+            <Route path="/knowledge" element={<KnowledgePanel />} />
+            <Route path="/tasks" element={<TasksPanel />} />
+            <Route path="/files" element={<FilesPanel />} />
+          </Routes>
+        )}
+      </div>
+    </div>
+  );
+
   return (
     <div className="app">
       <Sidebar />
@@ -302,43 +357,16 @@ function AppShell() {
         </Topbar>
         <div className="workspace-body">
           <div className="content-area">
-            <SidebarBottom
-              className="content-bottom"
-              sidebar={<WorkspaceBottomShell />}
-            >
-              <div className="content-routes">
-                <div
-                  className={`route-panel${isTerminal ? " route-panel--active" : ""}`}
-                >
-                  {terminalMounted && <TerminalPanel />}
-                </div>
-                <div
-                  className={`route-panel${isDocker ? " route-panel--active" : ""}`}
-                >
-                  {dockerMounted && <DockerPanel />}
-                </div>
-                <div
-                  className={`route-panel${!isTerminal && !isDocker ? " route-panel--active" : ""}`}
-                >
-                  {otherRoutesMounted && (
-                    <Routes>
-                      <Route path="/" element={<Dashboard />} />
-                      <Route path="/terminal" element={null} />
-                      <Route path="/ssh" element={<SshPanel />} />
-                      <Route path="/database" element={<DatabasePanel />} />
-                      <Route path="/docker" element={null} />
-                      <Route path="/server" element={<ServerPanel />} />
-                      <Route path="/protocol" element={<ProtocolPanel />} />
-                      <Route path="/workflow" element={<WorkflowPanel />} />
-                      <Route path="/knowledge" element={<KnowledgePanel />} />
-                      <Route path="/tasks" element={<TasksPanel />} />
-                      <Route path="/files" element={<FilesPanel />} />
-                      <Route path="/settings" element={<SettingsPanel />} />
-                    </Routes>
-                  )}
-                </div>
-              </div>
-            </SidebarBottom>
+            {isDashboard ? (
+              <div className="content-bottom content-bottom--home">{routePanels}</div>
+            ) : (
+              <SidebarBottom
+                className="content-bottom"
+                sidebar={<WorkspaceBottomShell />}
+              >
+                {routePanels}
+              </SidebarBottom>
+            )}
           </div>
           {dockOpen && (
             <div
@@ -360,6 +388,7 @@ function AppShell() {
       <NotificationDrawer />
       <WindowResize />
       <QuickInputHost />
+      <SettingsWindow />
       {pendingRiskActionId && pendingRiskAction && riskResult && (
         <DangerConfirmDialog
           command={pendingRiskAction.command ?? pendingRiskAction.description}

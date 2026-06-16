@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { useActionStore } from "../../stores/actionStore";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
@@ -6,16 +6,13 @@ import { useBottomPanelStore } from "../../stores/bottomPanelStore";
 import { useStatusBarStore } from "../../stores/statusBarStore";
 import { workspaceResources, getResourceById, type EnvironmentTag } from "../../lib/resourceRegistry";
 import { useI18n } from "../../i18n";
-import { WorkspacePopover } from "./WorkspacePopover";
+import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
 
-function StatusBarWorkspaceControls() {
+function StatusBarWorkspacePanelToggle() {
   const { t } = useI18n();
-  const workspace = useWorkspaceStore((state) => state.workspace);
   const isOpen = useBottomPanelStore((state) => state.isOpen);
   const isFullscreen = useBottomPanelStore((state) => state.isFullscreen);
   const toggleOpen = useBottomPanelStore((state) => state.toggleOpen);
-  const [open, setOpen] = useState(false);
-  const buttonRef = useRef<HTMLButtonElement>(null);
 
   const panelVisible = isOpen || isFullscreen;
   const toggleLabel = panelVisible
@@ -25,59 +22,35 @@ function StatusBarWorkspaceControls() {
     : t("shell.statusbar.expandWorkspace");
 
   return (
+    <button
+      type="button"
+      className={`statusbar-item statusbar-button statusbar-workspace-toggle${panelVisible ? " statusbar-workspace-toggle--open" : ""}`}
+      onClick={() => toggleOpen()}
+      title={toggleLabel}
+      aria-label={toggleLabel}
+      aria-pressed={panelVisible}
+    >
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="12" height="12" aria-hidden>
+        <rect x="3" y="4" width="18" height="16" rx="1.5" />
+        <path d="M3 15h18" />
+        {panelVisible ? (
+          <polyline points="8 18 12 14 16 18" />
+        ) : (
+          <polyline points="8 11 12 7 16 11" />
+        )}
+      </svg>
+    </button>
+  );
+}
+
+function StatusBarWorkspaceControls() {
+  const location = useLocation();
+  const showBottomWorkspaceToggle = location.pathname !== "/";
+
+  return (
     <div className="statusbar-workspace-controls">
-      <button
-        ref={buttonRef}
-        type="button"
-        className={`statusbar-item statusbar-button${open ? " statusbar-button--active" : ""}`}
-        onClick={() => setOpen((v) => !v)}
-        aria-haspopup="dialog"
-        aria-expanded={open}
-        title={workspace.name}
-      >
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="12" height="12" aria-hidden>
-          <rect x="3" y="4" width="18" height="16" rx="2" />
-          <path d="M3 9h18" />
-          <path d="M9 4v5" />
-        </svg>
-        <span className="statusbar-button-label">{workspace.name}</span>
-        <svg
-          className="statusbar-button-chevron"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          width="10"
-          height="10"
-          aria-hidden
-        >
-          <polyline points="6 15 12 9 18 15" />
-        </svg>
-      </button>
-      <button
-        type="button"
-        className={`statusbar-item statusbar-button statusbar-workspace-toggle${panelVisible ? " statusbar-workspace-toggle--open" : ""}`}
-        onClick={() => toggleOpen()}
-        title={toggleLabel}
-        aria-label={toggleLabel}
-        aria-pressed={panelVisible}
-      >
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="12" height="12" aria-hidden>
-          <rect x="3" y="4" width="18" height="16" rx="1.5" />
-          <path d="M3 15h18" />
-          {panelVisible ? (
-            <polyline points="8 18 12 14 16 18" />
-          ) : (
-            <polyline points="8 11 12 7 16 11" />
-          )}
-        </svg>
-      </button>
-      {open && (
-        <WorkspacePopover
-          anchorRef={buttonRef}
-          onClose={() => setOpen(false)}
-        />
-      )}
+      <WorkspaceSwitcher variant="statusbar" placement="above" />
+      {showBottomWorkspaceToggle && <StatusBarWorkspacePanelToggle />}
     </div>
   );
 }

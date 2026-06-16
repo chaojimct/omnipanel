@@ -102,6 +102,8 @@ interface WorkspaceBottomDockState {
   isOriginDocked: (scope: string, originPanelId: string) => boolean;
   /** 删除工作区时清理底部 dock 持久化数据 */
   removeWorkspaceData: (workspaceId: string) => void;
+  /** 重置全部底部工作区布局与 Tab（清除应用缓存时使用） */
+  resetAll: () => void;
 }
 
 export const useWorkspaceBottomDockStore = create<WorkspaceBottomDockState>()(
@@ -239,6 +241,14 @@ export const useWorkspaceBottomDockStore = create<WorkspaceBottomDockState>()(
           };
         });
       },
+
+      resetAll: () =>
+        set({
+          tabsByWorkspace: {},
+          layoutByWorkspace: {},
+          activeTabByWorkspace: {},
+          dockedOriginByScope: {},
+        }),
     }),
     {
       name: "omnipanel.workspace-bottom-dock.v2",

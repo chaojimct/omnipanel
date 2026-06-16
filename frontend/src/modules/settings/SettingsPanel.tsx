@@ -1,6 +1,5 @@
 import { useState, useEffect, type ReactNode } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { useAiStore } from "../../stores/aiStore";
 import { detectMonospaceFonts } from "../../lib/systemFonts";
 import {
   countEnabledModels,
@@ -34,6 +33,7 @@ import { ShortcutRecorder } from "../../components/settings/ShortcutRecorder";
 import { AddModelDialog } from "../../components/settings/AddModelDialog";
 import { AddAcpServiceDialog } from "../../components/settings/AddAcpServiceDialog";
 import { ProviderModelList } from "../../components/settings/ProviderModelList";
+import { DataBackupSection } from "../../components/settings/DataBackupSection";
 import { Button } from "../../components/ui/Button";
 import { ModuleEmptyState } from "../../components/ui/ModuleEmptyState";
 import { Select } from "../../components/ui/Select";
@@ -1466,64 +1466,7 @@ export function SettingsPanel() {
         )}
 
         {/* Data & Backup */}
-        {activeSection === "data" && (
-          <div className="settings-panel active">
-            <div className="settings-section">
-              <h2>Data &amp; Backup</h2>
-              <p className="section-desc">Local data management, import/export, and cleanup</p>
-              <div className="setting-row">
-                <div className="setting-label">
-                  <h4>Export all data</h4>
-                  <p>Export connections, settings, history, and workflows to a file</p>
-                </div>
-                <Button variant="secondary" size="sm">Export</Button>
-              </div>
-              <div className="setting-row">
-                <div className="setting-label">
-                  <h4>Import data</h4>
-                  <p>Import from OmniPanel export, Xshell, WindTerm, or OpenSSH config</p>
-                </div>
-                <Button variant="secondary" size="sm">Import</Button>
-              </div>
-              <div className="setting-row">
-                <div className="setting-label">
-                  <h4>Clear command history</h4>
-                  <p>Remove all saved terminal command history</p>
-                </div>
-                <Button variant="danger" size="sm">Clear</Button>
-              </div>
-              <div className="setting-row">
-                <div className="setting-label">
-                  <h4>Clear AI conversation history</h4>
-                  <p>Remove all saved AI chat history</p>
-                </div>
-                <Button
-                  variant="danger"
-                  size="sm"
-                  onClick={() => {
-                    useAiStore.setState({ conversations: [], activeConversationId: null });
-                  }}
-                >
-                  Clear
-                </Button>
-              </div>
-              <div className="setting-row">
-                <div className="setting-label">
-                  <h4>Clear SQL history</h4>
-                  <p>Remove all saved SQL query history</p>
-                </div>
-                <Button variant="danger" size="sm">Clear</Button>
-              </div>
-              <div className="setting-row">
-                <div className="setting-label">
-                  <h4>Reset all settings</h4>
-                  <p>Restore all settings to factory defaults</p>
-                </div>
-                <Button variant="danger" size="sm">Reset</Button>
-              </div>
-            </div>
-          </div>
-        )}
+        {activeSection === "data" && <DataBackupSection />}
       </div>
     </SidebarWorkspace>
   );

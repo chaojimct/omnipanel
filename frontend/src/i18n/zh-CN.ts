@@ -13,6 +13,9 @@ export const zhCN = {
     },
   },
   knowledge: {
+    tabs: {
+      library: "知识库",
+    },
     categories: "分类",
     tags: "标签",
     nav: {
@@ -420,6 +423,9 @@ export const zhCN = {
     file: "文件",
   },
   files: {
+    tabs: {
+      browser: "文件管理",
+    },
     loading: "正在加载…",
     empty: "空目录",
     groups: {
@@ -744,6 +750,9 @@ export const zhCN = {
     },
   },
   dashboard: {
+    tabs: {
+      home: "首页",
+    },
     recentWorkspaces: "最近工作区",
     new: "新建",
     open: "打开",
@@ -1410,6 +1419,21 @@ export const zhCN = {
       copyOnSelect: "选中即复制",
       copyOnSelectDesc: "选中文本时自动复制到剪贴板",
     },
+    data: {
+      title: "数据与备份",
+      description: "管理本地数据、清除布局缓存或用户创建的内容。",
+      clearCacheLabel: "清除应用缓存",
+      clearCacheDesc: "重置 Dock 分屏布局、模块 Tab 记忆、快捷键覆盖、侧栏选择记忆等界面习惯，不影响连接与设置。",
+      clearCacheBtn: "清除缓存",
+      clearCacheConfirm: "将清除所有布局与界面习惯缓存（Dock 分屏、模块 Tab、快捷键覆盖等）。应用设置与连接数据不会删除。是否继续？",
+      clearCacheDone: "应用缓存已清除。部分界面将在切换模块后生效。",
+      clearUserDataLabel: "清除用户数据",
+      clearUserDataDesc: "删除各模块中您创建的数据：连接、终端会话、任务、工作流、知识库、AI 模型与对话等。此操作不可恢复。",
+      clearUserDataBtn: "清除用户数据",
+      clearUserDataConfirm: "将永久删除所有用户创建的数据（连接、任务、工作流、终端标签、AI 配置等）。内置本地连接会保留。是否继续？",
+      clearUserDataDone: "用户数据已清除。",
+      clearing: "处理中…",
+    },
     update: {
       checkLabel: "检查更新",
       checkDesc: "启动时自动检查新版本",
@@ -1786,6 +1810,10 @@ common: {
     },
   },
   workflow: {
+    tabs: {
+      workflows: "工作流",
+      history: "执行记录",
+    },
     sections: {
       scripts: { group: "脚本", label: "快捷脚本" },
       templates: { group: "脚本", label: "命令模板" },

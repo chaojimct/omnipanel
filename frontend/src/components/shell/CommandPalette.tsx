@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAiStore } from "../../stores/aiStore";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { useActionStore } from "../../stores/actionStore";
+import { useSettingsUiStore } from "../../stores/settingsUiStore";
 import { openLocalTerminalSession } from "../../lib/terminalSession";
 import { useI18n } from "../../i18n";
 import {
@@ -36,7 +37,7 @@ const COMMAND_DEFS: CommandItem[] = [
   { id: "workflow", labelKey: "shell.commandPalette.commands.workflow", path: "/workflow", categoryKey: "shell.commandPalette.categories.nav" },
   { id: "knowledge", labelKey: "shell.commandPalette.commands.knowledge", path: "/knowledge", categoryKey: "shell.commandPalette.categories.nav" },
   { id: "tasks", labelKey: "shell.commandPalette.commands.tasks", path: "/tasks", categoryKey: "shell.commandPalette.categories.nav" },
-  { id: "settings", labelKey: "shell.commandPalette.commands.settings", shortcut: "⌘,", path: "/settings", categoryKey: "shell.commandPalette.categories.nav" },
+  { id: "settings", labelKey: "shell.commandPalette.commands.settings", shortcut: "⌘,", action: () => useSettingsUiStore.getState().openSettings(), categoryKey: "shell.commandPalette.categories.nav" },
   { id: "new-terminal", labelKey: "shell.commandPalette.commands.newTerminal", shortcut: "⌘T", action: () => openLocalTerminalSession(), categoryKey: "shell.commandPalette.categories.action" },
   {
     id: "new-ssh",
