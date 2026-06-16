@@ -1,13 +1,15 @@
 import { createContext, useContext } from "react";
 import type {
-  SqlWorkspaceTab,
   SqlTabState,
   TablePreviewState,
   DbColumnMeta,
 } from "../modules/database/dbWorkspaceState";
+import type { DbWorkspaceTab } from "../modules/database/workspaceTabs";
 import type { DbConnectionConfig } from "../modules/database/api";
 import type { DatabaseSchema } from "../modules/database/types";
 import type { SqlEditorOpenMode } from "../modules/database/SqlEditor";
+
+import type { SchemaTableSelection } from "../modules/database/SchemaBrowser";
 
 export type DbTabAction = {
   kind: "refresh" | "page" | "close";
@@ -17,7 +19,7 @@ export type DbTabAction = {
 
 export interface DbWorkspaceContextValue {
   // 共享引用
-  tabs: SqlWorkspaceTab[];
+  tabs: DbWorkspaceTab[];
   activeTabId: string;
   setActiveTabId: (id: string) => void;
 
@@ -47,6 +49,8 @@ export interface DbWorkspaceContextValue {
     tabId: string,
     cellInfo: { rowIndex: number; column: string; row: Record<string, unknown> },
   ) => void;
+  selectTable: (selection: SchemaTableSelection) => void;
+  activeTableKey: string | null;
 
   // 状态字典 (by tabId)
   sqlTabStates: Record<string, SqlTabState>;

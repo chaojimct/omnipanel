@@ -1,4 +1,4 @@
-export type DockTabIconKind = "sql" | "table";
+export type DockTabIconKind = "sql" | "table" | "database";
 
 const iconProps = {
   viewBox: "0 0 16 16",
@@ -16,6 +16,16 @@ export function DockTabIcon({ kind }: { kind: DockTabIconKind }) {
       <svg {...iconProps}>
         <rect x="2" y="3" width="12" height="10" rx="1" />
         <path d="M2 7h12M6 3v10M10 3v10" />
+      </svg>
+    );
+  }
+
+  if (kind === "database") {
+    return (
+      <svg {...iconProps}>
+        <ellipse cx="8" cy="4.5" rx="5" ry="2" />
+        <path d="M3 4.5v7c0 1.1 2.2 2 5 2s5-.9 5-2v-7" />
+        <path d="M3 8c0 1.1 2.2 2 5 2s5-.9 5-2" />
       </svg>
     );
   }

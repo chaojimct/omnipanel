@@ -6,6 +6,8 @@ import {
   subscribeMirroredDbTab,
 } from "../../stores/dbWorkspaceMirrorStore";
 import { DbPanelSurface } from "./DbPanelSurface";
+import { DatabaseTablesPanel } from "./DatabaseTablesPanel";
+import { isDatabaseListTab, isSqlWorkspaceTab } from "./workspaceTabs";
 
 interface DatabaseTabDockPaneProps {
   tabId: string;
@@ -30,11 +32,33 @@ export function DatabaseTabDockPane({ tabId, isActive: _isActive }: DatabaseTabD
     return null;
   }
 
+  const { ctx, tab } = snapshot;
+
   return (
-    <DbWorkspaceProvider value={snapshot.ctx}>
+    <DbWorkspaceProvider value={ctx}>
       <div className="workspace-database-mirror db-dock-workspace">
         <div className="db-workspace-pane db-dock-pane">
-          <DbPanelSurface tab={snapshot.tab} />
+          {isDatabaseListTab(tab) ? (
+            (() => {
+              const connection =
+                ctx.groupConnections.find((item) => item.id === tab.connId) ?? null;
+              if (!connection) {
+                return null;
+              }
+              return (
+                <DatabaseTablesPanel
+                  selection={{
+                    connId: tab.connId,
+                    dbName: tab.dbName,
+                    connection,
+                  }}
+                  onSelectTable={ctx.selectTable}
+                />
+              );
+            })()
+          ) : isSqlWorkspaceTab(tab) ? (
+            <DbPanelSurface tab={tab} />
+          ) : null}
         </div>
       </div>
     </DbWorkspaceProvider>

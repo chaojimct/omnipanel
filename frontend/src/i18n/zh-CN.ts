@@ -280,6 +280,9 @@ export const zhCN = {
       searchPlaceholder: "搜索…",
       noResults: "无匹配项",
     },
+    scopedSearch: {
+      close: "关闭搜索",
+    },
   },
   shell: {
     nav: {
@@ -547,6 +550,16 @@ export const zhCN = {
       noIndexes: "无索引",
       detailsFailed: "加载表结构失败",
       loadMore: "加载更多…",
+    },
+    tablesPanel: {
+      title: "数据表",
+      search: "搜索表…",
+      count: "共 {count} 张表",
+      close: "关闭",
+      ddlEmpty: "单击表名查看建表语句",
+      ddlLoading: "加载建表语句…",
+      ddlFailed: "加载失败：{message}",
+      openHint: "双击打开表数据",
     },
     groups: {
       new: "新建分组",

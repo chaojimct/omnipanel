@@ -1,8 +1,7 @@
 import type { SqlEditorOpenMode } from "./SqlEditor";
 import type { TablePreviewResult, DbColumnMeta } from "./api";
-import type { SqlWorkspaceTab } from "./workspaceTabs";
 
-export { type SqlWorkspaceTab };
+export { type DbWorkspaceTab, type SqlWorkspaceTab } from "./workspaceTabs";
 
 export type QueryResult = {
   columns: string[];

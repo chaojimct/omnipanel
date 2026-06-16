@@ -284,6 +284,9 @@ export const enUS: TranslationDict = {
       searchPlaceholder: "Search…",
       noResults: "No matches",
     },
+    scopedSearch: {
+      close: "Close search",
+    },
   },
   shell: {
     nav: {
@@ -551,6 +554,16 @@ export const enUS: TranslationDict = {
       noIndexes: "No indexes",
       detailsFailed: "Failed to load table structure",
       loadMore: "Load more…",
+    },
+    tablesPanel: {
+      title: "Tables",
+      search: "Search tables…",
+      count: "{count} tables",
+      close: "Close",
+      ddlEmpty: "Click a table to view its DDL",
+      ddlLoading: "Loading DDL…",
+      ddlFailed: "Failed to load DDL: {message}",
+      openHint: "Double-click to open table data",
     },
     groups: {
       new: "New Group",
