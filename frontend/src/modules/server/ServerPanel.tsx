@@ -4,10 +4,10 @@ import { SidebarWorkspace } from "../../components/ui/SidebarWorkspace";
 import { ServerSidebar } from "../../components/workspace/ServerSidebar";
 import { Button } from "../../components/ui/Button";
 import { WorkspaceEmptyPage } from "../../components/ui/WorkspaceEmptyPage";
+import { ModuleSegmentDock } from "../../components/dock";
 import { useConnectionStore } from "../../stores/connectionStore";
 import { useServerGroupStore } from "../../stores/serverGroupStore";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
-import { useTopbarTabs } from "../../hooks/useTopbarTabs";
 import { useI18n } from "../../i18n";
 import {
   ServerWorkspace,
@@ -61,12 +61,9 @@ export function ServerPanel() {
   const [tab, setTab] = useServerWorkspaceTabState();
   const topbarTabs = useServerWorkspaceTabs(tab);
 
-  useTopbarTabs(
-    topbarTabs,
-    {
-      onSelect: (id) => setTab(id as ServerWorkspaceTab),
-    },
-    { mode: "segment", enabled: isActiveRoute && !!activeServer },
+  const segmentTabs = useMemo(
+    () => topbarTabs.map(({ id, label }) => ({ id, label })),
+    [topbarTabs],
   );
 
   useEffect(() => {
@@ -113,36 +110,67 @@ export function ServerPanel() {
     [removeConn, t],
   );
 
-  return (
-    <SidebarWorkspace preset="server" sidebar={
-      <ServerSidebar
-        servers={panelServers}
-        groups={groups}
-        activeGroupId={activeGroupId}
-        activeServerId={activeServerId}
-        onGroupChange={setActiveGroupId}
-        onCreateGroup={handleCreateGroup}
-        onSelectServer={handleSelectServer}
-        onCreateServer={handleCreateServer}
-        onEditServer={handleEditServer}
-        onDeleteServer={handleDeleteServer}
-      />
-    }>
-      <div className="server-main">
-        {activeServer ? (
-          <ServerWorkspace server={activeServer} tab={tab} />
-        ) : (
-          <WorkspaceEmptyPage
-            prompt={t("server.empty.description")}
-            actions={
-              <Button variant="primary" size="sm" onClick={handleCreateServer}>
-                {t("server.sidebar.addPanel")}
-              </Button>
-            }
+  const renderPanel = useCallback(
+    (tabId: string) => (
+      <SidebarWorkspace
+        preset="server"
+        sidebar={
+          <ServerSidebar
+            servers={panelServers}
+            groups={groups}
+            activeGroupId={activeGroupId}
+            activeServerId={activeServerId}
+            onGroupChange={setActiveGroupId}
+            onCreateGroup={handleCreateGroup}
+            onSelectServer={handleSelectServer}
+            onCreateServer={handleCreateServer}
+            onEditServer={handleEditServer}
+            onDeleteServer={handleDeleteServer}
           />
-        )}
-      </div>
+        }
+      >
+        <div className="server-main">
+          {activeServer ? (
+            <ServerWorkspace server={activeServer} tab={tabId as ServerWorkspaceTab} />
+          ) : (
+            <WorkspaceEmptyPage
+              prompt={t("server.empty.description")}
+              actions={
+                <Button variant="primary" size="sm" onClick={handleCreateServer}>
+                  {t("server.sidebar.addPanel")}
+                </Button>
+              }
+            />
+          )}
+        </div>
+      </SidebarWorkspace>
+    ),
+    [
+      activeGroupId,
+      activeServer,
+      activeServerId,
+      groups,
+      handleCreateGroup,
+      handleCreateServer,
+      handleDeleteServer,
+      handleEditServer,
+      handleSelectServer,
+      panelServers,
+      setActiveGroupId,
+      t,
+    ],
+  );
 
+  return (
+    <>
+      <ModuleSegmentDock
+        className="server-module-dock"
+        tabs={segmentTabs}
+        activeTabId={tab}
+        onActiveTabChange={(id) => setTab(id as ServerWorkspaceTab)}
+        enabled={isActiveRoute && !!activeServer}
+        renderPanel={renderPanel}
+      />
       <ServerConnectionDialog
         open={showDialog}
         onClose={() => setShowDialog(false)}
@@ -150,6 +178,6 @@ export function ServerPanel() {
         editPanelConnection={editPanelConnection}
         defaultGroup={activeGroupName}
       />
-    </SidebarWorkspace>
+    </>
   );
 }

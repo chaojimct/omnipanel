@@ -3,7 +3,7 @@ import { useLocation } from "react-router-dom";
 import { SidebarWorkspace } from "../../components/ui/SidebarWorkspace";
 import { WorkspaceEmptyPage } from "../../components/ui/WorkspaceEmptyPage";
 import { HostListPanel } from "../../components/workspace/HostListPanel";
-import { useTopbarTabs } from "../../hooks/useTopbarTabs";
+import { ModuleSegmentDock } from "../../components/dock";
 import { usePersistedModuleTab } from "../../hooks/usePersistedModuleTab";
 import { useI18n } from "../../i18n";
 import { HostDetailPanel } from "./ssh/components/HostDetailPanel";
@@ -23,38 +23,39 @@ export function SshPanel() {
   const sshResources = useSshHostResources();
   const ctx = useSshManager();
 
-  const topbarTabs = useMemo(
+  const segmentTabs = useMemo(
     () => [
-      { id: "hosts", label: t("ssh.tabs.hosts"), active: workspaceTab === "hosts" },
-      { id: "tunnels", label: t("ssh.tabs.tunnels"), active: workspaceTab === "tunnels" },
-      { id: "keys", label: t("ssh.tabs.keys"), active: workspaceTab === "keys" },
+      { id: "hosts", label: t("ssh.tabs.hosts") },
+      { id: "tunnels", label: t("ssh.tabs.tunnels") },
+      { id: "keys", label: t("ssh.tabs.keys") },
     ],
-    [workspaceTab, t],
+    [t],
   );
-
-  useTopbarTabs(
-    topbarTabs,
-    {
-      onSelect: (id) => setWorkspaceTab(id as SshWorkspaceTab),
-    },
-    { mode: "segment", enabled: isActiveRoute },
-  );
-
-  if (workspaceTab === "tunnels") {
-    return <TunnelsModuleView sshResources={ctx.sshResources} />;
-  }
-
-  if (workspaceTab === "keys") {
-    return <KeysModuleView />;
-  }
 
   return (
-    <SidebarWorkspace preset="host" sidebar={<HostListPanel resources={sshResources} />}>
-      {ctx.activeResource ? (
-        <HostDetailPanel {...ctx} />
-      ) : (
-        <WorkspaceEmptyPage prompt={t("ssh.empty.selectHost")} />
-      )}
-    </SidebarWorkspace>
+    <ModuleSegmentDock
+      className="ssh-module-dock"
+      tabs={segmentTabs}
+      activeTabId={workspaceTab}
+      onActiveTabChange={(id) => setWorkspaceTab(id as SshWorkspaceTab)}
+      enabled={isActiveRoute}
+      renderPanel={(tabId) => {
+        if (tabId === "tunnels") {
+          return <TunnelsModuleView sshResources={ctx.sshResources} />;
+        }
+        if (tabId === "keys") {
+          return <KeysModuleView />;
+        }
+        return (
+          <SidebarWorkspace preset="host" sidebar={<HostListPanel resources={sshResources} />}>
+            {ctx.activeResource ? (
+              <HostDetailPanel {...ctx} />
+            ) : (
+              <WorkspaceEmptyPage prompt={t("ssh.empty.selectHost")} />
+            )}
+          </SidebarWorkspace>
+        );
+      }}
+    />
   );
 }

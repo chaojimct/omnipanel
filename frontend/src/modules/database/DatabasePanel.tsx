@@ -57,7 +57,7 @@ import {
   type QueryResult,
 } from "./dbWorkspaceState";
 import { DbPanelSurface } from "./DbPanelSurface";
-import { DockableWorkspace } from "../../components/dock";
+import { DockableWorkspace, ModuleSegmentDock } from "../../components/dock";
 import { DbWorkspaceProvider, type DbWorkspaceContextValue } from "../../contexts/DbWorkspaceContext";
 import { useDbDockLayoutStore } from "../../stores/dbDockLayoutStore";
 import {
@@ -71,7 +71,6 @@ import {
 } from "./dbWorkspaceSession";
 import { useWorkspaceBottomDockStore } from "../../stores/workspaceBottomDockStore";
 import { publishDbWorkspaceMirror } from "../../stores/dbWorkspaceMirrorStore";
-import { useTopbarTabs } from "../../hooks/useTopbarTabs";
 import { usePersistedModuleTab } from "../../hooks/usePersistedModuleTab";
 
 const EMPTY_DOCKED_DATABASE_TABS: string[] = [];
@@ -377,20 +376,12 @@ export function DatabasePanel() {
     [groupConnections, activeConnId],
   );
 
-  const topbarTabs = useMemo(
+  const moduleSegmentTabs = useMemo(
     () => [
-      { id: "query", label: t("database.tabs.query"), active: moduleTab === "query" },
-      { id: "transfer", label: t("database.tabs.transfer"), active: moduleTab === "transfer" },
+      { id: "query", label: t("database.tabs.query") },
+      { id: "transfer", label: t("database.tabs.transfer") },
     ],
-    [moduleTab, t],
-  );
-
-  useTopbarTabs(
-    topbarTabs,
-    {
-      onSelect: (id) => setModuleTab(id as DbModuleTab),
-    },
-    { mode: "segment", enabled: isActiveRoute },
+    [t],
   );
 
   const activeGroupName = useMemo(
@@ -1792,7 +1783,15 @@ export function DatabasePanel() {
     [],
   );
 
-  return moduleTab === "transfer" ? (
+  return (
+    <ModuleSegmentDock
+      className="db-module-dock"
+      enabled={isActiveRoute}
+      tabs={moduleSegmentTabs}
+      activeTabId={moduleTab}
+      onActiveTabChange={(id) => setModuleTab(id as DbModuleTab)}
+      renderPanel={(panelId) =>
+        panelId === "transfer" ? (
     <div className="db-module-transfer">
       <DatabaseToolbox
         connections={groupConnections}
@@ -1849,7 +1848,7 @@ export function DatabasePanel() {
           <DockableWorkspace
             className="db-workspace"
             dockScope="database"
-            defaultHeaderPosition="bottom"
+            defaultHeaderPosition="top"
             enableTabGroups={false}
             tabs={dockTabs}
             activeTabId={activeWorkspaceTabId}
@@ -1861,6 +1860,7 @@ export function DatabasePanel() {
             onTabContextMenu={handleDockTabContextMenu}
             canAcceptExternalDrop={canAcceptSchemaTreeDrop}
             onExternalDrop={handleExternalSchemaDrop}
+            windowControl={false}
           />
         )}
         </div>
@@ -1984,5 +1984,8 @@ export function DatabasePanel() {
         );
       })()}
     </DbWorkspaceProvider>
+  )
+      }
+    />
   );
 }

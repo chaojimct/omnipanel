@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { useLocation } from "react-router-dom";
 import { useTaskStore, initTaskProgressListener } from "../../stores/taskStore";
-import { useTopbarTabs } from "../../hooks/useTopbarTabs";
+import { ModuleSegmentDock } from "../../components/dock";
 import { useI18n } from "../../i18n";
 import { Select } from "../../components/ui/Select";
 import type {
@@ -418,31 +418,23 @@ export function TasksPanel() {
     [tasks, selectedTaskId]
   );
 
-  // Tab 配置
-  const topbarTabs = useMemo(
+  const segmentTabs = useMemo(
     () =>
-      TASK_TABS.map((id) => ({
-        id,
-        label: t(`tasks.tabs.${id}`),
-        active: tab === id,
-        badge:
-          id === "active"
-            ? { text: activeTasks.length, tone: "accent" as const }
-            : id === "drafts"
-              ? { text: draftTasks.length, tone: "warn" as const }
-              : undefined,
-      })),
-    [tab, t, activeTasks.length, draftTasks.length]
+      TASK_TABS.map((id) => {
+        const base = t(`tasks.tabs.${id}`);
+        if (id === "active" && activeTasks.length > 0) {
+          return { id, label: `${base} (${activeTasks.length})` };
+        }
+        if (id === "drafts" && draftTasks.length > 0) {
+          return { id, label: `${base} (${draftTasks.length})` };
+        }
+        return { id, label: base };
+      }),
+    [t, activeTasks.length, draftTasks.length],
   );
 
   const location = useLocation();
   const isActiveRoute = location.pathname === "/tasks";
-
-  useTopbarTabs(
-    topbarTabs,
-    { onSelect: (id) => setTab(id as TaskTab) },
-    { mode: "segment", enabled: isActiveRoute }
-  );
 
   // 事件处理
   const handleCreate = useCallback(
@@ -478,6 +470,14 @@ export function TasksPanel() {
   );
 
   return (
+    <>
+    <ModuleSegmentDock
+      className="tasks-module-dock"
+      tabs={segmentTabs}
+      activeTabId={tab}
+      onActiveTabChange={(id) => setTab(id as TaskTab)}
+      enabled={isActiveRoute}
+      renderPanel={(tabId) => (
     <div className="tasks-content" style={{ display: "flex", height: "100%", gap: 0 }}>
       {/* 左侧：任务列表 */}
       <div style={{ flex: 1, overflow: "auto", minWidth: 0 }}>
@@ -497,7 +497,7 @@ export function TasksPanel() {
         )}
 
         {/* Active Tab */}
-        {tab === "active" && (
+        {tabId === "active" && (
           <div className="task-panel active">
             {activeTasks.length === 0 ? (
               <div className="empty-state compact">{t("tasks.active.empty")}</div>
@@ -544,7 +544,7 @@ export function TasksPanel() {
         )}
 
         {/* Drafts Tab */}
-        {tab === "drafts" && (
+        {tabId === "drafts" && (
           <div className="task-panel active">
             <div style={{ marginBottom: "var(--sp-4)" }}>
               <h2 style={{ fontSize: 16, fontWeight: 700, marginBottom: 4 }}>
@@ -640,7 +640,7 @@ export function TasksPanel() {
         )}
 
         {/* History Tab */}
-        {tab === "history" && (
+        {tabId === "history" && (
           <div className="task-panel active">
             <div className="table-wrap">
               <table>
@@ -721,5 +721,8 @@ export function TasksPanel() {
         <NewTaskForm onClose={() => setShowCreateForm(false)} onCreated={handleCreate} />
       )}
     </div>
+      )}
+    />
+    </>
   );
 }
