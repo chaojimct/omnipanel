@@ -41,6 +41,8 @@ export interface ModuleSegmentDockProps {
   ) => void;
   emptyContent?: ReactNode;
   dockScope?: string;
+  /** Tab 栏前缀区域（tabs 左侧，如首页工作区切换） */
+  preActions?: ReactNode;
 }
 
 const EMPTY_LAYOUT = null;
@@ -64,6 +66,7 @@ export function ModuleSegmentDock({
   onTabContextMenu,
   emptyContent,
   dockScope,
+  preActions,
 }: ModuleSegmentDockProps) {
   const layoutRef = useRef(EMPTY_LAYOUT);
   const noopClose = useCallback(() => {}, []);
@@ -108,6 +111,7 @@ export function ModuleSegmentDock({
       addTabConfig={addTabConfig}
       onTabContextMenu={onTabContextMenu}
       emptyContent={emptyContent}
+      preActions={preActions}
     />
   );
 }

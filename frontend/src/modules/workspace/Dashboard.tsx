@@ -1,20 +1,16 @@
-import { useState, useRef, useEffect, useCallback, type KeyboardEvent } from "react";
-import { useWorkspaceStore, type WorkspaceInfo } from "../../stores/workspaceStore";
-import { useBottomPanelStore } from "../../stores/bottomPanelStore";
+import { useState, useRef, useEffect, useCallback, useMemo, type KeyboardEvent } from "react";
+import { useLocation } from "react-router-dom";
+import { ModuleSegmentDock } from "../../components/dock";
+import { WorkspaceSwitcher } from "../../components/shell/WorkspaceSwitcher";
 import { AppLogo } from "../../components/ui/AppLogo";
 import { useI18n } from "../../i18n";
+import { usePersistedModuleTab } from "../../hooks/usePersistedModuleTab";
 
-function currentEnvOfWorkspace(_ws: WorkspaceInfo) {
-  return "dev";
-}
+type DashboardTab = "home";
+const DASHBOARD_TABS: DashboardTab[] = ["home"];
 
-export function Dashboard() {
+function DashboardHomeView() {
   const { t } = useI18n();
-  const workspaces = useWorkspaceStore((s) => s.workspaces);
-  const activeWorkspaceId = useWorkspaceStore((s) => s.workspace.id);
-  const switchWorkspace = useWorkspaceStore((s) => s.switchWorkspace);
-  const requestExpand = useBottomPanelStore((s) => s.requestExpand);
-
   const [draft, setDraft] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -36,11 +32,6 @@ export function Dashboard() {
       e.preventDefault();
       handleSend();
     }
-  };
-
-  const openWorkspace = (ws: WorkspaceInfo) => {
-    switchWorkspace(ws.id);
-    requestExpand();
   };
 
   return (
@@ -76,25 +67,40 @@ export function Dashboard() {
             </svg>
           </button>
         </div>
-
-        <div className="dashboard-workspace-list">
-          {workspaces.map((ws) => {
-            const active = ws.id === activeWorkspaceId;
-            return (
-              <button
-                key={ws.id}
-                type="button"
-                className={"workspace-pill" + (active ? " is-active" : "")}
-                onClick={() => openWorkspace(ws)}
-              >
-                <span className="workspace-pill-dot" />
-                <span className="workspace-pill-name">{ws.name}</span>
-                <span className="workspace-pill-env">{currentEnvOfWorkspace(ws)}</span>
-              </button>
-            );
-          })}
-        </div>
       </div>
     </div>
+  );
+}
+
+export function Dashboard() {
+  const { t } = useI18n();
+  const location = useLocation();
+  const isActiveRoute = location.pathname === "/";
+  const [tab, setTab] = usePersistedModuleTab("dashboard", "home", DASHBOARD_TABS);
+
+  const segmentTabs = useMemo(
+    () => [{ id: "home", label: t("dashboard.tabs.home") }],
+    [t],
+  );
+
+  const renderPanel = useCallback((tabId: string) => {
+    if (tabId === "home") {
+      return <DashboardHomeView />;
+    }
+    return null;
+  }, []);
+
+  const preActions = useMemo(() => <WorkspaceSwitcher placement="below" />, []);
+
+  return (
+    <ModuleSegmentDock
+      className="dashboard-module-dock"
+      tabs={segmentTabs}
+      activeTabId={tab}
+      onActiveTabChange={(id) => setTab(id as DashboardTab)}
+      enabled={isActiveRoute}
+      renderPanel={renderPanel}
+      preActions={preActions}
+    />
   );
 }

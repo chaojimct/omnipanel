@@ -101,6 +101,8 @@ export interface DockableWorkspaceProps {
   tabStyle?: "default" | "topbar";
   /** 右侧「+」新建 tab / 菜单（与顶栏 TopbarTabs 行为一致） */
   addTabConfig?: DockAddTabConfig;
+  /** Tab 栏前缀区域（dockview dv-pre-actions-container / prefixHeaderActions） */
+  preActions?: ReactNode;
   /** 布局变化时在 tab 栏右侧嵌入窗口拖拽区与控制按钮 */
   windowControl?: boolean;
   /**
@@ -158,6 +160,7 @@ export function DockableWorkspace({
   enableTabGroups = true,
   tabStyle = "default",
   addTabConfig,
+  preActions,
   windowControl = false,
   windowChromeVariant = "default",
 }: DockableWorkspaceProps) {
@@ -272,6 +275,8 @@ export function DockableWorkspace({
   tabStyleRef.current = tabStyle;
   const addTabConfigRef = useRef(addTabConfig);
   addTabConfigRef.current = addTabConfig;
+  const preActionsRef = useRef(preActions);
+  preActionsRef.current = preActions;
 
   const syncTabGroups = useCallback((api: DockviewApi, manageLock = true) => {
     if (manageLock) isSyncingRef.current = true;
@@ -385,7 +390,16 @@ export function DockableWorkspace({
     [windowChromeHosts],
   );
 
-  // dockview DOM 顺序：tabs → leftActions → void → rightActions
+  // dockview DOM 顺序：prefixActions → tabs → leftActions → void → rightActions
+  const prefixHeaderActions = useCallback(
+    (_props: IDockviewHeaderActionsProps) => {
+      const node = preActionsRef.current;
+      if (!node) return null;
+      return <div className="dock-prefix-actions">{node}</div>;
+    },
+    [],
+  );
+
   // 「+」放在 leftActions，紧贴在 tabs 后面
   const leftHeaderActions = useCallback(
     (props: IDockviewHeaderActionsProps) => {
@@ -896,6 +910,7 @@ export function DockableWorkspace({
           leftHeaderActionsComponent={
             createPanelRequest || addTabConfig?.show ? leftHeaderActions : undefined
           }
+          prefixHeaderActionsComponent={preActions ? prefixHeaderActions : undefined}
           rightHeaderActionsComponent={
             windowControl ? rightHeaderActions : undefined
           }

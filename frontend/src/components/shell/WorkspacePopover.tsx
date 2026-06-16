@@ -14,6 +14,8 @@ import { useI18n } from "../../i18n";
 interface WorkspacePopoverProps {
   anchorRef: RefObject<HTMLElement | null>;
   onClose: () => void;
+  /** above：锚点上方（状态栏）；below：锚点下方（模块 Tab 栏） */
+  placement?: "above" | "below";
 }
 
 function isPopoverNode(target: EventTarget | null): boolean {
@@ -22,7 +24,11 @@ function isPopoverNode(target: EventTarget | null): boolean {
   );
 }
 
-export function WorkspacePopover({ anchorRef, onClose }: WorkspacePopoverProps) {
+export function WorkspacePopover({
+  anchorRef,
+  onClose,
+  placement = "above",
+}: WorkspacePopoverProps) {
   const { t } = useI18n();
   const workspaces = useWorkspaceStore((state) => state.workspaces);
   const currentId = useWorkspaceStore((state) => state.workspace.id);
@@ -35,7 +41,11 @@ export function WorkspacePopover({ anchorRef, onClose }: WorkspacePopoverProps) 
   const requestExpand = useBottomPanelStore((state) => state.requestExpand);
 
   const panelRef = useRef<HTMLDivElement>(null);
-  const [coords, setCoords] = useState<{ left: number; bottom: number } | null>(null);
+  const [coords, setCoords] = useState<{
+    left: number;
+    top?: number;
+    bottom?: number;
+  } | null>(null);
   const [ready, setReady] = useState(false);
   const [creating, setCreating] = useState(false);
   const [draftName, setDraftName] = useState("");
@@ -58,10 +68,13 @@ export function WorkspacePopover({ anchorRef, onClose }: WorkspacePopoverProps) 
     const margin = 8;
     const desiredLeft = anchorRect.right - width;
     const left = Math.max(margin, Math.min(desiredLeft, window.innerWidth - width - margin));
-    const bottom = window.innerHeight - anchorRect.top + gap;
-    setCoords({ left, bottom });
+    if (placement === "below") {
+      setCoords({ left, top: anchorRect.bottom + gap });
+    } else {
+      setCoords({ left, bottom: window.innerHeight - anchorRect.top + gap });
+    }
     setReady(true);
-  }, [anchorRef, workspaces.length, currentId, creating]);
+  }, [anchorRef, workspaces.length, currentId, creating, placement]);
 
   useEffect(() => {
     if (creating) {
@@ -147,7 +160,8 @@ export function WorkspacePopover({ anchorRef, onClose }: WorkspacePopoverProps) 
         className="workspace-popover"
         style={{
           left: coords?.left ?? 0,
-          bottom: coords?.bottom ?? 0,
+          ...(coords?.top != null ? { top: coords.top } : {}),
+          ...(coords?.bottom != null ? { bottom: coords.bottom } : {}),
           visibility: ready ? "visible" : "hidden",
         }}
         role="dialog"

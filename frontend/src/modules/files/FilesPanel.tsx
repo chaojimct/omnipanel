@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { open as openFileDialog, save as saveFileDialog } from "@tauri-apps/plugin-dialog";
 import { ContextMenu, type ContextMenuItem } from "../../components/ui/ContextMenu";
 import { FileEntryIcon } from "../../components/ui/FileEntryIcon";
 import { ModuleEmptyState } from "../../components/ui/ModuleEmptyState";
 import { SidebarWorkspace } from "../../components/ui/SidebarWorkspace";
+import { ModuleSegmentDock } from "../../components/dock";
+import { usePersistedModuleTab } from "../../hooks/usePersistedModuleTab";
 import { useI18n } from "../../i18n";
 import type { Connection, FileEntry, FileManagerConnectionInfo } from "../../ipc/bindings";
 import { useConnectionStore } from "../../stores/connectionStore";
@@ -104,7 +107,10 @@ function decodePreview(bytes: number[]): string {
   }
 }
 
-export function FilesPanel() {
+type FilesModuleTab = "browser";
+const FILES_TABS: FilesModuleTab[] = ["browser"];
+
+function FilesBrowserView() {
   const { t } = useI18n();
   const refreshConnections = useConnectionStore((s) => s.refresh);
   const removeConnection = useConnectionStore((s) => s.remove);
@@ -713,5 +719,35 @@ export function FilesPanel() {
         />
       )}
     </>
+  );
+}
+
+export function FilesPanel() {
+  const { t } = useI18n();
+  const location = useLocation();
+  const isActiveRoute = location.pathname === "/files";
+  const [tab, setTab] = usePersistedModuleTab("files", "browser", FILES_TABS);
+
+  const segmentTabs = useMemo(
+    () => [{ id: "browser", label: t("files.tabs.browser") }],
+    [t],
+  );
+
+  const renderPanel = useCallback((tabId: string) => {
+    if (tabId === "browser") {
+      return <FilesBrowserView />;
+    }
+    return null;
+  }, []);
+
+  return (
+    <ModuleSegmentDock
+      className="files-module-dock"
+      tabs={segmentTabs}
+      activeTabId={tab}
+      onActiveTabChange={(id) => setTab(id as FilesModuleTab)}
+      enabled={isActiveRoute}
+      renderPanel={renderPanel}
+    />
   );
 }

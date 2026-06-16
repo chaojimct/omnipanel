@@ -1,15 +1,21 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { useKnowledgeStore, type KnowledgeTab } from "../../stores/knowledgeStore";
 import { useI18n } from "../../i18n";
 import { Button } from "../../components/ui/Button";
 import { SidebarWorkspace } from "../../components/ui/SidebarWorkspace";
 import { ModuleEmptyState } from "../../components/ui/ModuleEmptyState";
 import { KnowledgeKindIcon } from "../../components/ui/KnowledgeKindIcon";
+import { ModuleSegmentDock } from "../../components/dock";
+import { usePersistedModuleTab } from "../../hooks/usePersistedModuleTab";
 import { KnowledgeCard } from "./KnowledgeCard";
 import { KnowledgeDetail } from "./KnowledgeDetail";
 import { CreateEntryDialog } from "./CreateEntryDialog";
 
-export function KnowledgePanel() {
+type KnowledgeModuleTab = "library";
+const KNOWLEDGE_TABS: KnowledgeModuleTab[] = ["library"];
+
+function KnowledgeLibraryView() {
   const { t } = useI18n();
   const {
     entries, searchResults, allTags,
@@ -189,5 +195,35 @@ export function KnowledgePanel() {
 
       <CreateEntryDialog open={showCreate} onClose={() => setShowCreate(false)} />
     </div>
+  );
+}
+
+export function KnowledgePanel() {
+  const { t } = useI18n();
+  const location = useLocation();
+  const isActiveRoute = location.pathname === "/knowledge";
+  const [tab, setTab] = usePersistedModuleTab("knowledge", "library", KNOWLEDGE_TABS);
+
+  const segmentTabs = useMemo(
+    () => [{ id: "library", label: t("knowledge.tabs.library") }],
+    [t],
+  );
+
+  const renderPanel = useCallback((tabId: string) => {
+    if (tabId === "library") {
+      return <KnowledgeLibraryView />;
+    }
+    return null;
+  }, []);
+
+  return (
+    <ModuleSegmentDock
+      className="knowledge-module-dock"
+      tabs={segmentTabs}
+      activeTabId={tab}
+      onActiveTabChange={(id) => setTab(id as KnowledgeModuleTab)}
+      enabled={isActiveRoute}
+      renderPanel={renderPanel}
+    />
   );
 }

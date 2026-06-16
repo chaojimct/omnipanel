@@ -22,7 +22,7 @@ export interface WorkspaceContextSnapshot {
   updatedAt: number;
 }
 
-const DEFAULT_WORKSPACE: WorkspaceInfo = {
+export const DEFAULT_WORKSPACE: WorkspaceInfo = {
   id: "default",
   name: "默认工程工作区",
   description: "本地终端、远程主机、数据库、容器与协议调试的统一上下文",

@@ -1,8 +1,10 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { useWorkflowStore } from "../../stores/workflowStore";
 import { useActionStore } from "../../stores/actionStore";
 import { useI18n } from "../../i18n";
-import { SidebarWorkspace } from "../../components/ui/SidebarWorkspace";
+import { ModuleSegmentDock } from "../../components/dock";
+import { usePersistedModuleTab } from "../../hooks/usePersistedModuleTab";
 import { Select } from "../../components/ui/Select";
 import type {
   Workflow,
@@ -13,24 +15,10 @@ import type {
   SaveStepRequest,
 } from "../../ipc/bindings";
 
-// ─── Sidebar section types ───────────────────────────────
-type WfSection = "workflows" | "history";
+// ─── Top-level segment tabs ───────────────────────────────
+type WfTab = "workflows" | "history";
 
-const SECTION_IDS: WfSection[] = ["workflows", "history"];
-
-const SECTION_ICONS: Record<WfSection, ReactNode> = {
-  workflows: (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
-    </svg>
-  ),
-  history: (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="M3 3v18h18" />
-      <path d="m19 9-5 5-4-4-3 3" />
-    </svg>
-  ),
-};
+const WF_TABS: WfTab[] = ["workflows", "history"];
 
 // ─── Type filter tabs ────────────────────────────────────
 type TypeFilter = "all" | WorkflowType;
@@ -110,6 +98,9 @@ function emptyStep(order: number): SaveStepRequest {
 // ═══════════════════════════════════════════════════════════
 export function WorkflowPanel() {
   const { t } = useI18n();
+  const location = useLocation();
+  const isActiveRoute = location.pathname === "/workflow";
+  const [tab, setTab] = usePersistedModuleTab("workflow", "workflows", WF_TABS);
   const enqueueAction = useActionStore((s) => s.enqueueAction);
 
   const {
@@ -126,7 +117,6 @@ export function WorkflowPanel() {
     clearError,
   } = useWorkflowStore();
 
-  const [activeSection, setActiveSection] = useState<WfSection>("workflows");
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
   const [query, setQuery] = useState("");
   const [showCreateDialog, setShowCreateDialog] = useState(false);
@@ -197,26 +187,18 @@ export function WorkflowPanel() {
     return map[rl] ?? rl;
   };
 
-  const sidebar = (
-    <div>
-      <div className="wf-section-title">{t("workflow.ui.operations")}</div>
-      {SECTION_IDS.map((sid) => (
-        <button
-          key={sid}
-          type="button"
-          className={`wf-nav-item${activeSection === sid ? " active" : ""}`}
-          onClick={() => setActiveSection(sid)}
-        >
-          {SECTION_ICONS[sid]}
-          {t(`workflow.ui.sections.${sid}`)}
-        </button>
-      ))}
-    </div>
+  const segmentTabs = useMemo(
+    () =>
+      WF_TABS.map((id) => ({
+        id,
+        label: t(`workflow.tabs.${id}`),
+      })),
+    [t],
   );
 
-  return (
-    <>
-      <SidebarWorkspace sidebar={sidebar}>
+  const renderPanel = useCallback(
+    (tabId: string) => (
+      <div className="wf-module-body">
         <div className="wf-content">
           {/* ── Error bar ──────────────────────────── */}
           {error && (
@@ -244,10 +226,7 @@ export function WorkflowPanel() {
             </div>
           )}
 
-          {/* ═══════════════════════════════════════════ */}
-          {/*  WORKFLOWS LIST                            */}
-          {/* ═══════════════════════════════════════════ */}
-          {activeSection === "workflows" && (
+          {tabId === "workflows" && (
             <div className="wf-panel active">
               {/* Header with search + create button */}
               <div
@@ -439,10 +418,7 @@ export function WorkflowPanel() {
             </div>
           )}
 
-          {/* ═══════════════════════════════════════════ */}
-          {/*  EXECUTION HISTORY                         */}
-          {/* ═══════════════════════════════════════════ */}
-          {activeSection === "history" && (
+          {tabId === "history" && (
             <ExecutionHistoryView
               workflows={workflows}
               executions={executions}
@@ -452,7 +428,38 @@ export function WorkflowPanel() {
             />
           )}
         </div>
-      </SidebarWorkspace>
+      </div>
+    ),
+    [
+      clearError,
+      error,
+      executions,
+      filteredWorkflows,
+      isLoading,
+      query,
+      riskLabel,
+      runWorkflow,
+      selectWorkflow,
+      selectedDetail,
+      selectedWorkflowId,
+      showCreateDialog,
+      t,
+      typeFilter,
+      typeLabel,
+      workflows,
+    ],
+  );
+
+  return (
+    <>
+      <ModuleSegmentDock
+        className="workflow-module-dock"
+        tabs={segmentTabs}
+        activeTabId={tab}
+        onActiveTabChange={(id) => setTab(id as WfTab)}
+        enabled={isActiveRoute}
+        renderPanel={renderPanel}
+      />
 
       {/* ═══════════════════════════════════════════════ */}
       {/*  CREATE / EDIT DIALOG                         */}
