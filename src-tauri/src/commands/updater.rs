@@ -31,12 +31,7 @@ pub async fn check_update(app: AppHandle) -> Result<UpdateInfo, String> {
         }),
         Err(e) => {
             tracing::warn!("Update check failed: {e}");
-            Ok(UpdateInfo {
-                available: false,
-                version: current_version.clone(),
-                body: String::new(),
-                current_version,
-            })
+            Err(e.to_string())
         }
     }
 }

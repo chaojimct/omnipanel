@@ -3,15 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "description": "AI-native cross-platform engineering workstation",
-  "workspaces": [
-    "frontend"
-  ],
   "scripts": {
     "dev:frontend": "cd frontend && npm run dev",
     "build:frontend": "cd frontend && npm run build"
-  },
-  "dependencies": {
-    "@xterm/xterm": "^5.5.0",
-    "react-xtermjs": "^1.0.12"
   }
 }

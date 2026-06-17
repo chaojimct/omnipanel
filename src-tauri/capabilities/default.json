@@ -21,6 +21,7 @@
     "shell:default",
     "dialog:default",
     "dialog:allow-confirm",
-    "fs:default"
+    "fs:default",
+    "updater:default"
   ]
 }
