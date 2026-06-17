@@ -7,6 +7,7 @@ import {
 } from "../../lib/readLatestClipboard";
 import { Button } from "./Button";
 import { ZoomableImage } from "./ZoomableImage";
+import aigenIcon from "../../assets/aigen.svg";
 
 export type FormDialogClipboardBarProps = {
   open: boolean;
@@ -130,13 +131,21 @@ export function FormDialogClipboardBar({ open, onRecognize }: FormDialogClipboar
       </div>
       <Button
         type="button"
-        variant="secondary"
-        size="sm"
+        variant="icon"
         className="form-dialog-clipboard-bar__action"
         disabled={loading}
         onClick={handleRecognize}
+        title={t("formDialog.clipboard.aiRecognize")}
+        aria-label={loading ? t("common.loading") : t("formDialog.clipboard.aiRecognize")}
       >
-        {loading ? t("common.loading") : t("formDialog.clipboard.aiRecognize")}
+        <img
+          src={aigenIcon}
+          alt=""
+          className="form-dialog-clipboard-bar__action-icon"
+          width={18}
+          height={18}
+          aria-hidden
+        />
       </Button>
     </div>
   );

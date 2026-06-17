@@ -17,6 +17,7 @@ import { useActionStore } from "../../stores/actionStore";
 import { useDbGroupStore } from "../../stores/dbGroupStore";
 import { useDbSchemaFilterStore } from "../../stores/dbSchemaFilterStore";
 import { useDbSchemaTreeExpandedStore } from "../../stores/dbSchemaTreeExpandedStore";
+import { useDbSchemaCacheStore } from "../../stores/dbSchemaCacheStore";
 import { getVisibleNames, mergeFilter } from "./DatabaseFilterDialog";
 import { useI18n } from "../../i18n";
 import { quickInput } from "../../lib/quickInput";
@@ -27,10 +28,8 @@ import {
   countTable,
   createDatabase,
   fetchTableDdl,
-  introspectSchema,
   introspectTable,
   listConnections,
-  listDatabases,
   MYSQL_CHARSET_PRESETS,
   previewTable,
   saveConnection,
@@ -41,6 +40,8 @@ import {
 import { buildDatabaseSchema, introspectToTableSchemas } from "./lsp/sqlCompletion";
 import { toCsv } from "./csvExport";
 import { buildRedisColumnMeta, buildRedisUpdateCommands } from "./redisTableMeta";
+import { getCachedDatabaseNames } from "./schemaCacheMerge";
+import { refreshConnectionSchemaCache } from "./schemaCacheRefresh";
 import type { DatabaseSchema } from "./types";
 import {
   makeSqlTabId,
@@ -324,7 +325,7 @@ export function DatabasePanel() {
   const [tabModes, setTabModes] = useState<Record<string, "data" | "sql">>({});
   const [databasesByConnId, setDatabasesByConnId] = useState<Record<string, string[]>>({});
   const [schemaByKey, setSchemaByKey] = useState<Record<string, DatabaseSchema>>({});
-  const [schemaLoadingKey, setSchemaLoadingKey] = useState<string | null>(null);
+  const [schemaLoadingKey] = useState<string | null>(null);
   const [cellEdit, setCellEdit] = useState<{
     tabId: string;
     column: string;
@@ -649,6 +650,9 @@ export function DatabasePanel() {
   const hydrateSchemaFilters = useDbSchemaFilterStore((s) => s.hydrate);
   const setDatabaseFilters = useDbSchemaFilterStore((s) => s.setDatabaseFilters);
   const filtersHydrated = useDbSchemaFilterStore((s) => s.hydrated);
+  const hydrateSchemaCache = useDbSchemaCacheStore((s) => s.hydrate);
+  const cacheHydrated = useDbSchemaCacheStore((s) => s.hydrated);
+  const schemaSnapshot = useDbSchemaCacheStore((s) => s.snapshot);
 
   const allDatabasesForActiveConn = activeConn
     ? (databasesByConnId[activeConn.id] ?? [])
@@ -667,6 +671,33 @@ export function DatabasePanel() {
     }
   }, [filtersHydrated, hydrateSchemaFilters, schemaRefreshToken]);
 
+  useEffect(() => {
+    if (!cacheHydrated) {
+      void hydrateSchemaCache();
+    }
+  }, [cacheHydrated, hydrateSchemaCache]);
+
+  useEffect(() => {
+    if (!cacheHydrated || !activeConn) {
+      return;
+    }
+    const names = getCachedDatabaseNames(schemaSnapshot, activeConn.id);
+    if (names.length === 0) {
+      return;
+    }
+    setDatabasesByConnId((prev) => {
+      const current = prev[activeConn.id];
+      if (current && current.length === names.length && current.every((name, index) => name === names[index])) {
+        return prev;
+      }
+      return { ...prev, [activeConn.id]: names };
+    });
+    setDatabaseFilters((prev) => ({
+      ...prev,
+      [activeConn.id]: mergeFilter(prev[activeConn.id], names),
+    }));
+  }, [activeConn, cacheHydrated, schemaSnapshot, setDatabaseFilters]);
+
   const sqlCompletionSchemas = useMemo((): DatabaseSchema[] => {
     if (!activeConn || !activeSqlDatabase.trim()) {
       return [];
@@ -678,35 +709,6 @@ export function DatabasePanel() {
     }
     return [buildDatabaseSchema(activeSqlDatabase, [])];
   }, [activeConn, activeSqlDatabase, schemaByKey]);
-
-  useEffect(() => {
-    if (!activeConn) {
-      return;
-    }
-    if (databasesByConnId[activeConn.id]) {
-      return;
-    }
-    let cancelled = false;
-    void listDatabases(activeConn)
-      .then((names) => {
-        if (!cancelled) {
-          setDatabasesByConnId((prev) => ({ ...prev, [activeConn.id]: names }));
-          setDatabaseFilters((prev) => ({
-            ...prev,
-            [activeConn.id]: mergeFilter(prev[activeConn.id], names),
-          }));
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          const fallback = activeConn.database.trim() ? [activeConn.database] : [];
-          setDatabasesByConnId((prev) => ({ ...prev, [activeConn.id]: fallback }));
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [activeConn, databasesByConnId]);
 
   useEffect(() => {
     if (!activeSqlTabId || !activeConn || databasesForActiveConn.length === 0) {
@@ -733,36 +735,25 @@ export function DatabasePanel() {
   ]);
 
   useEffect(() => {
-    if (!activeConn || !activeSqlDatabase.trim()) {
+    if (!activeConn || !activeSqlDatabase.trim() || !cacheHydrated) {
       return;
     }
     const key = `${activeConn.id}:${activeSqlDatabase}`;
     if (schemaByKey[key]) {
       return;
     }
-    let cancelled = false;
-    setSchemaLoadingKey(key);
-    void introspectSchema(activeConn, activeSqlDatabase)
-      .then((result) => {
-        if (cancelled) {
-          return;
-        }
-        const tables = introspectToTableSchemas(result.tables);
-        setSchemaByKey((prev) => ({
-          ...prev,
-          [key]: buildDatabaseSchema(result.database, tables),
-        }));
-      })
-      .catch(() => {})
-      .finally(() => {
-        if (!cancelled) {
-          setSchemaLoadingKey((current) => (current === key ? null : current));
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [activeConn, activeSqlDatabase, schemaByKey]);
+    const dbEntry = schemaSnapshot.connections[activeConn.id]?.databases.find(
+      (entry) => entry.name === activeSqlDatabase,
+    );
+    if (!dbEntry) {
+      return;
+    }
+    const tables = introspectToTableSchemas(dbEntry.tables);
+    setSchemaByKey((prev) => ({
+      ...prev,
+      [key]: buildDatabaseSchema(activeSqlDatabase, tables),
+    }));
+  }, [activeConn, activeSqlDatabase, schemaByKey, cacheHydrated, schemaSnapshot]);
 
   const loadTablePreview = useCallback(
     async (tabId: string, connection: DbConnectionConfig, dbName: string, tableName: string) => {
@@ -1371,28 +1362,20 @@ export function DatabasePanel() {
   const refreshConnDatabases = useCallback(
     (connId: string) => {
       const conn = connections.find((c) => c.id === connId);
-      if (!conn) return;
-      let cancelled = false;
-      void listDatabases(conn)
-        .then((names) => {
-          if (cancelled) return;
-          setDatabasesByConnId((prev) => ({ ...prev, [connId]: names }));
-          setDatabaseFilters((prev) => ({
-            ...prev,
-            [connId]: mergeFilter(prev[connId], names),
-          }));
-        })
-        .catch((err) => {
-          if (cancelled) return;
-          console.error("[DatabasePanel] listDatabases failed", err);
-          const fallback = conn.database.trim() ? [conn.database] : [];
-          setDatabasesByConnId((prev) => ({ ...prev, [connId]: fallback }));
-        });
-      return () => {
-        cancelled = true;
-      };
+      if (!conn || !isConnectionEnabled(conn)) {
+        return;
+      }
+      void refreshConnectionSchemaCache(conn).then(async (entry) => {
+        await useDbSchemaCacheStore.getState().patchConnection(connId, entry);
+        const names = entry.databases.map((db) => db.name);
+        setDatabasesByConnId((prev) => ({ ...prev, [connId]: names }));
+        setDatabaseFilters((prev) => ({
+          ...prev,
+          [connId]: mergeFilter(prev[connId], names),
+        }));
+      });
     },
-    [connections],
+    [connections, setDatabaseFilters],
   );
 
   const buildConnContextMenuItems = useCallback(() => {

@@ -5,7 +5,7 @@
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    background: var(--crepe-color-background, var(--bg));
+    background: var(--bg);
 }
 
 .knowledge-crepe-shell [data-milkdown-root] {
@@ -15,34 +15,127 @@
     flex-direction: column;
 }
 
+/* Crepe 主题变量 → OmniPanel tokens */
 .knowledge-crepe-shell .milkdown {
     flex: 1;
     min-height: 0;
     overflow: auto;
+    --crepe-color-background: var(--bg);
+    --crepe-color-on-background: var(--fg);
+    --crepe-color-surface: var(--surface);
+    --crepe-color-surface-low: var(--bg-deeper);
+    --crepe-color-on-surface: var(--fg);
+    --crepe-color-on-surface-variant: var(--muted);
+    --crepe-color-outline: var(--border);
+    --crepe-color-primary: var(--accent);
+    --crepe-color-secondary: var(--accent-soft);
+    --crepe-color-on-secondary: var(--accent);
+    --crepe-color-inverse: var(--fg);
+    --crepe-color-on-inverse: var(--bg);
+    --crepe-color-inline-code: var(--danger);
+    --crepe-color-error: var(--danger);
+    --crepe-color-hover: var(--surface-hover);
+    --crepe-color-selected: color-mix(in srgb, var(--accent) 14%, var(--surface));
+    --crepe-color-inline-area: var(--bg-deeper);
+    --crepe-font-default: var(--font-ui);
+    --crepe-font-code: var(--font-mono);
+    --crepe-shadow-1: 0 6px 24px color-mix(in srgb, var(--fg) 8%, transparent);
+    --crepe-shadow-2: 0 10px 32px color-mix(in srgb, var(--fg) 12%, transparent);
 }
 
-html[data-theme="dark"] .knowledge-crepe-shell .milkdown {
-    --crepe-color-background: #1f1b16;
-    --crepe-color-on-background: #eae1d9;
-    --crepe-color-surface: #18120b;
-    --crepe-color-surface-low: #201b13;
-    --crepe-color-on-surface: #ede0d4;
-    --crepe-color-on-surface-variant: #d3c4b4;
-    --crepe-color-outline: #9c8f80;
-    --crepe-color-primary: #f4bd6f;
-    --crepe-color-secondary: #56442a;
-    --crepe-color-on-secondary: #fbdebc;
-    --crepe-color-inverse: #ede0d4;
-    --crepe-color-on-inverse: #362f27;
-    --crepe-color-inline-code: #ffb4ab;
-    --crepe-color-error: #ffb4ab;
-    --crepe-color-hover: #251f17;
-    --crepe-color-selected: #3b342b;
-    --crepe-color-inline-area: #3f3830;
-    --crepe-shadow-1:
-        0px 1px 2px 0px rgba(255, 255, 255, 0.3),
-        0px 1px 3px 1px rgba(255, 255, 255, 0.15);
-    --crepe-shadow-2:
-        0px 1px 2px 0px rgba(255, 255, 255, 0.3),
-        0px 2px 6px 2px rgba(255, 255, 255, 0.15);
+/* 斜杠命令菜单（div.milkdown-slash-menu） */
+.knowledge-crepe-shell .milkdown .milkdown-slash-menu {
+    border: 1px solid var(--border);
+    border-radius: var(--r-lg);
+    box-shadow: var(--crepe-shadow-1);
+    overflow: hidden;
+    backdrop-filter: blur(12px);
+}
+
+.knowledge-crepe-shell .milkdown .milkdown-slash-menu .tab-group {
+    border-bottom: 1px solid var(--border-soft);
+    padding: var(--sp-2) var(--sp-3) 0;
+    background: color-mix(in srgb, var(--bg-deeper) 72%, transparent);
+}
+
+.knowledge-crepe-shell .milkdown .milkdown-slash-menu .tab-group ul {
+    padding: var(--sp-1) var(--sp-1);
+    gap: var(--sp-1);
+}
+
+.knowledge-crepe-shell .milkdown .milkdown-slash-menu .tab-group ul li {
+    padding: 5px 10px;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.3;
+    color: var(--muted);
+    border-radius: var(--r-sm);
+}
+
+.knowledge-crepe-shell .milkdown .milkdown-slash-menu .tab-group ul li:hover {
+    color: var(--fg);
+    background: var(--surface-hover);
+}
+
+.knowledge-crepe-shell .milkdown .milkdown-slash-menu .tab-group ul li.selected {
+    color: var(--accent);
+    background: var(--accent-soft);
+}
+
+.knowledge-crepe-shell .milkdown .milkdown-slash-menu .menu-groups {
+    padding: var(--sp-2);
+    max-height: min(420px, 50vh);
+    background: var(--surface);
+}
+
+.knowledge-crepe-shell .milkdown .milkdown-slash-menu .menu-groups .menu-group h6 {
+    margin: 0;
+    padding: var(--sp-2) var(--sp-2) var(--sp-1);
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.3;
+    letter-spacing: 0.02em;
+    text-transform: none;
+    color: var(--meta);
+}
+
+.knowledge-crepe-shell .milkdown .milkdown-slash-menu .menu-groups .menu-group li {
+    min-width: 220px;
+    gap: var(--sp-3);
+    padding: 8px var(--sp-2);
+    border-radius: var(--r-md);
+}
+
+.knowledge-crepe-shell .milkdown .milkdown-slash-menu .menu-groups .menu-group li.hover,
+.knowledge-crepe-shell .milkdown .milkdown-slash-menu .menu-groups .menu-group li:hover {
+    background: var(--surface-hover);
+}
+
+.knowledge-crepe-shell .milkdown .milkdown-slash-menu .menu-groups .menu-group li.active {
+    background: color-mix(in srgb, var(--accent) 18%, var(--surface));
+}
+
+.knowledge-crepe-shell .milkdown .milkdown-slash-menu .menu-groups .menu-group li svg {
+    width: 18px;
+    height: 18px;
+    color: var(--muted);
+    fill: var(--muted);
+}
+
+.knowledge-crepe-shell .milkdown .milkdown-slash-menu .menu-groups .menu-group li.hover svg,
+.knowledge-crepe-shell .milkdown .milkdown-slash-menu .menu-groups .menu-group li.active svg {
+    color: var(--accent);
+    fill: var(--accent);
+}
+
+.knowledge-crepe-shell .milkdown .milkdown-slash-menu .menu-groups .menu-group li > span {
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 1.35;
+    color: var(--fg);
+}
+
+.knowledge-crepe-shell .milkdown .milkdown-slash-menu .menu-groups .menu-group + .menu-group::before {
+    margin: var(--sp-1) var(--sp-2);
+    background: var(--border-soft);
 }

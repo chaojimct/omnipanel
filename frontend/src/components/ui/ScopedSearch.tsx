@@ -16,6 +16,10 @@ import {
   clearScopedSearchHighlights,
 } from "./scopedSearchHighlight";
 import { registerScopedSearch } from "./scopedSearchRegistry";
+import {
+  getTextSearchMatchIndices,
+  splitTextByMatchIndices,
+} from "../../lib/textSearchMatch";
 
 export interface ScopedSearchProps {
   value: string;
@@ -53,31 +57,24 @@ export function ScopedSearchText({ text, className }: ScopedSearchTextProps) {
     return <span className={className}>{text}</span>;
   }
 
-  const queryLower = query.toLowerCase();
-  const textLower = text.toLowerCase();
-  const parts: ReactNode[] = [];
-  let lastIndex = 0;
-  let matchIndex = textLower.indexOf(queryLower, lastIndex);
-  let key = 0;
-
-  while (matchIndex >= 0) {
-    if (matchIndex > lastIndex) {
-      parts.push(<span key={key++}>{text.slice(lastIndex, matchIndex)}</span>);
-    }
-    parts.push(
-      <mark key={key++} className="scoped-search-mark">
-        {text.slice(matchIndex, matchIndex + query.length)}
-      </mark>,
-    );
-    lastIndex = matchIndex + query.length;
-    matchIndex = textLower.indexOf(queryLower, lastIndex);
+  const parts = splitTextByMatchIndices(text, getTextSearchMatchIndices(text, query));
+  if (parts.length === 1 && !parts[0].matched) {
+    return <span className={className}>{text}</span>;
   }
 
-  if (lastIndex < text.length) {
-    parts.push(<span key={key++}>{text.slice(lastIndex)}</span>);
-  }
-
-  return <span className={className}>{parts}</span>;
+  return (
+    <span className={className}>
+      {parts.map((part, index) =>
+        part.matched ? (
+          <mark key={index} className="scoped-search-mark">
+            {part.text}
+          </mark>
+        ) : (
+          <span key={index}>{part.text}</span>
+        ),
+      )}
+    </span>
+  );
 }
 
 /**

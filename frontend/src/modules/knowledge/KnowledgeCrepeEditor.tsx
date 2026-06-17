@@ -1,6 +1,8 @@
 import { useRef } from "react";
 import { Crepe, CrepeFeature } from "@milkdown/crepe";
 import { Milkdown, MilkdownProvider, useEditor } from "@milkdown/react";
+import { useI18n } from "../../i18n";
+import { buildCrepeFeatureConfigs } from "./crepeBlockEditI18n";
 import "@milkdown/crepe/theme/common/style.css";
 import "@milkdown/crepe/theme/classic.css";
 import "./knowledgeCrepe.css";
@@ -18,12 +20,15 @@ function CrepeEditorInner({
   placeholder,
   onChange,
 }: KnowledgeCrepeEditorProps) {
+  const { t, locale } = useI18n();
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
   const skipInitialUpdateRef = useRef(true);
 
   useEditor((root) => {
     skipInitialUpdateRef.current = true;
+    const featureConfigs = buildCrepeFeatureConfigs(t);
+
     const crepe = new Crepe({
       root,
       defaultValue: defaultContent,
@@ -32,6 +37,7 @@ function CrepeEditorInner({
         [CrepeFeature.AI]: false,
       },
       featureConfigs: {
+        ...featureConfigs,
         [CrepeFeature.Placeholder]: {
           text: placeholder,
           mode: "block",
@@ -50,7 +56,7 @@ function CrepeEditorInner({
     });
 
     return crepe;
-  }, [entryId]);
+  }, [entryId, locale]);
 
   return <Milkdown />;
 }

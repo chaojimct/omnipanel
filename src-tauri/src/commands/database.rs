@@ -3,9 +3,10 @@ use std::collections::HashMap;
 use omnipanel_db::{DbParams, QueryResult, mysql_connect_options};
 use omnipanel_error::OmniError;
 pub use omnipanel_store::{
-    DbConnectionConfig, SchemaFiltersSnapshot, SchemaTreeExpandedSnapshot, load_schema_filters,
-    load_schema_tree_expanded, prune_connection_expanded, prune_connection_filters,
-    save_schema_filters, save_schema_tree_expanded,
+    DbConnectionConfig, SchemaCacheSnapshot, SchemaFiltersSnapshot, SchemaTreeExpandedSnapshot,
+    load_schema_cache, load_schema_filters, load_schema_tree_expanded, prune_connection_cache,
+    prune_connection_expanded, prune_connection_filters, save_schema_cache, save_schema_filters,
+    save_schema_tree_expanded,
 };
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
@@ -48,6 +49,114 @@ fn mysql_row_i32(row: &MySqlRow, index: usize, default: i32) -> i32 {
     mysql_row_string(row, index).parse().unwrap_or(default)
 }
 
+fn normalize_table_comment(raw: &str) -> Option<String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_string())
+    }
+}
+
+async fn mysql_fetch_table_comments(
+    pool: &MySqlPool,
+    db_name: &str,
+) -> Result<HashMap<String, String>, String> {
+    let rows = sqlx::query(
+        "SELECT TABLE_NAME, TABLE_COMMENT FROM information_schema.TABLES \
+         WHERE TABLE_SCHEMA = ? AND TABLE_TYPE = 'BASE TABLE'",
+    )
+    .bind(db_name)
+    .fetch_all(pool)
+    .await
+    .map_err(|e| format!("Query failed: {e}"))?;
+
+    let mut map = HashMap::new();
+    for row in rows {
+        let name = mysql_row_string(&row, 0);
+        let comment = mysql_row_string(&row, 1);
+        if let Some(normalized) = normalize_table_comment(&comment) {
+            map.insert(name, normalized);
+        }
+    }
+    Ok(map)
+}
+
+async fn mysql_fetch_table_comment(
+    pool: &MySqlPool,
+    db_name: &str,
+    table_name: &str,
+) -> Result<Option<String>, String> {
+    let row = sqlx::query(
+        "SELECT TABLE_COMMENT FROM information_schema.TABLES \
+         WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? AND TABLE_TYPE = 'BASE TABLE'",
+    )
+    .bind(db_name)
+    .bind(table_name)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| format!("Query failed: {e}"))?;
+
+    Ok(row.and_then(|r| normalize_table_comment(&mysql_row_string(&r, 0))))
+}
+
+async fn pg_fetch_table_comments(
+    pool: &PgPool,
+    schema: &str,
+) -> Result<HashMap<String, String>, String> {
+    let rows = sqlx::query(
+        "SELECT c.relname, obj_description(c.oid, 'pg_class')::text \
+         FROM pg_class c \
+         JOIN pg_namespace n ON n.oid = c.relnamespace \
+         WHERE n.nspname = $1 AND c.relkind = 'r'",
+    )
+    .bind(schema)
+    .fetch_all(pool)
+    .await
+    .map_err(|e| format!("PG table comments query failed: {e}"))?;
+
+    let mut map = HashMap::new();
+    for row in rows {
+        let name: String = row.try_get(0).unwrap_or_default();
+        let comment: Option<String> = row.try_get(1).ok();
+        if let Some(normalized) = comment.and_then(|c| normalize_table_comment(&c)) {
+            map.insert(name, normalized);
+        }
+    }
+    Ok(map)
+}
+
+async fn pg_fetch_table_comment(
+    pool: &PgPool,
+    schema: &str,
+    table_name: &str,
+) -> Result<Option<String>, String> {
+    let row = sqlx::query(
+        "SELECT obj_description(c.oid, 'pg_class')::text \
+         FROM pg_class c \
+         JOIN pg_namespace n ON n.oid = c.relnamespace \
+         WHERE n.nspname = $1 AND c.relname = $2 AND c.relkind = 'r'",
+    )
+    .bind(schema)
+    .bind(table_name)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| format!("PG table comment query failed: {e}"))?;
+
+    Ok(row
+        .and_then(|r| r.try_get::<Option<String>, _>(0).ok())
+        .flatten()
+        .and_then(|c| normalize_table_comment(&c)))
+}
+
+fn apply_table_comments(tables: &mut [DbTableSchema], comments: HashMap<String, String>) {
+    for table in tables {
+        if let Some(comment) = comments.get(&table.name) {
+            table.comment = Some(comment.clone());
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct TableInfo {
     pub name: String,
@@ -79,6 +188,8 @@ pub struct DbTableSchema {
     pub columns: Vec<DbColumnMeta>,
     #[serde(default)]
     pub indexes: Vec<DbIndexMeta>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub comment: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
@@ -179,6 +290,9 @@ pub async fn db_delete_connection(state: State<'_, AppState>, id: String) -> Res
     let mut expanded = load_schema_tree_expanded().map_err(|e| e.to_string())?;
     prune_connection_expanded(&mut expanded, &id);
     save_schema_tree_expanded(&expanded).map_err(|e| e.to_string())?;
+    let mut cache = load_schema_cache().map_err(|e| e.to_string())?;
+    prune_connection_cache(&mut cache, &id);
+    save_schema_cache(&cache).map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -206,6 +320,18 @@ pub async fn db_save_schema_tree_expanded(
     snapshot: SchemaTreeExpandedSnapshot,
 ) -> Result<(), String> {
     save_schema_tree_expanded(&snapshot).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn db_load_schema_cache() -> Result<SchemaCacheSnapshot, String> {
+    load_schema_cache().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn db_save_schema_cache(snapshot: SchemaCacheSnapshot) -> Result<(), String> {
+    save_schema_cache(&snapshot).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -365,6 +491,7 @@ pub async fn db_introspect_schema(
                         name,
                         columns: Vec::new(),
                         indexes: Vec::new(),
+                        comment: None,
                     })
                     .collect(),
             })
@@ -397,6 +524,7 @@ pub async fn db_introspect_table(
             name: table,
             columns: Vec::new(),
             indexes: Vec::new(),
+            comment: None,
         }),
     }
 }
@@ -607,6 +735,8 @@ async fn introspect_mysql_schema(
     .fetch_all(&pool)
     .await
     .map_err(|e| format!("Query failed: {e}"))?;
+
+    let comments = mysql_fetch_table_comments(&pool, db_name).await?;
     pool.close().await;
 
     let mut tables: Vec<DbTableSchema> = Vec::new();
@@ -635,11 +765,13 @@ async fn introspect_mysql_schema(
                     is_fk,
                 }],
                 indexes: Vec::new(),
+                comment: None,
             });
         }
     }
 
     apply_mysql_index_rows(&mut tables, idx_rows);
+    apply_table_comments(&mut tables, comments);
 
     Ok(DbIntrospectResult {
         database: db_name.to_string(),
@@ -677,6 +809,8 @@ async fn introspect_mysql_table(
     .fetch_all(&pool)
     .await
     .map_err(|e| format!("Query failed: {e}"))?;
+
+    let comment = mysql_fetch_table_comment(&pool, db_name, table_name).await?;
     pool.close().await;
 
     let columns: Vec<DbColumnMeta> = col_rows
@@ -698,6 +832,7 @@ async fn introspect_mysql_table(
         name: table_name.to_string(),
         columns,
         indexes: Vec::new(),
+        comment,
     };
     push_mysql_index_row(&mut table.indexes, idx_rows);
     Ok(table)
@@ -895,6 +1030,8 @@ async fn introspect_pg_schema(
     .fetch_all(&pool)
     .await
     .map_err(|e| format!("PG indexes query failed: {e}"))?;
+
+    let comments = pg_fetch_table_comments(&pool, "public").await?;
     pool.close().await;
 
     let mut tables: Vec<DbTableSchema> = Vec::new();
@@ -921,6 +1058,7 @@ async fn introspect_pg_schema(
                     is_fk: false,
                 }],
                 indexes: Vec::new(),
+                comment: None,
             });
         }
     }
@@ -943,6 +1081,8 @@ async fn introspect_pg_schema(
             }
         }
     }
+
+    apply_table_comments(&mut tables, comments);
 
     Ok(DbIntrospectResult {
         database: db_name.to_string(),
@@ -989,6 +1129,8 @@ async fn introspect_pg_table(
     .fetch_all(&pool)
     .await
     .map_err(|e| format!("PG indexes query failed: {e}"))?;
+
+    let comment = pg_fetch_table_comment(&pool, "public", table_name).await?;
     pool.close().await;
 
     let columns: Vec<DbColumnMeta> = col_rows
@@ -1022,6 +1164,7 @@ async fn introspect_pg_table(
         name: table_name.to_string(),
         columns,
         indexes,
+        comment,
     })
 }
 
@@ -1055,6 +1198,7 @@ fn introspect_sqlite_schema_inner(
             name: tname.clone(),
             columns,
             indexes,
+            comment: None,
         });
     }
 
@@ -1081,6 +1225,7 @@ fn introspect_sqlite_table_inner(
         name: table_name.to_string(),
         columns,
         indexes,
+        comment: None,
     })
 }
 

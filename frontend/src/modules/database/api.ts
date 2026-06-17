@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { SchemaFiltersSnapshot } from "./schemaFilters";
 import type { SchemaTreeExpandedSnapshot } from "./schemaTreeExpanded";
+import type { SchemaCacheSnapshot } from "./schemaCache";
 
 export interface DbConnectionConfig {
   id: string;
@@ -120,6 +121,14 @@ export async function saveSchemaTreeExpanded(snapshot: SchemaTreeExpandedSnapsho
   return invoke<void>("db_save_schema_tree_expanded", { snapshot });
 }
 
+export async function loadSchemaCache(): Promise<SchemaCacheSnapshot> {
+  return invoke<SchemaCacheSnapshot>("db_load_schema_cache");
+}
+
+export async function saveSchemaCache(snapshot: SchemaCacheSnapshot): Promise<void> {
+  return invoke<void>("db_save_schema_cache", { snapshot });
+}
+
 export async function saveConnection(connection: DbConnectionConfig): Promise<DbConnectionConfig> {
   return invoke<DbConnectionConfig>("db_save_connection", { connection });
 }
@@ -169,6 +178,7 @@ export interface DbTableSchema {
   name: string;
   columns: DbColumnMeta[];
   indexes?: DbIndexMeta[];
+  comment?: string | null;
 }
 
 export interface DbIntrospectResult {

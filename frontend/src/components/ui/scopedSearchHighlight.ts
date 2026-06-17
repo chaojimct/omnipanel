@@ -1,3 +1,8 @@
+import {
+  getTextSearchMatchIndices,
+  splitTextByMatchIndices,
+} from "../../lib/textSearchMatch";
+
 const MARK_CLASS = "scoped-search-mark";
 
 const SKIP_SELECTOR =
@@ -51,7 +56,7 @@ export function clearScopedSearchHighlights(root: HTMLElement): void {
   root.normalize();
 }
 
-/** 在宿主 DOM 内为匹配 query 的文本片段包裹高亮 mark（大小写不敏感）。 */
+/** 在宿主 DOM 内为匹配 query 的文本片段包裹高亮 mark（支持拼音与原文）。 */
 export function applyScopedSearchHighlights(root: HTMLElement, query: string): void {
   clearScopedSearchHighlights(root);
 
@@ -60,35 +65,23 @@ export function applyScopedSearchHighlights(root: HTMLElement, query: string): v
     return;
   }
 
-  const needleLower = needle.toLowerCase();
-
   for (const textNode of collectTextNodes(root)) {
     const text = textNode.textContent ?? "";
-    const textLower = text.toLowerCase();
-    let searchFrom = 0;
-    let matchIndex = textLower.indexOf(needleLower, searchFrom);
-    if (matchIndex < 0) {
+    const indices = getTextSearchMatchIndices(text, needle);
+    if (indices.length === 0) {
       continue;
     }
 
     const fragment = document.createDocumentFragment();
-    let lastIndex = 0;
-
-    while (matchIndex >= 0) {
-      if (matchIndex > lastIndex) {
-        fragment.appendChild(document.createTextNode(text.slice(lastIndex, matchIndex)));
+    for (const part of splitTextByMatchIndices(text, indices)) {
+      if (part.matched) {
+        const mark = document.createElement("mark");
+        mark.className = MARK_CLASS;
+        mark.textContent = part.text;
+        fragment.appendChild(mark);
+      } else {
+        fragment.appendChild(document.createTextNode(part.text));
       }
-      const mark = document.createElement("mark");
-      mark.className = MARK_CLASS;
-      mark.textContent = text.slice(matchIndex, matchIndex + needle.length);
-      fragment.appendChild(mark);
-      lastIndex = matchIndex + needle.length;
-      searchFrom = lastIndex;
-      matchIndex = textLower.indexOf(needleLower, searchFrom);
-    }
-
-    if (lastIndex < text.length) {
-      fragment.appendChild(document.createTextNode(text.slice(lastIndex)));
     }
 
     textNode.parentNode?.replaceChild(fragment, textNode);
