@@ -28,6 +28,8 @@ fn export_ipc_bindings() {
         commands::database::db_save_schema_filters,
         commands::database::db_load_schema_tree_expanded,
         commands::database::db_save_schema_tree_expanded,
+        commands::database::db_load_schema_cache,
+        commands::database::db_save_schema_cache,
         commands::database::db_test_connection,
         commands::database::db_list_databases,
         commands::database::db_create_database,
@@ -228,6 +230,7 @@ fn export_ipc_bindings() {
         // AI 模型持久化
         commands::ai_models::ai_models_load,
         commands::ai_models::ai_models_save,
+        
     ]);
 
     // 用 CARGO_MANIFEST_DIR 拼绝对路径，避免 cwd 在不同入口（cargo test/run）下不一致。
@@ -393,6 +396,8 @@ pub fn run() {
             commands::database::db_save_schema_filters,
             commands::database::db_load_schema_tree_expanded,
             commands::database::db_save_schema_tree_expanded,
+            commands::database::db_load_schema_cache,
+            commands::database::db_save_schema_cache,
             commands::database::db_test_connection,
             commands::database::db_list_databases,
             commands::database::db_create_database,

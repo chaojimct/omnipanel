@@ -7,6 +7,7 @@ mod http;
 mod knowledge;
 mod knowledge_todo;
 mod paths;
+mod schema_cache;
 mod schema_filters;
 mod schema_tree_expanded;
 mod storage;
@@ -23,8 +24,13 @@ pub use http::{HttpCollection, HttpHistoryEntry, SavedHttpRequest};
 pub use knowledge::{KnowledgeEntry, KnowledgeSearchResult};
 pub use knowledge_todo::{KnowledgeTodoItem, KnowledgeTodoList};
 pub use paths::{
-    database_connections_path, database_schema_filters_path, database_schema_tree_expanded_path,
-    meta_db_path, module_dir, omnipd_root,
+    database_connections_path, database_schema_cache_path, database_schema_filters_path,
+    database_schema_tree_expanded_path, meta_db_path, module_dir, omnipd_root,
+};
+pub use schema_cache::{
+    SchemaCacheColumn, SchemaCacheConnection, SchemaCacheDatabase, SchemaCacheIndex,
+    SchemaCacheSnapshot, SchemaCacheTable, load_schema_cache, prune_connection_cache,
+    save_schema_cache,
 };
 pub use schema_filters::{
     SchemaFilterRecord, SchemaFiltersSnapshot, load_schema_filters, prune_connection_filters,

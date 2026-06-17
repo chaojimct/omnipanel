@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo, useEffect } from "react";
-import { FormDialog } from "../../../components/ui/FormDialog";
+import { CellEditDialog } from "../../../components/ui/CellEditDialog";
 import {
   detectCellEditorKind,
   formatCellValue,
@@ -28,16 +28,9 @@ export interface CellEditorDialogProps {
   onCancel: () => void;
 }
 
-const LABEL_MAP: Record<CellEditorKind, string> = {
-  text: "Text",
-  number: "Number",
-  boolean: "Boolean",
-  date: "Date",
-  datetime: "Datetime",
-  time: "Time",
-  json: "JSON",
-  binary: "Binary",
-};
+function editorKindLabel(t: (key: string) => string, kind: CellEditorKind): string {
+  return t(`database.cellEditor.kinds.${kind}`);
+}
 
 export function CellEditorDialog({
   open,
@@ -50,13 +43,16 @@ export function CellEditorDialog({
   const { t } = useI18n();
   const editorKind = useMemo(() => detectCellEditorKind(columnType), [columnType]);
   const rawText = useMemo(() => formatCellValue(currentValue), [currentValue]);
-  // Normalize date/time values to the format expected by native <input> controls
   const normalized = useMemo(() => {
     switch (editorKind) {
-      case "date": return normalizeDate(rawText);
-      case "datetime": return normalizeDatetime(rawText);
-      case "time": return normalizeTime(rawText);
-      default: return rawText;
+      case "date":
+        return normalizeDate(rawText);
+      case "datetime":
+        return normalizeDatetime(rawText);
+      case "time":
+        return normalizeTime(rawText);
+      default:
+        return rawText;
     }
   }, [editorKind, rawText]);
   const [editText, setEditText] = useState(normalized);
@@ -96,27 +92,25 @@ export function CellEditorDialog({
   };
 
   return (
-    <FormDialog
+    <CellEditDialog
       open={open}
-      onClose={onCancel}
       title={t("database.cellEditor.title")}
-      className="cell-editor-dialog"
-      showCloseButton={false}
-      beforeBody={
+      onConfirm={handleSave}
+      onCancel={onCancel}
+      meta={
         <div className="cell-editor-meta">
           <span className="cell-editor-col-name">{columnName}</span>
           <span className="cell-editor-col-type">{columnType}</span>
-          <span className="cell-editor-kind-badge">{LABEL_MAP[editorKind]}</span>
-          {isNull && <span className="cell-editor-kind-badge cell-editor-kind-badge--null">NULL</span>}
+          <span className="cell-editor-kind-badge">{editorKindLabel(t, editorKind)}</span>
+          {isNull && (
+            <span className="cell-editor-kind-badge cell-editor-kind-badge--null">
+              {t("database.cellEditor.nullValue")}
+            </span>
+          )}
         </div>
       }
-      onCancel={onCancel}
-      primaryAction={{
-        label: t("common.confirm"),
-        onClick: handleSave,
-      }}
     >
       {renderEditor()}
-    </FormDialog>
+    </CellEditDialog>
   );
 }

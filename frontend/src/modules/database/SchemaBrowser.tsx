@@ -5,15 +5,14 @@ import { ScopedSearch } from "../../components/ui/ScopedSearch";
 import {
   type DbConnectionConfig,
   connectionMatchesGroup,
-  introspectTable,
   listConnections,
-  listDatabases,
-  listTables,
   isConnectionEnabled,
+  connectionHasTableSchemaChildren,
 } from "./api";
 import type { DbConnectionGroup } from "../../stores/dbGroupStore";
 import { useDbSchemaFilterStore } from "../../stores/dbSchemaFilterStore";
 import { useDbSchemaTreeExpandedStore } from "../../stores/dbSchemaTreeExpandedStore";
+import { useDbSchemaCacheStore } from "../../stores/dbSchemaCacheStore";
 import { useSettingsStore } from "../../stores/settingsStore";
 import { getEngineIconByType } from "./engineIcons";
 import {
@@ -46,41 +45,14 @@ import {
   nextSchemaChildLimit,
   paginateSchemaChildren,
 } from "./schemaTreePagination";
+import { mergeConnectionsWithCache, type CachedConnection, type CachedDatabase } from "./schemaCacheMerge";
+import { refreshAllSchemaCache } from "./schemaCacheRefresh";
+import type { SchemaCacheSnapshot } from "./schemaCache";
+import { textSearchMatches } from "../../lib/textSearchMatch";
 
-interface TableColumn {
-  name: string;
-  type: string;
-  isPk?: boolean;
-  isFk?: boolean;
-}
+type LoadedDatabase = CachedDatabase;
 
-interface TableIndex {
-  name: string;
-  columns: string[];
-  unique?: boolean;
-}
-
-interface Table {
-  name: string;
-  columns?: TableColumn[];
-  indexes?: TableIndex[];
-  loadingDetails?: boolean;
-  detailsError?: string;
-}
-
-interface LoadedDatabase {
-  name: string;
-  tables?: Table[];
-  loadingTables?: boolean;
-  loadError?: string;
-}
-
-interface LoadedConnection {
-  config: DbConnectionConfig;
-  databases?: LoadedDatabase[];
-  loadingDatabases?: boolean;
-  databasesError?: string;
-}
+type LoadedConnection = CachedConnection;
 
 interface TreeNodeProps {
   item: SchemaTreeItem;
@@ -100,6 +72,8 @@ interface TreeNodeProps {
   reorderName?: string;
   onMetaClick?: () => void;
   metaTitle?: string;
+  /** 表节点：名称后显示的灰色注释 */
+  labelComment?: string;
   /** 连接节点：是否启用（禁用与树折叠无关） */
   connectionEnabled?: boolean;
 }
@@ -147,6 +121,7 @@ function TreeNode({
   reorderName,
   onMetaClick,
   metaTitle,
+  labelComment,
   connectionEnabled = true,
 }: TreeNodeProps) {
   const { t } = useI18n();
@@ -267,6 +242,11 @@ function TreeNode({
         }}
       >
         {label}
+        {labelComment ? (
+          <span className="tree-label-comment" title={labelComment}>
+            {labelComment}
+          </span>
+        ) : null}
       </span>
       {isPk && <span className="tree-badge tree-badge--pk">PK</span>}
       {isFk && <span className="tree-badge tree-badge--fk">FK</span>}
@@ -288,18 +268,6 @@ function TreeNode({
       )}
     </div>
   );
-}
-
-function parseDbNodeId(id: string): { connId: string; dbName: string } | null {
-  if (!id.startsWith("db:")) {
-    return null;
-  }
-  const rest = id.slice(3);
-  const sep = rest.indexOf(":");
-  if (sep < 0) {
-    return null;
-  }
-  return { connId: rest.slice(0, sep), dbName: rest.slice(sep + 1) };
 }
 
 function makeTableNodeId(connId: string, dbName: string, tableName: string) {
@@ -343,6 +311,23 @@ export type SchemaDatabaseSelection = {
 
 export function makeDatabaseNodeId(connId: string, dbName: string) {
   return `db:${connId}:${dbName}`;
+}
+
+function syncFiltersFromSnapshot(
+  snapshot: SchemaCacheSnapshot,
+  syncDatabaseFilter: (connId: string, names: string[]) => void,
+  syncTableFilter: (connId: string, dbName: string, names: string[]) => void,
+) {
+  for (const [connId, entry] of Object.entries(snapshot.connections)) {
+    if (entry.databases.length > 0) {
+      syncDatabaseFilter(connId, entry.databases.map((db) => db.name));
+    }
+    for (const db of entry.databases) {
+      if (db.tables.length > 0) {
+        syncTableFilter(connId, db.name, db.tables.map((table) => table.name));
+      }
+    }
+  }
 }
 
 interface SchemaBrowserProps {
@@ -404,11 +389,10 @@ export function SchemaBrowser({
   const sidebarRef = useRef<HTMLDivElement>(null);
   const schemaTreeRef = useRef<HTMLDivElement>(null);
   const connectionsRef = useRef(connections);
-  const loadingDatabasesRef = useRef(new Set<string>());
-  const loadingTablesRef = useRef(new Set<string>());
-  const loadingTableDetailsRef = useRef(new Set<string>());
-  const pendingDatabaseLoadsRef = useRef(new Map<string, Promise<DbConnectionConfig | null>>());
-  const expandedRestoreDoneRef = useRef(false);
+  const hydrateSchemaCache = useDbSchemaCacheStore((s) => s.hydrate);
+  const replaceSchemaSnapshot = useDbSchemaCacheStore((s) => s.replaceSnapshot);
+  const schemaSnapshot = useDbSchemaCacheStore((s) => s.snapshot);
+  const [refreshingSchema, setRefreshingSchema] = useState(false);
 
   connectionsRef.current = connections;
 
@@ -430,19 +414,48 @@ export function SchemaBrowser({
   const loadConnections = useCallback(async () => {
     setLoading(true);
     setLoadError(null);
-    loadingDatabasesRef.current.clear();
-    loadingTablesRef.current.clear();
-    pendingDatabaseLoadsRef.current.clear();
     try {
+      await hydrateSchemaCache();
       const list = await listConnections();
-      setConnections(list.map((config) => ({ config })));
+      const snapshot = useDbSchemaCacheStore.getState().snapshot;
+      const merged = mergeConnectionsWithCache(list, snapshot);
+      connectionsRef.current = merged;
+      setConnections(merged);
     } catch (error) {
       setConnections([]);
       setLoadError(String(error));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [hydrateSchemaCache]);
+
+  const refreshSchemaCache = useCallback(async () => {
+    setRefreshingSchema(true);
+    setLoadError(null);
+    try {
+      const list = await listConnections();
+      const snapshot = await refreshAllSchemaCache();
+      await replaceSchemaSnapshot(snapshot);
+      const merged = mergeConnectionsWithCache(list, snapshot);
+      connectionsRef.current = merged;
+      setConnections(merged);
+      syncFiltersFromSnapshot(snapshot, syncDatabaseFilter, syncTableFilter);
+    } catch (error) {
+      setLoadError(String(error));
+    } finally {
+      setRefreshingSchema(false);
+    }
+  }, [replaceSchemaSnapshot, syncDatabaseFilter, syncTableFilter]);
+
+  useEffect(() => {
+    const configs = connectionsRef.current.map((item) => item.config);
+    if (configs.length === 0) {
+      return;
+    }
+    const merged = mergeConnectionsWithCache(configs, schemaSnapshot);
+    connectionsRef.current = merged;
+    setConnections(merged);
+  }, [schemaSnapshot]);
 
   useEffect(() => {
     void loadConnections();
@@ -519,312 +532,6 @@ export function SchemaBrowser({
     });
   }, [setDatabaseFilters, setTableFilters]);
 
-  const ensureDatabasesLoaded = useCallback(async (connId: string): Promise<DbConnectionConfig | null> => {
-    const pending = pendingDatabaseLoadsRef.current.get(connId);
-    if (pending) {
-      return pending;
-    }
-
-    const current = connectionsRef.current.find((item) => item.config.id === connId);
-    if (!current) {
-      return null;
-    }
-    if (!isConnectionEnabled(current.config)) {
-      return null;
-    }
-    if (current.databases !== undefined) {
-      return current.config;
-    }
-
-    const loadPromise = (async (): Promise<DbConnectionConfig | null> => {
-      loadingDatabasesRef.current.add(connId);
-      const config = current.config;
-
-      const markLoading = (prev: LoadedConnection[]) =>
-        prev.map((item) =>
-          item.config.id === connId ? { ...item, loadingDatabases: true, databasesError: undefined } : item
-        );
-      connectionsRef.current = markLoading(connectionsRef.current);
-      setConnections(connectionsRef.current);
-
-      const applyDatabases = (databases: LoadedDatabase[], databasesError?: string) => {
-        const next = connectionsRef.current.map((item) =>
-          item.config.id === connId
-            ? { ...item, databases, loadingDatabases: false, databasesError }
-            : item
-        );
-        connectionsRef.current = next;
-        setConnections(next);
-        if (databases.length > 0) {
-          syncDatabaseFilter(connId, databases.map((db) => db.name));
-        }
-      };
-
-      const presetDb = config.database.trim();
-      if (presetDb) {
-        applyDatabases([{ name: presetDb }]);
-        loadingDatabasesRef.current.delete(connId);
-        return config;
-      }
-
-      try {
-        const names = await listDatabases(config);
-        applyDatabases(names.map((name) => ({ name })));
-        return config;
-      } catch (error) {
-        applyDatabases([], String(error));
-        return config;
-      } finally {
-        loadingDatabasesRef.current.delete(connId);
-      }
-    })();
-
-    pendingDatabaseLoadsRef.current.set(connId, loadPromise);
-    try {
-      return await loadPromise;
-    } finally {
-      pendingDatabaseLoadsRef.current.delete(connId);
-    }
-  }, [syncDatabaseFilter]);
-
-  const ensureTablesLoaded = useCallback(async (connId: string, dbName: string, config: DbConnectionConfig) => {
-    const cacheKey = `${connId}:${dbName}`;
-    const current = connectionsRef.current.find((item) => item.config.id === connId);
-    const db = current?.databases?.find((item) => item.name === dbName);
-    if (db?.tables !== undefined || db?.loadingTables || loadingTablesRef.current.has(cacheKey)) {
-      return;
-    }
-
-    loadingTablesRef.current.add(cacheKey);
-
-    const markLoading = (prev: LoadedConnection[]) =>
-      prev.map((item) =>
-        item.config.id === connId
-          ? {
-              ...item,
-              databases: item.databases?.map((entry) =>
-                entry.name === dbName ? { ...entry, loadingTables: true, loadError: undefined } : entry
-              ),
-            }
-          : item
-      );
-    connectionsRef.current = markLoading(connectionsRef.current);
-    setConnections(connectionsRef.current);
-
-    try {
-      const tables = await listTables(config, dbName);
-      const next = connectionsRef.current.map((item) =>
-        item.config.id === connId
-          ? {
-              ...item,
-              databases: item.databases?.map((entry) =>
-                entry.name === dbName
-                  ? {
-                      ...entry,
-                      tables: tables.map((name) => ({ name })),
-                      loadingTables: false,
-                    }
-                  : entry
-              ),
-            }
-          : item
-      );
-      connectionsRef.current = next;
-      setConnections(next);
-      if (tables.length > 0) {
-        syncTableFilter(connId, dbName, tables);
-      }
-    } catch (error) {
-      const next = connectionsRef.current.map((item) =>
-        item.config.id === connId
-          ? {
-              ...item,
-              databases: item.databases?.map((entry) =>
-                entry.name === dbName
-                  ? {
-                      ...entry,
-                      tables: [],
-                      loadingTables: false,
-                      loadError: String(error),
-                    }
-                  : entry
-              ),
-            }
-          : item
-      );
-      connectionsRef.current = next;
-      setConnections(next);
-    } finally {
-      loadingTablesRef.current.delete(cacheKey);
-    }
-  }, [syncTableFilter]);
-
-  const ensureTableDetailsLoaded = useCallback(
-    async (connId: string, dbName: string, tableName: string, config: DbConnectionConfig) => {
-      const cacheKey = `${connId}:${dbName}:${tableName}`;
-      const current = connectionsRef.current.find((item) => item.config.id === connId);
-      const db = current?.databases?.find((item) => item.name === dbName);
-      const table = db?.tables?.find((item) => item.name === tableName);
-      if (
-        table?.columns !== undefined ||
-        table?.loadingDetails ||
-        loadingTableDetailsRef.current.has(cacheKey)
-      ) {
-        return;
-      }
-
-      loadingTableDetailsRef.current.add(cacheKey);
-
-      const markLoading = (prev: LoadedConnection[]) =>
-        prev.map((item) =>
-          item.config.id === connId
-            ? {
-                ...item,
-                databases: item.databases?.map((entry) =>
-                  entry.name === dbName
-                    ? {
-                        ...entry,
-                        tables: entry.tables?.map((tbl) =>
-                          tbl.name === tableName
-                            ? { ...tbl, loadingDetails: true, detailsError: undefined }
-                            : tbl
-                        ),
-                      }
-                    : entry
-                ),
-              }
-            : item
-        );
-      connectionsRef.current = markLoading(connectionsRef.current);
-      setConnections(connectionsRef.current);
-
-      try {
-        const detail = await introspectTable(config, dbName, tableName);
-        const applyDetail = (prev: LoadedConnection[]) =>
-          prev.map((item) =>
-            item.config.id === connId
-              ? {
-                  ...item,
-                  databases: item.databases?.map((entry) =>
-                    entry.name === dbName
-                      ? {
-                          ...entry,
-                          tables: entry.tables?.map((tbl) =>
-                            tbl.name === tableName
-                              ? {
-                                  ...tbl,
-                                  loadingDetails: false,
-                                  columns: detail.columns.map((col) => ({
-                                    name: col.name,
-                                    type: col.type,
-                                    isPk: col.isPk,
-                                    isFk: col.isFk,
-                                  })),
-                                  indexes: (detail.indexes ?? []).map((idx) => ({
-                                    name: idx.name,
-                                    columns: idx.columns,
-                                    unique: idx.unique,
-                                  })),
-                                }
-                              : tbl
-                          ),
-                        }
-                      : entry
-                  ),
-                }
-              : item
-          );
-        connectionsRef.current = applyDetail(connectionsRef.current);
-        setConnections(connectionsRef.current);
-      } catch (error) {
-        const applyError = (prev: LoadedConnection[]) =>
-          prev.map((item) =>
-            item.config.id === connId
-              ? {
-                  ...item,
-                  databases: item.databases?.map((entry) =>
-                    entry.name === dbName
-                      ? {
-                          ...entry,
-                          tables: entry.tables?.map((tbl) =>
-                            tbl.name === tableName
-                              ? {
-                                  ...tbl,
-                                  loadingDetails: false,
-                                  columns: [],
-                                  indexes: [],
-                                  detailsError: String(error),
-                                }
-                              : tbl
-                          ),
-                        }
-                      : entry
-                  ),
-                }
-              : item
-          );
-        connectionsRef.current = applyError(connectionsRef.current);
-        setConnections(connectionsRef.current);
-      } finally {
-        loadingTableDetailsRef.current.delete(cacheKey);
-      }
-    },
-    [],
-  );
-
-  const loadExpandedNodeData = useCallback(
-    (id: string) => {
-      if (id.startsWith("conn:")) {
-        const connId = id.slice(5);
-        const conn = connectionsRef.current.find((item) => item.config.id === connId);
-        if (conn && !isConnectionEnabled(conn.config)) {
-          return;
-        }
-        void ensureDatabasesLoaded(connId);
-        return;
-      }
-
-      const parsed = parseDbNodeId(id);
-      if (parsed) {
-        void (async () => {
-          const config = await ensureDatabasesLoaded(parsed.connId);
-          if (config) {
-            await ensureTablesLoaded(parsed.connId, parsed.dbName, config);
-          }
-        })();
-        return;
-      }
-
-      const tableParsed = parseTableNodeId(id);
-      if (tableParsed) {
-        void (async () => {
-          const config = await ensureDatabasesLoaded(tableParsed.connId);
-          if (config) {
-            await ensureTablesLoaded(tableParsed.connId, tableParsed.dbName, config);
-            await ensureTableDetailsLoaded(
-              tableParsed.connId,
-              tableParsed.dbName,
-              tableParsed.tableName,
-              config,
-            );
-          }
-        })();
-      }
-    },
-    [ensureDatabasesLoaded, ensureTablesLoaded, ensureTableDetailsLoaded],
-  );
-
-  useEffect(() => {
-    if (!expandedHydrated || loading || expandedRestoreDoneRef.current) {
-      return;
-    }
-    expandedRestoreDoneRef.current = true;
-    const ids = useDbSchemaTreeExpandedStore.getState().expandedNodeIds;
-    for (const id of ids) {
-      loadExpandedNodeData(id);
-    }
-  }, [expandedHydrated, loading, loadExpandedNodeData]);
-
   const loadMoreChildren = useCallback((parentNodeId: string) => {
     setChildVisibleLimits((prev) => ({
       ...prev,
@@ -856,16 +563,17 @@ export function SchemaBrowser({
       return;
     }
 
-    loadExpandedNodeData(id);
-
     const tableParsed = parseTableNodeId(id);
     if (tableParsed) {
-      updateExpanded((prev) => {
-        const next = new Set(prev);
-        next.add(tableColumnsFolderId(id));
-        next.add(tableIndexesFolderId(id));
-        return next;
-      });
+      const conn = connectionsRef.current.find((item) => item.config.id === tableParsed.connId);
+      if (conn && connectionHasTableSchemaChildren(conn.config)) {
+        updateExpanded((prev) => {
+          const next = new Set(prev);
+          next.add(tableColumnsFolderId(id));
+          next.add(tableIndexesFolderId(id));
+          return next;
+        });
+      }
     }
   };
 
@@ -874,22 +582,25 @@ export function SchemaBrowser({
       return connections;
     }
 
-    const q = search.toLowerCase();
+    const q = search.trim();
+    const tableMatchesQuery = (table: { name: string; comment?: string }) =>
+      textSearchMatches(q, table.name) || (table.comment ? textSearchMatches(q, table.comment) : false);
+
     return connections
       .map((conn) => {
-        const nameMatch = conn.config.name.toLowerCase().includes(q);
+        const nameMatch = textSearchMatches(q, conn.config.name);
         const allDatabases = conn.databases ?? [];
         const visibleDatabases = getVisibleItems(allDatabases, databaseFilters[conn.config.id]);
         const databases = visibleDatabases
           .map((db) => {
-            const dbMatch = nameMatch || db.name.toLowerCase().includes(q);
+            const dbMatch = nameMatch || textSearchMatches(q, db.name);
             const allTables = db.tables ?? [];
             const visibleTables = getVisibleItems(
               allTables,
               tableFilters[makeTableFilterKey(conn.config.id, db.name)]
             );
             const tables = visibleTables.filter(
-              (table) => dbMatch || table.name.toLowerCase().includes(q)
+              (table) => dbMatch || tableMatchesQuery(table),
             );
             if (dbMatch) {
               return db;
@@ -956,7 +667,12 @@ export function SchemaBrowser({
             <path d="M12 5v14M5 12h14" />
           </svg>
         </Button>
-        <Button variant="icon" title={t("database.sidebar.refresh")} onClick={() => void loadConnections()}>
+        <Button
+          variant="icon"
+          title={t("database.sidebar.refresh")}
+          disabled={refreshingSchema}
+          onClick={() => void refreshSchemaCache()}
+        >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
             <path d="M23 4v6h-6M1 20v-6h6" />
             <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" />
@@ -1056,18 +772,17 @@ export function SchemaBrowser({
                 meta={
                   !connEnabled
                     ? t("database.sidebar.connectionDisabled")
-                    : conn.loadingDatabases
-                      ? t("common.loading")
-                      : conn.databases
-                        ? isFiltered
-                          ? `${visibleCount}/${totalCount} DB`
-                          : `${totalCount} DB`
-                        : conn.config.db_type
+                    : conn.databases
+                      ? isFiltered
+                        ? `${visibleCount}/${totalCount} DB`
+                        : `${totalCount} DB`
+                      : refreshingSchema
+                        ? t("common.loading")
+                        : t("database.sidebar.cacheEmpty")
                 }
                 onMetaClick={
                   connEnabled &&
                   conn.databases &&
-                  !conn.loadingDatabases &&
                   totalCount > 0
                     ? () => setFilterDialogConnId(conn.config.id)
                     : undefined
@@ -1075,7 +790,6 @@ export function SchemaBrowser({
                 metaTitle={
                   connEnabled &&
                   conn.databases &&
-                  !conn.loadingDatabases &&
                   totalCount > 0
                     ? t("database.sidebar.filterDisplay")
                     : undefined
@@ -1089,7 +803,15 @@ export function SchemaBrowser({
               )}
               {connEnabled &&
                 connExpanded &&
-                !conn.loadingDatabases &&
+                !conn.databases &&
+                !conn.databasesError && (
+                  <div style={{ padding: "4px 24px", fontSize: "11px", color: "var(--text-secondary, #8e8e93)" }}>
+                    {t("database.sidebar.cacheEmptyHint")}
+                  </div>
+                )}
+              {connEnabled &&
+                connExpanded &&
+                conn.databases &&
                 totalCount === 0 &&
                 !conn.databasesError && (
                   <div style={{ padding: "4px 24px", fontSize: "11px", color: "var(--text-secondary, #8e8e93)" }}>
@@ -1098,7 +820,7 @@ export function SchemaBrowser({
                 )}
               {connEnabled &&
                 connExpanded &&
-                !conn.loadingDatabases &&
+                conn.databases &&
                 visibleCount === 0 &&
                 totalCount > 0 && (
                   <div style={{ padding: "4px 24px", fontSize: "11px", color: "var(--text-secondary, #8e8e93)" }}>
@@ -1107,7 +829,7 @@ export function SchemaBrowser({
                 )}
               {connEnabled &&
                 connExpanded &&
-                !conn.loadingDatabases &&
+                conn.databases &&
                 pagedDatabases.visible.map((db) => {
                   const dbId = makeDatabaseNodeId(conn.config.id, db.name);
                   const dbExpanded = expandedNodeIds.has(dbId);
@@ -1133,13 +855,6 @@ export function SchemaBrowser({
                         onLabelClick={() => {
                           if (!dbExpanded) {
                             toggle(dbId);
-                          } else {
-                            void (async () => {
-                              const config = await ensureDatabasesLoaded(conn.config.id);
-                              if (config) {
-                                await ensureTablesLoaded(conn.config.id, db.name, config);
-                              }
-                            })();
                           }
                           onSelectDatabase?.({
                             connId: conn.config.id,
@@ -1148,18 +863,16 @@ export function SchemaBrowser({
                           });
                         }}
                         meta={
-                          db.loadingTables
-                            ? t("common.loading")
-                            : db.loadError
-                              ? t("database.sidebar.tablesFailed")
-                              : db.tables
-                                ? isTableFiltered
-                                  ? `${tableVisibleCount}/${tableTotalCount} tables`
-                                  : `${tableTotalCount} tables`
-                                : undefined
+                          db.loadError
+                            ? t("database.sidebar.tablesFailed")
+                            : db.tables
+                              ? isTableFiltered
+                                ? `${tableVisibleCount}/${tableTotalCount} tables`
+                                : `${tableTotalCount} tables`
+                              : undefined
                         }
                         onMetaClick={
-                          db.tables && !db.loadingTables && tableTotalCount > 0
+                          db.tables && tableTotalCount > 0
                             ? () =>
                                 setFilterDialogTable({
                                   connId: conn.config.id,
@@ -1168,7 +881,7 @@ export function SchemaBrowser({
                             : undefined
                         }
                         metaTitle={
-                          db.tables && !db.loadingTables && tableTotalCount > 0
+                          db.tables && tableTotalCount > 0
                             ? t("database.sidebar.filterDisplay")
                             : undefined
                         }
@@ -1186,7 +899,6 @@ export function SchemaBrowser({
                         </div>
                       )}
                       {dbExpanded &&
-                        !db.loadingTables &&
                         tableTotalCount === 0 &&
                         !db.loadError && (
                           <div
@@ -1200,7 +912,6 @@ export function SchemaBrowser({
                           </div>
                         )}
                       {dbExpanded &&
-                        !db.loadingTables &&
                         tableVisibleCount === 0 &&
                         tableTotalCount > 0 && (
                           <div
@@ -1217,6 +928,7 @@ export function SchemaBrowser({
                         pagedTables.visible.map((tbl) => {
                           const tableKey = makeTableNodeId(conn.config.id, db.name, tbl.name);
                           const tableExpanded = expandedNodeIds.has(tableKey);
+                          const showTableSchemaChildren = connectionHasTableSchemaChildren(conn.config);
                           const colsFolderId = tableColumnsFolderId(tableKey);
                           const idxFolderId = tableIndexesFolderId(tableKey);
                           const colsExpanded = expandedNodeIds.has(colsFolderId);
@@ -1250,8 +962,9 @@ export function SchemaBrowser({
                                 onToggle={() => toggle(tableKey)}
                                 reorderScope={makeTableFilterKey(conn.config.id, db.name)}
                                 reorderName={tbl.name}
-                                hasChildren
+                                hasChildren={showTableSchemaChildren}
                                 active={activeTableKey === tableKey}
+                                labelComment={tbl.comment?.trim() || undefined}
                                 onLabelClick={() =>
                                   onSelectTable?.({
                                     connId: conn.config.id,
@@ -1275,8 +988,8 @@ export function SchemaBrowser({
                                     : undefined
                                 }
                                 meta={
-                                  tbl.loadingDetails
-                                    ? t("common.loading")
+                                  !showTableSchemaChildren
+                                    ? undefined
                                     : tbl.detailsError
                                       ? t("database.sidebar.detailsFailed")
                                       : tbl.columns
@@ -1284,7 +997,7 @@ export function SchemaBrowser({
                                         : undefined
                                 }
                               />
-                              {tableExpanded && tbl.detailsError && (
+                              {showTableSchemaChildren && tableExpanded && tbl.detailsError && (
                                 <div
                                   style={{
                                     padding: "4px 56px",
@@ -1295,7 +1008,7 @@ export function SchemaBrowser({
                                   {tbl.detailsError}
                                 </div>
                               )}
-                              {tableExpanded && !tbl.loadingDetails && (
+                              {showTableSchemaChildren && tableExpanded && tbl.columns && (
                                 <>
                                   <TreeNode
                                     item={colsFolderItem}
@@ -1395,7 +1108,7 @@ export function SchemaBrowser({
                             </div>
                           );
                         })}
-                      {dbExpanded && !db.loadingTables && pagedTables.hasMore && (
+                      {dbExpanded && pagedTables.hasMore && (
                         <SchemaLoadMoreButton
                           depth={3}
                           remaining={pagedTables.remaining}
@@ -1406,7 +1119,7 @@ export function SchemaBrowser({
                     </div>
                   );
                 })}
-              {connEnabled && connExpanded && !conn.loadingDatabases && pagedDatabases.hasMore && (
+              {connEnabled && connExpanded && conn.databases && pagedDatabases.hasMore && (
                 <SchemaLoadMoreButton
                   depth={2}
                   remaining={pagedDatabases.remaining}

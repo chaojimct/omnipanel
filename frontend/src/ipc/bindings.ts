@@ -20,11 +20,13 @@ export const commands = {
 	dbSaveSchemaFilters: (snapshot: SchemaFiltersSnapshot) => typedError<null, string>(__TAURI_INVOKE("db_save_schema_filters", { snapshot })),
 	dbLoadSchemaTreeExpanded: () => typedError<SchemaTreeExpandedSnapshot, string>(__TAURI_INVOKE("db_load_schema_tree_expanded")),
 	dbSaveSchemaTreeExpanded: (snapshot: SchemaTreeExpandedSnapshot) => typedError<null, string>(__TAURI_INVOKE("db_save_schema_tree_expanded", { snapshot })),
+	dbLoadSchemaCache: () => typedError<SchemaCacheSnapshot_Serialize, string>(__TAURI_INVOKE("db_load_schema_cache")),
+	dbSaveSchemaCache: (snapshot: SchemaCacheSnapshot_Deserialize) => typedError<null, string>(__TAURI_INVOKE("db_save_schema_cache", { snapshot })),
 	dbTestConnection: (connection: DbConnectionConfig) => typedError<string, string>(__TAURI_INVOKE("db_test_connection", { connection })),
 	dbListDatabases: (connection: DbConnectionConfig) => typedError<string[], string>(__TAURI_INVOKE("db_list_databases", { connection })),
 	dbCreateDatabase: (args: CreateDatabaseArgs) => typedError<string, string>(__TAURI_INVOKE("db_create_database", { args })),
-	dbIntrospectSchema: (connection: DbConnectionConfig, schema: string | null) => typedError<DbIntrospectResult, string>(__TAURI_INVOKE("db_introspect_schema", { connection, schema })),
-	dbIntrospectTable: (connection: DbConnectionConfig, schema: string | null, table: string) => typedError<DbTableSchema, string>(__TAURI_INVOKE("db_introspect_table", { connection, schema, table })),
+	dbIntrospectSchema: (connection: DbConnectionConfig, schema: string | null) => typedError<DbIntrospectResult_Serialize, string>(__TAURI_INVOKE("db_introspect_schema", { connection, schema })),
+	dbIntrospectTable: (connection: DbConnectionConfig, schema: string | null, table: string) => typedError<DbTableSchema_Serialize, string>(__TAURI_INVOKE("db_introspect_table", { connection, schema, table })),
 	dbListTables: (connection: DbConnectionConfig, schema: string | null) => typedError<string[], string>(__TAURI_INVOKE("db_list_tables", { connection, schema })),
 	dbTableDdl: (connection: DbConnectionConfig, schema: string | null, table: string) => typedError<string, string>(__TAURI_INVOKE("db_table_ddl", { connection, schema, table })),
 	/**  列出全部已保存连接。 */
@@ -520,15 +522,32 @@ export type DbIndexMeta = {
 	unique: boolean,
 };
 
-export type DbIntrospectResult = {
+export type DbIntrospectResult = DbIntrospectResult_Serialize | DbIntrospectResult_Deserialize;
+
+export type DbIntrospectResult_Deserialize = {
 	database: string,
-	tables: DbTableSchema[],
+	tables: DbTableSchema_Deserialize[],
 };
 
-export type DbTableSchema = {
+export type DbIntrospectResult_Serialize = {
+	database: string,
+	tables: DbTableSchema_Serialize[],
+};
+
+export type DbTableSchema = DbTableSchema_Serialize | DbTableSchema_Deserialize;
+
+export type DbTableSchema_Deserialize = {
 	name: string,
 	columns: DbColumnMeta[],
 	indexes?: DbIndexMeta[],
+	comment?: string | null,
+};
+
+export type DbTableSchema_Serialize = {
+	name: string,
+	columns: DbColumnMeta[],
+	indexes: DbIndexMeta[],
+	comment?: string | null,
 };
 
 export type DiskStats = {
@@ -1315,6 +1334,76 @@ export type SavedHttpRequest = {
 	collectionId: string | null,
 	createdAt: number | null,
 	updatedAt: number | null,
+};
+
+export type SchemaCacheColumn = {
+	name: string,
+	type: string,
+	isPk: boolean,
+	isFk: boolean,
+};
+
+export type SchemaCacheConnection = SchemaCacheConnection_Serialize | SchemaCacheConnection_Deserialize;
+
+export type SchemaCacheConnection_Deserialize = {
+	databases?: SchemaCacheDatabase_Deserialize[],
+	refreshedAt?: number | null,
+	error?: string | null,
+};
+
+export type SchemaCacheConnection_Serialize = {
+	databases: SchemaCacheDatabase_Serialize[],
+	refreshedAt?: number | null,
+	error?: string | null,
+};
+
+export type SchemaCacheDatabase = SchemaCacheDatabase_Serialize | SchemaCacheDatabase_Deserialize;
+
+export type SchemaCacheDatabase_Deserialize = {
+	name: string,
+	tables?: SchemaCacheTable_Deserialize[],
+	loadError?: string | null,
+};
+
+export type SchemaCacheDatabase_Serialize = {
+	name: string,
+	tables: SchemaCacheTable_Serialize[],
+	loadError?: string | null,
+};
+
+export type SchemaCacheIndex = {
+	name: string,
+	columns: string[],
+	unique: boolean,
+};
+
+/**  全部连接的 Schema 缓存快照。 */
+export type SchemaCacheSnapshot = SchemaCacheSnapshot_Serialize | SchemaCacheSnapshot_Deserialize;
+
+/**  全部连接的 Schema 缓存快照。 */
+export type SchemaCacheSnapshot_Deserialize = {
+	connections?: { [key in string]: SchemaCacheConnection_Deserialize },
+};
+
+/**  全部连接的 Schema 缓存快照。 */
+export type SchemaCacheSnapshot_Serialize = {
+	connections: { [key in string]: SchemaCacheConnection_Serialize },
+};
+
+export type SchemaCacheTable = SchemaCacheTable_Serialize | SchemaCacheTable_Deserialize;
+
+export type SchemaCacheTable_Deserialize = {
+	name: string,
+	columns?: SchemaCacheColumn[],
+	indexes?: SchemaCacheIndex[],
+	comment?: string | null,
+};
+
+export type SchemaCacheTable_Serialize = {
+	name: string,
+	columns: SchemaCacheColumn[],
+	indexes: SchemaCacheIndex[],
+	comment?: string | null,
 };
 
 /**  单个连接或库下的过滤项（与前端 `SchemaFilterState` 对应，可见项为列表）。 */

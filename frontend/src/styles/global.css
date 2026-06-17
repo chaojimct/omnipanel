@@ -572,8 +572,7 @@
 }
 
 .workspace-dashboard,
-.module-main,
-.tasks-content {
+.module-main {
     flex: 1;
     min-height: 0;
     overflow-y: auto;
@@ -9482,29 +9481,80 @@
     .db-tables-panel-body {
         flex: 1;
         min-height: 0;
-        display: flex;
         overflow: hidden;
     }
 
+    .db-tables-panel-split {
+        height: 100%;
+        min-height: 0;
+    }
+
+    .db-tables-panel-list-pane,
+    .db-tables-panel-ddl-pane {
+        min-height: 0;
+        min-width: 0;
+        height: 100%;
+    }
+
     .db-tables-panel-list {
-        flex: 0 0 220px;
-        width: 220px;
-        min-width: 160px;
-        max-width: 40%;
+        height: 100%;
         min-height: 0;
         overflow-y: auto;
         padding: var(--sp-2);
-        border-right: 1px solid var(--border);
     }
 
     .db-tables-panel-ddl {
-        flex: 1;
+        height: 100%;
         min-width: 0;
         min-height: 0;
         display: flex;
         flex-direction: column;
         overflow: hidden;
         background: var(--bg);
+    }
+
+    .db-tables-panel-tree-folder {
+        display: flex;
+        align-items: center;
+        gap: var(--sp-1);
+        width: 100%;
+        padding: var(--sp-1) var(--sp-2);
+        margin-bottom: 2px;
+        border: none;
+        border-radius: var(--r-sm);
+        background: transparent;
+        color: var(--fg-2);
+        font: inherit;
+        font-size: 12px;
+        text-align: left;
+        cursor: pointer;
+        transition: background 0.12s, color 0.12s;
+    }
+
+    .db-tables-panel-tree-folder:hover {
+        background: var(--surface);
+        color: var(--fg);
+    }
+
+    .db-tables-panel-tree-folder-name {
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-weight: 500;
+    }
+
+    .db-tables-panel-tree-folder-count {
+        flex-shrink: 0;
+        margin-left: auto;
+        padding-left: var(--sp-2);
+        font-size: 11px;
+        color: var(--muted);
+    }
+
+    .db-tables-panel-tree-table {
+        width: calc(100% - 4px);
     }
 
     .db-tables-panel-ddl-empty {
@@ -9537,12 +9587,14 @@
         white-space: nowrap;
     }
 
-    .db-tables-panel-ddl-hint {
+    .db-tables-panel-ddl-copy {
         margin-left: auto;
-        font-size: 10px;
-        color: var(--muted);
-        white-space: nowrap;
         flex-shrink: 0;
+    }
+
+    .db-tables-panel-ddl-copy:disabled {
+        opacity: 0.35;
+        cursor: not-allowed;
     }
 
     .db-tables-panel-ddl-content {
@@ -9615,6 +9667,17 @@
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
+    }
+
+    .db-tables-panel-item-comment {
+        margin-left: 6px;
+        font-size: 11px;
+        font-weight: 400;
+        color: var(--muted);
+    }
+
+    .db-tables-panel-item.is-selected .db-tables-panel-item-comment {
+        color: var(--muted);
     }
 
     .db-tables-panel-empty,
@@ -9810,6 +9873,18 @@
 
     .tree-node--table .tree-label {
         color: var(--fg-2);
+    }
+
+    .tree-label-comment {
+        margin-left: 6px;
+        font-size: 11px;
+        font-weight: 400;
+        color: var(--muted);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        max-width: min(240px, 40vw);
+        vertical-align: baseline;
     }
 
     .tree-node--table .tree-icon {
@@ -10138,6 +10213,13 @@
 
     .form-dialog-clipboard-bar__action {
         flex-shrink: 0;
+    }
+
+    .form-dialog-clipboard-bar__action-icon {
+        display: block;
+        width: 18px;
+        height: 18px;
+        object-fit: contain;
     }
 
     .zoomable-image {
@@ -11680,6 +11762,19 @@
 
     .db-cell--editable:hover {
         border-color: var(--accent);
+    }
+
+    .cell-edit-dialog {
+        max-width: 520px;
+    }
+
+    .cell-edit-dialog__heading {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .cell-edit-dialog__body {
+        min-height: 0;
     }
 
     .cell-editor-dialog {
@@ -16836,50 +16931,6 @@
         font-size: 11px;
     }
 
-    /* ══════════════════════════════════════════════════════════════════════
-     Tasks (tasks.html)
-     ══════════════════════════════════════════════════════════════════════ */
-    .tasks-content {
-        flex: 1;
-        overflow-y: auto;
-        padding: var(--sp-4);
-    }
-
-    .task-card {
-        background: var(--surface);
-        border: 1px solid var(--border);
-        border-radius: var(--r-md);
-        padding: var(--sp-4);
-        margin-bottom: var(--sp-3);
-    }
-
-    .task-header {
-        display: flex;
-        align-items: center;
-        gap: var(--sp-3);
-        margin-bottom: var(--sp-3);
-    }
-
-    .task-header h3 {
-        font-size: 13px;
-        font-weight: 600;
-        flex: 1;
-    }
-
-    .task-progress {
-        height: 6px;
-        background: var(--bg-deeper);
-        border-radius: 3px;
-        overflow: hidden;
-        margin-bottom: var(--sp-2);
-    }
-
-    .task-progress-fill {
-        height: 100%;
-        border-radius: 3px;
-        transition: width 0.3s ease;
-    }
-
     /* ─── DataLoading（全局数据加载进度） ─────────────────────────────── */
     .data-loading {
         display: flex;
@@ -16914,133 +16965,6 @@
         line-height: 1.4;
         max-width: 100%;
         word-break: break-word;
-    }
-
-    .task-meta {
-        display: flex;
-        align-items: center;
-        gap: var(--sp-3);
-        font-size: 11px;
-        color: var(--meta);
-    }
-
-    .task-steps {
-        margin-top: var(--sp-3);
-        padding-top: var(--sp-3);
-        border-top: 1px solid var(--border-soft);
-    }
-
-    .task-step {
-        display: flex;
-        align-items: center;
-        gap: var(--sp-2);
-        padding: var(--sp-1) 0;
-        font-size: 11px;
-    }
-
-    .task-step .step-icon {
-        width: 16px;
-        height: 16px;
-        display: grid;
-        place-items: center;
-        flex-shrink: 0;
-    }
-
-    .task-step .step-icon svg {
-        width: 12px;
-        height: 12px;
-    }
-
-    .task-step .step-name {
-        flex: 1;
-    }
-
-    .task-step .step-status {
-        font-size: 10px;
-    }
-
-    .task-actions {
-        display: flex;
-        gap: var(--sp-1);
-        margin-top: var(--sp-3);
-    }
-
-    .draft-item {
-        background: var(--surface);
-        border: 1px solid var(--border);
-        border-radius: var(--r-md);
-        padding: var(--sp-3) var(--sp-4);
-        margin-bottom: var(--sp-2);
-        display: flex;
-        align-items: center;
-        gap: var(--sp-3);
-    }
-
-    .draft-item .draft-icon {
-        width: 28px;
-        height: 28px;
-        display: grid;
-        place-items: center;
-        border-radius: var(--r-sm);
-        flex-shrink: 0;
-    }
-
-    .draft-item .draft-icon svg {
-        width: 14px;
-        height: 14px;
-    }
-
-    .draft-item .draft-body {
-        flex: 1;
-        min-width: 0;
-    }
-
-    .draft-item .draft-title {
-        font-size: 12px;
-        font-weight: 500;
-    }
-
-    .draft-item .draft-desc {
-        font-size: 11px;
-        color: var(--muted);
-    }
-
-    .draft-item .draft-actions {
-        display: flex;
-        gap: var(--sp-1);
-    }
-
-    .task-tabs {
-        display: flex;
-        gap: 0;
-        border-bottom: 1px solid var(--border);
-        margin-bottom: var(--sp-4);
-    }
-
-    .task-tab {
-        padding: var(--sp-2) var(--sp-4);
-        font-size: 12px;
-        color: var(--meta);
-        cursor: pointer;
-        border-bottom: 2px solid transparent;
-        transition: color 0.12s, border-color 0.12s;
-    }
-
-    .task-tab:hover {
-        color: var(--fg);
-    }
-
-    .task-tab.active {
-        color: var(--fg);
-        border-bottom-color: var(--accent);
-    }
-
-    .task-panel {
-        display: none;
-    }
-
-    .task-panel.active {
-        display: block;
     }
 
     /* ══════════════════════════════════════════════════════════════════════
