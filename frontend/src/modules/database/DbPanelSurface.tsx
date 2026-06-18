@@ -109,6 +109,105 @@ export const DbPanelSurface = memo(function DbPanelSurface({ tab }: DbPanelSurfa
     ws.updateSqlTabState(tab.id, { result: null, error: null, elapsed: null });
   };
 
+  const showPreviewGrid = Boolean(
+    isPreviewTab && preview?.data && canRefresh && !preview.loading && !preview.error,
+  );
+
+  const previewToolbar = useMemo(() => {
+    if (!showPreviewGrid || !preview) return null;
+    const dirtyCount = Object.keys(ws.tabDirtyRows[tab.id] ?? {}).length;
+    const isCommitting = ws.committingTabs.has(tab.id);
+    return (
+      <>
+        <Button
+          variant="icon"
+          title={t("common.refresh")}
+          aria-label={t("common.refresh")}
+          disabled={preview.loading}
+          onClick={() => ws.requestTabAction({ kind: "refresh", tabId: tab.id })}
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
+            <path d="M23 4v6h-6M1 20v-6h6" />
+            <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" />
+          </svg>
+        </Button>
+        {!preview.loading && canInsertRow && (
+          <Button
+            variant="icon"
+            title={t("database.rowEditor.newRow")}
+            aria-label={t("database.rowEditor.newRow")}
+            onClick={() => ws.handleRowNew(tab.id)}
+          >
+            <IconPlus size={14} />
+          </Button>
+        )}
+        {canExport && (
+          <Button
+            variant="icon"
+            title={t("database.results.exportCsv")}
+            aria-label={t("database.results.exportCsv")}
+            disabled={tabState.running}
+            onClick={(e) => {
+              ws.openExportMenu(e.clientX, e.clientY, tab.id);
+            }}
+          >
+            <svg
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.6"
+              width="14"
+              height="14"
+              aria-hidden
+            >
+              <path d="M8 1.5v9" strokeLinecap="round" />
+              <path d="M4.5 7L8 10.5 11.5 7" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M2.5 13h11" strokeLinecap="round" />
+            </svg>
+          </Button>
+        )}
+        <span className="db-toolbar-icon-button-wrap">
+          <Button
+            variant={dirtyCount > 0 ? "primary" : "icon"}
+            style={{ position: "relative" }}
+            disabled={dirtyCount === 0 || isCommitting}
+            onClick={() => {
+              ws.commitTabDirty(tab.id).catch(() => {});
+            }}
+            title={t("database.results.commitDirty", { count: dirtyCount })}
+            aria-label={t("database.results.commitDirty", { count: dirtyCount })}
+          >
+            <svg
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.6"
+              width="14"
+              height="14"
+              aria-hidden
+            >
+              <path d="M3 8.5l3 3 7-7" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </Button>
+          {dirtyCount > 0 && !isCommitting && (
+            <span className="db-toolbar-badge" aria-hidden>{dirtyCount}</span>
+          )}
+        </span>
+      </>
+    );
+  }, [
+    showPreviewGrid,
+    preview,
+    canInsertRow,
+    canExport,
+    tabState.running,
+    tab.id,
+    t,
+    ws,
+  ]);
+
+  const showResultsHeader = !showPreviewGrid && !!(tabState.error || tabState.result);
+
   const editorContent = (
     <div className="db-editor-area">
       <div className="sql-toolbar">
@@ -177,45 +276,11 @@ export const DbPanelSurface = memo(function DbPanelSurface({ tab }: DbPanelSurfa
 
   const resultsContent = (
     <div className="results-area db-sql-results">
+      {showResultsHeader && (
       <div className="results-header">
         <h3 style={{ marginRight: "auto" }}>
-          {isPreviewTab ? tab.label : t("database.results.preview")}
+          {t("database.results.preview")}
         </h3>
-        {isPreviewTab && canRefresh && (
-          <>
-            <Button
-              variant="icon"
-              style={{ marginLeft: "var(--sp-2)" }}
-              title="Refresh"
-              disabled={preview!.loading}
-              onClick={() => ws.requestTabAction({ kind: "refresh", tabId: tab.id })}
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
-                <path d="M23 4v6h-6M1 20v-6h6" />
-                <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" />
-              </svg>
-            </Button>
-            {!preview!.loading && canInsertRow && (
-              <Button
-                variant="icon"
-                style={{ marginLeft: "var(--sp-2)" }}
-                title={t("database.rowEditor.newRow")}
-                aria-label={t("database.rowEditor.newRow")}
-                onClick={() => ws.handleRowNew(tab.id)}
-              >
-                <IconPlus size={14} />
-              </Button>
-            )}
-          </>
-        )}
-        {isPreviewTab && preview?.data && !preview.loading && canRefresh && (
-          <span className="results-meta" style={{ marginLeft: "var(--sp-2)" }}>
-            {preview!.page * preview!.pageSize + 1}–
-            {Math.min((preview!.page + 1) * preview!.pageSize, preview!.totalRows)}
-            {" / "}
-            {preview!.totalRows.toLocaleString()}
-          </span>
-        )}
         {canExport && (
           <Button
             variant="icon"
@@ -242,48 +307,13 @@ export const DbPanelSurface = memo(function DbPanelSurface({ tab }: DbPanelSurfa
             </svg>
           </Button>
         )}
-        {isPreviewTab && (() => {
-          const dirtyCount = Object.keys(ws.tabDirtyRows[tab.id] ?? {}).length;
-          const isCommitting = ws.committingTabs.has(tab.id);
-          return (
-            <span className="db-toolbar-icon-button-wrap" style={{ marginLeft: "var(--sp-2)" }}>
-              <Button
-                variant={dirtyCount > 0 ? "primary" : "icon"}
-                style={{ position: "relative" }}
-                disabled={dirtyCount === 0 || isCommitting}
-                onClick={() => {
-                  ws.commitTabDirty(tab.id).catch(() => {});
-                }}
-                title={t("database.results.commitDirty", { count: dirtyCount })}
-                aria-label={t("database.results.commitDirty", { count: dirtyCount })}
-              >
-                <svg
-                  viewBox="0 0 16 16"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.6"
-                  width="14"
-                  height="14"
-                  aria-hidden
-                >
-                  <path d="M3 8.5l3 3 7-7" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              </Button>
-              {dirtyCount > 0 && !isCommitting && (
-                <span className="db-toolbar-badge" aria-hidden>{dirtyCount}</span>
-              )}
-            </span>
-          );
-        })()}
-        {!isPreviewTab && (
-          <span className="results-meta">
-            {t("database.results.meta", {
-              rows: rowCount,
-              ms: tabState.elapsed ?? 0,
-              mode: t("common.readonly"),
-            })}
-          </span>
-        )}
+        <span className="results-meta">
+          {t("database.results.meta", {
+            rows: rowCount,
+            ms: tabState.elapsed ?? 0,
+            mode: t("common.readonly"),
+          })}
+        </span>
         {mode === "sql" && hasSqlQueryOutput && (
           <Button
             variant="icon"
@@ -304,6 +334,7 @@ export const DbPanelSurface = memo(function DbPanelSurface({ tab }: DbPanelSurfa
           </Button>
         )}
       </div>
+      )}
       {tabState.error ? (
         <div
           className="empty-state compact text-danger"
@@ -349,6 +380,7 @@ export const DbPanelSurface = memo(function DbPanelSurface({ tab }: DbPanelSurfa
             loading={false}
             columnMeta={colMeta}
             enableTranspose
+            toolbar={previewToolbar}
             onCellEdit={handlePreviewCellEdit}
             onRowEdit={handlePreviewRowEdit}
             dirtyRowKeys={previewDirtyRowKeys}

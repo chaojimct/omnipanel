@@ -45,6 +45,8 @@ export interface ModuleSegmentDockProps {
   acceptExternalDrops?: boolean;
   /** Tab 栏前缀区域（tabs 左侧，如首页工作区切换） */
   preActions?: ReactNode;
+  /** 递增/变更时刷新 panel 内容（renderPanel 在 dockview 内不会随父 state 自动重绘） */
+  panelContentKey?: string;
 }
 
 const EMPTY_LAYOUT = null;
@@ -70,6 +72,7 @@ export function ModuleSegmentDock({
   dockScope,
   acceptExternalDrops,
   preActions,
+  panelContentKey,
 }: ModuleSegmentDockProps) {
   const layoutRef = useRef(EMPTY_LAYOUT);
   const noopClose = useCallback(() => {}, []);
@@ -116,6 +119,7 @@ export function ModuleSegmentDock({
       emptyContent={emptyContent}
       preActions={preActions}
       acceptExternalDrops={acceptExternalDrops}
+      panelContentKey={panelContentKey}
     />
   );
 }
