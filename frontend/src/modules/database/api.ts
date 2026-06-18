@@ -174,6 +174,16 @@ export interface DbIndexMeta {
   unique: boolean;
 }
 
+export interface DbRoutineMeta {
+  name: string;
+  routineType: string;
+}
+
+export interface DbUserMeta {
+  name: string;
+  host?: string | null;
+}
+
 export interface DbTableSchema {
   name: string;
   columns: DbColumnMeta[];
@@ -184,6 +194,14 @@ export interface DbTableSchema {
 export interface DbIntrospectResult {
   database: string;
   tables: DbTableSchema[];
+  views?: DbTableSchema[];
+  routines?: DbRoutineMeta[];
+}
+
+export async function listConnectionUsers(
+  connection: DbConnectionConfig,
+): Promise<DbUserMeta[]> {
+  return invoke<DbUserMeta[]>("db_list_connection_users", { connection });
 }
 
 export async function introspectSchema(

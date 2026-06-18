@@ -6,7 +6,8 @@ import { SidebarWorkspace } from "../../components/ui/SidebarWorkspace";
 import { Button } from "../../components/ui/Button";
 import { Modal } from "../../components/ui/Modal";
 import { WorkspaceEmptyPage } from "../../components/ui/WorkspaceEmptyPage";
-import { SchemaBrowser, type SchemaDatabaseSelection, type SchemaTableSelection } from "./SchemaBrowser";
+import type { SchemaDatabaseSelection, SchemaTableSelection } from "./SchemaBrowser";
+import { DatabaseSchemaSidebar } from "./DatabaseSchemaSidebar";
 import { DatabaseTablesPanel } from "./DatabaseTablesPanel";
 import { ConnectionDialog } from "./ConnectionDialog";
 import { ContextMenu } from "../../components/ui/ContextMenu";
@@ -22,6 +23,7 @@ import { getVisibleNames, mergeFilter } from "./DatabaseFilterDialog";
 import { useI18n } from "../../i18n";
 import { quickInput } from "../../lib/quickInput";
 import { isSqlMonacoEditorFocused, sqlAtOffset } from "./lsp/sqlStatement";
+import type { DbSqlFileNode } from "../../stores/dbSqlFileStore";
 import {
   connectionMatchesGroup,
   normalizeConnectionGroup,
@@ -57,11 +59,13 @@ import {
   type DbWorkspaceTab,
   type SqlWorkspaceTab,
 } from "./workspaceTabs";
-import { CellEditorDialog } from "./cell_editor";
+import { DatabaseTableEditorHost } from "./DatabaseTableEditorHost";
 import { DatabaseToolbox } from "./toolbox/DatabaseToolbox";
 import {
   createDefaultSqlTabState,
   createDefaultTablePreviewState,
+  NEW_ROW_KEY_PREFIX,
+  PENDING_INSERT_ROW_KEY,
   rowsToRecord,
   tabModeToEditorOpenMode,
   type SqlTabState,
@@ -333,6 +337,12 @@ export function DatabasePanel() {
     tabId: string;
     column: string;
     row: Record<string, unknown>;
+  } | null>(null);
+  const [rowEdit, setRowEdit] = useState<{
+    tabId: string;
+    column: string;
+    row: Record<string, unknown>;
+    isNewRow?: boolean;
   } | null>(null);
   /** 每个 tab 的「未提交修改」：行键 -> {列名: 新值}。提交或回滚后清空对应 tab。 */
   const [tabDirtyRows, setTabDirtyRows] = useState<
@@ -850,6 +860,13 @@ export function DatabasePanel() {
 
       // 2) 查询当前页数据
       const pageSize = prev.pageSize;
+      if (connection.db_type !== "redis") {
+        void introspectTable(connection, dbName, tableName)
+          .then((schema) => {
+            setTableColumnMeta((prevMeta) => ({ ...prevMeta, [tabId]: schema.columns }));
+          })
+          .catch(() => {});
+      }
       try {
         const data = await previewTable(connForSchema, tableName, pageSize, 0);
         setTablePreviews((prevMap) => ({
@@ -1006,6 +1023,16 @@ export function DatabasePanel() {
           return `'${String(v).replace(/'/g, "\\'")}'`;
         };
         for (const [rowKey, changes] of Object.entries(dirty)) {
+          if (rowKey.startsWith(NEW_ROW_KEY_PREFIX)) {
+            const entries = Object.entries(changes);
+            if (entries.length === 0) continue;
+            const cols = entries.map(([col]) => `\`${col}\``);
+            const vals = entries.map(([, val]) => escape(val));
+            sqls.push(
+              `INSERT INTO \`${tableName}\` (${cols.join(", ")}) VALUES (${vals.join(", ")})`,
+            );
+            continue;
+          }
           const setClause = Object.entries(changes)
             .map(([col, val]) => `\`${col}\` = ${escape(val)}`)
             .join(", ");
@@ -1152,6 +1179,116 @@ export function DatabasePanel() {
     [],
   );
 
+  const handleRowEdit = useCallback(
+    (tabId: string, cellInfo: { rowIndex: number; column: string; row: Record<string, unknown> }) => {
+      const pendingKey = cellInfo.row[PENDING_INSERT_ROW_KEY];
+      setRowEdit({
+        tabId,
+        column: cellInfo.column,
+        row: cellInfo.row,
+        isNewRow: typeof pendingKey === "string",
+      });
+    },
+    [],
+  );
+
+  const handleRowNew = useCallback(
+    (tabId: string) => {
+      const colMeta = tableColumnMeta[tabId];
+      if (!colMeta?.length) return;
+      const firstEditable = colMeta.find((c) => !c.isPk) ?? colMeta[0];
+      setRowEdit({
+        tabId,
+        column: firstEditable.name,
+        row: {},
+        isNewRow: true,
+      });
+    },
+    [tableColumnMeta],
+  );
+
+  const resolveConnection = useCallback(
+    (connId: string) => connections.find((c) => c.id === connId) ?? null,
+    [connections],
+  );
+
+  const isSameCellValue = useCallback((originalValue: unknown, value: unknown) => {
+    return (
+      originalValue === value ||
+      (originalValue == null && value === "") ||
+      (originalValue === "" && value == null) ||
+      (typeof originalValue === "number" &&
+        typeof value === "string" &&
+        String(originalValue) === value)
+    );
+  }, []);
+
+  const handleRowSave = useCallback(
+    (changes: Record<string, unknown>) => {
+      if (!rowEdit) return;
+      const { tabId, row, isNewRow } = rowEdit;
+      const colMeta = tableColumnMeta[tabId];
+      if (!colMeta) {
+        setRowEdit(null);
+        return;
+      }
+
+      if (isNewRow) {
+        const pendingKey = row[PENDING_INSERT_ROW_KEY];
+        const rowKey =
+          typeof pendingKey === "string" ? pendingKey : `${NEW_ROW_KEY_PREFIX}${crypto.randomUUID()}`;
+        setTabDirtyRows((prev) => {
+          const cur = { ...(prev[tabId] ?? {}) };
+          cur[rowKey] = { ...changes };
+          return { ...prev, [tabId]: cur };
+        });
+        setRowEdit(null);
+        return;
+      }
+
+      const pkCols = colMeta.filter((c) => c.isPk);
+      if (pkCols.length === 0) {
+        setRowEdit(null);
+        return;
+      }
+      const rowKey = pkCols
+        .map((pk) => `${pk.name}=${row[pk.name] == null ? "" : String(row[pk.name])}`)
+        .join("&");
+
+      setTabDirtyRows((prev) => {
+        const cur = { ...(prev[tabId] ?? {}) };
+        const rowDirty = { ...(cur[rowKey] ?? {}) };
+
+        for (const [column, value] of Object.entries(changes)) {
+          const meta = colMeta.find((c) => c.name === column);
+          if (!meta || meta.isPk) continue;
+          const originalValue = row[column];
+          if (isSameCellValue(originalValue, value)) {
+            delete rowDirty[column];
+          } else if (value === null || value === undefined) {
+            rowDirty[column] = value;
+          } else {
+            rowDirty[column] = value;
+          }
+        }
+
+        if (Object.keys(rowDirty).length === 0) {
+          delete cur[rowKey];
+        } else {
+          cur[rowKey] = rowDirty;
+        }
+        if (Object.keys(cur).length === 0) {
+          const next = { ...prev };
+          delete next[tabId];
+          return next;
+        }
+        return { ...prev, [tabId]: cur };
+      });
+      setRowEdit(null);
+    },
+    [rowEdit, tableColumnMeta, isSameCellValue],
+  );
+
   const handleCellSave = useCallback(
     (value: unknown) => {
       if (!cellEdit) return;
@@ -1167,13 +1304,7 @@ export function DatabasePanel() {
         return;
       }
       const originalValue = row[column];
-      const same =
-        originalValue === value ||
-        (originalValue == null && value === "") ||
-        (originalValue === "" && value == null) ||
-        (typeof originalValue === "number" &&
-          typeof value === "string" &&
-          String(originalValue) === value);
+      const same = isSameCellValue(originalValue, value);
       if (same) {
         setCellEdit(null);
         return;
@@ -1203,7 +1334,7 @@ export function DatabasePanel() {
       });
       setCellEdit(null);
     },
-    [cellEdit, tableColumnMeta],
+    [cellEdit, tableColumnMeta, isSameCellValue],
   );
 
   const handleContextTable = useCallback(
@@ -1542,6 +1673,16 @@ export function DatabasePanel() {
       );
       if (existingTabId) {
         setActiveWorkspaceTabId(existingTabId);
+        if (selection.connection.db_type !== "redis") {
+          void introspectTable(selection.connection, selection.dbName, selection.tableName)
+            .then((schema) => {
+              setTableColumnMeta((prev) => {
+                if (prev[existingTabId]?.length) return prev;
+                return { ...prev, [existingTabId]: schema.columns };
+              });
+            })
+            .catch(() => {});
+        }
         return;
       }
 
@@ -1689,6 +1830,29 @@ export function DatabasePanel() {
     setActiveWorkspaceTabId(tabId);
     setTabModes((prev) => ({ ...prev, [tabId]: "sql" }));
   }, [activeConn?.database, workspaceTabs]);
+
+  const openSqlFile = useCallback(
+    (file: DbSqlFileNode) => {
+      const tabId = makeSqlTabId();
+      const tab: SqlWorkspaceTab = {
+        id: tabId,
+        kind: "sql",
+        label: file.name.replace(/\.sql$/i, ""),
+      };
+      const presetDb = activeConn?.database.trim() ?? "";
+      setSqlTabStates((prev) => ({
+        ...prev,
+        [tabId]: {
+          ...createDefaultSqlTabState(presetDb),
+          sql: file.sql ?? "",
+        },
+      }));
+      setWorkspaceTabs((prev) => [...prev, tab]);
+      setActiveWorkspaceTabId(tabId);
+      setTabModes((prev) => ({ ...prev, [tabId]: "sql" }));
+    },
+    [activeConn?.database],
+  );
 
   const renameWorkspaceTab = useCallback((tabId: string, label: string) => {
     const nextLabel = label.trim();
@@ -1892,6 +2056,9 @@ export function DatabasePanel() {
     goToPage,
     requestTabAction,
     handleCellEdit,
+    handleRowEdit,
+    handleRowNew,
+    resolveConnection,
     selectTable: handleSelectTable,
     activeTableKey,
     sqlTabStates,
@@ -1916,7 +2083,7 @@ export function DatabasePanel() {
     tabModeToEditorOpenMode,
   }), [
     workspaceTabs, activeWorkspaceTabId, setActiveWorkspaceTabId, requestTabAction,
-    runQuery, updateSqlTabState, refreshTablePreview, goToPage, handleCellEdit, handleSelectTable,
+    runQuery, updateSqlTabState, refreshTablePreview, goToPage, handleCellEdit, handleRowEdit, handleRowNew, resolveConnection, handleSelectTable,
     activeTableKey,
     sqlTabStates, tablePreviews, tableColumnMeta, tabModes, tabDirtyRows, committingTabs,
     commitTabDirty, activeConn, groupConnections, databasesByConnId, databasesForActiveConn,
@@ -2019,12 +2186,13 @@ export function DatabasePanel() {
       />
     </div>
   ) : (
+    <>
     <DbWorkspaceProvider value={ctxValue}>
       <SidebarWorkspace
         preset="schema"
         sidebarMinPx={280}
         sidebar={
-          <SchemaBrowser
+          <DatabaseSchemaSidebar
             groups={groups}
             activeGroupId={activeGroupId}
             activeConnId={activeConnId}
@@ -2035,7 +2203,7 @@ export function DatabasePanel() {
             onCreateGroup={() => void handleCreateGroup()}
             onSelectGroup={handleSelectGroup}
             onSelectConnection={handleSelectConnection}
-            onNewQuery={openNewSqlTab}
+            onOpenSqlFile={openSqlFile}
             onSelectTable={handleSelectTable}
             onSelectDatabase={handleSelectDatabase}
             onContextTable={handleContextTable}
@@ -2233,20 +2401,18 @@ export function DatabasePanel() {
         groups={groups}
         initialConnection={editingConnection}
       />
-      {cellEdit && (() => {
-        const colMeta = tableColumnMeta[cellEdit.tabId]?.find((c) => c.name === cellEdit.column);
-        return (
-          <CellEditorDialog
-            open
-            columnName={cellEdit.column}
-            columnType={colMeta?.type ?? "text"}
-            currentValue={cellEdit.row[cellEdit.column]}
-            onSave={handleCellSave}
-            onCancel={() => setCellEdit(null)}
-          />
-        );
-      })()}
     </DbWorkspaceProvider>
+    <DatabaseTableEditorHost
+      cellEdit={cellEdit}
+      rowEdit={rowEdit}
+      tableColumnMeta={tableColumnMeta}
+      tabDirtyRows={tabDirtyRows}
+      onCellSave={handleCellSave}
+      onCellCancel={() => setCellEdit(null)}
+      onRowSave={handleRowSave}
+      onRowCancel={() => setRowEdit(null)}
+    />
+    </>
   )
       }
     />

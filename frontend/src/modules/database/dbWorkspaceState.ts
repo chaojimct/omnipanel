@@ -35,6 +35,11 @@ export type SqlTabState = {
 export const DEFAULT_PAGE_SIZE = 100;
 export const DEFAULT_SQL = `SELECT version();`;
 
+/** 未提交的新建行在 tabDirtyRows 中的 key 前缀 */
+export const NEW_ROW_KEY_PREFIX = "__new__:";
+/** 预览网格行对象上标记 pending insert 的内部字段（非表列） */
+export const PENDING_INSERT_ROW_KEY = "__pendingRowKey";
+
 export function createDefaultTablePreviewState(): TablePreviewState {
   return { loading: false, error: null, data: null, totalRows: 0, page: 0, pageSize: DEFAULT_PAGE_SIZE };
 }

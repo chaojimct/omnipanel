@@ -49,6 +49,13 @@ export interface DbWorkspaceContextValue {
     tabId: string,
     cellInfo: { rowIndex: number; column: string; row: Record<string, unknown> },
   ) => void;
+  handleRowEdit: (
+    tabId: string,
+    cellInfo: { rowIndex: number; column: string; row: Record<string, unknown> },
+  ) => void;
+  handleRowNew: (tabId: string) => void;
+  /** 按 id 查找连接（不受当前分组过滤影响） */
+  resolveConnection: (connId: string) => DbConnectionConfig | null;
   selectTable: (selection: SchemaTableSelection) => void;
   activeTableKey: string | null;
 

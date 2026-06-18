@@ -1,19 +1,21 @@
+import { useMemo, memo, useCallback } from "react";
 import { useDbWorkspace } from "../../contexts/DbWorkspaceContext";
 import type { SqlWorkspaceTab } from "./workspaceTabs";
 import { DockLayout, DockHandle, DockPanel } from "../../components/dock";
 import { Button } from "../../components/ui/Button";
+import { IconPlus } from "../../components/ui/Icons";
 import { Select } from "../../components/ui/Select";
 import { TableDataGrid } from "./TableDataGrid";
 import { SqlEditor } from "./SqlEditor";
 import { useI18n } from "../../i18n";
-import { createDefaultSqlTabState } from "./dbWorkspaceState";
-import { isConnectionEnabled } from "./api";
+import { createDefaultSqlTabState, NEW_ROW_KEY_PREFIX, PENDING_INSERT_ROW_KEY } from "./dbWorkspaceState";
+import { connectionHasTableSchemaChildren, isConnectionEnabled } from "./api";
 
 interface DbPanelSurfaceProps {
   tab: SqlWorkspaceTab;
 }
 
-export function DbPanelSurface({ tab }: DbPanelSurfaceProps) {
+export const DbPanelSurface = memo(function DbPanelSurface({ tab }: DbPanelSurfaceProps) {
   const { t } = useI18n();
   const ws = useDbWorkspace();
 
@@ -46,6 +48,56 @@ export function DbPanelSurface({ tab }: DbPanelSurfaceProps) {
   const canExport =
     hasSqlResult ||
     !!(tabState.sql.trim() && exportConn && tabState.database.trim());
+
+  const previewConnection = preview?.connId ? ws.resolveConnection(preview.connId) : null;
+  const canInsertRow = !!(
+    isPreviewTab &&
+    canRefresh &&
+    preview?.data &&
+    colMeta?.length &&
+    previewConnection &&
+    connectionHasTableSchemaChildren(previewConnection)
+  );
+
+  const previewDisplayRows = useMemo(() => {
+    if (!preview?.data || !colMeta) return preview?.data?.rows ?? [];
+    const dirty = ws.tabDirtyRows[tab.id] ?? {};
+    const pendingRows = Object.entries(dirty)
+      .filter(([key]) => key.startsWith(NEW_ROW_KEY_PREFIX))
+      .map(([key, changes]) => {
+        const row: Record<string, unknown> = { [PENDING_INSERT_ROW_KEY]: key };
+        for (const column of colMeta) {
+          row[column.name] = changes[column.name] ?? null;
+        }
+        return row;
+      });
+    return [...preview.data.rows, ...pendingRows];
+  }, [preview?.data, colMeta, ws.tabDirtyRows, tab.id]);
+
+  const previewDirtyRowKeys = useMemo(
+    () => new Set(Object.keys(ws.tabDirtyRows[tab.id] ?? {})),
+    [ws.tabDirtyRows, tab.id],
+  );
+  const previewCellOverrides = ws.tabDirtyRows[tab.id];
+  const handlePreviewCellEdit = useCallback(
+    (cellInfo: { rowIndex: number; column: string; row: Record<string, unknown> }) => {
+      ws.handleCellEdit(tab.id, cellInfo);
+    },
+    [ws.handleCellEdit, tab.id],
+  );
+  const handlePreviewRowEdit = useCallback(
+    (cellInfo: { rowIndex: number; column: string; row: Record<string, unknown> }) => {
+      ws.handleRowEdit(tab.id, cellInfo);
+    },
+    [ws.handleRowEdit, tab.id],
+  );
+  const handlePreviewPageChange = useCallback(
+    (page: number) => {
+      ws.requestTabAction({ kind: "page", tabId: tab.id, page });
+    },
+    [ws.requestTabAction, tab.id],
+  );
+  const noopPageChange = useCallback(() => {}, []);
 
   const dismissSqlResults = () => {
     ws.updateSqlTabState(tab.id, { result: null, error: null, elapsed: null });
@@ -124,18 +176,31 @@ export function DbPanelSurface({ tab }: DbPanelSurfaceProps) {
           {isPreviewTab ? tab.label : t("database.results.preview")}
         </h3>
         {isPreviewTab && canRefresh && (
-          <Button
-            variant="icon"
-            style={{ marginLeft: "var(--sp-2)" }}
-            title="Refresh"
-            disabled={preview!.loading}
-            onClick={() => ws.requestTabAction({ kind: "refresh", tabId: tab.id })}
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
-              <path d="M23 4v6h-6M1 20v-6h6" />
-              <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" />
-            </svg>
-          </Button>
+          <>
+            <Button
+              variant="icon"
+              style={{ marginLeft: "var(--sp-2)" }}
+              title="Refresh"
+              disabled={preview!.loading}
+              onClick={() => ws.requestTabAction({ kind: "refresh", tabId: tab.id })}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
+                <path d="M23 4v6h-6M1 20v-6h6" />
+                <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" />
+              </svg>
+            </Button>
+            {!preview!.loading && canInsertRow && (
+              <Button
+                variant="icon"
+                style={{ marginLeft: "var(--sp-2)" }}
+                title={t("database.rowEditor.newRow")}
+                aria-label={t("database.rowEditor.newRow")}
+                onClick={() => ws.handleRowNew(tab.id)}
+              >
+                <IconPlus size={14} />
+              </Button>
+            )}
+          </>
         )}
         {isPreviewTab && preview?.data && !preview.loading && canRefresh && (
           <span className="results-meta" style={{ marginLeft: "var(--sp-2)" }}>
@@ -253,7 +318,7 @@ export function DbPanelSurface({ tab }: DbPanelSurfaceProps) {
             page={0}
             pageSize={resultRows.length}
             loading={false}
-            onPageChange={() => {}}
+            onPageChange={noopPageChange}
           />
         )
       ) : isPreviewTab && preview ? (
@@ -271,17 +336,18 @@ export function DbPanelSurface({ tab }: DbPanelSurfaceProps) {
         ) : preview.data && canRefresh ? (
           <TableDataGrid
             columns={preview.data.columns}
-            rows={preview.data.rows}
-            totalRows={preview.totalRows}
+            rows={previewDisplayRows}
+            totalRows={preview.totalRows + (previewDisplayRows.length - preview.data.rows.length)}
             page={preview.page}
             pageSize={preview.pageSize}
             loading={false}
             columnMeta={colMeta}
             enableTranspose
-            onCellEdit={(cellInfo) => ws.handleCellEdit(tab.id, cellInfo)}
-            dirtyRowKeys={new Set(Object.keys(ws.tabDirtyRows[tab.id] ?? {}))}
-            cellOverrides={ws.tabDirtyRows[tab.id]}
-            onPageChange={(page) => ws.requestTabAction({ kind: "page", tabId: tab.id, page })}
+            onCellEdit={handlePreviewCellEdit}
+            onRowEdit={handlePreviewRowEdit}
+            dirtyRowKeys={previewDirtyRowKeys}
+            cellOverrides={previewCellOverrides}
+            onPageChange={handlePreviewPageChange}
           />
         ) : null
       ) : (
@@ -341,4 +407,4 @@ export function DbPanelSurface({ tab }: DbPanelSurfaceProps) {
       </DockLayout>
     </div>
   );
-}
+});

@@ -23,13 +23,10 @@ import {
   SchemaFilterDialog,
 } from "./DatabaseFilterDialog";
 import {
-  buildColumnTreeItem,
   buildConnectionTreeItem,
   buildDatabaseTreeItem,
   buildFolderTreeItem,
   buildGroupTreeItem,
-  buildIndexTreeItem,
-  buildTableTreeItem,
   handleSchemaTreeDragStart,
   handleSchemaTreeDragEnd,
   isSchemaTreeItemDraggable,
@@ -49,6 +46,21 @@ import { mergeConnectionsWithCache, type CachedConnection, type CachedDatabase }
 import { refreshAllSchemaCache } from "./schemaCacheRefresh";
 import type { SchemaCacheSnapshot } from "./schemaCache";
 import { textSearchMatches } from "../../lib/textSearchMatch";
+import {
+  connectionUsersFolderId,
+  databaseOtherFolderId,
+  databaseTablesFolderId,
+  databaseViewsFolderId,
+  formatUserLabel,
+  makeDatabaseNodeId,
+  parseTableNodeId,
+  parseViewNodeId,
+  routineNodeId,
+  userNodeId,
+} from "./schemaTreeIds";
+import { SchemaTreeObjectDetails } from "./schemaTreeObjectDetails";
+import type { SchemaSidebarSectionConfig } from "./SchemaSidebarSection";
+import { SchemaSidebarSection } from "./SchemaSidebarSection";
 
 type LoadedDatabase = CachedDatabase;
 
@@ -196,6 +208,26 @@ function TreeNode({
             <path d="M3 9h18M3 15h18M9 3v18" />
           </svg>
         )}
+        {type === "view" && (
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" width="13" height="13">
+            <path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7z" />
+            <circle cx="12" cy="12" r="3" />
+          </svg>
+        )}
+        {type === "user" && (
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" width="13" height="13">
+            <circle cx="12" cy="8" r="3" />
+            <path d="M5 20a7 7 0 0114 0" />
+          </svg>
+        )}
+        {type === "routine" && (
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" width="13" height="13">
+            <path d="M10 3h4" />
+            <path d="M12 3v6" />
+            <path d="M6 14h12" />
+            <path d="M8 18h8" />
+          </svg>
+        )}
         {(type === "folder" || type === "group") && (
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" width="13" height="13">
             <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" />
@@ -270,23 +302,20 @@ function TreeNode({
   );
 }
 
-function makeTableNodeId(connId: string, dbName: string, tableName: string) {
-  return `tbl:${connId}:${dbName}:${tableName}`;
+function routineTypeLabel(t: (key: string) => string, routineType: string): string {
+  switch (routineType.toLowerCase()) {
+    case "procedure":
+      return t("database.sidebar.routineProcedure");
+    case "function":
+      return t("database.sidebar.routineFunction");
+    case "trigger":
+      return t("database.sidebar.routineTrigger");
+    default:
+      return routineType;
+  }
 }
 
-function parseTableNodeId(id: string): { connId: string; dbName: string; tableName: string } | null {
-  if (!id.startsWith("tbl:")) {
-    return null;
-  }
-  const parts = id.slice(4).split(":");
-  if (parts.length < 3) {
-    return null;
-  }
-  const connId = parts[0];
-  const tableName = parts[parts.length - 1];
-  const dbName = parts.slice(1, -1).join(":");
-  return { connId, dbName, tableName };
-}
+export { makeDatabaseNodeId } from "./schemaTreeIds";
 
 function tableColumnsFolderId(tableId: string) {
   return `${tableId}:cols`;
@@ -309,10 +338,6 @@ export type SchemaDatabaseSelection = {
   connection: DbConnectionConfig;
 };
 
-export function makeDatabaseNodeId(connId: string, dbName: string) {
-  return `db:${connId}:${dbName}`;
-}
-
 function syncFiltersFromSnapshot(
   snapshot: SchemaCacheSnapshot,
   syncDatabaseFilter: (connId: string, names: string[]) => void,
@@ -330,7 +355,7 @@ function syncFiltersFromSnapshot(
   }
 }
 
-interface SchemaBrowserProps {
+export interface SchemaBrowserProps {
   groups: DbConnectionGroup[];
   activeGroupId?: string;
   activeConnId?: string | null;
@@ -338,7 +363,6 @@ interface SchemaBrowserProps {
   onCreateGroup?: () => void;
   onSelectGroup?: (groupId: string) => void;
   onSelectConnection?: (connId: string) => void;
-  onNewQuery?: () => void;
   onSelectTable?: (selection: SchemaTableSelection) => void;
   onSelectDatabase?: (selection: SchemaDatabaseSelection) => void;
   onContextTable?: (selection: SchemaTableSelection, event: ReactMouseEvent) => void;
@@ -346,6 +370,7 @@ interface SchemaBrowserProps {
   activeTableKey?: string | null;
   activeDatabaseKey?: string | null;
   refreshToken?: number;
+  section?: SchemaSidebarSectionConfig;
 }
 
 export function SchemaBrowser({
@@ -356,7 +381,6 @@ export function SchemaBrowser({
   onCreateGroup,
   onSelectGroup,
   onSelectConnection,
-  onNewQuery,
   onSelectTable,
   onSelectDatabase,
   onContextTable,
@@ -364,6 +388,7 @@ export function SchemaBrowser({
   activeTableKey = null,
   activeDatabaseKey = null,
   refreshToken = 0,
+  section,
 }: SchemaBrowserProps) {
   const { t } = useI18n();
   const resolvedTheme = useSettingsStore((s) => s.resolved);
@@ -564,13 +589,17 @@ export function SchemaBrowser({
     }
 
     const tableParsed = parseTableNodeId(id);
-    if (tableParsed) {
-      const conn = connectionsRef.current.find((item) => item.config.id === tableParsed.connId);
+    const viewParsed = parseViewNodeId(id);
+    if (tableParsed || viewParsed) {
+      const parsed = tableParsed ?? viewParsed!;
+      const conn = connectionsRef.current.find((item) => item.config.id === parsed.connId);
       if (conn && connectionHasTableSchemaChildren(conn.config)) {
         updateExpanded((prev) => {
           const next = new Set(prev);
           next.add(tableColumnsFolderId(id));
-          next.add(tableIndexesFolderId(id));
+          if (tableParsed) {
+            next.add(tableIndexesFolderId(id));
+          }
           return next;
         });
       }
@@ -583,12 +612,22 @@ export function SchemaBrowser({
     }
 
     const q = search.trim();
-    const tableMatchesQuery = (table: { name: string; comment?: string }) =>
-      textSearchMatches(q, table.name) || (table.comment ? textSearchMatches(q, table.comment) : false);
+    const objectMatchesQuery = (name: string, comment?: string) =>
+      textSearchMatches(q, name) || (comment ? textSearchMatches(q, comment) : false);
 
     return connections
       .map((conn) => {
         const nameMatch = textSearchMatches(q, conn.config.name);
+        const allUsers = conn.users ?? [];
+        const users = nameMatch
+          ? allUsers
+          : allUsers.filter(
+              (user) =>
+                textSearchMatches(q, user.name) ||
+                (user.host ? textSearchMatches(q, user.host) : false) ||
+                textSearchMatches(q, formatUserLabel(user.name, user.host)),
+            );
+
         const allDatabases = conn.databases ?? [];
         const visibleDatabases = getVisibleItems(allDatabases, databaseFilters[conn.config.id]);
         const databases = visibleDatabases
@@ -597,16 +636,27 @@ export function SchemaBrowser({
             const allTables = db.tables ?? [];
             const visibleTables = getVisibleItems(
               allTables,
-              tableFilters[makeTableFilterKey(conn.config.id, db.name)]
+              tableFilters[makeTableFilterKey(conn.config.id, db.name)],
             );
-            const tables = visibleTables.filter(
-              (table) => dbMatch || tableMatchesQuery(table),
-            );
+            const tables = dbMatch
+              ? visibleTables
+              : visibleTables.filter((table) => objectMatchesQuery(table.name, table.comment));
+
+            const allViews = db.views ?? [];
+            const views = dbMatch
+              ? allViews
+              : allViews.filter((view) => objectMatchesQuery(view.name, view.comment));
+
+            const allRoutines = db.routines ?? [];
+            const routines = dbMatch
+              ? allRoutines
+              : allRoutines.filter((routine) => objectMatchesQuery(routine.name));
+
             if (dbMatch) {
               return db;
             }
-            if (tables.length > 0) {
-              return { ...db, tables };
+            if (tables.length > 0 || views.length > 0 || routines.length > 0) {
+              return { ...db, tables, views, routines };
             }
             return null;
           })
@@ -615,8 +665,12 @@ export function SchemaBrowser({
         if (nameMatch) {
           return conn;
         }
-        if (databases.length > 0) {
-          return { ...conn, databases };
+        if (databases.length > 0 || users.length > 0) {
+          return {
+            ...conn,
+            databases: databases.length > 0 ? databases : [],
+            users: users.length > 0 ? users : [],
+          };
         }
         return null;
       })
@@ -646,48 +700,42 @@ export function SchemaBrowser({
       .find((conn) => conn.config.id === filterDialogTable.connId)
       ?.databases?.find((db) => db.name === filterDialogTable.dbName);
 
-  return (
-    <div className="schema-panel" ref={sidebarRef}>
-      <div className="schema-header">
-        <h3>{t("database.sidebar.title")}</h3>
-        {onCreateGroup && (
-          <Button variant="icon" title={t("database.groups.new")} onClick={onCreateGroup}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
-              <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2v-5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" />
-              <path d="M12 11v6M9 14h6" />
-            </svg>
-          </Button>
-        )}
-        <Button
-          variant="icon"
-          title={t("database.sidebar.createConnection")}
-          onClick={onCreateConnection}
-        >
+  const toolbar = (
+    <div className="schema-toolbar schema-toolbar--inline">
+      {onCreateGroup && (
+        <Button variant="icon" title={t("database.groups.new")} onClick={onCreateGroup}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
-            <path d="M12 5v14M5 12h14" />
+            <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2v-5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" />
+            <path d="M12 11v6M9 14h6" />
           </svg>
         </Button>
-        <Button
-          variant="icon"
-          title={t("database.sidebar.refresh")}
-          disabled={refreshingSchema}
-          onClick={() => void refreshSchemaCache()}
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
-            <path d="M23 4v6h-6M1 20v-6h6" />
-            <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" />
-          </svg>
-        </Button>
-        {onNewQuery && (
-          <Button variant="icon" title={t("database.sidebar.newQuery")} onClick={onNewQuery}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
-              <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
-              <path d="M14 2v6h6" />
-              <path d="M8 13h8M8 17h5" />
-            </svg>
-          </Button>
-        )}
-      </div>
+      )}
+      <Button
+        variant="icon"
+        title={t("database.sidebar.createConnection")}
+        onClick={onCreateConnection}
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
+          <path d="M12 5v14M5 12h14" />
+        </svg>
+      </Button>
+      <Button
+        variant="icon"
+        title={t("database.sidebar.refresh")}
+        disabled={refreshingSchema}
+        onClick={() => void refreshSchemaCache()}
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
+          <path d="M23 4v6h-6M1 20v-6h6" />
+          <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" />
+        </svg>
+      </Button>
+    </div>
+  );
+
+  const panelBody = (
+    <div className="schema-browser" ref={sidebarRef}>
+      {!section && toolbar}
       <ScopedSearch
         className="schema-tree-scoped-search"
         value={search}
@@ -834,13 +882,32 @@ export function SchemaBrowser({
                   const dbId = makeDatabaseNodeId(conn.config.id, db.name);
                   const dbExpanded = expandedNodeIds.has(dbId);
                   const allTables = db.tables ?? [];
+                  const allViews = db.views ?? [];
+                  const allRoutines = db.routines ?? [];
                   const tableFilter = tableFilters[makeTableFilterKey(conn.config.id, db.name)];
                   const visibleTables = getVisibleItems(allTables, tableFilter);
                   const tableVisibleCount = visibleTables.length;
                   const tableTotalCount = allTables.length;
                   const isTableFiltered = tableTotalCount > 0 && tableVisibleCount < tableTotalCount;
-                  const pagedTables = paginateSchemaChildren(visibleTables, dbId, childVisibleLimits);
+                  const viewTotalCount = allViews.length;
+                  const routineTotalCount = allRoutines.length;
+                  const tblsFolderId = databaseTablesFolderId(conn.config.id, db.name);
+                  const viewsFolderId = databaseViewsFolderId(conn.config.id, db.name);
+                  const otherFolderId = databaseOtherFolderId(conn.config.id, db.name);
+                  const tblsExpanded = expandedNodeIds.has(tblsFolderId);
+                  const viewsExpanded = expandedNodeIds.has(viewsFolderId);
+                  const otherExpanded = expandedNodeIds.has(otherFolderId);
+                  const pagedTables = paginateSchemaChildren(visibleTables, tblsFolderId, childVisibleLimits);
+                  const pagedViews = paginateSchemaChildren(allViews, viewsFolderId, childVisibleLimits);
+                  const pagedRoutines = paginateSchemaChildren(allRoutines, otherFolderId, childVisibleLimits);
                   const dbItem = buildDatabaseTreeItem(conn.config.id, db.name);
+                  const objectSummary = [
+                    tableTotalCount > 0 ? `${tableTotalCount} ${t("database.sidebar.tables")}` : null,
+                    viewTotalCount > 0 ? `${viewTotalCount} ${t("database.sidebar.views")}` : null,
+                    routineTotalCount > 0 ? `${routineTotalCount} ${t("database.sidebar.other")}` : null,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ");
 
                   return (
                     <div key={db.name}>
@@ -865,25 +932,7 @@ export function SchemaBrowser({
                         meta={
                           db.loadError
                             ? t("database.sidebar.tablesFailed")
-                            : db.tables
-                              ? isTableFiltered
-                                ? `${tableVisibleCount}/${tableTotalCount} tables`
-                                : `${tableTotalCount} tables`
-                              : undefined
-                        }
-                        onMetaClick={
-                          db.tables && tableTotalCount > 0
-                            ? () =>
-                                setFilterDialogTable({
-                                  connId: conn.config.id,
-                                  dbName: db.name,
-                                })
-                            : undefined
-                        }
-                        metaTitle={
-                          db.tables && tableTotalCount > 0
-                            ? t("database.sidebar.filterDisplay")
-                            : undefined
+                            : objectSummary || undefined
                         }
                         hasChildren
                       />
@@ -898,227 +947,268 @@ export function SchemaBrowser({
                           {db.loadError}
                         </div>
                       )}
-                      {dbExpanded &&
-                        tableTotalCount === 0 &&
-                        !db.loadError && (
-                          <div
-                            style={{
-                              padding: "4px 40px",
-                              fontSize: "11px",
-                              color: "var(--text-secondary, #8e8e93)",
-                            }}
-                          >
-                            {t("database.sidebar.noTables")}
-                          </div>
-                        )}
-                      {dbExpanded &&
-                        tableVisibleCount === 0 &&
-                        tableTotalCount > 0 && (
-                          <div
-                            style={{
-                              padding: "4px 40px",
-                              fontSize: "11px",
-                              color: "var(--text-secondary, #8e8e93)",
-                            }}
-                          >
-                            {t("database.sidebar.filterHiddenTables")}
-                          </div>
-                        )}
-                      {dbExpanded &&
-                        pagedTables.visible.map((tbl) => {
-                          const tableKey = makeTableNodeId(conn.config.id, db.name, tbl.name);
-                          const tableExpanded = expandedNodeIds.has(tableKey);
-                          const showTableSchemaChildren = connectionHasTableSchemaChildren(conn.config);
-                          const colsFolderId = tableColumnsFolderId(tableKey);
-                          const idxFolderId = tableIndexesFolderId(tableKey);
-                          const colsExpanded = expandedNodeIds.has(colsFolderId);
-                          const idxExpanded = expandedNodeIds.has(idxFolderId);
-                          const columns = tbl.columns ?? [];
-                          const indexes = tbl.indexes ?? [];
-                          const pagedColumns = paginateSchemaChildren(columns, colsFolderId, childVisibleLimits);
-                          const pagedIndexes = paginateSchemaChildren(indexes, idxFolderId, childVisibleLimits);
-                          const tableItem = buildTableTreeItem(conn.config.id, db.name, tbl.name);
-                          const colsFolderItem = buildFolderTreeItem(
-                            colsFolderId,
-                            t("database.sidebar.fields"),
-                            conn.config.id,
-                            db.name,
-                            tbl.name,
-                          );
-                          const idxFolderItem = buildFolderTreeItem(
-                            idxFolderId,
-                            t("database.sidebar.indexes"),
-                            conn.config.id,
-                            db.name,
-                            tbl.name,
-                          );
-
-                          return (
-                            <div key={tbl.name}>
-                              <TreeNode
-                                item={tableItem}
-                                depth={3}
-                                expanded={tableExpanded}
-                                onToggle={() => toggle(tableKey)}
-                                reorderScope={makeTableFilterKey(conn.config.id, db.name)}
-                                reorderName={tbl.name}
-                                hasChildren={showTableSchemaChildren}
-                                active={activeTableKey === tableKey}
-                                labelComment={tbl.comment?.trim() || undefined}
-                                onLabelClick={() =>
-                                  onSelectTable?.({
-                                    connId: conn.config.id,
-                                    dbName: db.name,
-                                    tableName: tbl.name,
-                                    connection: conn.config,
-                                  })
-                                }
-                                onContextMenu={
-                                  onContextTable
-                                    ? (e) =>
-                                        onContextTable(
-                                          {
-                                            connId: conn.config.id,
-                                            dbName: db.name,
-                                            tableName: tbl.name,
-                                            connection: conn.config,
-                                          },
-                                          e,
-                                        )
-                                    : undefined
-                                }
-                                meta={
-                                  !showTableSchemaChildren
-                                    ? undefined
-                                    : tbl.detailsError
-                                      ? t("database.sidebar.detailsFailed")
-                                      : tbl.columns
-                                        ? `${columns.length} ${t("database.sidebar.fields")} · ${indexes.length} ${t("database.sidebar.indexes")}`
-                                        : undefined
-                                }
-                              />
-                              {showTableSchemaChildren && tableExpanded && tbl.detailsError && (
-                                <div
-                                  style={{
-                                    padding: "4px 56px",
-                                    fontSize: "11px",
-                                    color: "var(--color-danger, #ff3b30)",
-                                  }}
-                                >
-                                  {tbl.detailsError}
-                                </div>
-                              )}
-                              {showTableSchemaChildren && tableExpanded && tbl.columns && (
-                                <>
-                                  <TreeNode
-                                    item={colsFolderItem}
-                                    depth={4}
-                                    expanded={colsExpanded}
-                                    onToggle={() => toggle(colsFolderId)}
-                                    meta={String(columns.length)}
-                                    hasChildren={columns.length > 0}
-                                  />
-                                  {colsExpanded &&
-                                    pagedColumns.visible.map((col) => (
-                                      <TreeNode
-                                        key={`${tableKey}:col:${col.name}`}
-                                        item={buildColumnTreeItem(
-                                          conn.config.id,
-                                          db.name,
-                                          tbl.name,
-                                          col.name,
-                                          col.type,
-                                          `${tableKey}:col:${col.name}`,
-                                        )}
-                                        depth={5}
-                                        expanded={false}
-                                        onToggle={() => {}}
-                                        hasChildren={false}
-                                        meta={col.type}
-                                        isPk={col.isPk}
-                                        isFk={col.isFk}
-                                      />
-                                    ))}
-                                  {colsExpanded && pagedColumns.hasMore && (
-                                    <SchemaLoadMoreButton
-                                      depth={5}
-                                      remaining={pagedColumns.remaining}
-                                      label={t("database.sidebar.loadMore")}
-                                      onClick={() => loadMoreChildren(colsFolderId)}
-                                    />
-                                  )}
-                                  {colsExpanded && columns.length === 0 && !tbl.detailsError && (
-                                    <div
-                                      style={{
-                                        padding: "4px 72px",
-                                        fontSize: "11px",
-                                        color: "var(--text-secondary, #8e8e93)",
-                                      }}
-                                    >
-                                      {t("database.sidebar.noColumns")}
-                                    </div>
-                                  )}
-                                  <TreeNode
-                                    item={idxFolderItem}
-                                    depth={4}
-                                    expanded={idxExpanded}
-                                    onToggle={() => toggle(idxFolderId)}
-                                    meta={String(indexes.length)}
-                                    hasChildren={indexes.length > 0}
-                                  />
-                                  {idxExpanded &&
-                                    pagedIndexes.visible.map((idx) => (
-                                      <TreeNode
-                                        key={`${tableKey}:idx:${idx.name}`}
-                                        item={buildIndexTreeItem(
-                                          conn.config.id,
-                                          db.name,
-                                          tbl.name,
-                                          idx.name,
-                                          `${tableKey}:idx:${idx.name}`,
-                                        )}
-                                        depth={5}
-                                        expanded={false}
-                                        onToggle={() => {}}
-                                        hasChildren={false}
-                                        meta={idx.columns.join(", ")}
-                                      />
-                                    ))}
-                                  {idxExpanded && pagedIndexes.hasMore && (
-                                    <SchemaLoadMoreButton
-                                      depth={5}
-                                      remaining={pagedIndexes.remaining}
-                                      label={t("database.sidebar.loadMore")}
-                                      onClick={() => loadMoreChildren(idxFolderId)}
-                                    />
-                                  )}
-                                  {idxExpanded && indexes.length === 0 && !tbl.detailsError && (
-                                    <div
-                                      style={{
-                                        padding: "4px 72px",
-                                        fontSize: "11px",
-                                        color: "var(--text-secondary, #8e8e93)",
-                                      }}
-                                    >
-                                      {t("database.sidebar.noIndexes")}
-                                    </div>
-                                  )}
-                                </>
-                              )}
+                      {dbExpanded && (
+                        <>
+                          <TreeNode
+                            item={buildFolderTreeItem(
+                              tblsFolderId,
+                              t("database.sidebar.tables"),
+                              conn.config.id,
+                              db.name,
+                            )}
+                            depth={3}
+                            expanded={tblsExpanded}
+                            onToggle={() => toggle(tblsFolderId)}
+                            meta={
+                              db.tables
+                                ? isTableFiltered
+                                  ? `${tableVisibleCount}/${tableTotalCount}`
+                                  : String(tableTotalCount)
+                                : undefined
+                            }
+                            onMetaClick={
+                              db.tables && tableTotalCount > 0
+                                ? () =>
+                                    setFilterDialogTable({
+                                      connId: conn.config.id,
+                                      dbName: db.name,
+                                    })
+                                : undefined
+                            }
+                            metaTitle={
+                              db.tables && tableTotalCount > 0
+                                ? t("database.sidebar.filterDisplay")
+                                : undefined
+                            }
+                            hasChildren
+                          />
+                          {tblsExpanded && tableTotalCount === 0 && !db.loadError && (
+                            <div
+                              style={{
+                                padding: "4px 56px",
+                                fontSize: "11px",
+                                color: "var(--text-secondary, #8e8e93)",
+                              }}
+                            >
+                              {t("database.sidebar.noTables")}
                             </div>
-                          );
-                        })}
-                      {dbExpanded && pagedTables.hasMore && (
-                        <SchemaLoadMoreButton
-                          depth={3}
-                          remaining={pagedTables.remaining}
-                          label={t("database.sidebar.loadMore")}
-                          onClick={() => loadMoreChildren(dbId)}
-                        />
+                          )}
+                          {tblsExpanded && tableVisibleCount === 0 && tableTotalCount > 0 && (
+                            <div
+                              style={{
+                                padding: "4px 56px",
+                                fontSize: "11px",
+                                color: "var(--text-secondary, #8e8e93)",
+                              }}
+                            >
+                              {t("database.sidebar.filterHiddenTables")}
+                            </div>
+                          )}
+                          {tblsExpanded &&
+                            pagedTables.visible.map((tbl) => (
+                              <SchemaTreeObjectDetails
+                                key={tbl.name}
+                                TreeNode={TreeNode}
+                                LoadMoreButton={SchemaLoadMoreButton}
+                                conn={conn}
+                                dbName={db.name}
+                                tbl={tbl}
+                                objectKind="table"
+                                depth={4}
+                                expandedNodeIds={expandedNodeIds}
+                                childVisibleLimits={childVisibleLimits}
+                                activeTableKey={activeTableKey}
+                                onToggle={toggle}
+                                onLoadMore={loadMoreChildren}
+                                onSelectTable={onSelectTable}
+                                onContextTable={onContextTable}
+                              />
+                            ))}
+                          {tblsExpanded && pagedTables.hasMore && (
+                            <SchemaLoadMoreButton
+                              depth={4}
+                              remaining={pagedTables.remaining}
+                              label={t("database.sidebar.loadMore")}
+                              onClick={() => loadMoreChildren(tblsFolderId)}
+                            />
+                          )}
+
+                          <TreeNode
+                            item={buildFolderTreeItem(
+                              viewsFolderId,
+                              t("database.sidebar.views"),
+                              conn.config.id,
+                              db.name,
+                            )}
+                            depth={3}
+                            expanded={viewsExpanded}
+                            onToggle={() => toggle(viewsFolderId)}
+                            meta={viewTotalCount > 0 ? String(viewTotalCount) : undefined}
+                            hasChildren
+                          />
+                          {viewsExpanded && viewTotalCount === 0 && !db.loadError && (
+                            <div
+                              style={{
+                                padding: "4px 56px",
+                                fontSize: "11px",
+                                color: "var(--text-secondary, #8e8e93)",
+                              }}
+                            >
+                              {t("database.sidebar.noViews")}
+                            </div>
+                          )}
+                          {viewsExpanded &&
+                            pagedViews.visible.map((view) => (
+                              <SchemaTreeObjectDetails
+                                key={view.name}
+                                TreeNode={TreeNode}
+                                LoadMoreButton={SchemaLoadMoreButton}
+                                conn={conn}
+                                dbName={db.name}
+                                tbl={view}
+                                objectKind="view"
+                                depth={4}
+                                expandedNodeIds={expandedNodeIds}
+                                childVisibleLimits={childVisibleLimits}
+                                activeTableKey={activeTableKey}
+                                onToggle={toggle}
+                                onLoadMore={loadMoreChildren}
+                                onSelectTable={onSelectTable}
+                                onContextTable={onContextTable}
+                              />
+                            ))}
+                          {viewsExpanded && pagedViews.hasMore && (
+                            <SchemaLoadMoreButton
+                              depth={4}
+                              remaining={pagedViews.remaining}
+                              label={t("database.sidebar.loadMore")}
+                              onClick={() => loadMoreChildren(viewsFolderId)}
+                            />
+                          )}
+
+                          <TreeNode
+                            item={buildFolderTreeItem(
+                              otherFolderId,
+                              t("database.sidebar.other"),
+                              conn.config.id,
+                              db.name,
+                            )}
+                            depth={3}
+                            expanded={otherExpanded}
+                            onToggle={() => toggle(otherFolderId)}
+                            meta={routineTotalCount > 0 ? String(routineTotalCount) : undefined}
+                            hasChildren
+                          />
+                          {otherExpanded && routineTotalCount === 0 && !db.loadError && (
+                            <div
+                              style={{
+                                padding: "4px 56px",
+                                fontSize: "11px",
+                                color: "var(--text-secondary, #8e8e93)",
+                              }}
+                            >
+                              {t("database.sidebar.noRoutines")}
+                            </div>
+                          )}
+                          {otherExpanded &&
+                            pagedRoutines.visible.map((routine) => {
+                              const routineId = routineNodeId(conn.config.id, db.name, routine.name);
+                              const routineItem: SchemaTreeItem = {
+                                type: "routine",
+                                id: routineId,
+                                label: routine.name,
+                                connId: conn.config.id,
+                                dbName: db.name,
+                              };
+                              return (
+                                <TreeNode
+                                  key={routineId}
+                                  item={routineItem}
+                                  depth={4}
+                                  expanded={false}
+                                  onToggle={() => {}}
+                                  hasChildren={false}
+                                  meta={routineTypeLabel(t, routine.routineType)}
+                                />
+                              );
+                            })}
+                          {otherExpanded && pagedRoutines.hasMore && (
+                            <SchemaLoadMoreButton
+                              depth={4}
+                              remaining={pagedRoutines.remaining}
+                              label={t("database.sidebar.loadMore")}
+                              onClick={() => loadMoreChildren(otherFolderId)}
+                            />
+                          )}
+                        </>
                       )}
                     </div>
                   );
                 })}
+              {connEnabled &&
+                connExpanded &&
+                conn.databases &&
+                (() => {
+                  const usersFolderId = connectionUsersFolderId(conn.config.id);
+                  const usersExpanded = expandedNodeIds.has(usersFolderId);
+                  const allUsers = conn.users ?? [];
+                  const pagedUsers = paginateSchemaChildren(allUsers, usersFolderId, childVisibleLimits);
+                  return (
+                    <>
+                      <TreeNode
+                        item={buildFolderTreeItem(
+                          usersFolderId,
+                          t("database.sidebar.users"),
+                          conn.config.id,
+                        )}
+                        depth={2}
+                        expanded={usersExpanded}
+                        onToggle={() => toggle(usersFolderId)}
+                        meta={allUsers.length > 0 ? String(allUsers.length) : undefined}
+                        hasChildren
+                      />
+                      {usersExpanded && allUsers.length === 0 && (
+                        <div
+                          style={{
+                            padding: "4px 40px",
+                            fontSize: "11px",
+                            color: "var(--text-secondary, #8e8e93)",
+                          }}
+                        >
+                          {t("database.sidebar.noUsers")}
+                        </div>
+                      )}
+                      {usersExpanded &&
+                        pagedUsers.visible.map((user) => {
+                          const uid = userNodeId(conn.config.id, user.name, user.host);
+                          const userItem: SchemaTreeItem = {
+                            type: "user",
+                            id: uid,
+                            label: formatUserLabel(user.name, user.host),
+                            connId: conn.config.id,
+                          };
+                          return (
+                            <TreeNode
+                              key={uid}
+                              item={userItem}
+                              depth={3}
+                              expanded={false}
+                              onToggle={() => {}}
+                              hasChildren={false}
+                            />
+                          );
+                        })}
+                      {usersExpanded && pagedUsers.hasMore && (
+                        <SchemaLoadMoreButton
+                          depth={3}
+                          remaining={pagedUsers.remaining}
+                          label={t("database.sidebar.loadMore")}
+                          onClick={() => loadMoreChildren(usersFolderId)}
+                        />
+                      )}
+                    </>
+                  );
+                })()}
               {connEnabled && connExpanded && conn.databases && pagedDatabases.hasMore && (
                 <SchemaLoadMoreButton
                   depth={2}
@@ -1183,4 +1273,14 @@ export function SchemaBrowser({
       )}
     </div>
   );
+
+  if (section) {
+    return (
+      <SchemaSidebarSection {...section} actions={toolbar}>
+        {panelBody}
+      </SchemaSidebarSection>
+    );
+  }
+
+  return panelBody;
 }
