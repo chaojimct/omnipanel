@@ -1,4 +1,2 @@
-# 项目内禁用 Clippy lint（本地 cargo clippy 不再报 clippy 类警告）
 [build]
-rustc-wrapper = "sccache"
 rustflags = ["-A", "clippy::all"]
