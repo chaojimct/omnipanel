@@ -24,9 +24,17 @@ export const DbPanelSurface = memo(function DbPanelSurface({ tab }: DbPanelSurfa
   const colMeta = ws.tableColumnMeta[tab.id];
   const mode = ws.tabModes[tab.id] ?? "sql";
 
+  const isPreviewTab = !!(preview?.connId);
+  const hasSqlQueryOutput = !isPreviewTab && !!(tabState.result || tabState.error);
+
+  const tabConn = ws.resolveSqlTabConnection(tab.id);
+  const tabDatabases = ws.getSqlTabDatabases(tab.id);
+  const connectionForRun = ws.connectionForSqlTab(tab.id);
+  const completionSchemas = ws.getSqlCompletionSchemas(tab.id);
+
   const schemaKey =
-    ws.activeConn && tabState.database.trim()
-      ? `${ws.activeConn.id}:${tabState.database}`
+    tabConn && tabState.database.trim()
+      ? `${tabConn.id}:${tabState.database}`
       : null;
   const schemaLoading = schemaKey !== null && ws.schemaLoadingKey === schemaKey;
 
@@ -36,14 +44,12 @@ export const DbPanelSurface = memo(function DbPanelSurface({ tab }: DbPanelSurfa
   const rowCount = resultRows.length;
 
   const canRefresh = preview?.connId && preview?.dbName && preview?.tableName;
-  const isPreviewTab = !!(preview?.connId);
-  const hasSqlQueryOutput = !isPreviewTab && !!(tabState.result || tabState.error);
 
-  const databasesForActiveConn = ws.databasesForActiveConn;
+  const sqlConnections = ws.sqlConnections;
 
   const exportConn = preview?.connId
     ? ws.groupConnections.find((c) => c.id === preview.connId)
-    : ws.activeConn;
+    : tabConn;
   const hasSqlResult = !!(tabState.result && tabState.result.columns.length > 0);
   const canExport =
     hasSqlResult ||
@@ -108,16 +114,16 @@ export const DbPanelSurface = memo(function DbPanelSurface({ tab }: DbPanelSurfa
       <div className="sql-toolbar">
         <Select
           className="db-select"
-          value={ws.activeConn?.id ?? ""}
-          onChange={(v) => ws.setActiveConnId(v || null)}
-          disabled={ws.groupConnections.length === 0}
+          value={tabConn?.id ?? tabState.connId ?? ""}
+          onChange={(v) => ws.setSqlTabConnection(tab.id, v || null)}
+          disabled={isPreviewTab || !tabState.connId && sqlConnections.length === 0}
           title={t("database.workspace.connection")}
           searchable={false}
           placeholder={t("database.results.noConnection")}
           options={
-            ws.groupConnections.length === 0
+            sqlConnections.length === 0
               ? [{ value: "", label: t("database.results.noConnection"), disabled: true }]
-              : ws.groupConnections.map((conn) => ({
+              : sqlConnections.map((conn) => ({
                   value: conn.id,
                   label: isConnectionEnabled(conn)
                     ? conn.name
@@ -130,14 +136,14 @@ export const DbPanelSurface = memo(function DbPanelSurface({ tab }: DbPanelSurfa
           className="db-select"
           value={tabState.database}
           onChange={(v) => ws.updateSqlTabState(tab.id, { database: v })}
-          disabled={!ws.activeConn || databasesForActiveConn.length === 0}
+          disabled={isPreviewTab || !tabState.connId}
           title={t("database.workspace.database")}
           searchable={false}
           placeholder={t("database.workspace.noDatabase")}
           options={
-            !ws.activeConn || databasesForActiveConn.length === 0
+            !tabConn || tabDatabases.length === 0
               ? [{ value: "", label: t("database.workspace.noDatabase"), disabled: true }]
-              : databasesForActiveConn.map((dbName) => ({ value: dbName, label: dbName }))
+              : tabDatabases.map((dbName) => ({ value: dbName, label: dbName }))
           }
         />
         {schemaLoading && (
@@ -149,7 +155,7 @@ export const DbPanelSurface = memo(function DbPanelSurface({ tab }: DbPanelSurfa
           style={{ marginLeft: "auto" }}
           onClick={() => void ws.runQuery(undefined, tab.id)}
           disabled={
-            tabState.running || !ws.connectionForSql || !tabState.database.trim()
+            tabState.running || !connectionForRun || !tabState.database.trim()
           }
         >
           {tabState.running ? t("database.running") : t("database.runSql")}
@@ -164,7 +170,7 @@ export const DbPanelSurface = memo(function DbPanelSurface({ tab }: DbPanelSurfa
           ws.updateSqlTabState(tab.id, { cursorOffset })
         }
         onRun={(sql) => void ws.runQuery(sql, tab.id)}
-        schemas={ws.sqlCompletionSchemas}
+        schemas={completionSchemas}
       />
     </div>
   );

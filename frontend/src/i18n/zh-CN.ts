@@ -638,6 +638,7 @@ export const zhCN = {
       tables: "表",
       views: "视图",
       other: "其他",
+      databases: "数据库",
       users: "用户",
       noViews: "无视图",
       noRoutines: "无存储过程/触发器/函数",
@@ -681,6 +682,9 @@ export const zhCN = {
       ddlLoading: "加载建表语句…",
       ddlFailed: "加载失败：{message}",
       openHint: "双击打开表数据",
+      viewMode: "显示方式",
+      viewTree: "树形显示",
+      viewList: "列表显示",
     },
     groups: {
       new: "新建分组",

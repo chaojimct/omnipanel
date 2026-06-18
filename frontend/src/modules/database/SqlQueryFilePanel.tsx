@@ -5,7 +5,7 @@ import { ScopedSearch } from "../../components/ui/ScopedSearch";
 import { ContextMenu } from "../../components/ui/ContextMenu";
 import { quickInput } from "../../lib/quickInput";
 import { textSearchMatches } from "../../lib/textSearchMatch";
-import { useDbSqlFileStore, type DbSqlFileNode } from "../../stores/dbSqlFileStore";
+import { useDbSqlFileStore, getSqlFileChildren, type DbSqlFileNode } from "../../stores/dbSqlFileStore";
 import type { SchemaSidebarSectionConfig } from "./SchemaSidebarSection";
 import { SchemaSidebarSection } from "./SchemaSidebarSection";
 
@@ -15,6 +15,7 @@ interface SqlQueryFilePanelProps {
 }
 
 function FolderTree({
+  allNodes,
   parentId,
   depth,
   search,
@@ -24,6 +25,7 @@ function FolderTree({
   onContextMenu,
   activeFileId,
 }: {
+  allNodes: DbSqlFileNode[];
   parentId: string | null;
   depth: number;
   search: string;
@@ -33,7 +35,10 @@ function FolderTree({
   onContextMenu: (node: DbSqlFileNode, event: ReactMouseEvent) => void;
   activeFileId?: string | null;
 }) {
-  const nodes = useDbSqlFileStore((s) => s.getChildren(parentId));
+  const nodes = useMemo(
+    () => getSqlFileChildren(allNodes, parentId),
+    [allNodes, parentId],
+  );
   const q = search.trim();
 
   const visibleNodes = useMemo(() => {
@@ -85,6 +90,7 @@ function FolderTree({
               </div>
               {expanded && (
                 <FolderTree
+                  allNodes={allNodes}
                   parentId={node.id}
                   depth={depth + 1}
                   search={search}
@@ -233,6 +239,7 @@ export function SqlQueryFilePanel({ onOpenFile, section }: SqlQueryFilePanelProp
             <div className="sql-query-file-empty">{t("database.queryFiles.empty")}</div>
           ) : (
             <FolderTree
+              allNodes={nodes}
               parentId={null}
               depth={0}
               search={search}

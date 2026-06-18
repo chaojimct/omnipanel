@@ -24,6 +24,7 @@ import { useI18n } from "../../i18n";
 import { quickInput } from "../../lib/quickInput";
 import { isSqlMonacoEditorFocused, sqlAtOffset } from "./lsp/sqlStatement";
 import type { DbSqlFileNode } from "../../stores/dbSqlFileStore";
+import { useDbSqlFileStore } from "../../stores/dbSqlFileStore";
 import {
   connectionMatchesGroup,
   normalizeConnectionGroup,
@@ -32,10 +33,12 @@ import {
   fetchTableDdl,
   introspectTable,
   listConnections,
+  listDatabases,
   MYSQL_CHARSET_PRESETS,
   previewTable,
   saveConnection,
   isConnectionEnabled,
+  isSqlCapableConnection,
   type DbColumnMeta,
   type DbConnectionConfig,
 } from "./api";
@@ -51,6 +54,7 @@ import {
   makeDatabaseTabId,
   makeDatabaseTabKey,
   findTabIdForDatabase,
+  findTabIdForSqlFile,
   makeTableTabLabel,
   makeTableTabKey,
   findTabIdForTable,
@@ -66,6 +70,7 @@ import {
   createDefaultTablePreviewState,
   NEW_ROW_KEY_PREFIX,
   PENDING_INSERT_ROW_KEY,
+  resolveSqlTabConnectionId,
   rowsToRecord,
   tabModeToEditorOpenMode,
   type SqlTabState,
@@ -106,21 +111,15 @@ import { logSchemaTreeDrop } from "./schemaTreeDragLog";
 import { connectionNodeId } from "./schemaTreeExpanded";
 import type { SchemaTreeItem } from "./schemaTreeItem";
 
-const INITIAL_SQL_TAB_ID = makeSqlTabId();
-const INITIAL_SQL_TAB: SqlWorkspaceTab = {
-  id: INITIAL_SQL_TAB_ID,
-  kind: "sql",
-  label: makeSqlTabLabel(1),
-};
-
 type DbModuleTab = "query" | "transfer";
 const DB_MODULE_TABS: DbModuleTab[] = ["query", "transfer"];
 
 function restoreSqlTabStateFromSnapshot(snap: DbSqlTabStateSnapshot): SqlTabState {
   return {
-    ...createDefaultSqlTabState(snap.database),
+    ...createDefaultSqlTabState(snap.database, snap.connId ?? ""),
     sql: snap.sql,
     database: snap.database,
+    connId: snap.connId ?? "",
     cursorOffset: snap.cursorOffset,
     result: null,
     error: null,
@@ -134,9 +133,9 @@ function applyDefaultWorkspaceSession(
   setActiveWorkspaceTabId: (id: string) => void,
   setSqlTabStates: (states: Record<string, SqlTabState>) => void,
 ): void {
-  setWorkspaceTabs([INITIAL_SQL_TAB]);
-  setActiveWorkspaceTabId(INITIAL_SQL_TAB_ID);
-  setSqlTabStates({ [INITIAL_SQL_TAB_ID]: createDefaultSqlTabState() });
+  setWorkspaceTabs([]);
+  setActiveWorkspaceTabId("");
+  setSqlTabStates({});
 }
 
 
@@ -402,6 +401,8 @@ export function DatabasePanel() {
   // Refs for workspace switch (access current state from event listener)
   const workspaceTabsRef = useRef(workspaceTabs);
   workspaceTabsRef.current = workspaceTabs;
+  const sqlTabStatesRef = useRef(sqlTabStates);
+  sqlTabStatesRef.current = sqlTabStates;
   const tabModesRef = useRef(tabModes);
   tabModesRef.current = tabModes;
 
@@ -462,6 +463,14 @@ export function DatabasePanel() {
     [connections, activeGroupNameFromStore],
   );
 
+  const sqlConnections = useMemo(
+    () =>
+      connections.filter(
+        (conn) => isSqlCapableConnection(conn) && isConnectionEnabled(conn),
+      ),
+    [connections],
+  );
+
   const activeConn = useMemo(
     () => groupConnections.find((c) => c.id === activeConnId) ?? groupConnections[0] ?? null,
     [groupConnections, activeConnId],
@@ -488,12 +497,43 @@ export function DatabasePanel() {
     [workspaceTabs, activeWorkspaceTabId],
   );
 
-  const updateSqlTabState = useCallback((tabId: string, patch: Partial<SqlTabState>) => {
-    setSqlTabStates((prev) => ({
-      ...prev,
-      [tabId]: { ...(prev[tabId] ?? createDefaultSqlTabState()), ...patch },
-    }));
+  const persistSqlFileState = useCallback((tabId: string, state: SqlTabState) => {
+    const tab = workspaceTabsRef.current.find(
+      (item): item is SqlWorkspaceTab => item.id === tabId && item.kind === "sql",
+    );
+    if (!tab?.sqlFileId) {
+      return;
+    }
+    const store = useDbSqlFileStore.getState();
+    store.updateFileSql(tab.sqlFileId, state.sql);
+    store.updateFileBinding(tab.sqlFileId, state.connId, state.database);
   }, []);
+
+  const updateSqlTabState = useCallback((tabId: string, patch: Partial<SqlTabState>) => {
+    const shouldPersist =
+      patch.sql !== undefined || patch.connId !== undefined || patch.database !== undefined;
+    let nextStateForPersist: SqlTabState | null = null;
+
+    setSqlTabStates((prev) => {
+      const nextState = { ...(prev[tabId] ?? createDefaultSqlTabState()), ...patch };
+      if (shouldPersist) {
+        nextStateForPersist = nextState;
+      }
+      return { ...prev, [tabId]: nextState };
+    });
+
+    if (nextStateForPersist) {
+      const state = nextStateForPersist;
+      queueMicrotask(() => persistSqlFileState(tabId, state));
+    }
+  }, [persistSqlFileState]);
+
+  const setSqlTabConnection = useCallback(
+    (tabId: string, connId: string | null) => {
+      updateSqlTabState(tabId, { connId: connId ?? "", database: "" });
+    },
+    [updateSqlTabState],
+  );
 
   const refreshConnections = useCallback(async () => {
     try {
@@ -708,20 +748,57 @@ export function DatabasePanel() {
 
   const activeSqlTabId =
     activeWorkspaceTab?.kind === "sql" ? activeWorkspaceTab.id : null;
-  const activeSqlTabState = activeSqlTabId
-    ? (sqlTabStates[activeSqlTabId] ?? createDefaultSqlTabState())
-    : null;
-  const activeSqlDatabase = activeSqlTabState?.database ?? "";
 
-  const connectionForSql = useMemo(() => {
-    if (!activeConn || !isConnectionEnabled(activeConn)) {
-      return null;
+  const toolboxSeed = useMemo(() => {
+    if (!activeSqlTabId) {
+      return { connId: null as string | null, database: "" };
     }
-    if (!activeSqlDatabase.trim()) {
-      return activeConn;
+    const connId = resolveSqlTabConnectionId(activeSqlTabId, sqlTabStates, tablePreviews);
+    const database = sqlTabStates[activeSqlTabId]?.database?.trim() ?? "";
+    if (!connId || !database) {
+      return { connId: null, database: "" };
     }
-    return { ...activeConn, database: activeSqlDatabase };
-  }, [activeConn, activeSqlDatabase]);
+    const conn = connections.find((item) => item.id === connId);
+    if (!conn || !isSqlCapableConnection(conn)) {
+      return { connId: null, database: "" };
+    }
+    return { connId, database };
+  }, [activeSqlTabId, sqlTabStates, tablePreviews, connections]);
+
+  const referencedSqlConnIds = useMemo(() => {
+    const ids = new Set<string>();
+    if (activeConn) {
+      ids.add(activeConn.id);
+    }
+    for (const tab of workspaceTabs) {
+      if (tab.kind !== "sql") {
+        continue;
+      }
+      const connId = resolveSqlTabConnectionId(tab.id, sqlTabStates, tablePreviews);
+      if (connId) {
+        ids.add(connId);
+      }
+    }
+    return ids;
+  }, [activeConn, workspaceTabs, sqlTabStates, tablePreviews]);
+
+  const resolveSqlTabConnection = useCallback(
+    (tabId: string): DbConnectionConfig | null => {
+      const connId = resolveSqlTabConnectionId(tabId, sqlTabStates, tablePreviews);
+      if (!connId) {
+        return null;
+      }
+      const conn = connections.find((item) => item.id === connId);
+      if (!conn || !isConnectionEnabled(conn)) {
+        return null;
+      }
+      if (!tablePreviews[tabId]?.connId && !isSqlCapableConnection(conn)) {
+        return null;
+      }
+      return conn;
+    },
+    [connections, sqlTabStates, tablePreviews],
+  );
 
   const databaseFilters = useDbSchemaFilterStore((s) => s.databaseFilters);
   const hydrateSchemaFilters = useDbSchemaFilterStore((s) => s.hydrate);
@@ -731,16 +808,46 @@ export function DatabasePanel() {
   const cacheHydrated = useDbSchemaCacheStore((s) => s.hydrated);
   const schemaSnapshot = useDbSchemaCacheStore((s) => s.snapshot);
 
-  const allDatabasesForActiveConn = activeConn
-    ? (databasesByConnId[activeConn.id] ?? [])
-    : [];
+  const getSqlTabDatabases = useCallback(
+    (tabId: string): string[] => {
+      const conn = resolveSqlTabConnection(tabId);
+      if (!conn) {
+        return [];
+      }
+      const all = databasesByConnId[conn.id] ?? [];
+      return getVisibleNames(all, databaseFilters[conn.id]);
+    },
+    [resolveSqlTabConnection, databasesByConnId, databaseFilters],
+  );
 
-  const databasesForActiveConn = useMemo(() => {
-    if (!activeConn) {
-      return [];
-    }
-    return getVisibleNames(allDatabasesForActiveConn, databaseFilters[activeConn.id]);
-  }, [activeConn, allDatabasesForActiveConn, databaseFilters]);
+  const connectionForSqlTab = useCallback(
+    (tabId: string): DbConnectionConfig | null => {
+      const conn = resolveSqlTabConnection(tabId);
+      const database = sqlTabStates[tabId]?.database.trim() ?? "";
+      if (!conn || !database) {
+        return null;
+      }
+      return { ...conn, database };
+    },
+    [resolveSqlTabConnection, sqlTabStates],
+  );
+
+  const getSqlCompletionSchemas = useCallback(
+    (tabId: string): DatabaseSchema[] => {
+      const conn = resolveSqlTabConnection(tabId);
+      const database = sqlTabStates[tabId]?.database.trim() ?? "";
+      if (!conn || !database) {
+        return [];
+      }
+      const key = `${conn.id}:${database}`;
+      const cached = schemaByKey[key];
+      if (cached) {
+        return [cached];
+      }
+      return [buildDatabaseSchema(database, [])];
+    },
+    [resolveSqlTabConnection, sqlTabStates, schemaByKey],
+  );
 
   useEffect(() => {
     if (!filtersHydrated) {
@@ -755,82 +862,104 @@ export function DatabasePanel() {
   }, [cacheHydrated, hydrateSchemaCache]);
 
   useEffect(() => {
-    if (!cacheHydrated || !activeConn) {
+    if (!cacheHydrated) {
       return;
     }
-    const names = getCachedDatabaseNames(schemaSnapshot, activeConn.id);
-    if (names.length === 0) {
-      return;
-    }
-    setDatabasesByConnId((prev) => {
-      const current = prev[activeConn.id];
-      if (current && current.length === names.length && current.every((name, index) => name === names[index])) {
-        return prev;
+    for (const connId of referencedSqlConnIds) {
+      const names = getCachedDatabaseNames(schemaSnapshot, connId);
+      if (names.length === 0) {
+        continue;
       }
-      return { ...prev, [activeConn.id]: names };
-    });
-    setDatabaseFilters((prev) => ({
-      ...prev,
-      [activeConn.id]: mergeFilter(prev[activeConn.id], names),
-    }));
-  }, [activeConn, cacheHydrated, schemaSnapshot, setDatabaseFilters]);
-
-  const sqlCompletionSchemas = useMemo((): DatabaseSchema[] => {
-    if (!activeConn || !activeSqlDatabase.trim()) {
-      return [];
+      setDatabasesByConnId((prev) => {
+        const current = prev[connId];
+        if (current && current.length === names.length && current.every((name, index) => name === names[index])) {
+          return prev;
+        }
+        return { ...prev, [connId]: names };
+      });
+      setDatabaseFilters((prev) => ({
+        ...prev,
+        [connId]: mergeFilter(prev[connId], names),
+      }));
     }
-    const key = `${activeConn.id}:${activeSqlDatabase}`;
-    const cached = schemaByKey[key];
-    if (cached) {
-      return [cached];
-    }
-    return [buildDatabaseSchema(activeSqlDatabase, [])];
-  }, [activeConn, activeSqlDatabase, schemaByKey]);
+  }, [referencedSqlConnIds, cacheHydrated, schemaSnapshot, setDatabaseFilters]);
 
   useEffect(() => {
-    if (!activeSqlTabId || !activeConn || databasesForActiveConn.length === 0) {
+    if (!cacheHydrated) {
       return;
     }
-    const tabState = sqlTabStates[activeSqlTabId];
-    const current = tabState?.database.trim() ?? "";
-    const preset = activeConn.database.trim();
-    const pick =
-      current && databasesForActiveConn.includes(current)
-        ? current
-        : preset && databasesForActiveConn.includes(preset)
-          ? preset
-          : databasesForActiveConn[0];
-    if (pick && pick !== current) {
-      updateSqlTabState(activeSqlTabId, { database: pick });
+    let cancelled = false;
+    for (const connId of referencedSqlConnIds) {
+      const connection = connections.find((item) => item.id === connId);
+      if (!connection || !isConnectionEnabled(connection)) {
+        continue;
+      }
+      const cachedNames = getCachedDatabaseNames(schemaSnapshot, connId);
+      if (cachedNames.length > 0) {
+        continue;
+      }
+      void listDatabases(connection)
+        .then((names) => {
+          if (cancelled || names.length === 0) {
+            return;
+          }
+          setDatabasesByConnId((prev) => {
+            if (prev[connId]?.length) {
+              return prev;
+            }
+            return { ...prev, [connId]: names };
+          });
+          setDatabaseFilters((prev) => ({
+            ...prev,
+            [connId]: mergeFilter(prev[connId], names),
+          }));
+        })
+        .catch(() => {
+          // 忽略：用户可在 Schema 侧栏手动刷新
+        });
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [referencedSqlConnIds, cacheHydrated, schemaSnapshot, connections, setDatabaseFilters]);
+
+  useEffect(() => {
+    if (!cacheHydrated) {
+      return;
+    }
+    for (const tab of workspaceTabs) {
+      if (tab.kind !== "sql") {
+        continue;
+      }
+      const conn = resolveSqlTabConnection(tab.id);
+      const database = sqlTabStates[tab.id]?.database.trim() ?? "";
+      if (!conn || !database) {
+        continue;
+      }
+      const key = `${conn.id}:${database}`;
+      if (schemaByKey[key]) {
+        continue;
+      }
+      const dbEntry = schemaSnapshot.connections[conn.id]?.databases.find(
+        (entry) => entry.name === database,
+      );
+      if (!dbEntry) {
+        continue;
+      }
+      const tables = introspectToTableSchemas(dbEntry.tables);
+      setSchemaByKey((prev) => ({
+        ...prev,
+        [key]: buildDatabaseSchema(database, tables),
+      }));
     }
   }, [
-    activeSqlTabId,
-    activeConn,
-    databasesForActiveConn,
+    workspaceTabs,
     sqlTabStates,
-    updateSqlTabState,
+    resolveSqlTabConnection,
+    schemaByKey,
+    cacheHydrated,
+    schemaSnapshot,
   ]);
-
-  useEffect(() => {
-    if (!activeConn || !activeSqlDatabase.trim() || !cacheHydrated) {
-      return;
-    }
-    const key = `${activeConn.id}:${activeSqlDatabase}`;
-    if (schemaByKey[key]) {
-      return;
-    }
-    const dbEntry = schemaSnapshot.connections[activeConn.id]?.databases.find(
-      (entry) => entry.name === activeSqlDatabase,
-    );
-    if (!dbEntry) {
-      return;
-    }
-    const tables = introspectToTableSchemas(dbEntry.tables);
-    setSchemaByKey((prev) => ({
-      ...prev,
-      [key]: buildDatabaseSchema(activeSqlDatabase, tables),
-    }));
-  }, [activeConn, activeSqlDatabase, schemaByKey, cacheHydrated, schemaSnapshot]);
 
   const loadTablePreview = useCallback(
     async (tabId: string, connection: DbConnectionConfig, dbName: string, tableName: string) => {
@@ -1413,7 +1542,7 @@ export function DatabasePanel() {
     async (tabId: string) => {
       const tabState = sqlTabStates[tabId] ?? createDefaultSqlTabState();
       const preview = tablePreviews[tabId];
-      const connId = preview?.connId ?? activeConn?.id;
+      const connId = preview?.connId ?? sqlTabStates[tabId]?.connId;
       const baseConn = connId ? connections.find((c) => c.id === connId) : null;
       if (!baseConn || !tabState.database.trim()) {
         return null;
@@ -1448,7 +1577,7 @@ export function DatabasePanel() {
 
       return { columns: queryResult.columns, rows, baseName };
     },
-    [sqlTabStates, tablePreviews, activeConn, connections],
+    [sqlTabStates, tablePreviews, connections],
   );
 
   const exportTabResultToCsv = useCallback(
@@ -1563,15 +1692,21 @@ export function DatabasePanel() {
       if (!conn || !isConnectionEnabled(conn)) {
         return;
       }
-      void refreshConnectionSchemaCache(conn).then(async (entry) => {
-        await useDbSchemaCacheStore.getState().patchConnection(connId, entry);
-        const names = entry.databases.map((db) => db.name);
-        setDatabasesByConnId((prev) => ({ ...prev, [connId]: names }));
-        setDatabaseFilters((prev) => ({
-          ...prev,
-          [connId]: mergeFilter(prev[connId], names),
-        }));
-      });
+      const { setConnectionRefreshing, patchConnection } = useDbSchemaCacheStore.getState();
+      setConnectionRefreshing(connId, true);
+      void refreshConnectionSchemaCache(conn)
+        .then(async (entry) => {
+          await patchConnection(connId, entry);
+          const names = entry.databases.map((db) => db.name);
+          setDatabasesByConnId((prev) => ({ ...prev, [connId]: names }));
+          setDatabaseFilters((prev) => ({
+            ...prev,
+            [connId]: mergeFilter(prev[connId], names),
+          }));
+        })
+        .finally(() => {
+          setConnectionRefreshing(connId, false);
+        });
     },
     [connections, setDatabaseFilters],
   );
@@ -1674,14 +1809,16 @@ export function DatabasePanel() {
       if (existingTabId) {
         setActiveWorkspaceTabId(existingTabId);
         if (selection.connection.db_type !== "redis") {
-          void introspectTable(selection.connection, selection.dbName, selection.tableName)
-            .then((schema) => {
-              setTableColumnMeta((prev) => {
-                if (prev[existingTabId]?.length) return prev;
-                return { ...prev, [existingTabId]: schema.columns };
-              });
-            })
-            .catch(() => {});
+          queueMicrotask(() => {
+            void introspectTable(selection.connection, selection.dbName, selection.tableName)
+              .then((schema) => {
+                setTableColumnMeta((prev) => {
+                  if (prev[existingTabId]?.length) return prev;
+                  return { ...prev, [existingTabId]: schema.columns };
+                });
+              })
+              .catch(() => {});
+          });
         }
         return;
       }
@@ -1703,7 +1840,10 @@ export function DatabasePanel() {
       // Set the database for the SQL tab
       setSqlTabStates((prev) => ({
         ...prev,
-        [tabId]: { ...createDefaultSqlTabState(selection.dbName), sql: `SELECT * FROM \`${selection.tableName}\` LIMIT 100;` },
+        [tabId]: {
+          ...createDefaultSqlTabState(selection.dbName, selection.connId),
+          sql: `SELECT * FROM \`${selection.tableName}\` LIMIT 100;`,
+        },
       }));
 
       // Initialize preview metadata (before loadTablePreview's async updates)
@@ -1712,19 +1852,21 @@ export function DatabasePanel() {
         [tabId]: { ...createDefaultTablePreviewState(), loading: true, connId: selection.connId, dbName: selection.dbName, tableName: selection.tableName },
       }));
 
-      void loadTablePreview(
-        tabId,
-        selection.connection,
-        selection.dbName,
-        selection.tableName,
-      );
-      if (selection.connection.db_type !== "redis") {
-        void introspectTable(selection.connection, selection.dbName, selection.tableName)
-          .then((schema) => {
-            setTableColumnMeta((prev) => ({ ...prev, [tabId]: schema.columns }));
-          })
-          .catch(() => {});
-      }
+      queueMicrotask(() => {
+        void loadTablePreview(
+          tabId,
+          selection.connection,
+          selection.dbName,
+          selection.tableName,
+        );
+        if (selection.connection.db_type !== "redis") {
+          void introspectTable(selection.connection, selection.dbName, selection.tableName)
+            .then((schema) => {
+              setTableColumnMeta((prev) => ({ ...prev, [tabId]: schema.columns }));
+            })
+            .catch(() => {});
+        }
+      });
     },
     [loadTablePreview, tablePreviews, workspaceTabs],
   );
@@ -1821,29 +1963,33 @@ export function DatabasePanel() {
       kind: "sql",
       label: makeSqlTabLabel(sqlTabCount),
     };
-    const presetDb = activeConn?.database.trim() ?? "";
     setSqlTabStates((prev) => ({
       ...prev,
-      [tabId]: createDefaultSqlTabState(presetDb),
+      [tabId]: createDefaultSqlTabState(),
     }));
     setWorkspaceTabs((prev) => [...prev, tab]);
     setActiveWorkspaceTabId(tabId);
     setTabModes((prev) => ({ ...prev, [tabId]: "sql" }));
-  }, [activeConn?.database, workspaceTabs]);
+  }, [workspaceTabs]);
 
   const openSqlFile = useCallback(
     (file: DbSqlFileNode) => {
+      const existingTabId = findTabIdForSqlFile(workspaceTabs, file.id);
+      if (existingTabId) {
+        setActiveWorkspaceTabId(existingTabId);
+        return;
+      }
       const tabId = makeSqlTabId();
       const tab: SqlWorkspaceTab = {
         id: tabId,
         kind: "sql",
         label: file.name.replace(/\.sql$/i, ""),
+        sqlFileId: file.id,
       };
-      const presetDb = activeConn?.database.trim() ?? "";
       setSqlTabStates((prev) => ({
         ...prev,
         [tabId]: {
-          ...createDefaultSqlTabState(presetDb),
+          ...createDefaultSqlTabState(file.database ?? "", file.connId ?? ""),
           sql: file.sql ?? "",
         },
       }));
@@ -1851,7 +1997,7 @@ export function DatabasePanel() {
       setActiveWorkspaceTabId(tabId);
       setTabModes((prev) => ({ ...prev, [tabId]: "sql" }));
     },
-    [activeConn?.database],
+    [workspaceTabs],
   );
 
   const renameWorkspaceTab = useCallback((tabId: string, label: string) => {
@@ -1969,7 +2115,7 @@ export function DatabasePanel() {
     }
     const resolvedTabId = tab.id;
     const tabState = sqlTabStates[resolvedTabId] ?? createDefaultSqlTabState();
-    const conn = connectionForSql;
+    const conn = connectionForSqlTab(resolvedTabId);
     const sql = (sqlOverride ?? tabState.sql).trim();
     if (!conn) {
       updateSqlTabState(resolvedTabId, { error: t("database.results.noConnection") });
@@ -2011,7 +2157,7 @@ export function DatabasePanel() {
       });
     }
   }, [
-    connectionForSql,
+    connectionForSqlTab,
     activeWorkspaceTab,
     workspaceTabs,
     enqueueAction,
@@ -2070,15 +2216,16 @@ export function DatabasePanel() {
     committingTabs,
     commitTabDirty,
     openExportMenu: (x: number, y: number, tabId: string) => setExportMenu({ x, y, tabId }),
-    activeConn,
+    sqlConnections,
     groupConnections,
     databasesByConnId,
-    databasesForActiveConn,
     schemaByKey,
     schemaLoadingKey,
-    setActiveConnId,
-    sqlCompletionSchemas,
-    connectionForSql,
+    resolveSqlTabConnection,
+    getSqlTabDatabases,
+    getSqlCompletionSchemas,
+    connectionForSqlTab,
+    setSqlTabConnection,
     rowsToRecord,
     tabModeToEditorOpenMode,
   }), [
@@ -2086,8 +2233,9 @@ export function DatabasePanel() {
     runQuery, updateSqlTabState, refreshTablePreview, goToPage, handleCellEdit, handleRowEdit, handleRowNew, resolveConnection, handleSelectTable,
     activeTableKey,
     sqlTabStates, tablePreviews, tableColumnMeta, tabModes, tabDirtyRows, committingTabs,
-    commitTabDirty, activeConn, groupConnections, databasesByConnId, databasesForActiveConn,
-    schemaByKey, schemaLoadingKey, setActiveConnId, sqlCompletionSchemas, connectionForSql,
+    commitTabDirty, sqlConnections, groupConnections, databasesByConnId,
+    schemaByKey, schemaLoadingKey, resolveSqlTabConnection, getSqlTabDatabases,
+    getSqlCompletionSchemas, connectionForSqlTab, setSqlTabConnection,
   ]);
 
   const mirrorRevisionsRef = useRef(new Map<string, string>());
@@ -2180,9 +2328,9 @@ export function DatabasePanel() {
         panelId === "transfer" ? (
     <div className="db-module-transfer">
       <DatabaseToolbox
-        connections={groupConnections}
-        initialSourceConnectionId={activeConn?.id}
-        initialSourceDatabase={activeSqlDatabase}
+        connections={connections.filter((conn) => isConnectionEnabled(conn))}
+        initialSourceConnectionId={toolboxSeed.connId ?? activeConn?.id}
+        initialSourceDatabase={toolboxSeed.database}
       />
     </div>
   ) : (

@@ -642,6 +642,7 @@ export const enUS: TranslationDict = {
       tables: "Tables",
       views: "Views",
       other: "Other",
+      databases: "Databases",
       users: "Users",
       noViews: "No views",
       noRoutines: "No routines",
@@ -685,6 +686,9 @@ export const enUS: TranslationDict = {
       ddlLoading: "Loading DDL…",
       ddlFailed: "Failed to load DDL: {message}",
       openHint: "Double-click to open table data",
+      viewMode: "Display mode",
+      viewTree: "Tree view",
+      viewList: "List view",
     },
     groups: {
       new: "New Group",

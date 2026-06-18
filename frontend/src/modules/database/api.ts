@@ -101,6 +101,13 @@ export function connectionHasTableSchemaChildren(
   return connection.db_type !== "redis";
 }
 
+/** 可在 SQL 编辑器中执行查询的连接（排除 Redis 等 KV 引擎）。 */
+export function isSqlCapableConnection(
+  connection: Pick<DbConnectionConfig, "db_type">,
+): boolean {
+  return connection.db_type !== "redis";
+}
+
 export async function listConnections(): Promise<DbConnectionConfig[]> {
   return invoke<DbConnectionConfig[]>("db_list_connections");
 }

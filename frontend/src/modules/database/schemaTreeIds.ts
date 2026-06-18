@@ -34,6 +34,10 @@ export function makeDatabaseNodeId(connId: string, dbName: string) {
   return `db:${connId}:${dbName}`;
 }
 
+export function connectionDatabasesFolderId(connId: string) {
+  return `databases:${connId}`;
+}
+
 export function connectionUsersFolderId(connId: string) {
   return `users:${connId}`;
 }

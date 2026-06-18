@@ -25,6 +25,7 @@ type TreeNodeComponent = (props: {
   hasChildren: boolean;
   active?: boolean;
   onLabelClick?: () => void;
+  onLabelDoubleClick?: () => void;
   onContextMenu?: (e: ReactMouseEvent) => void;
   reorderScope?: string;
   reorderName?: string;
@@ -130,7 +131,9 @@ export function SchemaTreeObjectDetails({
         hasChildren={showTableSchemaChildren}
         active={activeTableKey === tableKey}
         labelComment={tbl.comment?.trim() || undefined}
-        onLabelClick={() => onSelectTable?.(selection)}
+        onLabelDoubleClick={
+          objectKind === "table" ? () => onSelectTable?.(selection) : undefined
+        }
         onContextMenu={onContextTable ? (e) => onContextTable(selection, e) : undefined}
         meta={
           !showTableSchemaChildren
@@ -198,17 +201,6 @@ export function SchemaTreeObjectDetails({
               onClick={() => onLoadMore(colsFolderId)}
             />
           )}
-          {colsExpanded && columns.length === 0 && !tbl.detailsError && (
-            <div
-              style={{
-                padding: "4px 72px",
-                fontSize: "11px",
-                color: "var(--text-secondary, #8e8e93)",
-              }}
-            >
-              {t("database.sidebar.noColumns")}
-            </div>
-          )}
           {objectKind === "table" && (
             <>
               <TreeNode
@@ -250,17 +242,6 @@ export function SchemaTreeObjectDetails({
                   label={t("database.sidebar.loadMore")}
                   onClick={() => onLoadMore(idxFolderId)}
                 />
-              )}
-              {idxExpanded && indexes.length === 0 && !tbl.detailsError && (
-                <div
-                  style={{
-                    padding: "4px 72px",
-                    fontSize: "11px",
-                    color: "var(--text-secondary, #8e8e93)",
-                  }}
-                >
-                  {t("database.sidebar.noIndexes")}
-                </div>
               )}
             </>
           )}

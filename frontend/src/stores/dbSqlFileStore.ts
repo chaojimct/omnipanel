@@ -9,6 +9,10 @@ export interface DbSqlFileNode {
   name: string;
   parentId: string | null;
   sql?: string;
+  /** 上次在此文件上选用的数据库连接 */
+  connId?: string;
+  /** 上次在此文件上选用的数据库名 */
+  database?: string;
   updatedAt: number;
 }
 
@@ -17,10 +21,10 @@ interface DbSqlFileState {
   addFolder: (parentId: string | null, name: string) => DbSqlFileNode;
   addFile: (parentId: string | null, name: string, sql?: string) => DbSqlFileNode;
   updateFileSql: (id: string, sql: string) => void;
+  updateFileBinding: (id: string, connId: string, database: string) => void;
   renameNode: (id: string, name: string) => boolean;
   deleteNode: (id: string) => void;
   getNode: (id: string) => DbSqlFileNode | undefined;
-  getChildren: (parentId: string | null) => DbSqlFileNode[];
 }
 
 function makeId(prefix: string): string {
@@ -58,6 +62,20 @@ function collectDescendantIds(nodes: DbSqlFileNode[], rootId: string): Set<strin
     }
   }
   return ids;
+}
+
+export function getSqlFileChildren(
+  nodes: DbSqlFileNode[],
+  parentId: string | null,
+): DbSqlFileNode[] {
+  return nodes
+    .filter((node) => node.parentId === parentId)
+    .sort((a, b) => {
+      if (a.type !== b.type) {
+        return a.type === "folder" ? -1 : 1;
+      }
+      return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
+    });
 }
 
 export const useDbSqlFileStore = create<DbSqlFileState>()(
@@ -101,6 +119,21 @@ export const useDbSqlFileStore = create<DbSqlFileState>()(
         }));
       },
 
+      updateFileBinding: (id, connId, database) => {
+        set((state) => ({
+          nodes: state.nodes.map((node) =>
+            node.id === id && node.type === "file"
+              ? {
+                  ...node,
+                  connId: connId || undefined,
+                  database: database || undefined,
+                  updatedAt: Date.now(),
+                }
+              : node,
+          ),
+        }));
+      },
+
       renameNode: (id, name) => {
         const trimmed = name.trim();
         if (!trimmed) {
@@ -134,16 +167,6 @@ export const useDbSqlFileStore = create<DbSqlFileState>()(
       },
 
       getNode: (id) => get().nodes.find((node) => node.id === id),
-
-      getChildren: (parentId) =>
-        get()
-          .nodes.filter((node) => node.parentId === parentId)
-          .sort((a, b) => {
-            if (a.type !== b.type) {
-              return a.type === "folder" ? -1 : 1;
-            }
-            return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
-          }),
     }),
     {
       name: "omnipanel-db-sql-files",

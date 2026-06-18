@@ -22,6 +22,8 @@ export type TablePreviewState = {
 };
 
 export type SqlTabState = {
+  /** 查询 Tab 选用的连接 id（表预览 Tab 以 tablePreviews.connId 为准）。 */
+  connId: string;
   sql: string;
   database: string;
   /** 上次光标位置，表预览模式无编辑器焦点时 ⌘+Enter 用此 offset 取语句。 */
@@ -44,8 +46,9 @@ export function createDefaultTablePreviewState(): TablePreviewState {
   return { loading: false, error: null, data: null, totalRows: 0, page: 0, pageSize: DEFAULT_PAGE_SIZE };
 }
 
-export function createDefaultSqlTabState(database = ""): SqlTabState {
+export function createDefaultSqlTabState(database = "", connId = ""): SqlTabState {
   return {
+    connId,
     sql: DEFAULT_SQL,
     database,
     cursorOffset: 0,
@@ -54,6 +57,15 @@ export function createDefaultSqlTabState(database = ""): SqlTabState {
     elapsed: 0,
     running: false,
   };
+}
+
+/** 解析 Tab 实际使用的连接 id（表预览优先）。 */
+export function resolveSqlTabConnectionId(
+  tabId: string,
+  sqlTabStates: Record<string, SqlTabState>,
+  tablePreviews: Record<string, TablePreviewState>,
+): string {
+  return tablePreviews[tabId]?.connId ?? sqlTabStates[tabId]?.connId ?? "";
 }
 
 export function tabModeToEditorOpenMode(mode: "data" | "sql"): SqlEditorOpenMode {
