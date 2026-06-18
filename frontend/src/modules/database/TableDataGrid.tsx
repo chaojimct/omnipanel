@@ -1,4 +1,14 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, memo, type MutableRefObject } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  memo,
+  type MutableRefObject,
+  type ReactNode,
+} from "react";
 import {
   flexRender,
   getCoreRowModel,
@@ -30,6 +40,8 @@ export type TableDataGridProps = {
   cellOverrides?: Record<string, Record<string, unknown>>;
   /** 显示行列转换切换按钮（表数据预览） */
   enableTranspose?: boolean;
+  /** 底部分页栏左侧工具按钮（表预览操作等） */
+  toolbar?: ReactNode;
 };
 
 function buildRowKey(row: Record<string, unknown>, pkCols: { name: string }[]): string {
@@ -207,7 +219,7 @@ function TableCellContextMenu({
   );
 }
 
-export const TableDataGrid = memo(function TableDataGrid({ columns, rows, totalRows, page, pageSize, loading, onPageChange, columnMeta, onCellEdit, onRowEdit, dirtyRowKeys, cellOverrides, enableTranspose = false }: TableDataGridProps) {
+export const TableDataGrid = memo(function TableDataGrid({ columns, rows, totalRows, page, pageSize, loading, onPageChange, columnMeta, onCellEdit, onRowEdit, dirtyRowKeys, cellOverrides, enableTranspose = false, toolbar }: TableDataGridProps) {
   const { t } = useI18n();
   const [transposed, setTransposed] = useState(false);
   const cellMenuOpenRef = useRef<(state: CellMenuState) => void>(() => {});
@@ -417,7 +429,7 @@ export const TableDataGrid = memo(function TableDataGrid({ columns, rows, totalR
   const showingTo = Math.min((page + 1) * pageSize, totalRows);
 
   return (
-    <>
+    <div className="db-data-table-panel">
     <div
       ref={wrapRef}
       className={`db-data-table-wrap${transposed ? " db-data-table-wrap--transposed" : ""}`}
@@ -540,7 +552,9 @@ export const TableDataGrid = memo(function TableDataGrid({ columns, rows, totalR
       <TableCellContextMenu menuOpenRef={cellMenuOpenRef} onRowEdit={onRowEdit} />
     )}
     <div className="db-pagination">
-      <div className="db-pagination-info">
+      <div className="db-pagination-left">
+        {toolbar ? <div className="db-pagination-toolbar">{toolbar}</div> : null}
+        <div className="db-pagination-info">
         {enableTranspose && (
           <Button
             variant={transposed ? "primary" : "ghost"}
@@ -576,6 +590,7 @@ export const TableDataGrid = memo(function TableDataGrid({ columns, rows, totalR
         ) : (
           <span>0 rows</span>
         )}
+        </div>
       </div>
       <div className="db-pagination-controls">
         <Button
@@ -625,6 +640,6 @@ export const TableDataGrid = memo(function TableDataGrid({ columns, rows, totalR
         </Button>
       </div>
     </div>
-    </>
+    </div>
   );
 });

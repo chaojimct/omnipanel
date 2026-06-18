@@ -12764,6 +12764,14 @@
         overflow: auto;
     }
 
+    .db-workspace-pane--sql .db-data-table-panel {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+    }
+
     .db-workspace-pane--sql .db-data-table-wrap {
         flex: 1;
         min-height: 0;
@@ -12781,6 +12789,14 @@
         min-height: 0;
         display: flex;
         flex-direction: column;
+    }
+
+    .db-workspace-pane--table .db-data-table-panel {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
     }
 
     .db-workspace-pane--table .db-data-table-wrap {
@@ -12907,12 +12923,34 @@
         display: flex;
         align-items: center;
         justify-content: space-between;
+        gap: var(--sp-3);
         padding: var(--sp-2) var(--sp-4);
         border-top: 1px solid var(--border);
         background: var(--bg);
         flex-shrink: 0;
         width: 100%;
         box-sizing: border-box;
+        min-height: 36px;
+    }
+
+    .db-pagination-left {
+        display: flex;
+        align-items: center;
+        gap: var(--sp-3);
+        min-width: 0;
+        flex: 1;
+    }
+
+    .db-pagination-toolbar {
+        display: flex;
+        align-items: center;
+        gap: var(--sp-1);
+        flex-shrink: 0;
+    }
+
+    .db-pagination-toolbar:not(:empty) + .db-pagination-info {
+        padding-left: var(--sp-3);
+        border-left: 1px solid var(--border);
     }
 
     .db-pagination-info {

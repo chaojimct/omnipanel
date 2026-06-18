@@ -2321,10 +2321,55 @@ export function DatabasePanel() {
     [],
   );
 
+  useEffect(() => {
+    if (isActiveRoute) return;
+    setCtxMenu(null);
+    setTableCtxMenu(null);
+    setConnCtxMenu(null);
+    setExportMenu(null);
+  }, [isActiveRoute]);
+
+  const queryPanelContentKey = useMemo(
+    () =>
+      [
+        workspaceInitialized ? "1" : "0",
+        workspaceTabs.map((tab) => `${tab.id}:${tab.kind}`).join("|"),
+        activeWorkspaceTabId,
+        activeTableKey ?? "",
+        activeDatabaseKey ?? "",
+        schemaRefreshToken,
+        activeGroupId ?? "",
+        activeConnId ?? "",
+        connections.map((c) => `${c.id}:${c.enabled !== false ? 1 : 0}`).join(","),
+        dockTabs.map((tab) => tab.id).join(","),
+        dialogOpen ? "1" : "0",
+        createDbDialog?.connId ?? "",
+        pendingTabAction?.tabId ?? "",
+      ].join(";"),
+    [
+      workspaceInitialized,
+      workspaceTabs,
+      activeWorkspaceTabId,
+      activeTableKey,
+      activeDatabaseKey,
+      schemaRefreshToken,
+      activeGroupId,
+      activeConnId,
+      connections,
+      dockTabs,
+      dialogOpen,
+      createDbDialog?.connId,
+      pendingTabAction?.tabId,
+    ],
+  );
+
   return (
+    <>
+    <DbWorkspaceProvider value={ctxValue}>
     <ModuleSegmentDock
       className="db-module-dock"
       enabled={isActiveRoute}
+      panelContentKey={queryPanelContentKey}
       tabs={moduleSegmentTabs}
       activeTabId={moduleTab}
       onActiveTabChange={(id) => setModuleTab(id as DbModuleTab)}
@@ -2339,7 +2384,6 @@ export function DatabasePanel() {
     </div>
   ) : (
     <>
-    <DbWorkspaceProvider value={ctxValue}>
       <SidebarWorkspace
         preset="schema"
         sidebarMinPx={280}
@@ -2406,153 +2450,81 @@ export function DatabasePanel() {
         )}
         </div>
       </SidebarWorkspace>
-      {ctxMenu && (() => {
-        const ctxTab = workspaceTabs.find((t) => t.id === ctxMenu.tabId);
-        const snapshot = ctxTab ? dbTabToSnapshot(ctxTab, tabModes[ctxTab.id]) : null;
-        const closeItems = buildTabCloseMenuItems(
-          t,
-          workspaceTabs.length,
-          ctxMenu.index,
-          handleContextAction,
-          { showRename: true },
-        );
-        const wsCopyItems = snapshot ? buildCopyToWorkspaceMenuItems({
-          workspaces: allWorkspaces,
-          currentWorkspaceId,
-          snapshot,
-          onCopyToCurrent: () => {
-            if (!ctxTab) return;
-            const newTab: DbWorkspaceTab = ctxTab.kind === "sql"
-              ? { id: makeSqlTabId(), kind: "sql", label: `${ctxTab.label} (副本)` }
-              : { id: makeDatabaseTabId(), kind: "database", label: `${ctxTab.label} (副本)`, connId: ctxTab.connId, dbName: ctxTab.dbName };
-            setWorkspaceTabs((prev) => [...prev, newTab]);
-            setActiveWorkspaceTabId(newTab.id);
-            addSnapshotToWorkspace(
-              currentWorkspaceId,
-              dbTabToSnapshot(newTab, tabModes[ctxTab.id]),
-            );
-          },
-        }) : [];
-        const wsMoveItems = snapshot ? buildMoveToWorkspaceMenuItems(t, {
-          workspaces: allWorkspaces,
-          currentWorkspaceId,
-          snapshot,
-          onMoveToOther: () => closeWorkspaceTab(ctxMenu.tabId),
-        }) : [];
-        const allItems = [
-          ...closeItems,
-          { id: "ws-sep-before", separator: true, label: "" },
-          {
-            id: "ws-copy",
-            label: t("shell.workspace.copyTo"),
-            children: wsCopyItems,
-          },
-          {
-            id: "ws-move",
-            label: t("shell.workspace.moveTo"),
-            children: wsMoveItems,
-          },
-        ];
+    </>
+  )
+      }
+    />
+    <CreateDatabaseDialog
+      open={createDbDialog !== null}
+      connection={
+        createDbDialog
+          ? connections.find((c) => c.id === createDbDialog.connId) ?? null
+          : null
+      }
+      onCancel={() => setCreateDbDialog(null)}
+      onCreated={(_created) => {
+        const connId = createDbDialog?.connId;
+        setCreateDbDialog(null);
+        if (connId) {
+          refreshConnDatabases(connId);
+          setActiveConnId(connId);
+        }
+      }}
+    />
+    <Modal
+      open={pendingTabAction !== null}
+      onClose={cancelPendingCommit}
+    >
+      {pendingTabAction && (() => {
+        const dirtyCount = Object.keys(tabDirtyRows[pendingTabAction.tabId] ?? {}).length;
         return (
-          <ContextMenu
-            items={allItems}
-            position={{ x: ctxMenu.x, y: ctxMenu.y }}
-            onClose={() => setCtxMenu(null)}
-          />
+          <div className="warn-alert-dialog" role="alertdialog">
+            <div className="warn-alert-header">
+              <span className="warn-alert-icon" aria-hidden>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="20" height="20">
+                  <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                  <line x1="12" y1="9" x2="12" y2="13" />
+                  <line x1="12" y1="17" x2="12.01" y2="17" />
+                </svg>
+              </span>
+              <h3 className="warn-alert-title">{t("database.results.dirtyTitle")}</h3>
+            </div>
+            <div className="warn-alert-body">
+              <p className="warn-alert-message">
+                {t("database.results.dirtyMessage", { count: dirtyCount })}
+              </p>
+            </div>
+            <div className="warn-alert-footer">
+              <Button type="button" variant="secondary" onClick={cancelPendingCommit}>
+                {t("database.results.dirtyRollback")}
+              </Button>
+              <Button
+                type="button"
+                variant="primary"
+                onClick={confirmPendingCommit}
+                disabled={committingTabs.has(pendingTabAction.tabId)}
+              >
+                {t("database.results.dirtyCommit")}
+              </Button>
+            </div>
+          </div>
         );
       })()}
-      {tableCtxMenu && (
-        <ContextMenu
-          items={buildTableContextMenuItems()}
-          position={{ x: tableCtxMenu.x, y: tableCtxMenu.y }}
-          onClose={() => setTableCtxMenu(null)}
-        />
-      )}
-      {connCtxMenu && (
-        <ContextMenu
-          items={buildConnContextMenuItems()}
-          position={{ x: connCtxMenu.x, y: connCtxMenu.y }}
-          onClose={() => setConnCtxMenu(null)}
-        />
-      )}
-      <CreateDatabaseDialog
-        open={createDbDialog !== null}
-        connection={
-          createDbDialog
-            ? connections.find((c) => c.id === createDbDialog.connId) ?? null
-            : null
-        }
-        onCancel={() => setCreateDbDialog(null)}
-        onCreated={(_created) => {
-          const connId = createDbDialog?.connId;
-          setCreateDbDialog(null);
-          if (connId) {
-            refreshConnDatabases(connId);
-            setActiveConnId(connId);
-          }
-        }}
-      />
-      {exportMenu && (
-        <ContextMenu
-          items={buildExportMenuItems()}
-          position={{ x: exportMenu.x, y: exportMenu.y }}
-          onClose={() => setExportMenu(null)}
-        />
-      )}
-      <Modal
-        open={pendingTabAction !== null}
-        onClose={cancelPendingCommit}
-      >
-        {pendingTabAction && (() => {
-          const dirtyCount = Object.keys(tabDirtyRows[pendingTabAction.tabId] ?? {}).length;
-          return (
-            <div className="warn-alert-dialog" role="alertdialog">
-              <div className="warn-alert-header">
-                <span className="warn-alert-icon" aria-hidden>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="20" height="20">
-                    <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
-                    <line x1="12" y1="9" x2="12" y2="13" />
-                    <line x1="12" y1="17" x2="12.01" y2="17" />
-                  </svg>
-                </span>
-                <h3 className="warn-alert-title">{t("database.results.dirtyTitle")}</h3>
-              </div>
-              <div className="warn-alert-body">
-                <p className="warn-alert-message">
-                  {t("database.results.dirtyMessage", { count: dirtyCount })}
-                </p>
-              </div>
-              <div className="warn-alert-footer">
-                <Button type="button" variant="secondary" onClick={cancelPendingCommit}>
-                  {t("database.results.dirtyRollback")}
-                </Button>
-                <Button
-                  type="button"
-                  variant="primary"
-                  onClick={confirmPendingCommit}
-                  disabled={committingTabs.has(pendingTabAction.tabId)}
-                >
-                  {t("database.results.dirtyCommit")}
-                </Button>
-              </div>
-            </div>
-          );
-        })()}
-      </Modal>
-      <ConnectionDialog
-        open={dialogOpen}
-        onClose={() => {
-          setDialogOpen(false);
-          setEditingConnection(null);
-        }}
-        onSaved={() => {
-          setSchemaRefreshToken((token) => token + 1);
-          setEditingConnection(null);
-        }}
-        defaultGroup={activeGroupName}
-        groups={groups}
-        initialConnection={editingConnection}
-      />
+    </Modal>
+    <ConnectionDialog
+      open={dialogOpen}
+      onClose={() => {
+        setDialogOpen(false);
+        setEditingConnection(null);
+      }}
+      onSaved={() => {
+        setSchemaRefreshToken((token) => token + 1);
+        setEditingConnection(null);
+      }}
+      defaultGroup={activeGroupName}
+      groups={groups}
+      initialConnection={editingConnection}
+    />
     </DbWorkspaceProvider>
     <DatabaseTableEditorHost
       cellEdit={cellEdit}
@@ -2564,9 +2536,82 @@ export function DatabasePanel() {
       onRowSave={handleRowSave}
       onRowCancel={() => setRowEdit(null)}
     />
+    {isActiveRoute && ctxMenu && (() => {
+      const ctxTab = workspaceTabs.find((t) => t.id === ctxMenu.tabId);
+      const snapshot = ctxTab ? dbTabToSnapshot(ctxTab, tabModes[ctxTab.id]) : null;
+      const closeItems = buildTabCloseMenuItems(
+        t,
+        workspaceTabs.length,
+        ctxMenu.index,
+        handleContextAction,
+        { showRename: true },
+      );
+      const wsCopyItems = snapshot ? buildCopyToWorkspaceMenuItems({
+        workspaces: allWorkspaces,
+        currentWorkspaceId,
+        snapshot,
+        onCopyToCurrent: () => {
+          if (!ctxTab) return;
+          const newTab: DbWorkspaceTab = ctxTab.kind === "sql"
+            ? { id: makeSqlTabId(), kind: "sql", label: `${ctxTab.label} (副本)` }
+            : { id: makeDatabaseTabId(), kind: "database", label: `${ctxTab.label} (副本)`, connId: ctxTab.connId, dbName: ctxTab.dbName };
+          setWorkspaceTabs((prev) => [...prev, newTab]);
+          setActiveWorkspaceTabId(newTab.id);
+          addSnapshotToWorkspace(
+            currentWorkspaceId,
+            dbTabToSnapshot(newTab, tabModes[ctxTab.id]),
+          );
+        },
+      }) : [];
+      const wsMoveItems = snapshot ? buildMoveToWorkspaceMenuItems(t, {
+        workspaces: allWorkspaces,
+        currentWorkspaceId,
+        snapshot,
+        onMoveToOther: () => closeWorkspaceTab(ctxMenu.tabId),
+      }) : [];
+      const allItems = [
+        ...closeItems,
+        { id: "ws-sep-before", separator: true, label: "" },
+        {
+          id: "ws-copy",
+          label: t("shell.workspace.copyTo"),
+          children: wsCopyItems,
+        },
+        {
+          id: "ws-move",
+          label: t("shell.workspace.moveTo"),
+          children: wsMoveItems,
+        },
+      ];
+      return (
+        <ContextMenu
+          items={allItems}
+          position={{ x: ctxMenu.x, y: ctxMenu.y }}
+          onClose={() => setCtxMenu(null)}
+        />
+      );
+    })()}
+    {isActiveRoute && tableCtxMenu && (
+      <ContextMenu
+        items={buildTableContextMenuItems()}
+        position={{ x: tableCtxMenu.x, y: tableCtxMenu.y }}
+        onClose={() => setTableCtxMenu(null)}
+      />
+    )}
+    {isActiveRoute && connCtxMenu && (
+      <ContextMenu
+        items={buildConnContextMenuItems()}
+        position={{ x: connCtxMenu.x, y: connCtxMenu.y }}
+        onClose={() => setConnCtxMenu(null)}
+      />
+    )}
+    {isActiveRoute && exportMenu && (
+      <ContextMenu
+        items={buildExportMenuItems()}
+        position={{ x: exportMenu.x, y: exportMenu.y }}
+        onClose={() => setExportMenu(null)}
+      />
+    )}
     </>
-  )
-      }
-    />
   );
 }
