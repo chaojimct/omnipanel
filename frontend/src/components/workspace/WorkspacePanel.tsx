@@ -194,11 +194,9 @@ export function WorkspacePanel({ workspace }: WorkspacePanelProps) {
     [enterWorkspaceFullscreen, isEngineeringFullscreen],
   );
 
-  const showHomeInSwitcher = embeddedMode === "half";
-
   const preActions = useMemo(
-    () => <WorkspaceSwitcher placement="below" showHome={showHomeInSwitcher} />,
-    [showHomeInSwitcher],
+    () => <WorkspaceSwitcher placement="below" showHome={false} />,
+    [],
   );
 
   const fullscreenButton = (

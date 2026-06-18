@@ -2,22 +2,26 @@ import { useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useBottomPanelStore } from "../../stores/bottomPanelStore";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
-import { defaultHeightForMode } from "../../lib/workspaceMode";
 
-const DRAG_THRESHOLD_PX = 36;
+const DRAG_START_THRESHOLD_PX = 8;
 
 /**
- * 工程全屏顶栏下方的拖拽把手：向下拖拽退出全屏并恢复功能页与非全屏高度形态。
+ * 工程全屏顶栏下方的拖拽把手：一旦开始向下拖拽，立即进入半屏并回到最后操作界面。
  */
 export function WorkspaceFullscreenDragHandle() {
   const navigate = useNavigate();
   const activePath = useWorkspaceStore((s) => s.activePath);
   const leaveFullscreenByDrag = useBottomPanelStore((s) => s.leaveFullscreenByDrag);
   const dragging = useRef(false);
+  const exited = useRef(false);
   const startY = useRef(0);
-  const maxDelta = useRef(0);
   const moveRef = useRef<((event: PointerEvent) => void) | null>(null);
   const upRef = useRef<(() => void) | null>(null);
+
+  const navigateToLastFeature = useCallback(() => {
+    const path = activePath && activePath !== "/" ? activePath : "/terminal";
+    navigate(path);
+  }, [activePath, navigate]);
 
   const cleanupListeners = useCallback(() => {
     if (moveRef.current) {
@@ -26,6 +30,7 @@ export function WorkspaceFullscreenDragHandle() {
     }
     if (upRef.current) {
       window.removeEventListener("pointerup", upRef.current);
+      window.removeEventListener("pointercancel", upRef.current);
       upRef.current = null;
     }
     document.body.style.cursor = "";
@@ -33,41 +38,41 @@ export function WorkspaceFullscreenDragHandle() {
     dragging.current = false;
   }, []);
 
-  const finishDrag = useCallback(() => {
-    const delta = maxDelta.current;
-    cleanupListeners();
-    if (delta < DRAG_THRESHOLD_PX) return;
-
-    leaveFullscreenByDrag(defaultHeightForMode("half"));
-    const path = activePath && activePath !== "/" ? activePath : "/terminal";
-    navigate(path);
-  }, [activePath, cleanupListeners, leaveFullscreenByDrag, navigate]);
+  const exitToHalf = useCallback(() => {
+    if (exited.current) return;
+    exited.current = true;
+    leaveFullscreenByDrag();
+    navigateToLastFeature();
+  }, [leaveFullscreenByDrag, navigateToLastFeature]);
 
   const onPointerDown = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
       if (event.button !== 0) return;
       dragging.current = true;
+      exited.current = false;
       startY.current = event.clientY;
-      maxDelta.current = 0;
       document.body.style.cursor = "row-resize";
       document.body.style.userSelect = "none";
 
       const onMove = (ev: PointerEvent) => {
-        if (!dragging.current) return;
-        maxDelta.current = Math.max(maxDelta.current, ev.clientY - startY.current);
+        if (!dragging.current || exited.current) return;
+        const delta = ev.clientY - startY.current;
+        if (delta >= DRAG_START_THRESHOLD_PX) {
+          exitToHalf();
+        }
       };
       const onUp = () => {
-        if (!dragging.current) return;
-        finishDrag();
+        cleanupListeners();
       };
 
       moveRef.current = onMove;
       upRef.current = onUp;
       window.addEventListener("pointermove", onMove);
       window.addEventListener("pointerup", onUp);
+      window.addEventListener("pointercancel", onUp);
       event.preventDefault();
     },
-    [finishDrag],
+    [cleanupListeners, exitToHalf],
   );
 
   return (

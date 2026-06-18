@@ -2321,6 +2321,36 @@
     transform: rotate(180deg);
 }
 
+.workspace-switcher--half-dock .workspace-switcher-trigger {
+    gap: 0;
+    padding: 0;
+}
+
+.workspace-switcher--half-dock .workspace-switcher-icon-hit,
+.workspace-switcher--half-dock .workspace-switcher-menu-hit {
+    display: inline-flex;
+    align-items: center;
+    height: 100%;
+    cursor: pointer;
+}
+
+.workspace-switcher--half-dock .workspace-switcher-icon-hit {
+    padding: 0 var(--sp-2) 0 var(--sp-3);
+}
+
+.workspace-switcher--half-dock .workspace-switcher-menu-hit {
+    gap: var(--sp-2);
+    padding: 0 var(--sp-3) 0 var(--sp-2);
+    border-left: 1px solid var(--border);
+}
+
+.workspace-switcher--half-dock .workspace-switcher-icon-hit:hover,
+.workspace-switcher--half-dock .workspace-switcher-menu-hit:hover,
+.workspace-switcher--half-dock .workspace-switcher-trigger.is-open .workspace-switcher-menu-hit {
+    background: var(--surface-hover);
+    color: var(--fg);
+}
+
 .dockable-workspace .dv-left-actions-container {
     display: flex;
     align-items: stretch;

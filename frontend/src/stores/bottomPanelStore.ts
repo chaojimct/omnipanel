@@ -4,8 +4,7 @@ import {
   defaultHeightForMode,
   dragModeFromHeight,
   isEmbeddedWorkspaceMode,
-  modeFromHeight,
-  normalizeWorkspaceHeight,
+  resolveEmbeddedHeight,
   WS_HEIGHT_HIDDEN_MAX,
   type EmbeddedWorkspaceMode,
   type WorkspaceMode,
@@ -51,8 +50,8 @@ interface BottomPanelState {
   toggleFullscreen: () => void;
   toggleEmbeddedWorkspace: () => void;
   toggleOpen: () => void;
-  /** 全屏顶栏向下拖拽退出全屏 */
-  leaveFullscreenByDrag: (heightPx: number) => void;
+  /** 全屏顶栏向下拖拽退出全屏，固定恢复半屏 */
+  leaveFullscreenByDrag: () => void;
   /** 半屏及以下右上角：先进工程全屏；工程全屏再进首页 */
   handleWorkspaceChromeIcon: () => void;
 }
@@ -139,8 +138,7 @@ export const useBottomPanelStore = create<BottomPanelState>()(
         }
 
         // 松手提交：吸附到规范高度并记忆。
-        const nextMode = dragModeFromHeight(heightPx, currentEmbedded);
-        const normalized = normalizeWorkspaceHeight(heightPx, nextMode);
+        const { mode: nextMode, height: normalized } = resolveEmbeddedHeight(heightPx);
         const patch: Partial<BottomPanelState> = {
           workspaceHeightPx: normalized,
           workspaceMode: nextMode,
@@ -205,23 +203,15 @@ export const useBottomPanelStore = create<BottomPanelState>()(
         get().leaveFullscreenForFeature();
       },
 
-      leaveFullscreenByDrag: (heightPx) => {
-        const { lastNonFullscreenMode } = get();
-        const currentEmbedded =
-          lastNonFullscreenMode !== "hidden" ? lastNonFullscreenMode : undefined;
-        const nextMode = modeFromHeight(heightPx, currentEmbedded);
-        const normalized = normalizeWorkspaceHeight(heightPx, nextMode);
+      leaveFullscreenByDrag: () => {
+        const halfHeight = defaultHeightForMode("half");
         set({
-          workspaceMode: nextMode,
-          workspaceHeightPx: normalized,
-          lastNonFullscreenMode: nextMode === "hidden" ? get().lastNonFullscreenMode : nextMode,
-          ...syncDerivedFlags(nextMode),
+          workspaceMode: "half",
+          workspaceHeightPx: halfHeight,
+          lastNonFullscreenMode: "half",
+          ...syncDerivedFlags("half"),
         });
-        if (nextMode !== "hidden") {
-          set((state) => ({ expandSignal: state.expandSignal + 1 }));
-        } else {
-          set((state) => ({ collapseSignal: state.collapseSignal + 1 }));
-        }
+        set((state) => ({ expandSignal: state.expandSignal + 1 }));
       },
 
       handleWorkspaceChromeIcon: () => {
@@ -313,7 +303,7 @@ export const useBottomPanelStore = create<BottomPanelState>()(
             typeof p.workspaceHeightPx === "number" && p.workspaceHeightPx > WS_HEIGHT_HIDDEN_MAX
               ? p.workspaceHeightPx
               : defaultHeightForMode(mode);
-          merged.workspaceHeightPx = normalizeWorkspaceHeight(rawHeight, mode);
+          merged.workspaceHeightPx = resolveEmbeddedHeight(rawHeight).height;
           Object.assign(merged, syncDerivedFlags(mode));
         } else {
           merged.workspaceMode = "hidden";

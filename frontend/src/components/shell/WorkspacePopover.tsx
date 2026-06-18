@@ -43,7 +43,6 @@ export function WorkspacePopover({
     (state) => state.removeWorkspaceData,
   );
   const requestExpand = useBottomPanelStore((state) => state.requestExpand);
-  const exitHomeToWorkspace = useBottomPanelStore((state) => state.exitHomeToWorkspace);
   const isHomeActive = useBottomPanelStore((state) => state.isHomeActive);
 
   const panelRef = useRef<HTMLDivElement>(null);
@@ -136,9 +135,7 @@ export function WorkspacePopover({
       setDraftError(t("shell.workspacePopover.nameDuplicate"));
       return;
     }
-    if (isHomeActive) {
-      exitHomeToWorkspace();
-    } else {
+    if (useBottomPanelStore.getState().workspaceMode === "hidden") {
       requestExpand();
     }
     addWorkspace(trimmed);
@@ -152,18 +149,17 @@ export function WorkspacePopover({
 
   function handleSelect(target: WorkspaceInfo) {
     const sameWorkspace = target.id === currentId;
-    if (sameWorkspace && !isHomeActive) {
-      requestExpand();
+    const { workspaceMode } = useBottomPanelStore.getState();
+
+    if (sameWorkspace) {
+      if (workspaceMode === "hidden") {
+        requestExpand();
+      }
       onClose();
       return;
     }
-    if (isHomeActive) {
-      exitHomeToWorkspace();
-    }
-    if (!sameWorkspace) {
-      switchWorkspace(target.id);
-    }
-    requestExpand();
+
+    switchWorkspace(target.id);
     onClose();
   }
 
@@ -173,7 +169,6 @@ export function WorkspacePopover({
     if (!canDelete) return;
     removeWorkspaceData(target.id);
     if (!removeWorkspace(target.id)) return;
-    requestExpand();
   }
 
   function startCreating() {
