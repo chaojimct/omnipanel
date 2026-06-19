@@ -10,6 +10,7 @@ import { useWorkspaceStore, type WorkspaceInfo } from "../../stores/workspaceSto
 import { useWorkspaceBottomDockStore } from "../../stores/workspaceBottomDockStore";
 import { useBottomPanelStore } from "../../stores/bottomPanelStore";
 import { goWorkspaceHome, navigateToWorkspace } from "../../lib/workspaceNavigation";
+import { appConfirm } from "../../lib/appConfirm";
 import { useI18n } from "../../i18n";
 
 interface WorkspacePopoverProps {
@@ -40,6 +41,7 @@ export function WorkspacePopover({
   const workspaces = useWorkspaceStore((state) => state.workspaces);
   const currentId = useWorkspaceStore((state) => state.workspace.id);
   const addWorkspace = useWorkspaceStore((state) => state.addWorkspace);
+  const renameWorkspace = useWorkspaceStore((state) => state.renameWorkspace);
   const removeWorkspace = useWorkspaceStore((state) => state.removeWorkspace);
   const removeWorkspaceData = useWorkspaceBottomDockStore(
     (state) => state.removeWorkspaceData,
@@ -57,7 +59,11 @@ export function WorkspacePopover({
   const [creating, setCreating] = useState(false);
   const [draftName, setDraftName] = useState("");
   const [draftError, setDraftError] = useState<string | null>(null);
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameDraft, setRenameDraft] = useState("");
+  const [renameError, setRenameError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const renameInputRef = useRef<HTMLInputElement>(null);
 
   const canDelete = workspaces.length > 1;
 
@@ -90,13 +96,20 @@ export function WorkspacePopover({
       setCoords({ left, bottom: window.innerHeight - anchorRect.top + gap });
     }
     setReady(true);
-  }, [anchorRef, workspaces.length, currentId, creating, placement]);
+  }, [anchorRef, workspaces.length, currentId, creating, renamingId, placement]);
 
   useEffect(() => {
     if (creating) {
       inputRef.current?.focus();
     }
   }, [creating]);
+
+  useEffect(() => {
+    if (renamingId) {
+      renameInputRef.current?.focus();
+      renameInputRef.current?.select();
+    }
+  }, [renamingId]);
 
   useEffect(() => {
     const handler = (e: MouseEvent | KeyboardEvent) => {
@@ -106,6 +119,8 @@ export function WorkspacePopover({
             setCreating(false);
             setDraftName("");
             setDraftError(null);
+          } else if (renamingId) {
+            cancelRename();
           } else {
             onClose();
           }
@@ -113,6 +128,9 @@ export function WorkspacePopover({
         }
         if (e.key === "Enter" && creating) {
           commitCreate();
+        }
+        if (e.key === "Enter" && renamingId) {
+          commitRename();
         }
         return;
       }
@@ -188,18 +206,59 @@ export function WorkspacePopover({
     onClose();
   }
 
-  function handleDelete(target: WorkspaceInfo, event: React.MouseEvent) {
+  async function handleDelete(target: WorkspaceInfo, event: React.MouseEvent) {
     event.preventDefault();
     event.stopPropagation();
     if (!canDelete) return;
+    if (
+      !(await appConfirm(
+        t("shell.workspacePopover.confirmDelete", { name: target.name }),
+        t("shell.workspacePopover.delete"),
+      ))
+    ) {
+      return;
+    }
     removeWorkspaceData(target.id);
     if (!removeWorkspace(target.id)) return;
   }
 
   function startCreating() {
+    cancelRename();
     setCreating(true);
     setDraftName("");
     setDraftError(null);
+  }
+
+  function startRename(target: WorkspaceInfo, event: React.MouseEvent) {
+    event.preventDefault();
+    event.stopPropagation();
+    setCreating(false);
+    setDraftName("");
+    setDraftError(null);
+    setRenamingId(target.id);
+    setRenameDraft(target.name);
+    setRenameError(null);
+  }
+
+  function cancelRename() {
+    setRenamingId(null);
+    setRenameDraft("");
+    setRenameError(null);
+  }
+
+  function commitRename() {
+    if (!renamingId) return;
+    const trimmed = renameDraft.trim();
+    if (!trimmed) {
+      setRenameError(t("shell.workspacePopover.nameRequired"));
+      return;
+    }
+    if (workspaces.some((w) => w.id !== renamingId && w.name === trimmed)) {
+      setRenameError(t("shell.workspacePopover.nameDuplicate"));
+      return;
+    }
+    if (!renameWorkspace(renamingId, trimmed)) return;
+    cancelRename();
   }
 
   return createPortal(
@@ -247,56 +306,129 @@ export function WorkspacePopover({
           {workspaces.map((ws) => {
             const active = ws.id === currentId && !isHomeActive;
             const deleteLabel = t("shell.workspacePopover.delete");
+            const renameLabel = t("shell.workspacePopover.rename");
+            const isRenaming = renamingId === ws.id;
             return (
-              <li key={ws.id} className="workspace-popover-row">
-                <button
-                  type="button"
-                  className={`workspace-popover-item${active ? " workspace-popover-item--active" : ""}`}
-                  onClick={() => handleSelect(ws)}
-                >
-                  <span className="workspace-popover-item-name">{ws.name}</span>
-                  {ws.description && (
-                    <span className="workspace-popover-item-desc">{ws.description}</span>
-                  )}
-                  {active && (
-                    <svg
-                      className="workspace-popover-item-check"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2.5"
-                      width="12"
-                      height="12"
-                      aria-hidden
+              <li
+                key={ws.id}
+                className={`workspace-popover-row${isRenaming ? " workspace-popover-row--editing" : ""}`}
+              >
+                {isRenaming ? (
+                  <div className="workspace-popover-inline-edit">
+                    <input
+                      ref={renameInputRef}
+                      type="text"
+                      className="workspace-popover-input"
+                      placeholder={t("shell.workspacePopover.namePlaceholder")}
+                      value={renameDraft}
+                      onChange={(e) => {
+                        setRenameDraft(e.target.value);
+                        if (renameError) setRenameError(null);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") commitRename();
+                        if (e.key === "Escape") cancelRename();
+                      }}
+                    />
+                    <button
+                      type="button"
+                      className="workspace-popover-confirm"
+                      onClick={commitRename}
+                      aria-label={t("shell.workspacePopover.confirmRename")}
                     >
-                      <polyline points="20 6 9 17 4 12" />
-                    </svg>
-                  )}
-                </button>
-                {canDelete ? (
-                  <button
-                    type="button"
-                    className="workspace-popover-delete"
-                    title={deleteLabel}
-                    aria-label={deleteLabel}
-                    onClick={(event) => handleDelete(ws, event)}
-                  >
-                    <svg
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      width="12"
-                      height="12"
-                      aria-hidden
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" width="12" height="12" aria-hidden>
+                        <polyline points="20 6 9 17 4 12" />
+                      </svg>
+                    </button>
+                    <button
+                      type="button"
+                      className="workspace-popover-cancel"
+                      onClick={cancelRename}
+                      aria-label={t("shell.workspacePopover.cancel")}
                     >
-                      <polyline points="3 6 5 6 21 6" />
-                      <path d="M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2" />
-                      <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />
-                      <line x1="10" y1="11" x2="10" y2="17" />
-                      <line x1="14" y1="11" x2="14" y2="17" />
-                    </svg>
-                  </button>
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="12" height="12" aria-hidden>
+                        <line x1="18" y1="6" x2="6" y2="18" />
+                        <line x1="6" y1="6" x2="18" y2="18" />
+                      </svg>
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      className={`workspace-popover-item${active ? " workspace-popover-item--active" : ""}`}
+                      onClick={() => handleSelect(ws)}
+                    >
+                      <span className="workspace-popover-item-name">{ws.name}</span>
+                      {ws.description && (
+                        <span className="workspace-popover-item-desc">{ws.description}</span>
+                      )}
+                      {active && (
+                        <svg
+                          className="workspace-popover-item-check"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2.5"
+                          width="12"
+                          height="12"
+                          aria-hidden
+                        >
+                          <polyline points="20 6 9 17 4 12" />
+                        </svg>
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      className="workspace-popover-rename"
+                      title={renameLabel}
+                      aria-label={renameLabel}
+                      onClick={(event) => startRename(ws, event)}
+                    >
+                      <svg
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        width="12"
+                        height="12"
+                        aria-hidden
+                      >
+                        <path d="M12 20h9" />
+                        <path d="M16.5 3.5a2.12 2.12 0 013 3L7 19l-4 1 1-4 12.5-12.5z" />
+                      </svg>
+                    </button>
+                    {canDelete ? (
+                      <button
+                        type="button"
+                        className="workspace-popover-delete"
+                        title={deleteLabel}
+                        aria-label={deleteLabel}
+                        onClick={(event) => void handleDelete(ws, event)}
+                      >
+                        <svg
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          width="12"
+                          height="12"
+                          aria-hidden
+                        >
+                          <polyline points="3 6 5 6 21 6" />
+                          <path d="M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2" />
+                          <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />
+                          <line x1="10" y1="11" x2="10" y2="17" />
+                          <line x1="14" y1="11" x2="14" y2="17" />
+                        </svg>
+                      </button>
+                    ) : null}
+                  </>
+                )}
+                {isRenaming && renameError ? (
+                  <div className="workspace-popover-error workspace-popover-error--inline">
+                    {renameError}
+                  </div>
                 ) : null}
               </li>
             );

@@ -429,7 +429,10 @@ export const zhCN = {
       nameDuplicate: "已存在同名工作区",
       create: "创建",
       cancel: "取消",
+      rename: "重命名工作区",
+      confirmRename: "确认重命名",
       delete: "删除工作区",
+      confirmDelete: "确定要删除工作区「{name}」吗？此操作不可撤销。",
       cannotDeleteLast: "至少保留一个工作区",
     },
     workspacePanel: {

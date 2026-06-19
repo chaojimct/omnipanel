@@ -45,7 +45,7 @@ import { useAiStore } from "./stores/aiStore";
 import { useAiDrawerShortcut } from "./hooks/useAiDrawerShortcut";
 import { useBottomWorkspaceShortcut } from "./hooks/useBottomWorkspaceShortcut";
 import { useWorkspaceStore } from "./stores/workspaceStore";
-import { navigateToFeature } from "./lib/workspaceNavigation";
+import { goWorkspaceHome, navigateToFeature } from "./lib/workspaceNavigation";
 import { useActionStore, getPendingRiskAction } from "./stores/actionStore";
 import { useTopbarStore } from "./stores/topbarStore";
 import { getResourceById } from "./lib/resourceRegistry";
@@ -255,6 +255,26 @@ function AppShell() {
   useEffect(() => {
     console.log("[route]", location.pathname);
   }, [location.pathname]);
+
+  useEffect(() => {
+    const bootToHome = () => {
+      const { workspaceMode, embeddedMode } = useBottomPanelStore.getState();
+      if (
+        embeddedMode === "half" ||
+        workspaceMode === "half" ||
+        workspaceMode === "thumbnail" ||
+        workspaceMode === "taskbar"
+      ) {
+        return;
+      }
+      goWorkspaceHome();
+    };
+    if (useBottomPanelStore.persist.hasHydrated()) {
+      bootToHome();
+      return;
+    }
+    return useBottomPanelStore.persist.onFinishHydration(bootToHome);
+  }, []);
 
   // 根路径重定向到默认工作区
   useEffect(() => {

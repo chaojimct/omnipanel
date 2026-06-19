@@ -5,6 +5,7 @@ import { useWorkspaceStore, type WorkspaceInfo } from "../../stores/workspaceSto
 import { useWorkspacePreviewCollapseStore } from "../../stores/workspacePreviewCollapseStore";
 import { useStatusBarStore } from "../../stores/statusBarStore";
 import { workspaceResources, getResourceById, type EnvironmentTag } from "../../lib/resourceRegistry";
+import { isWorkspacePath } from "../../lib/paths";
 import { useI18n } from "../../i18n";
 import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
 
@@ -76,6 +77,7 @@ export function StatusBar() {
   const runningCount = actions.filter((action) => action.status === "running").length;
   const activeResource = getResourceById(activeResourceId);
   const environment = activeResource?.environment ?? "unknown";
+  const showWorkspaceControls = !isWorkspacePath(location.pathname);
 
   useEffect(() => {
     if (location.pathname !== "/module/terminal") return;
@@ -116,7 +118,7 @@ export function StatusBar() {
         <span className="statusbar-item">GPU: wgpu</span>
         <span className="statusbar-item">UTF-8</span>
         <span className="statusbar-item">LF</span>
-          <StatusBarWorkspaceControls />
+          {showWorkspaceControls ? <StatusBarWorkspaceControls /> : null}
         </div>
       </>
     );
@@ -153,7 +155,7 @@ export function StatusBar() {
       <span className="statusbar-item" style={{ color: "var(--meta)" }}>
         {t("shell.statusbar.commandPaletteHint")}
       </span>
-      <StatusBarWorkspaceControls />
+      {showWorkspaceControls ? <StatusBarWorkspaceControls /> : null}
     </div>
     </>
   );

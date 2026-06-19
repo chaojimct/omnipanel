@@ -74,12 +74,12 @@ export const useBottomPanelStore = create<BottomPanelState>()(
     (set, get) => ({
       expandSignal: 0,
       collapseSignal: 0,
-      workspaceMode: "hidden",
+      workspaceMode: "home",
       workspaceHeightPx: 0,
       lastNonFullscreenMode: "half",
       isOpen: false,
-      isFullscreen: false,
-      isHomeActive: false,
+      isFullscreen: true,
+      isHomeActive: true,
       embeddedMode: "off",
 
       requestExpand: () => {
@@ -281,7 +281,7 @@ export const useBottomPanelStore = create<BottomPanelState>()(
             ? p.workspaceHeightPx
             : defaultHeightForMode("half");
         const workspaceMode: WorkspaceMode =
-          legacyEmbedded === "half" ? "half" : "hidden";
+          legacyEmbedded === "half" ? "half" : "home";
         return {
           ...p,
           lastNonFullscreenMode,
@@ -307,9 +307,9 @@ export const useBottomPanelStore = create<BottomPanelState>()(
           merged.workspaceHeightPx = resolveEmbeddedHeight(rawHeight).height;
           Object.assign(merged, syncDerivedFlags(mode));
         } else {
-          merged.workspaceMode = "hidden";
+          merged.workspaceMode = "home";
           merged.workspaceHeightPx = 0;
-          Object.assign(merged, syncDerivedFlags("hidden"));
+          Object.assign(merged, syncDerivedFlags("home"));
         }
         return merged;
       },

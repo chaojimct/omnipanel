@@ -433,7 +433,10 @@ export const enUS: TranslationDict = {
       nameDuplicate: "A workspace with this name already exists",
       create: "Create",
       cancel: "Cancel",
+      rename: "Rename workspace",
+      confirmRename: "Confirm rename",
       delete: "Delete workspace",
+      confirmDelete: "Delete workspace «{name}»? This cannot be undone.",
       cannotDeleteLast: "At least one workspace must remain",
     },
     workspacePanel: {
