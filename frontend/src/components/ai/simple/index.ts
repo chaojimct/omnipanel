@@ -1,6 +1,7 @@
 export { runSimpleChat, type RunSimpleChatOptions, type SimpleChatContentPart } from "./runSimpleChat";
 export {
   FORM_FILL_SIMPLE_AI_SYSTEM_PROMPT,
+  buildFormFillZodSchema,
   formFillInputFromClipboard,
   resolveFormFillModelConfig,
   runFormFillSimpleAI,

@@ -59,12 +59,17 @@ interface AiStore {
   reasoningEffort: ReasoningEffortLevel;
   /** 当前智能体已连接的 MCP 服务（打开助手或发送消息时刷新） */
   connectedMcpServices: AgentMcpConnection[];
+  /** 右侧会话列表面板是否展开 */
+  conversationListOpen: boolean;
+  /** 会话列表面板宽度（px） */
+  conversationListWidth: number;
 
   toggleDrawer: () => void;
   openDrawer: () => void;
   closeDrawer: () => void;
   createConversation: (provider?: string, model?: string) => string;
   setActiveConversation: (id: string) => void;
+  renameConversation: (id: string, title: string) => void;
   deleteConversation: (id: string) => void;
   addMessage: (
     conversationId: string,
@@ -95,6 +100,9 @@ interface AiStore {
   removeContext: (conversationId: string, type: string) => void;
   setReasoningEffort: (level: ReasoningEffortLevel) => void;
   setConnectedMcpServices: (connections: AgentMcpConnection[]) => void;
+  toggleConversationList: () => void;
+  setConversationListOpen: (open: boolean) => void;
+  setConversationListWidth: (width: number) => void;
 }
 
 let idCounter = 0;
@@ -115,6 +123,8 @@ export const useAiStore = create<AiStore>()(
       draftPrompt: "",
       reasoningEffort: "medium",
       connectedMcpServices: [],
+      conversationListOpen: false,
+      conversationListWidth: 240,
 
       toggleDrawer: () =>
         set((state) => ({ drawerOpen: !state.drawerOpen })),
@@ -151,6 +161,13 @@ export const useAiStore = create<AiStore>()(
       },
 
       setActiveConversation: (id) => set({ activeConversationId: id }),
+
+      renameConversation: (id, title) =>
+        set((state) => ({
+          conversations: state.conversations.map((c) =>
+            c.id === id ? { ...c, title, updatedAt: Date.now() } : c,
+          ),
+        })),
 
       deleteConversation: (id) =>
         set((state) => {
@@ -288,6 +305,14 @@ export const useAiStore = create<AiStore>()(
       setReasoningEffort: (level) => set({ reasoningEffort: level }),
 
       setConnectedMcpServices: (connections) => set({ connectedMcpServices: connections }),
+
+      toggleConversationList: () =>
+        set((state) => ({ conversationListOpen: !state.conversationListOpen })),
+
+      setConversationListOpen: (open) => set({ conversationListOpen: open }),
+
+      setConversationListWidth: (width) =>
+        set({ conversationListWidth: Math.max(180, Math.min(420, width)) }),
     }),
     {
       name: "omnipanel-ai-store",
@@ -298,6 +323,8 @@ export const useAiStore = create<AiStore>()(
         currentModel: state.currentModel,
         currentModelSelectionId: state.currentModelSelectionId,
         reasoningEffort: state.reasoningEffort,
+        conversationListOpen: state.conversationListOpen,
+        conversationListWidth: state.conversationListWidth,
       }),
     }
   )

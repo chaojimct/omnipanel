@@ -55,11 +55,20 @@ export function parentPath(path: string, protocol: string): string {
 }
 
 export function fmtError(e: unknown): string {
-  if (e instanceof Error) return e.message;
+  if (e instanceof Error) {
+    const extra = e as Error & { code?: unknown; cause?: unknown };
+    if (typeof extra.cause === "string" && extra.cause && !e.message.includes(extra.cause)) {
+      return `${e.message}（${extra.cause}）`;
+    }
+    return e.message;
+  }
   if (typeof e === "string") return e;
   if (e && typeof e === "object") {
     const err = e as Record<string, unknown>;
-    if (typeof err.message === "string") return err.message;
+    const message = typeof err.message === "string" ? err.message : null;
+    const cause = typeof err.cause === "string" ? err.cause : null;
+    if (message && cause && !message.includes(cause)) return `${message}（${cause}）`;
+    if (message) return message;
   }
   return String(e);
 }

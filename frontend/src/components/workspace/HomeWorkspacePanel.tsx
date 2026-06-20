@@ -1,7 +1,8 @@
 import { useCallback, useMemo } from "react";
 import { ModuleSegmentDock } from "../dock";
 import { WorkspaceSwitcher } from "../shell/WorkspaceSwitcher";
-import { AiPanelBody } from "../ai/AiDrawer";
+import { AiAssistantShell } from "../ai/assistant-ui/AiAssistantShell";
+import { AiRuntimeProvider } from "../ai/assistant-ui/AiRuntimeProvider";
 import { HomeBoardView } from "../../modules/workspace/HomeBoardView";
 import { useBottomPanelStore } from "../../stores/bottomPanelStore";
 import { useI18n } from "../../i18n";
@@ -43,7 +44,9 @@ export function HomeWorkspacePanel() {
     if (tabId === "ai") {
       return (
         <div className="home-workspace-ai-pane">
-          <AiPanelBody />
+          <AiRuntimeProvider>
+            <AiAssistantShell showDockHeader />
+          </AiRuntimeProvider>
         </div>
       );
     }

@@ -19,8 +19,8 @@ export type FormDialogStatusKind = "info" | "success" | "error";
 export interface FormDialogAction {
   key?: string;
   label: ReactNode;
-  variant?: "primary" | "secondary" | "ghost" | "icon";
-  size?: "sm" | "md";
+  variant?: "default" | "secondary" | "ghost";
+  size?: "sm" | "default";
   disabled?: boolean;
   onClick?: () => void;
 }
@@ -131,7 +131,7 @@ export function FormDialog({
           <div className="modal-footer-spacer" />
         )}
         {actions?.map((action, index) => renderAction(action, `action-${index}`))}
-        {primaryAction && renderAction({ ...primaryAction, variant: primaryAction.variant ?? "primary" }, "primary")}
+        {primaryAction && renderAction({ ...primaryAction, variant: primaryAction.variant ?? "default" }, "primary")}
       </div>
     ) : null;
 
@@ -152,7 +152,8 @@ export function FormDialog({
           {showCloseButton ? (
             <Button
               type="button"
-              variant="icon"
+              variant="ghost"
+              size="icon"
               onClick={onClose}
               disabled={closeDisabled}
               aria-label={t("shell.topbar.close")}

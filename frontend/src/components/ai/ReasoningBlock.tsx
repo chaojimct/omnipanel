@@ -79,11 +79,6 @@ export function ReasoningBlock({ content, isStreaming, hasAnswer }: ReasoningBlo
           )}
         </span>
         <span className="ai-reasoning-meta">
-          {!expanded && content && (
-            <span className="ai-reasoning-preview">
-              {content.length > 48 ? `${content.slice(0, 48)}…` : content}
-            </span>
-          )}
           <span className="ai-reasoning-chevron" aria-hidden>
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
               <path d="M6 9l6 6 6-6" />
@@ -92,7 +87,7 @@ export function ReasoningBlock({ content, isStreaming, hasAnswer }: ReasoningBlo
         </span>
       </button>
 
-      <div className="ai-reasoning-body-wrap">
+      <div className="ai-reasoning-body-wrap" aria-hidden={!expanded}>
         <div ref={bodyRef} className="ai-reasoning-body">
           <p className="ai-reasoning-text">
             {content}

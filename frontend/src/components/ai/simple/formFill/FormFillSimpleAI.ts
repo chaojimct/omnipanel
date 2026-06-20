@@ -1,11 +1,7 @@
 import type { ClipboardSnapshot } from "../../../../lib/readLatestClipboard";
-import type { OmniModelConfig } from "../../langchain/createOmniAgent";
-import {
-  firstModelSelectionId,
-  resolveModelSelection,
-  type AiModelProvider,
-} from "../../../../stores/aiModelsStore";
-import { runSimpleChat, type SimpleChatContentPart } from "../runSimpleChat";
+import { firstModelSelectionId, resolveModelSelection } from "../../../../stores/aiModelsStore";
+import type { AiModelProvider } from "../../../../stores/aiModelsStore";
+import type { ModelConfig } from "../../assistant-ui/chatModel";
 import type {
   FormFillFieldDef,
   FormFillSimpleAIInput,
@@ -13,64 +9,33 @@ import type {
   FormFillValue,
 } from "./types";
 
-/** 表单填充专用系统提示词（留空，由业务方自行填写）。 */
 export const FORM_FILL_SIMPLE_AI_SYSTEM_PROMPT = ``;
 
 export type { FormFillFieldDef, FormFillSimpleAIInput, FormFillSimpleAIResult, FormFillValue };
+export { buildFormFillZodSchema } from "./buildFormFillZodSchema";
 
 export interface RunFormFillSimpleAIOptions {
   signal?: AbortSignal;
-  /** 覆盖默认系统提示词 */
   systemPrompt?: string;
 }
 
 function buildUserPrompt(input: FormFillSimpleAIInput): string {
   const lines = [
-    "## 表单字段定义",
-    "```json",
-    JSON.stringify(input.fields, null, 2),
-    "```",
-    "",
-    "## 待识别内容",
-    input.sourceText.trim() || "(无文本)",
+    "## Source Content",
+    input.sourceText.trim() || "(no text)",
   ];
   if (input.context?.trim()) {
-    lines.push("", "## 补充说明", input.context.trim());
+    lines.push("", "## Additional Context", input.context.trim());
   }
   lines.push(
     "",
-    "## 输出要求",
-    "- 仅输出一个 JSON 对象，键为字段 key，值为识别结果",
-    "- 无法确定的可选字段使用 null",
-    "- 不要输出 Markdown 代码块或其它说明文字",
+    "## Task",
+    "Extract the values for each field from the source content above. Return ONLY a valid JSON object with the field keys and their values. For optional fields that cannot be determined, use null.",
   );
   return lines.join("\n");
 }
 
-function buildUserContent(input: FormFillSimpleAIInput): string | SimpleChatContentPart[] {
-  const text = buildUserPrompt(input);
-  if (!input.imageUrl) return text;
-  return [
-    { type: "text", text },
-    { type: "image_url", image_url: { url: input.imageUrl } },
-  ];
-}
-
-function parseJsonObject(raw: string): Record<string, unknown> {
-  const trimmed = raw.trim();
-  const fenceMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  const jsonStr = fenceMatch ? fenceMatch[1].trim() : trimmed;
-  const parsed = JSON.parse(jsonStr) as unknown;
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw new Error("FORM_FILL_INVALID_JSON");
-  }
-  return parsed as Record<string, unknown>;
-}
-
-function coerceFieldValue(
-  raw: unknown,
-  field: FormFillFieldDef,
-): FormFillValue {
+function coerceFieldValue(raw: unknown, field: FormFillFieldDef): FormFillValue {
   if (raw === null || raw === undefined || raw === "") {
     return field.required ? "" : null;
   }
@@ -92,6 +57,42 @@ function coerceFieldValue(
   }
 }
 
+function buildJsonSchema(fields: FormFillFieldDef[]): Record<string, unknown> {
+  const properties: Record<string, unknown> = {};
+  const required: string[] = [];
+
+  for (const field of fields) {
+    const key = field.key.trim();
+    let fieldType: string;
+    switch (field.type) {
+      case "number":
+        fieldType = "number";
+        break;
+      case "boolean":
+        fieldType = "boolean";
+        break;
+      default:
+        fieldType = "string";
+    }
+    const desc = [field.label, field.description]
+      .filter(Boolean)
+      .join("；");
+    properties[key] = {
+      type: fieldType,
+      description: desc,
+    };
+    if (field.required) {
+      required.push(key);
+    }
+  }
+
+  return {
+    type: "object",
+    properties,
+    ...(required.length > 0 ? { required } : {}),
+  };
+}
+
 function normalizeValues(
   raw: Record<string, unknown>,
   fields: FormFillFieldDef[],
@@ -103,7 +104,6 @@ function normalizeValues(
   return values;
 }
 
-/** 根据剪贴板快照构造表单填充输入；无可用内容时返回 null。 */
 export function formFillInputFromClipboard(
   snapshot: ClipboardSnapshot | null,
   fields: FormFillFieldDef[],
@@ -123,11 +123,10 @@ export function formFillInputFromClipboard(
   };
 }
 
-/** 解析当前可用的表单填充模型配置。 */
 export function resolveFormFillModelConfig(
   providers: AiModelProvider[],
   selectionId?: string | null,
-): OmniModelConfig | null {
+): ModelConfig | null {
   const resolvedId =
     selectionId && resolveModelSelection(providers, selectionId)
       ? selectionId
@@ -136,12 +135,8 @@ export function resolveFormFillModelConfig(
   return resolveModelSelection(providers, resolvedId);
 }
 
-/**
- * 表单填充简单 AI：根据用户提供的文本/图片，输出与字段定义匹配的结构化 JSON。
- * 主要用于 FormDialog 剪贴板识别等场景。
- */
 export async function runFormFillSimpleAI(
-  modelConfig: OmniModelConfig,
+  modelConfig: ModelConfig,
   input: FormFillSimpleAIInput,
   options?: RunFormFillSimpleAIOptions,
 ): Promise<FormFillSimpleAIResult> {
@@ -152,26 +147,62 @@ export async function runFormFillSimpleAI(
     throw new Error("FORM_FILL_NO_SOURCE");
   }
 
-  const raw = await runSimpleChat(
-    modelConfig,
-    options?.systemPrompt ?? FORM_FILL_SIMPLE_AI_SYSTEM_PROMPT,
-    buildUserContent(input),
-    { signal: options?.signal },
-  );
+  const schema = buildJsonSchema(input.fields);
+  const systemPrompt =
+    options?.systemPrompt ??
+    FORM_FILL_SIMPLE_AI_SYSTEM_PROMPT;
 
-  if (!raw) {
+  const userPrompt = buildUserPrompt(input);
+  const systemMessage = systemPrompt
+    ? `${systemPrompt}\n\nYou must respond with a valid JSON object matching this schema:\n${JSON.stringify(schema, null, 2)}`
+    : `You are a form-filling assistant. Extract field values from the source content. Respond with a valid JSON object matching this schema:\n${JSON.stringify(schema, null, 2)}`;
+
+  const baseUrl = modelConfig.baseUrl.replace(/\/+$/, "");
+  const url = baseUrl.includes("/v1")
+    ? `${baseUrl}/chat/completions`
+    : `${baseUrl}/v1/chat/completions`;
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${modelConfig.apiKey}`,
+    },
+    body: JSON.stringify({
+      model: modelConfig.name,
+      messages: [
+        { role: "system", content: systemMessage },
+        { role: "user", content: userPrompt },
+      ],
+      response_format: { type: "json_object" },
+    }),
+    signal: options?.signal,
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => "");
+    throw new Error(`API error ${response.status}: ${errorText || response.statusText}`);
+  }
+
+  const data = await response.json();
+  const content = data.choices?.[0]?.message?.content;
+  if (!content) {
     throw new Error("FORM_FILL_EMPTY_RESPONSE");
   }
 
   let parsed: Record<string, unknown>;
   try {
-    parsed = parseJsonObject(raw);
+    parsed = JSON.parse(content) as Record<string, unknown>;
   } catch {
     throw new Error("FORM_FILL_PARSE_FAILED");
   }
 
+  if (!parsed || typeof parsed !== "object") {
+    throw new Error("FORM_FILL_EMPTY_RESPONSE");
+  }
+
   return {
     values: normalizeValues(parsed, input.fields),
-    raw,
+    raw: content,
   };
 }

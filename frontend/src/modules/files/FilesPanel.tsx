@@ -184,6 +184,7 @@ function FilesBrowserView() {
       setPreviewText(null);
     } catch (e) {
       if (seq !== loadSeq.current) return;
+      console.error("[files] loadDir failed:", { connectionId: connId, path, error: e });
       setError(fmtError(e));
       setEntries([]);
     } finally {

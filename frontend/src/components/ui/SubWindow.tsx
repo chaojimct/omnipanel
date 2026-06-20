@@ -5,7 +5,7 @@ import { Button } from "./Button";
 
 export interface SubWindowProps {
   open: boolean;
-  title: string;
+  title: ReactNode;
   onClose: () => void;
   children: ReactNode;
   /** 相对主窗口可视区域的宽度比例，默认 0.9 */
@@ -61,9 +61,13 @@ export function SubWindow({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="subwindow-header">
-          <h2 id="subwindow-title" className="subwindow-title">
-            {title}
-          </h2>
+          {typeof title === "string" ? (
+            <h2 id="subwindow-title" className="subwindow-title">
+              {title}
+            </h2>
+          ) : (
+            title
+          )}
           {headerExtra ? (
             <div className="subwindow-header-extra">{headerExtra}</div>
           ) : null}

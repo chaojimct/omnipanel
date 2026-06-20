@@ -1,9 +1,29 @@
-import { commands, type Connection, type FileEntry, type FileManagerConnectionInfo } from "../../ipc/bindings";
+import { commands, type Connection, type FileEntry, type FileManagerConnectionInfo, type OmniError_Serialize } from "../../ipc/bindings";
 import { fmtError } from "./utils";
 
-async function unwrap<T>(res: { status: string; data?: T; error?: { message: string } }): Promise<T> {
+function ipcErrorToError(error: OmniError_Serialize): Error {
+  const message = error.cause ? `${error.message}（${error.cause}）` : error.message;
+  const err = new Error(message);
+  Object.assign(err, { code: error.code, cause: error.cause ?? null });
+  return err;
+}
+
+async function unwrap<T>(
+  res: { status: string; data?: T; error?: OmniError_Serialize },
+  debugContext?: Record<string, unknown>,
+): Promise<T> {
   if (res.status === "ok" && res.data !== undefined) return res.data;
-  throw new Error(res.error?.message ?? "请求失败");
+  if (res.error) {
+    console.error("[files] IPC error:", {
+      ...debugContext,
+      code: res.error.code,
+      message: res.error.message,
+      cause: res.error.cause ?? null,
+    });
+    throw ipcErrorToError(res.error);
+  }
+  console.error("[files] IPC error: unknown failure", debugContext);
+  throw new Error("请求失败");
 }
 
 export async function listFileConnections(): Promise<FileManagerConnectionInfo[]> {
@@ -11,7 +31,11 @@ export async function listFileConnections(): Promise<FileManagerConnectionInfo[]
 }
 
 export async function listDirectory(connectionId: string, path: string): Promise<FileEntry[]> {
-  return unwrap(await commands.fileListDir(connectionId, path));
+  return unwrap(await commands.fileListDir(connectionId, path), {
+    op: "fileListDir",
+    connectionId,
+    path,
+  });
 }
 
 export async function saveFileConnection(connection: Connection, secret: string | null): Promise<Connection> {

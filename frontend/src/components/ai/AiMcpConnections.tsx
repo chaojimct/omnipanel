@@ -2,7 +2,7 @@ import { useEffect } from "react";
 
 import { useI18n } from "../../i18n";
 import { useAiStore, type AgentMcpConnection } from "../../stores/aiStore";
-import { loadAgentMcpTools } from "./langchain/mcpTools";
+import { commands } from "../../ipc/bindings";
 
 function ConnectionChip({ connection }: { connection: AgentMcpConnection }) {
   const { t } = useI18n();
@@ -33,9 +33,28 @@ export function AiMcpConnections() {
 
   useEffect(() => {
     if (!drawerOpen) return;
-    void loadAgentMcpTools().then((bundle) => {
-      setConnectedMcpServices(bundle.connections);
-    });
+    void (async () => {
+      try {
+        const listResult = await commands.mcpListServices();
+        if (listResult.status !== "ok") return;
+        const running = listResult.data.filter((s) => s.status === "running");
+        const connections: AgentMcpConnection[] = [];
+        for (const service of running) {
+          const toolsResult = await commands.mcpListServiceTools(service.id);
+          const toolCount =
+            toolsResult.status === "ok" ? toolsResult.data.length : 0;
+          connections.push({
+            serviceId: service.id,
+            serviceName: service.name,
+            builtin: service.builtin,
+            toolCount,
+          });
+        }
+        setConnectedMcpServices(connections);
+      } catch {
+        /* ignore */
+      }
+    })();
   }, [drawerOpen, setConnectedMcpServices]);
 
   return (

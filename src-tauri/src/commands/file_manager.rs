@@ -465,10 +465,29 @@ async fn list_s3_dir(
 ) -> Result<Vec<FileEntry>, OmniError> {
     let bucket = s3_bucket(cfg, secret)?;
     let prefix = normalize_s3_prefix(path, cfg);
+    tracing::debug!(
+        bucket = %cfg.bucket,
+        region = %cfg.region,
+        endpoint = %cfg.endpoint,
+        prefix = %prefix,
+        path = %path,
+        "list_s3_dir"
+    );
     let pages = bucket
-        .list(prefix, Some("/".to_string()))
+        .list(prefix.clone(), Some("/".to_string()))
         .await
-        .map_err(|e| OmniError::new(ErrorCode::Io, "列出 S3 对象失败").with_cause(e.to_string()))?;
+        .map_err(|e| {
+            tracing::error!(
+                bucket = %cfg.bucket,
+                region = %cfg.region,
+                endpoint = %cfg.endpoint,
+                prefix = %prefix,
+                path = %path,
+                error = %e,
+                "列出 S3 对象失败"
+            );
+            OmniError::new(ErrorCode::Io, "列出 S3 对象失败").with_cause(e.to_string())
+        })?;
     let mut entries = Vec::new();
     for page in pages {
         if let Some(prefixes) = page.common_prefixes {

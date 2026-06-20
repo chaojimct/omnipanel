@@ -1,7 +1,4 @@
-import { HumanMessage, SystemMessage } from "@langchain/core/messages";
-
-import type { OmniModelConfig } from "../langchain/createOmniAgent";
-import { getOmniChatModel } from "../langchain/createOmniAgent";
+import { streamOpenAI, type ModelConfig } from "../assistant-ui/chatModel";
 
 export type SimpleChatContentPart =
   | { type: "text"; text: string }
@@ -11,33 +8,44 @@ export interface RunSimpleChatOptions {
   signal?: AbortSignal;
 }
 
-function extractMessageContent(content: unknown): string {
-  if (typeof content === "string") return content;
-  if (Array.isArray(content)) {
-    return content
-      .map((part) => {
-        if (typeof part === "string") return part;
-        if (part && typeof part === "object" && "text" in part) {
-          return String((part as { text: string }).text);
-        }
-        return "";
-      })
-      .join("");
+function buildApiMessages(
+  systemPrompt: string,
+  userContent: string | SimpleChatContentPart[],
+) {
+  const messages: { role: "system" | "user" | "assistant"; content: string }[] =
+    [];
+  if (systemPrompt) {
+    messages.push({ role: "system", content: systemPrompt });
   }
-  return String(content ?? "");
+  if (typeof userContent === "string") {
+    messages.push({ role: "user", content: userContent });
+  } else {
+    const textParts = userContent
+      .filter((p) => p.type === "text")
+      .map((p) => p.text)
+      .join("\n");
+    messages.push({ role: "user", content: textParts || "(image)" });
+  }
+  return messages;
 }
 
 /** 单次 LLM 调用（无 Agent / 工具），用于简单结构化任务。 */
 export async function runSimpleChat(
-  modelConfig: OmniModelConfig,
+  modelConfig: ModelConfig,
   systemPrompt: string,
   userContent: string | SimpleChatContentPart[],
   options?: RunSimpleChatOptions,
 ): Promise<string> {
-  const model = await getOmniChatModel(modelConfig);
-  const response = await model.invoke(
-    [new SystemMessage(systemPrompt), new HumanMessage(userContent)],
-    { signal: options?.signal },
-  );
-  return extractMessageContent(response.content).trim();
+  const messages = buildApiMessages(systemPrompt, userContent);
+
+  let result = "";
+  for await (const chunk of streamOpenAI(messages, modelConfig, {
+    signal: options?.signal,
+  })) {
+    if (chunk.type === "text") {
+      result += chunk.delta;
+    }
+  }
+
+  return result.trim();
 }
