@@ -11,6 +11,8 @@ import { LocalFilePanel } from "@/components/files";
 import { SftpPanel } from "@/components/sftp";
 import { TunnelPanel } from "@/components/tunnel";
 import { useI18n } from "@/i18n";
+import { normalizeTerminalCwdForSftp } from "@/modules/server/ssh/utils/parseCommandPaths";
+import { useSshDetailNavigationStore } from "@/stores/sshDetailNavigationStore";
 import { TerminalTabPaneView } from "./TerminalPaneView";
 import { AdvanceTerminalMonitorStack } from "./AdvanceTerminalMonitorStack";
 import { useTerminalTabDockPane } from "./useTerminalTabDockPane";
@@ -91,6 +93,22 @@ export function AdvanceTerminal({ tabId, isActive, onActivate }: AdvanceTerminal
   const openTunnelTab = useCallback(() => {
     setActiveSideTab("tunnel");
   }, []);
+
+  const requestSftp = useSshDetailNavigationStore((s) => s.requestSftp);
+  const lastSyncedSftpCwdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    lastSyncedSftpCwdRef.current = null;
+  }, [resource?.id, tabId]);
+
+  useEffect(() => {
+    if (!isRemoteSsh || !resource?.id || tab?.status !== "connected") return;
+    const sftpPath = normalizeTerminalCwdForSftp(tab.session.cwd);
+    if (!sftpPath) return;
+    if (lastSyncedSftpCwdRef.current === sftpPath) return;
+    lastSyncedSftpCwdRef.current = sftpPath;
+    requestSftp(resource.id, sftpPath);
+  }, [isRemoteSsh, resource?.id, tab?.status, tab?.session.cwd, requestSftp]);
 
   const renderSidePanel = useCallback(
     (panelId: string) => {

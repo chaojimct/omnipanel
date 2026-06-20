@@ -97,6 +97,12 @@ export const DbPanelSurface = memo(function DbPanelSurface({ tab }: DbPanelSurfa
     },
     [ws.handleRowEdit, tab.id],
   );
+  const handlePreviewCellSetNull = useCallback(
+    (cellInfo: { rowIndex: number; column: string; row: Record<string, unknown> }) => {
+      ws.handleCellSetNull(tab.id, cellInfo);
+    },
+    [ws.handleCellSetNull, tab.id],
+  );
   const handlePreviewPageChange = useCallback(
     (page: number) => {
       ws.requestTabAction({ kind: "page", tabId: tab.id, page });
@@ -384,6 +390,7 @@ export const DbPanelSurface = memo(function DbPanelSurface({ tab }: DbPanelSurfa
             toolbar={previewToolbar}
             onCellEdit={handlePreviewCellEdit}
             onRowEdit={handlePreviewRowEdit}
+            onCellSetNull={handlePreviewCellSetNull}
             dirtyRowKeys={previewDirtyRowKeys}
             cellOverrides={previewCellOverrides}
             onPageChange={handlePreviewPageChange}

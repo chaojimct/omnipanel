@@ -98,7 +98,7 @@ import { useWorkspaceBottomDockStore } from "../../stores/workspaceBottomDockSto
 import { publishDbWorkspaceMirror } from "../../stores/dbWorkspaceMirrorStore";
 import { usePersistedModuleTab } from "../../hooks/usePersistedModuleTab";
 import { useWorkspaceStore, onWorkspaceSwitch } from "../../stores/workspaceStore";
-import { dbTabToSnapshot, buildCopyToWorkspaceMenuItems, buildMoveToWorkspaceMenuItems, addSnapshotToWorkspace } from "../../lib/workspaceTabActions";
+import { dbTabToSnapshot, addSnapshotToWorkspace } from "../../lib/workspaceTabActions";
 import { useWorkspaceTabStore, type DbTabSnapshot } from "../../stores/workspaceTabStore";
 import {
   canAcceptSchemaTreeDrop,
@@ -409,7 +409,6 @@ export function DatabasePanel() {
       return [...ids].sort();
     }),
   );
-  const allWorkspaces = useWorkspaceStore((s) => s.workspaces);
   const currentWorkspaceId = useWorkspaceStore((s) => s.workspace.id);
   const wsTabStore = useWorkspaceTabStore;
 
@@ -1533,6 +1532,89 @@ export function DatabasePanel() {
     );
   }, []);
 
+  const commitCellDirtyChange = useCallback(
+    (
+      tabId: string,
+      column: string,
+      row: Record<string, unknown>,
+      value: unknown,
+    ) => {
+      const colMeta = tableColumnMeta[tabId];
+      if (!colMeta) return;
+      const meta = colMeta.find((c) => c.name === column);
+      if (!meta || meta.isPk) return;
+
+      const pendingKey = row[PENDING_INSERT_ROW_KEY];
+      if (typeof pendingKey === "string") {
+        setTabDirtyRows((prev) => {
+          const cur = { ...(prev[tabId] ?? {}) };
+          const rowDirty = { ...(cur[pendingKey] ?? {}) };
+          const originalValue = row[column];
+          if (isSameCellValue(originalValue, value)) {
+            delete rowDirty[column];
+          } else if (value === null || value === undefined) {
+            rowDirty[column] = null;
+          } else {
+            rowDirty[column] = value;
+          }
+          if (Object.keys(rowDirty).length === 0) {
+            delete cur[pendingKey];
+          } else {
+            cur[pendingKey] = rowDirty;
+          }
+          if (Object.keys(cur).length === 0) {
+            const next = { ...prev };
+            delete next[tabId];
+            return next;
+          }
+          return { ...prev, [tabId]: cur };
+        });
+        return;
+      }
+
+      const pkCols = colMeta.filter((c) => c.isPk);
+      if (pkCols.length === 0) return;
+      const originalValue = row[column];
+      if (isSameCellValue(originalValue, value)) return;
+
+      const rowKey = pkCols
+        .map((pk) => `${pk.name}=${row[pk.name] == null ? "" : String(row[pk.name])}`)
+        .join("&");
+
+      setTabDirtyRows((prev) => {
+        const cur = { ...(prev[tabId] ?? {}) };
+        const rowDirty = { ...(cur[rowKey] ?? {}) };
+        if (value === null || value === undefined) {
+          rowDirty[column] = null;
+        } else {
+          rowDirty[column] = value;
+        }
+        if (Object.keys(rowDirty).length === 0) {
+          delete cur[rowKey];
+        } else {
+          cur[rowKey] = rowDirty;
+        }
+        if (Object.keys(cur).length === 0) {
+          const next = { ...prev };
+          delete next[tabId];
+          return next;
+        }
+        return { ...prev, [tabId]: cur };
+      });
+    },
+    [tableColumnMeta, isSameCellValue],
+  );
+
+  const handleCellSetNull = useCallback(
+    (
+      tabId: string,
+      cellInfo: { rowIndex: number; column: string; row: Record<string, unknown> },
+    ) => {
+      commitCellDirtyChange(tabId, cellInfo.column, cellInfo.row, null);
+    },
+    [commitCellDirtyChange],
+  );
+
   const handleRowSave = useCallback(
     (changes: Record<string, unknown>) => {
       if (!rowEdit) return;
@@ -1602,49 +1684,10 @@ export function DatabasePanel() {
   const handleCellSave = useCallback(
     (value: unknown) => {
       if (!cellEdit) return;
-      const { tabId, column, row } = cellEdit;
-      const colMeta = tableColumnMeta[tabId];
-      if (!colMeta) {
-        setCellEdit(null);
-        return;
-      }
-      const pkCols = colMeta.filter((c) => c.isPk);
-      if (pkCols.length === 0) {
-        setCellEdit(null);
-        return;
-      }
-      const originalValue = row[column];
-      const same = isSameCellValue(originalValue, value);
-      if (same) {
-        setCellEdit(null);
-        return;
-      }
-      const rowKey = pkCols
-        .map((pk) => `${pk.name}=${row[pk.name] == null ? "" : String(row[pk.name])}`)
-        .join("&");
-      setTabDirtyRows((prev) => {
-        const cur = { ...(prev[tabId] ?? {}) };
-        const rowDirty = { ...(cur[rowKey] ?? {}) };
-        if (value === null || value === undefined) {
-          delete rowDirty[column];
-        } else {
-          rowDirty[column] = value;
-        }
-        if (Object.keys(rowDirty).length === 0) {
-          delete cur[rowKey];
-        } else {
-          cur[rowKey] = rowDirty;
-        }
-        if (Object.keys(cur).length === 0) {
-          const next = { ...prev };
-          delete next[tabId];
-          return next;
-        }
-        return { ...prev, [tabId]: cur };
-      });
+      commitCellDirtyChange(cellEdit.tabId, cellEdit.column, cellEdit.row, value);
       setCellEdit(null);
     },
-    [cellEdit, tableColumnMeta, isSameCellValue],
+    [cellEdit, commitCellDirtyChange],
   );
 
   const handleContextTable = useCallback(
@@ -2452,6 +2495,7 @@ export function DatabasePanel() {
     requestTabAction,
     handleCellEdit,
     handleRowEdit,
+    handleCellSetNull,
     handleRowNew,
     resolveConnection,
     selectTable: handleSelectTable,
@@ -2481,7 +2525,7 @@ export function DatabasePanel() {
     isSqlTabDirty,
   }), [
     workspaceTabs, activeWorkspaceTabId, setActiveWorkspaceTabId, requestTabAction,
-    runQuery, updateSqlTabState, refreshTablePreview, goToPage, handleCellEdit, handleRowEdit, handleRowNew, resolveConnection, handleSelectTable,
+    runQuery, updateSqlTabState, refreshTablePreview, goToPage, handleCellEdit, handleRowEdit, handleCellSetNull, handleRowNew, resolveConnection, handleSelectTable,
     activeTableKey,
     sqlTabStates, tablePreviews, tableColumnMeta, tabModes, tabDirtyRows, committingTabs,
     commitTabDirty, sqlConnections, groupConnections, databasesByConnId,
@@ -2603,6 +2647,30 @@ export function DatabasePanel() {
       setCtxMenu({ x: event.clientX, y: event.clientY, tabId, index });
     },
     [],
+  );
+
+  const handleCtrlCopyTab = useCallback(
+    (tabId: string) => {
+      const ctxTab = workspaceTabs.find((tab) => tab.id === tabId);
+      if (!ctxTab) return;
+      const newTab: DbWorkspaceTab =
+        ctxTab.kind === "sql"
+          ? { id: makeSqlTabId(), kind: "sql", label: `${ctxTab.label} (副本)` }
+          : {
+              id: makeDatabaseTabId(),
+              kind: "database",
+              label: `${ctxTab.label} (副本)`,
+              connId: ctxTab.connId,
+              dbName: ctxTab.dbName,
+            };
+      setWorkspaceTabs((prev) => [...prev, newTab]);
+      setActiveWorkspaceTabId(newTab.id);
+      addSnapshotToWorkspace(
+        currentWorkspaceId,
+        dbTabToSnapshot(newTab, tabModes[ctxTab.id]),
+      );
+    },
+    [workspaceTabs, tabModes, currentWorkspaceId, setWorkspaceTabs, setActiveWorkspaceTabId],
   );
 
   useEffect(() => {
@@ -2733,6 +2801,7 @@ export function DatabasePanel() {
             onSavedLayoutChange={setDockLayout}
             renderPanel={renderDockPanel}
             onTabContextMenu={handleDockTabContextMenu}
+            onCtrlCopyTab={handleCtrlCopyTab}
             canAcceptExternalDrop={canAcceptSchemaTreeDrop}
             onExternalDrop={handleExternalSchemaDrop}
             windowControl={false}
@@ -2827,8 +2896,6 @@ export function DatabasePanel() {
       onRowCancel={() => setRowEdit(null)}
     />
     {isActiveRoute && ctxMenu && (() => {
-      const ctxTab = workspaceTabs.find((t) => t.id === ctxMenu.tabId);
-      const snapshot = ctxTab ? dbTabToSnapshot(ctxTab, tabModes[ctxTab.id]) : null;
       const closeItems = buildTabCloseMenuItems(
         t,
         workspaceTabs.length,
@@ -2836,46 +2903,9 @@ export function DatabasePanel() {
         handleContextAction,
         { showRename: true },
       );
-      const wsCopyItems = snapshot ? buildCopyToWorkspaceMenuItems({
-        workspaces: allWorkspaces,
-        currentWorkspaceId,
-        snapshot,
-        onCopyToCurrent: () => {
-          if (!ctxTab) return;
-          const newTab: DbWorkspaceTab = ctxTab.kind === "sql"
-            ? { id: makeSqlTabId(), kind: "sql", label: `${ctxTab.label} (副本)` }
-            : { id: makeDatabaseTabId(), kind: "database", label: `${ctxTab.label} (副本)`, connId: ctxTab.connId, dbName: ctxTab.dbName };
-          setWorkspaceTabs((prev) => [...prev, newTab]);
-          setActiveWorkspaceTabId(newTab.id);
-          addSnapshotToWorkspace(
-            currentWorkspaceId,
-            dbTabToSnapshot(newTab, tabModes[ctxTab.id]),
-          );
-        },
-      }) : [];
-      const wsMoveItems = snapshot ? buildMoveToWorkspaceMenuItems(t, {
-        workspaces: allWorkspaces,
-        currentWorkspaceId,
-        snapshot,
-        onMoveToOther: () => closeWorkspaceTab(ctxMenu.tabId),
-      }) : [];
-      const allItems = [
-        ...closeItems,
-        { id: "ws-sep-before", separator: true, label: "" },
-        {
-          id: "ws-copy",
-          label: t("shell.workspace.copyTo"),
-          children: wsCopyItems,
-        },
-        {
-          id: "ws-move",
-          label: t("shell.workspace.moveTo"),
-          children: wsMoveItems,
-        },
-      ];
       return (
         <ContextMenu
-          items={allItems}
+          items={closeItems}
           position={{ x: ctxMenu.x, y: ctxMenu.y }}
           onClose={() => setCtxMenu(null)}
         />

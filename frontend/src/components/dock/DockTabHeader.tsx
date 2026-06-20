@@ -1,5 +1,5 @@
 import type { IDockviewPanelHeaderProps } from "dockview-react";
-import type { MouseEvent as ReactMouseEvent } from "react";
+import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from "react";
 import { useEffect, useRef } from "react";
 import { DockTabChrome } from "./DockTabChrome";
 import { DockTabIcon, type DockTabIconKind } from "./DockTabIcon";
@@ -20,11 +20,13 @@ interface PanelParams {
 interface DockTabHeaderProps extends IDockviewPanelHeaderProps<PanelParams> {
   closable?: boolean;
   onContextMenu?: (event: ReactMouseEvent) => void;
+  onPointerUp?: (event: ReactPointerEvent) => void;
 }
 
 export function DockTabHeader({
   closable = true,
   onContextMenu,
+  onPointerUp,
   ...props
 }: DockTabHeaderProps) {
   const tabId = props.params?.tabId ?? props.api.id;
@@ -78,6 +80,7 @@ export function DockTabHeader({
       closable={closable}
       tooltip={tooltip}
       onContextMenu={onContextMenu}
+      onPointerUp={onPointerUp}
     >
       {icon ? <DockTabIcon kind={icon} /> : null}
       {!isSide ? (

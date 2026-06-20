@@ -69,6 +69,23 @@ export function pathToRemoteDir(path: string): string {
   return "/";
 }
 
+/** 将终端 shell integration 报告的 cwd 转为 SFTP 可用的绝对目录。 */
+export function normalizeTerminalCwdForSftp(cwd: string): string | null {
+  const trimmed = cwd.trim();
+  if (!trimmed || trimmed === "~" || trimmed === "~/") return null;
+  if (trimmed.startsWith("file://")) {
+    try {
+      const pathname = decodeURIComponent(new URL(trimmed).pathname);
+      return pathname ? normalizeRemotePath(pathname) : "/";
+    } catch {
+      const stripped = trimmed.replace(/^file:\/\//, "");
+      return stripped.startsWith("/") ? normalizeRemotePath(stripped) : null;
+    }
+  }
+  if (trimmed.startsWith("/")) return normalizeRemotePath(trimmed);
+  return null;
+}
+
 export function shellCdCommand(dir: string): string {
   const safe = dir.replace(/'/g, `'\\''`);
   return `cd '${safe}'`;

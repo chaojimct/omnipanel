@@ -1,8 +1,52 @@
+use std::path::Path;
+use std::time::{SystemTime, UNIX_EPOCH};
+
 use omnipanel_error::OmniError;
 use omnipanel_store::{KnowledgeEntry, KnowledgeSearchResult, KnowledgeTodoList};
 use tauri::State;
 
 use crate::state::AppState;
+
+fn new_knowledge_id() -> String {
+    let t = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default();
+    let nanos = t.as_nanos();
+    format!(
+        "{:08x}-{:04x}-4{:03x}-{:04x}-{:012x}",
+        (nanos >> 96) as u32,
+        ((nanos >> 80) & 0xFFFF) as u16,
+        ((nanos >> 64) & 0xFFF) as u16,
+        ((nanos >> 48) & 0xFFFF) as u16,
+        nanos & 0xFFFFFFFFFFFF_u128
+    )
+}
+
+fn knowledge_title_from_pdf_path(path: &str) -> Result<String, OmniError> {
+    Path::new(path)
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+        .ok_or_else(|| OmniError::invalid_input("无效的文件路径"))
+}
+
+fn next_knowledge_sort_order(entries: &[KnowledgeEntry], parent_id: &str) -> i64 {
+    entries
+        .iter()
+        .filter(|e| e.parent_id == parent_id)
+        .map(|e| e.sort_order)
+        .max()
+        .unwrap_or(-1)
+        + 1
+}
+
+fn now_millis() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as i64
+}
 
 /// 列出知识条目（可选按 kind / tag 过滤）。
 #[tauri::command]
@@ -107,4 +151,67 @@ pub async fn knowledge_todo_delete(
 ) -> Result<(), OmniError> {
     let storage = state.storage.lock().await;
     storage.delete_knowledge_todo(&id)
+}
+
+/// 从 PDF 文件导入知识文档（提取文本并保存为 document 条目）。
+#[tauri::command]
+#[specta::specta]
+pub async fn knowledge_import_pdf(
+    state: State<'_, AppState>,
+    path: String,
+    parent_id: Option<String>,
+) -> Result<KnowledgeEntry, OmniError> {
+    let path = path.trim();
+    if path.is_empty() {
+        return Err(OmniError::invalid_input("未选择文件"));
+    }
+
+    let ext = Path::new(path)
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or_default();
+    if !ext.eq_ignore_ascii_case("pdf") {
+        return Err(OmniError::invalid_input("仅支持 PDF 格式文件"));
+    }
+
+    let content = pdf_extract::extract_text(path).map_err(|e| {
+        OmniError::internal("PDF 文本提取失败").with_cause(e.to_string())
+    })?;
+    if content.trim().is_empty() {
+        return Err(OmniError::invalid_input("PDF 中未提取到文本内容"));
+    }
+
+    let title = knowledge_title_from_pdf_path(path)?;
+    let parent = parent_id.unwrap_or_default();
+    let now = now_millis();
+
+    let entry = {
+        let storage = state.storage.lock().await;
+        let all = storage.list_knowledge(None, None)?;
+        let sort_order = next_knowledge_sort_order(&all, &parent);
+        KnowledgeEntry {
+            id: new_knowledge_id(),
+            kind: "snippet".to_string(),
+            title,
+            content,
+            tags: vec![],
+            risk_level: "safe".to_string(),
+            source: format!("import:pdf:{path}"),
+            env_tag: "dev".to_string(),
+            language: String::new(),
+            usage_count: 0,
+            created_at: now,
+            updated_at: now,
+            parent_id: parent,
+            node_type: "document".to_string(),
+            sort_order,
+        }
+    };
+
+    {
+        let storage = state.storage.lock().await;
+        storage.save_knowledge(&entry)?;
+    }
+
+    Ok(entry)
 }

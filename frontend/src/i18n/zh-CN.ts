@@ -148,6 +148,8 @@ export const zhCN = {
       new: "新建",
       newFolder: "新建文件夹",
       newDocument: "新建文档",
+      importPdf: "导入文档",
+      importPdfDialogTitle: "选择 PDF 文件",
       rename: "重命名",
       duplicate: "复制",
       folderHint: "选择左侧文档进行编辑，或在此文件夹下新建内容",
@@ -422,10 +424,10 @@ export const zhCN = {
       collapseWorkspace: "收起工作区",
     },
     connectionPool: {
-      summary: "连接 {active} / {idle}",
+      summary: "连接 {active} / {total}",
       detailTitle: "连接池",
       empty: "暂无连接",
-      categoryCounts: "活跃 {active} / 空闲 {idle}",
+      categoryCounts: "活跃 {active} / 总数 {total}",
       kind: {
         ssh: "SSH",
         docker: "Docker",
@@ -434,6 +436,9 @@ export const zhCN = {
         protocol: "协议调试",
         terminal: "本地终端",
       },
+    },
+    workspacePreview: {
+      noPanels: "暂无面板，从模块拖入工作区",
     },
     workspacePopover: {
       title: "工作区",
@@ -930,6 +935,7 @@ export const zhCN = {
     cellEditor: {
       title: "编辑单元格",
       nullValue: "空值",
+      setNull: "设置为 NULL",
       typeLabel: "类型：{type}",
       kinds: {
         text: "文本",

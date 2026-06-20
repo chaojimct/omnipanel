@@ -9,6 +9,10 @@ import {
 
 const VISIBLE_KINDS: PoolKind[] = ["ssh", "docker", "database", "redis", "protocol", "terminal"];
 
+function poolTotal(active: number, idle: number): number {
+  return active + idle;
+}
+
 function ConnectionPoolPopover({
   anchorRect,
   onClose,
@@ -34,12 +38,14 @@ function ConnectionPoolPopover({
 
   const rows = VISIBLE_KINDS.map((kind) => {
     const cat = summary.categories.find((c) => c.kind === kind);
+    const active = cat?.active ?? 0;
+    const idle = cat?.idle ?? 0;
     return {
       kind,
-      active: cat?.active ?? 0,
-      idle: cat?.idle ?? 0,
+      active,
+      total: poolTotal(active, idle),
     };
-  }).filter((row) => row.active > 0 || row.idle > 0);
+  }).filter((row) => row.active > 0 || row.total > 0);
 
   return createPortal(
     <div
@@ -59,7 +65,7 @@ function ConnectionPoolPopover({
               <span className="connection-pool-popover-counts">
                 {t("shell.connectionPool.categoryCounts", {
                   active: row.active,
-                  idle: row.idle,
+                  total: row.total,
                 })}
               </span>
             </li>
@@ -71,10 +77,11 @@ function ConnectionPoolPopover({
   );
 }
 
-/** 状态栏左侧：全局活跃 / 空闲连接数，悬停展示分类明细。 */
+/** 状态栏左侧：全局活跃 / 总连接数，悬停展示分类明细。 */
 export function ConnectionPoolIndicator() {
   const { t } = useI18n();
   const summary = useMergedPoolSummary();
+  const total = poolTotal(summary.active, summary.idle);
   const [open, setOpen] = useState(false);
   const anchorRef = useRef<HTMLSpanElement>(null);
   const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -100,7 +107,7 @@ export function ConnectionPoolIndicator() {
 
   const label = t("shell.connectionPool.summary", {
     active: summary.active,
-    idle: summary.idle,
+    total,
   });
 
   return (

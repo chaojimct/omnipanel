@@ -27,6 +27,7 @@ interface KnowledgeStore {
   moveEntry: (id: string, parentId: string, sortOrder: number) => Promise<void>;
   createFolder: (parentId?: string) => Promise<string | null>;
   createDocument: (parentId?: string) => Promise<string | null>;
+  importPdfFromPath: (path: string, parentId?: string) => Promise<string | null>;
   renameEntry: (id: string, title: string) => Promise<boolean>;
 
   setSearchQuery: (query: string) => void;
@@ -180,6 +181,31 @@ export const useKnowledgeStore = create<KnowledgeStore>()(
         }
         get().setSelectedEntry(entry.id);
         return entry.id;
+      },
+
+      importPdfFromPath: async (path: string, parentId = "") => {
+        const parent = normalizeParentId(parentId);
+        try {
+          const res = await commands.knowledgeImportPdf(path, parent || null);
+          if (res.status === "ok") {
+            const entry = res.data;
+            set((state) => ({
+              entries: state.entries.some((e) => e.id === entry.id)
+                ? state.entries.map((e) => (e.id === entry.id ? entry : e))
+                : [...state.entries, entry],
+            }));
+            if (parent) {
+              get().setExpanded(parent, true);
+            }
+            get().setSelectedEntry(entry.id);
+            return entry.id;
+          }
+          set({ error: res.error.message });
+          return null;
+        } catch (e) {
+          set({ error: String(e) });
+          return null;
+        }
       },
 
       renameEntry: async (id: string, title: string) => {

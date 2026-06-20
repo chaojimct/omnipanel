@@ -7,6 +7,7 @@ import {
   type DragEvent,
   type MouseEvent as ReactMouseEvent,
 } from "react";
+import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import { ScopedSearch } from "../../components/ui/ScopedSearch";
 import { ContextMenu, type ContextMenuItem } from "../../components/ui/ContextMenu";
 import { Button } from "../../components/ui/Button";
@@ -188,6 +189,7 @@ export function KnowledgeSidebar() {
   const toggleExpanded = useKnowledgeStore((s) => s.toggleExpanded);
   const createFolder = useKnowledgeStore((s) => s.createFolder);
   const createDocument = useKnowledgeStore((s) => s.createDocument);
+  const importPdfFromPath = useKnowledgeStore((s) => s.importPdfFromPath);
   const renameEntry = useKnowledgeStore((s) => s.renameEntry);
   const duplicateEntry = useKnowledgeStore((s) => s.duplicateEntry);
   const deleteEntryRecursive = useKnowledgeStore((s) => s.deleteEntryRecursive);
@@ -222,6 +224,25 @@ export function KnowledgeSidebar() {
     [renameEntry, t],
   );
 
+  const handleImportPdf = useCallback(
+    async (parentId: string) => {
+      try {
+        const selected = await openFileDialog({
+          title: t("knowledge.tree.importPdfDialogTitle"),
+          multiple: false,
+          directory: false,
+          filters: [{ name: "PDF", extensions: ["pdf"] }],
+        });
+        if (typeof selected === "string" && selected.length > 0) {
+          await importPdfFromPath(selected, parentId);
+        }
+      } catch {
+        // 用户取消选择时不提示
+      }
+    },
+    [importPdfFromPath, t],
+  );
+
   const buildMenuItems = useCallback((): ContextMenuItem[] => {
     if (!ctxEntry) return [];
     const parentId = normalizeParentId(ctxEntry.parentId);
@@ -235,6 +256,11 @@ export function KnowledgeSidebar() {
         id: "new-doc",
         label: t("knowledge.tree.newDocument"),
         onClick: () => void createDocument(isKnowledgeFolder(ctxEntry) ? ctxEntry.id : parentId),
+      },
+      {
+        id: "import-pdf",
+        label: t("knowledge.tree.importPdf"),
+        onClick: () => void handleImportPdf(isKnowledgeFolder(ctxEntry) ? ctxEntry.id : parentId),
       },
       { id: "sep1", separator: true, label: "" },
       {
@@ -260,7 +286,7 @@ export function KnowledgeSidebar() {
         },
       },
     ];
-  }, [ctxEntry, createDocument, createFolder, deleteEntryRecursive, duplicateEntry, handleRename, t]);
+  }, [ctxEntry, createDocument, createFolder, deleteEntryRecursive, duplicateEntry, handleImportPdf, handleRename, t]);
 
   const resolveDropPosition = (e: DragEvent, rowEl: HTMLElement): DropHint["position"] => {
     const rect = rowEl.getBoundingClientRect();
@@ -385,6 +411,9 @@ export function KnowledgeSidebar() {
               <button type="button" onClick={() => { setShowNewMenu(false); void createDocument(parentForNew); }}>
                 {t("knowledge.tree.newDocument")}
               </button>
+              <button type="button" onClick={() => { setShowNewMenu(false); void handleImportPdf(parentForNew); }}>
+                {t("knowledge.tree.importPdf")}
+              </button>
             </div>
           )}
         </div>
@@ -460,6 +489,11 @@ export function KnowledgeSidebar() {
               id: "blank-doc",
               label: t("knowledge.tree.newDocument"),
               onClick: () => void createDocument(parentForNew),
+            },
+            {
+              id: "blank-import-pdf",
+              label: t("knowledge.tree.importPdf"),
+              onClick: () => void handleImportPdf(parentForNew),
             },
           ]}
           position={blankCtx}

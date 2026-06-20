@@ -9,6 +9,7 @@ export function isBottomWorkspaceShortcut(e: KeyboardEvent): boolean {
 
 /** 处理 Alt/Option+W，返回是否已消费该按键 */
 export function triggerBottomWorkspaceToggle(e: KeyboardEvent): boolean {
+  if (e.repeat) return false;
   if (!isBottomWorkspaceShortcut(e)) return false;
   e.preventDefault();
   e.stopPropagation();

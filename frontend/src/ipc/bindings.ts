@@ -341,6 +341,8 @@ export const commands = {
 	knowledgeTodoSave: (list: KnowledgeTodoList) => typedError<null, OmniError_Serialize>(__TAURI_INVOKE("knowledge_todo_save", { list })),
 	/**  删除待办列表。 */
 	knowledgeTodoDelete: (id: string) => typedError<null, OmniError_Serialize>(__TAURI_INVOKE("knowledge_todo_delete", { id })),
+	/**  从 PDF 文件导入知识文档（提取文本并保存为 document 条目）。 */
+	knowledgeImportPdf: (path: string, parentId: string | null) => typedError<KnowledgeEntry, OmniError_Serialize>(__TAURI_INVOKE("knowledge_import_pdf", { path, parentId })),
 	/**  列出所有工作流。 */
 	workflowList: () => typedError<Workflow[], OmniError_Serialize>(__TAURI_INVOKE("workflow_list")),
 	/**  按 id 获取工作流详情（含步骤）。 */

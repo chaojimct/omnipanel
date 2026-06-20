@@ -85,6 +85,8 @@ interface TerminalState {
   setTerminal: (tabId: string, terminal: Terminal) => void;
   setStatus: (tabId: string, status: TerminalTab["status"]) => void;
   setBackendSessionId: (tabId: string, backendSessionId: string | null) => void;
+  /** 更新会话当前工作目录（shell integration / 远程 cwd 钩子） */
+  setSessionCwd: (sessionId: string, cwd: string) => void;
   /**
    * 切换 Tab 目标服务器（调用方需先 dispose 旧后端会话）。
    * Tab 的 id 保持不变；旧后端会话 dispose 后 store 内部的 id 计数器维持。
@@ -263,6 +265,23 @@ export const useTerminalStore = create<TerminalState>()(
         set((state) => ({
           tabs: updateTabById(state.tabs, tabId, (tab) => ({ ...tab, backendSessionId })),
         })),
+
+      setSessionCwd: (sessionId, cwd) =>
+        set((state) => {
+          const tabs = updateTabById(state.tabs, sessionId, (tab) => ({
+            ...tab,
+            session: { ...tab.session, cwd },
+          }));
+          const pane = state.embeddedPanes[sessionId];
+          if (!pane) return { tabs };
+          return {
+            tabs,
+            embeddedPanes: {
+              ...state.embeddedPanes,
+              [sessionId]: { ...pane, cwd },
+            },
+          };
+        }),
 
       setTabResource: (tabId, session) =>
         set((state) => ({

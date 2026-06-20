@@ -19,7 +19,7 @@ import { TerminalTabDockPane } from "./TerminalTabDockPane";
 import { clearTerminalPaneSender } from "./terminalPaneSenders";
 import { useWorkspaceBottomDockStore } from "../../stores/workspaceBottomDockStore";
 import { useWorkspaceTabStore, type TerminalTabSnapshot } from "../../stores/workspaceTabStore";
-import { terminalTabToSnapshot, buildCopyToWorkspaceMenuItems, buildMoveToWorkspaceMenuItems, addSnapshotToWorkspace } from "../../lib/workspaceTabActions";
+import { terminalTabToSnapshot, addSnapshotToWorkspace } from "../../lib/workspaceTabActions";
 import { subscribeDockviewTransfer } from "../../lib/dockviewRegistry";
 import { ModuleSegmentDock } from "../../components/dock";
 import {
@@ -72,7 +72,6 @@ export function TerminalPanel() {
 
   const isOriginDocked = useWorkspaceBottomDockStore((s) => s.isOriginDocked);
   const removeDockedOrigin = useWorkspaceBottomDockStore((s) => s.removeDockedOrigin);
-  const allWorkspaces = useWorkspaceStore((s) => s.workspaces);
   const currentWorkspaceId = useWorkspaceStore((s) => s.workspace.id);
   const wsTabStore = useWorkspaceTabStore;
 
@@ -327,6 +326,20 @@ export function TerminalPanel() {
     ],
   );
 
+  const handleCtrlCopyTab = useCallback(
+    (tabId: string) => {
+      const ctxTab = visibleTabs.find((tab) => tab.id === tabId);
+      if (!ctxTab) return;
+      const newId = addLocalTerminalTab(ctxTab.title);
+      const created = useTerminalStore.getState().tabs.find((tab) => tab.id === newId);
+      if (created) {
+        addSnapshotToWorkspace(currentWorkspaceId, terminalTabToSnapshot(created));
+      }
+      setActiveTab(newId);
+    },
+    [visibleTabs, addLocalTerminalTab, currentWorkspaceId, setActiveTab],
+  );
+
   return (
     <>
       <ModuleSegmentDock
@@ -341,6 +354,7 @@ export function TerminalPanel() {
         onSavedLayoutChange={setDockLayout}
         renderPanel={renderDockPanel}
         onTabContextMenu={handleDockTabContextMenu}
+        onCtrlCopyTab={handleCtrlCopyTab}
         addTabConfig={addTabConfig}
         enabled={isActiveRoute}
         emptyContent={
@@ -348,51 +362,15 @@ export function TerminalPanel() {
         }
       />
       {ctxMenu && (() => {
-        const ctxTab = visibleTabs.find((tab) => tab.id === ctxMenu.tabId);
-        const snapshot = ctxTab ? terminalTabToSnapshot(ctxTab) : null;
         const closeItems = buildTabCloseMenuItems(
           t,
           visibleTabs.length,
           ctxMenu.index,
           handleContextAction,
         );
-        const wsCopyItems = snapshot ? buildCopyToWorkspaceMenuItems({
-          workspaces: allWorkspaces,
-          currentWorkspaceId,
-          snapshot,
-          onCopyToCurrent: () => {
-            if (!ctxTab) return;
-            const newId = addLocalTerminalTab(ctxTab.title);
-            const created = useTerminalStore.getState().tabs.find((tab) => tab.id === newId);
-            if (created) {
-              addSnapshotToWorkspace(currentWorkspaceId, terminalTabToSnapshot(created));
-            }
-            setActiveTab(newId);
-          },
-        }) : [];
-        const wsMoveItems = snapshot ? buildMoveToWorkspaceMenuItems(t, {
-          workspaces: allWorkspaces,
-          currentWorkspaceId,
-          snapshot,
-          onMoveToOther: () => handleCloseTab(ctxMenu.tabId),
-        }) : [];
-        const allItems = [
-          ...closeItems,
-          { id: "ws-sep-before", separator: true, label: "" },
-          {
-            id: "ws-copy",
-            label: t("shell.workspace.copyTo"),
-            children: wsCopyItems,
-          },
-          {
-            id: "ws-move",
-            label: t("shell.workspace.moveTo"),
-            children: wsMoveItems,
-          },
-        ];
         return (
           <ContextMenu
-            items={allItems}
+            items={closeItems}
             position={{ x: ctxMenu.x, y: ctxMenu.y }}
             onClose={() => setCtxMenu(null)}
           />

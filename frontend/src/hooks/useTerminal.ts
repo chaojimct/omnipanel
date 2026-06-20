@@ -221,6 +221,23 @@ function disposeBackendSession(sessionId: string, backendSid: string) {
   invoke(cmd, { id: backendSid }).catch(() => {});
 }
 
+/** 远端 shell 无本地 init-file 注入时，通过 PROMPT_COMMAND / precmd 上报 cwd。 */
+function injectRemoteShellCwdReporting(write: (data: string) => void) {
+  const script = [
+    "if [ -z \"${__OMNIPANEL_CWD_HOOK-}\" ]; then",
+    "export __OMNIPANEL_CWD_HOOK=1;",
+    "__omnipanel_cwd_hook() { printf \"\\033]1337;CurrentDir=%s\\007\" \"$PWD\"; };",
+    "if [ -n \"${BASH_VERSION:-}\" ]; then",
+    "PROMPT_COMMAND=\"__omnipanel_cwd_hook${PROMPT_COMMAND:+;$PROMPT_COMMAND}\";",
+    "elif [ -n \"${ZSH_VERSION:-}\" ]; then",
+    "autoload -Uz add-zsh-hook 2>/dev/null; add-zsh-hook precmd __omnipanel_cwd_hook;",
+    "fi;",
+    "__omnipanel_cwd_hook;",
+    "fi",
+  ].join(" ");
+  write(`${script}\r`);
+}
+
 /** 关闭窗格对应的后端 PTY/SSH（仅在用户关闭窗格/标签时调用，勿在 React 卸载时调用） */
 export function disposePaneBackendSession(paneId: string) {
   const pane = findPaneById(paneId);
@@ -312,6 +329,7 @@ export function useTerminal(
     const resizeCmd = remote ? "ssh_resize" : "resize_terminal";
     // 重连恢复期间由后端快照统一重建屏幕，期间丢弃增量事件以避免重复。
     let restoring = false;
+    let remoteCwdHookInjected = false;
 
     // Shell integration state
     let pendingBlock: {
@@ -440,7 +458,11 @@ export function useTerminal(
       disposables.push(
         t.parser.registerOscHandler(1337, (data: string) => {
           if (data.startsWith("CurrentDir=")) {
-            currentCwd = data.substring("CurrentDir=".length);
+            const next = data.substring("CurrentDir=".length);
+            if (next && next !== currentCwd) {
+              currentCwd = next;
+              useTerminalStore.getState().setSessionCwd(sessionId, next);
+            }
           }
           return true;
         })
@@ -516,6 +538,12 @@ export function useTerminal(
         useTerminalStore.getState().setStatus(sessionId, "connected");
         void restoreSnapshot();
         flushPendingInput();
+        if (remote && !remoteCwdHookInjected) {
+          remoteCwdHookInjected = true;
+          window.setTimeout(() => {
+            if (!destroyed) injectRemoteShellCwdReporting(writeToBackend);
+          }, 300);
+        }
         return;
       }
 
@@ -526,6 +554,12 @@ export function useTerminal(
         backendSid = sid;
         useTerminalStore.getState().setStatus(sessionId, "connected");
         flushPendingInput();
+        if (remote && !remoteCwdHookInjected) {
+          remoteCwdHookInjected = true;
+          window.setTimeout(() => {
+            if (!destroyed) injectRemoteShellCwdReporting(writeToBackend);
+          }, 300);
+        }
       } catch (err) {
         if (destroyed) return;
         console.error(`[Terminal ${sessionId}] backend session failed:`, err);

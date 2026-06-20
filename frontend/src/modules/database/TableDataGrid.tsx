@@ -7,6 +7,7 @@ import {
   useState,
   memo,
   type MutableRefObject,
+  type CSSProperties,
   type ReactNode,
 } from "react";
 import {
@@ -34,6 +35,7 @@ export type TableDataGridProps = {
   columnMeta?: DbColumnMeta[];
   onCellEdit?: (cellInfo: { rowIndex: number; column: string; row: Record<string, unknown> }) => void;
   onRowEdit?: (cellInfo: { rowIndex: number; column: string; row: Record<string, unknown> }) => void;
+  onCellSetNull?: (cellInfo: { rowIndex: number; column: string; row: Record<string, unknown> }) => void;
   /** 已修改的行 key 集合（来自父组件脏数据状态），用于高亮 */
   dirtyRowKeys?: Set<string>;
   /** 单元覆盖：行 key -> 列名 -> 覆盖值；优先于 rows 展示 */
@@ -168,14 +170,36 @@ function applyColumnWidthDom(wrap: HTMLElement, columnId: string, width: number)
   wrap.querySelectorAll<HTMLElement>(`[data-col-id="${CSS.escape(columnId)}"]`).forEach((el) => {
     el.style.width = px;
   });
+  wrap
+    .querySelector<HTMLElement>(`col[data-col-id="${CSS.escape(columnId)}"]`)
+    ?.style.setProperty("width", px);
+}
+
+function buildColumnCellStyle(
+  columnId: string,
+  baseSize: number,
+  lastColumnId: string,
+  fillDelta: number,
+): CSSProperties {
+  const stretchLast = fillDelta > 0 && columnId === lastColumnId;
+  const width = stretchLast ? baseSize + fillDelta : baseSize;
+  return stretchLast
+    ? { width, minWidth: baseSize }
+    : { width, minWidth: baseSize, maxWidth: baseSize };
 }
 
 function TableCellContextMenu({
   menuOpenRef,
   onRowEdit,
+  onCellSetNull,
+  columnMeta,
+  cellOverrides,
 }: {
   menuOpenRef: MutableRefObject<(state: CellMenuState) => void>;
   onRowEdit: (info: { rowIndex: number; column: string; row: Record<string, unknown> }) => void;
+  onCellSetNull?: (info: { rowIndex: number; column: string; row: Record<string, unknown> }) => void;
+  columnMeta?: DbColumnMeta[];
+  cellOverrides?: Record<string, Record<string, unknown>>;
 }) {
   const { t } = useI18n();
   const [menu, setMenu] = useState<CellMenuState | null>(null);
@@ -197,6 +221,27 @@ function TableCellContextMenu({
     setMenu(null);
   }, [menu, onRowEdit]);
 
+  const handleSetNull = useCallback(() => {
+    if (!menu || !onCellSetNull) return;
+    onCellSetNull({
+      rowIndex: menu.rowIndex,
+      column: menu.column,
+      row: menu.row,
+    });
+    setMenu(null);
+  }, [menu, onCellSetNull]);
+
+  const setNullDisabled = useMemo(() => {
+    if (!menu || !onCellSetNull) return true;
+    const col = columnMeta?.find((item) => item.name === menu.column);
+    if (!col || col.isPk) return true;
+    const pkCols = (columnMeta ?? []).filter((item) => item.isPk);
+    const rowKey = resolveRowKey(menu.row, pkCols);
+    const overrideValue = rowKey ? cellOverrides?.[rowKey]?.[menu.column] : undefined;
+    const currentValue = overrideValue !== undefined ? overrideValue : menu.row[menu.column];
+    return currentValue == null;
+  }, [menu, onCellSetNull, columnMeta, cellOverrides]);
+
   const items = useMemo(
     () => [
       {
@@ -204,8 +249,14 @@ function TableCellContextMenu({
         label: t("database.rowEditor.contextMenu"),
         onClick: handleEditRow,
       },
+      {
+        id: "set-null",
+        label: t("database.cellEditor.setNull"),
+        disabled: setNullDisabled,
+        onClick: handleSetNull,
+      },
     ],
-    [t, handleEditRow],
+    [t, handleEditRow, handleSetNull, setNullDisabled],
   );
 
   if (!menu) return null;
@@ -219,7 +270,7 @@ function TableCellContextMenu({
   );
 }
 
-export const TableDataGrid = memo(function TableDataGrid({ columns, rows, totalRows, page, pageSize, loading, onPageChange, columnMeta, onCellEdit, onRowEdit, dirtyRowKeys, cellOverrides, enableTranspose = false, toolbar }: TableDataGridProps) {
+export const TableDataGrid = memo(function TableDataGrid({ columns, rows, totalRows, page, pageSize, loading, onPageChange, columnMeta, onCellEdit, onRowEdit, onCellSetNull, dirtyRowKeys, cellOverrides, enableTranspose = false, toolbar }: TableDataGridProps) {
   const { t } = useI18n();
   const [transposed, setTransposed] = useState(false);
   const cellMenuOpenRef = useRef<(state: CellMenuState) => void>(() => {});
@@ -238,6 +289,7 @@ export const TableDataGrid = memo(function TableDataGrid({ columns, rows, totalR
     lastHeight: number;
   } | null>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
+  const [containerWidth, setContainerWidth] = useState(0);
   const savedScrollRef = useRef({ left: 0, top: 0 });
   const restoreScrollAfterPageChangeRef = useRef(false);
 
@@ -420,6 +472,36 @@ export const TableDataGrid = memo(function TableDataGrid({ columns, rows, totalR
     };
   }, []);
 
+  const totalTableWidth = table.getTotalSize();
+  const leafColumns = table.getAllLeafColumns();
+  const lastColumnId = leafColumns[leafColumns.length - 1]?.id ?? "";
+  const fillDelta =
+    containerWidth > 0 ? Math.max(0, containerWidth - totalTableWidth) : 0;
+
+  const resolveColumnWidth = useCallback(
+    (columnId: string, baseSize: number) =>
+      fillDelta > 0 && columnId === lastColumnId ? baseSize + fillDelta : baseSize,
+    [fillDelta, lastColumnId],
+  );
+
+  useLayoutEffect(() => {
+    const wrap = wrapRef.current;
+    if (!wrap) return;
+    const syncWidth = () => setContainerWidth(wrap.clientWidth);
+    syncWidth();
+    const ro = new ResizeObserver(syncWidth);
+    ro.observe(wrap);
+    return () => ro.disconnect();
+  }, []);
+
+  useLayoutEffect(() => {
+    const wrap = wrapRef.current;
+    if (!wrap) return;
+    for (const column of table.getAllLeafColumns()) {
+      applyColumnWidthDom(wrap, column.id, resolveColumnWidth(column.id, column.getSize()));
+    }
+  }, [columnSizing, displayColumns, totalTableWidth, containerWidth, fillDelta, lastColumnId, resolveColumnWidth]);
+
   if (displayColumns.length === 0) {
     return null;
   }
@@ -434,16 +516,29 @@ export const TableDataGrid = memo(function TableDataGrid({ columns, rows, totalR
       ref={wrapRef}
       className={`db-data-table-wrap${transposed ? " db-data-table-wrap--transposed" : ""}`}
     >
-      <table className="db-data-table">
+      <table
+        className="db-data-table"
+        style={{ width: fillDelta > 0 ? "100%" : totalTableWidth, minWidth: "100%" }}
+      >
+        <colgroup>
+          {leafColumns.map((column) => (
+            <col
+              key={column.id}
+              data-col-id={column.id}
+              style={{ width: resolveColumnWidth(column.id, column.getSize()) }}
+            />
+          ))}
+        </colgroup>
         <thead>
                 {table.getHeaderGroups().map((headerGroup) => (
             <tr key={headerGroup.id}>
               {headerGroup.headers.map((header) => {
+                const baseSize = header.getSize();
                 return (
                 <th
                   key={header.id}
                   data-col-id={header.column.id}
-                  style={{ width: header.getSize() }}
+                  style={buildColumnCellStyle(header.column.id, baseSize, lastColumnId, fillDelta)}
                   className={table.getState().columnSizingInfo?.isResizingColumn === header.column.id ? "db-data-table-th-resizing" : ""}
                 >
                   {header.isPlaceholder
@@ -508,10 +603,12 @@ export const TableDataGrid = memo(function TableDataGrid({ columns, rows, totalR
                   const cellDirty = overrideValue !== undefined && rowDirty;
                   const rawValue = overrideValue !== undefined ? overrideValue : cell.getValue();
                   const cellTitle = cellToText(rawValue);
+                  const baseSize = cell.column.getSize();
                   return (
                     <td
                       key={cell.id}
                       data-col-id={cell.column.id}
+                      style={buildColumnCellStyle(cell.column.id, baseSize, lastColumnId, fillDelta)}
                       className={`db-data-table-cell${isCustomHeight ? " db-data-table-cell--custom-h" : ""}${columnSizing[cell.column.id] !== undefined ? " db-data-table-cell--sized" : ""}${canEdit ? " db-cell--editable" : ""}${cellDirty ? " db-data-table-cell--dirty" : ""}${transposed && cell.column.id === TRANSPOSE_FIELD_COL ? " db-data-table-cell--field" : ""}`}
                       onDoubleClick={canEdit ? () => effectiveOnCellEdit!({ rowIndex: cell.row.index, column: cell.column.id, row: cell.row.original }) : undefined}
                       onContextMenu={
@@ -549,7 +646,13 @@ export const TableDataGrid = memo(function TableDataGrid({ columns, rows, totalR
       </table>
     </div>
     {onRowEdit && (
-      <TableCellContextMenu menuOpenRef={cellMenuOpenRef} onRowEdit={onRowEdit} />
+      <TableCellContextMenu
+        menuOpenRef={cellMenuOpenRef}
+        onRowEdit={onRowEdit!}
+        onCellSetNull={onCellSetNull}
+        columnMeta={columnMeta}
+        cellOverrides={displayCellOverrides}
+      />
     )}
     <div className="db-pagination">
       <div className="db-pagination-left">

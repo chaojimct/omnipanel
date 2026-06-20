@@ -150,6 +150,8 @@ export const enUS: TranslationDict = {
       new: "New",
       newFolder: "New Folder",
       newDocument: "New Document",
+      importPdf: "Import Document",
+      importPdfDialogTitle: "Select PDF File",
       rename: "Rename",
       duplicate: "Duplicate",
       folderHint: "Select a document to edit, or create content under this folder",
@@ -426,10 +428,10 @@ export const enUS: TranslationDict = {
       collapseWorkspace: "Collapse workspace",
     },
     connectionPool: {
-      summary: "Connections {active} / {idle}",
+      summary: "Connections {active} / {total}",
       detailTitle: "Connection pool",
       empty: "No connections",
-      categoryCounts: "Active {active} / Idle {idle}",
+      categoryCounts: "Active {active} / Total {total}",
       kind: {
         ssh: "SSH",
         docker: "Docker",
@@ -438,6 +440,9 @@ export const enUS: TranslationDict = {
         protocol: "Protocol",
         terminal: "Local terminal",
       },
+    },
+    workspacePreview: {
+      noPanels: "No panels yet — drag from a module into the workspace",
     },
     workspacePopover: {
       title: "Workspaces",
@@ -934,6 +939,7 @@ export const enUS: TranslationDict = {
     cellEditor: {
       title: "Edit Cell",
       nullValue: "NULL",
+      setNull: "Set to NULL",
       typeLabel: "Type: {type}",
       kinds: {
         text: "Text",

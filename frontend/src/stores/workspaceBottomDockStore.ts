@@ -13,6 +13,9 @@ import type { WorkspaceInfo } from "./workspaceStore";
 
 export type WorkspaceDockTabKind = "mirrored" | "payload";
 
+/** 每个工作区底部 dock 最多容纳的面板数 */
+export const MAX_WORKSPACE_PANELS = 10;
+
 export interface WorkspaceDockTab {
   id: string;
   label: string;
@@ -149,6 +152,9 @@ export const useWorkspaceBottomDockStore = create<WorkspaceBottomDockState>()(
         };
         set((state) => {
           const current = ensureWorkspaceTabs(_workspace, state.tabsByWorkspace[workspaceId]);
+          if (current.length >= MAX_WORKSPACE_PANELS && !current.some((item) => item.id === nextTab.id)) {
+            return state;
+          }
           const tabs = current.some((item) => item.id === nextTab.id)
             ? current.map((item) => (item.id === nextTab.id ? nextTab : item))
             : [...current, nextTab];
@@ -179,6 +185,9 @@ export const useWorkspaceBottomDockStore = create<WorkspaceBottomDockState>()(
         };
         set((state) => {
           const current = ensureWorkspaceTabs(_workspace, state.tabsByWorkspace[workspaceId]);
+          if (current.length >= MAX_WORKSPACE_PANELS && !current.some((item) => item.id === nextTab.id)) {
+            return state;
+          }
           const tabs = current.some((item) => item.id === nextTab.id)
             ? current.map((item) => (item.id === nextTab.id ? nextTab : item))
             : [...current, nextTab];
