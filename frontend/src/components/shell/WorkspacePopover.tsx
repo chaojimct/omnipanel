@@ -9,7 +9,7 @@ import { createPortal } from "react-dom";
 import { useWorkspaceStore, type WorkspaceInfo } from "../../stores/workspaceStore";
 import { useWorkspaceBottomDockStore } from "../../stores/workspaceBottomDockStore";
 import { useBottomPanelStore } from "../../stores/bottomPanelStore";
-import { goWorkspaceHome, navigateToWorkspace } from "../../lib/workspaceNavigation";
+import { navigateToWorkspace } from "../../lib/workspaceNavigation";
 import { appConfirm } from "../../lib/appConfirm";
 import { useI18n } from "../../i18n";
 
@@ -18,8 +18,6 @@ interface WorkspacePopoverProps {
   onClose: () => void;
   /** above：锚点上方（状态栏）；below：锚点下方（模块 Tab 栏） */
   placement?: "above" | "below";
-  /** 半屏及以下隐藏首页入口 */
-  showHome?: boolean;
   /** 自定义选择工作区行为；未提供时默认导航到 /workspace/:id */
   onSelectWorkspace?: (ws: WorkspaceInfo) => void;
 }
@@ -34,7 +32,6 @@ export function WorkspacePopover({
   anchorRef,
   onClose,
   placement = "above",
-  showHome = true,
   onSelectWorkspace,
 }: WorkspacePopoverProps) {
   const { t } = useI18n();
@@ -47,7 +44,6 @@ export function WorkspacePopover({
     (state) => state.removeWorkspaceData,
   );
   const requestExpand = useBottomPanelStore((state) => state.requestExpand);
-  const isHomeActive = useBottomPanelStore((state) => state.isHomeActive);
 
   const panelRef = useRef<HTMLDivElement>(null);
   const [coords, setCoords] = useState<{
@@ -167,28 +163,12 @@ export function WorkspacePopover({
     onClose();
   }
 
-  function handleSelectHome() {
-    if (onSelectWorkspace) {
-      useWorkspaceStore.getState().switchWorkspace("default");
-    } else {
-      goWorkspaceHome();
-    }
-    onClose();
-  }
-
   function handleSelect(target: WorkspaceInfo) {
     const sameWorkspace = target.id === currentId;
-    const { workspaceMode, isHomeActive: homeActive } = useBottomPanelStore.getState();
+    const { workspaceMode } = useBottomPanelStore.getState();
 
     if (onSelectWorkspace) {
       onSelectWorkspace(target);
-      onClose();
-      return;
-    }
-
-    // 首页全屏下选择工程工作区：保持全屏，切换到对应工程工作区
-    if (homeActive) {
-      navigateToWorkspace(target.id);
       onClose();
       return;
     }
@@ -278,33 +258,8 @@ export function WorkspacePopover({
       >
         <div className="workspace-popover-header">{t("shell.workspacePopover.title")}</div>
         <ul className="workspace-popover-list" role="listbox">
-          {showHome ? (
-            <li className="workspace-popover-row">
-              <button
-                type="button"
-                className={`workspace-popover-item workspace-popover-item--home${isHomeActive ? " workspace-popover-item--active" : ""}`}
-                onClick={handleSelectHome}
-              >
-                <span className="workspace-popover-item-name">{t("shell.workspace.home")}</span>
-                {isHomeActive && (
-                  <svg
-                    className="workspace-popover-item-check"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.5"
-                    width="12"
-                    height="12"
-                    aria-hidden
-                  >
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
-                )}
-              </button>
-            </li>
-          ) : null}
           {workspaces.map((ws) => {
-            const active = ws.id === currentId && !isHomeActive;
+            const active = ws.id === currentId;
             const deleteLabel = t("shell.workspacePopover.delete");
             const renameLabel = t("shell.workspacePopover.rename");
             const isRenaming = renamingId === ws.id;

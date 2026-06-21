@@ -1,6 +1,8 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import type { DbWorkspaceTab } from "../modules/database/workspaceTabs";
+import type { ModuleRouteSnapshot } from "../lib/workspaceModuleRoutes";
+import type { ComponentSnapshot } from "../lib/workspaceComponentTypes";
 
 // --- Snapshot types ---
 
@@ -36,7 +38,12 @@ export type DockerTabSnapshot = {
   containerName: string;
 };
 
-export type WorkspaceTabSnapshot = TerminalTabSnapshot | DbTabSnapshot | DockerTabSnapshot;
+export type WorkspaceTabSnapshot =
+  | TerminalTabSnapshot
+  | DbTabSnapshot
+  | DockerTabSnapshot
+  | ModuleRouteSnapshot
+  | ComponentSnapshot;
 
 // --- Store state ---
 

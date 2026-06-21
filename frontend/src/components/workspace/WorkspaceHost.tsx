@@ -16,13 +16,18 @@ interface WorkspaceHostProps {
 export function WorkspaceHost({ children }: WorkspaceHostProps) {
   const location = useLocation();
   const workspaceMode = useBottomPanelStore((state) => state.workspaceMode);
-  const isHomeActive = useBottomPanelStore((state) => state.isHomeActive);
   const wsState = workspaceShellState(workspaceMode);
   const inWorkspaceDetail = isWorkspacePath(location.pathname);
+  const embeddedModeClass =
+    workspaceMode !== "fullscreen" &&
+    workspaceMode !== "home" &&
+    workspaceMode !== "hidden"
+      ? ` workspace-host--${workspaceMode}`
+      : "";
 
   if (inWorkspaceDetail) {
     return (
-      <div className={`content-bottom workspace-host workspace-host--${wsState}${isHomeActive ? " workspace-host--home" : ""}`}>
+      <div className={`content-bottom workspace-host workspace-host--${wsState}`}>
         {children}
       </div>
     );
@@ -30,7 +35,7 @@ export function WorkspaceHost({ children }: WorkspaceHostProps) {
 
   return (
     <WorkspacePreview
-      className={`content-bottom workspace-host workspace-host--${wsState}${isHomeActive ? " workspace-host--home" : ""}${workspaceMode !== "fullscreen" && workspaceMode !== "home" && workspaceMode !== "hidden" ? ` workspace-host--${workspaceMode}` : ""}`}
+      className={`content-bottom workspace-host workspace-host--${wsState}${embeddedModeClass}`}
     >
       {children}
     </WorkspacePreview>

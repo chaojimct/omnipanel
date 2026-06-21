@@ -5,6 +5,7 @@ import { WorkspaceEmptyPage } from "../../components/ui/WorkspaceEmptyPage";
 import { HostListPanel } from "../../components/workspace/HostListPanel";
 import { ModuleSegmentDock } from "../../components/dock";
 import { usePersistedModuleTab } from "../../hooks/usePersistedModuleTab";
+import { useWorkspaceCtrlCopyTab } from "../../hooks/useWorkspaceCtrlCopyTab";
 import { useI18n } from "../../i18n";
 import { HostDetailPanel } from "./ssh/components/HostDetailPanel";
 import { KeysModuleView } from "./ssh/components/KeysModuleView";
@@ -32,6 +33,10 @@ export function SshPanel() {
     [t],
   );
 
+  const handleCtrlCopyTab = useWorkspaceCtrlCopyTab("ssh", (tabId) =>
+    segmentTabs.find((tab) => tab.id === tabId)?.label ?? tabId,
+  );
+
   return (
     <ModuleSegmentDock
       className="ssh-module-dock"
@@ -39,6 +44,7 @@ export function SshPanel() {
       activeTabId={workspaceTab}
       onActiveTabChange={(id) => setWorkspaceTab(id as SshWorkspaceTab)}
       enabled={isActiveRoute}
+      onCtrlCopyTab={handleCtrlCopyTab}
       renderPanel={(tabId) => {
         if (tabId === "tunnels") {
           return <TunnelsModuleView sshResources={ctx.sshResources} />;

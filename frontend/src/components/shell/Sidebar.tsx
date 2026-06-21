@@ -1,13 +1,17 @@
 import { useNavigate, useLocation } from "react-router-dom";
 import { startTransition } from "react";
-import type { ReactNode } from "react";
+import type { MouseEvent, ReactNode } from "react";
 import { useAiStore } from "../../stores/aiStore";
 import { useSettingsUiStore } from "../../stores/settingsUiStore";
 import { useBottomPanelStore } from "../../stores/bottomPanelStore";
+import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { useI18n } from "../../i18n";
 import { AppLogo } from "../ui/AppLogo";
 import { goWorkspaceHome, navigateToFeature } from "../../lib/workspaceNavigation";
-import { MODULE_PATHS } from "../../lib/paths";
+import { isWorkspacePath, MODULE_PATHS } from "../../lib/paths";
+import { moduleKeyFromPath, moduleNavI18nKey } from "../../lib/workspaceModuleRoutes";
+import { addModuleRouteToWorkspace } from "../../lib/workspaceTabActions";
+import { workspaceAddDebug } from "../../lib/workspaceAddDebug";
 
 const navPaths = [
   {
@@ -113,10 +117,11 @@ export function Sidebar() {
   const { t } = useI18n();
   const navigate = useNavigate();
   const location = useLocation();
-  /** 全屏工作区（首页或工程工作区）时高亮左上角入口 */
-  const isWorkspaceHome = useBottomPanelStore(
-    (s) => s.isFullscreen || s.isHomeActive,
-  );
+  const workspaceId = useWorkspaceStore((s) => s.workspace.id);
+  const isBottomFullscreen = useBottomPanelStore((s) => s.isFullscreen);
+  /** 工作区全屏或位于工作区路由时高亮左上角入口 */
+  const isWorkspaceHome =
+    isWorkspacePath(location.pathname) || isBottomFullscreen;
   const drawerOpen = useAiStore((s) => s.drawerOpen);
   const settingsOpen = useSettingsUiStore((s) => s.open);
   const openSettings = useSettingsUiStore((s) => s.openSettings);
@@ -132,13 +137,34 @@ export function Sidebar() {
     });
   };
 
+  const handleModuleNav = (path: string, event: MouseEvent) => {
+    if (event.ctrlKey || event.metaKey) {
+      event.preventDefault();
+      const moduleKey = moduleKeyFromPath(path);
+      workspaceAddDebug("sidebar:ctrl_click", {
+        path,
+        moduleKey,
+        workspaceId,
+        ctrlKey: event.ctrlKey,
+        metaKey: event.metaKey,
+      });
+      if (!moduleKey) {
+        workspaceAddDebug("sidebar:ctrl_click:abort", { reason: "unknown_module_path", path });
+        return;
+      }
+      addModuleRouteToWorkspace(workspaceId, moduleKey, t(moduleNavI18nKey(moduleKey)));
+      return;
+    }
+    go(path);
+  };
+
   const renderItem = (item: { path: string; key: string; icon: ReactNode }) => (
     <button
       key={item.path}
       type="button"
       className={`sidebar-item${isActive(item.path) ? " active" : ""}`}
-      title={t(item.key)}
-      onClick={() => go(item.path)}
+      title={`${t(item.key)} (${t("shell.workspace.addPanelHint")})`}
+      onClick={(event) => handleModuleNav(item.path, event)}
     >
       {item.icon}
     </button>

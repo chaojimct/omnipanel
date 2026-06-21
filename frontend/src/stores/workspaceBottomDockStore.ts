@@ -10,11 +10,18 @@ import {
 } from "../components/dock/dockViewLayout";
 import type { WorkspaceTabSnapshot } from "./workspaceTabStore";
 import type { WorkspaceInfo } from "./workspaceStore";
+import {
+  defaultWorkspaceBuiltinActiveTabId,
+  isWorkspaceBuiltinTab,
+  isWorkspaceBuiltinTabId,
+  mergeWorkspaceBuiltinTabs,
+} from "../lib/workspaceBuiltinPanels";
+import { workspaceAddDebug } from "../lib/workspaceAddDebug";
 
-export type WorkspaceDockTabKind = "mirrored" | "payload";
+export type WorkspaceDockTabKind = "mirrored" | "payload" | "builtin";
 
 /** 每个工作区底部 dock 最多容纳的面板数 */
-export const MAX_WORKSPACE_PANELS = 10;
+export const MAX_WORKSPACE_PANELS = 15;
 
 export interface WorkspaceDockTab {
   id: string;
@@ -28,6 +35,8 @@ export interface WorkspaceDockTab {
   originPanelId?: string;
   /** 序列化快照（复制/移动到工作区） */
   payload?: WorkspaceTabSnapshot;
+  /** 内置面板类型（看板 / AI 助手） */
+  builtin?: "board" | "ai";
   closable?: boolean;
 }
 
@@ -38,21 +47,37 @@ export function resolveWorkspaceDockPanelType(tab: WorkspaceDockTab): string {
   return "unknown";
 }
 
-function ensureWorkspaceTabs(
-  _workspace: WorkspaceInfo,
+function tabsNeedBuiltinMerge(
+  workspaceId: string,
   tabs: WorkspaceDockTab[] | undefined,
 ): WorkspaceDockTab[] {
   const legacyTabs = (tabs ?? []) as Array<WorkspaceDockTab | { kind: "welcome" }>;
-  return legacyTabs.filter((tab) => tab.kind !== "welcome") as WorkspaceDockTab[];
+  const cleaned = legacyTabs.filter((tab) => tab.kind !== "welcome") as WorkspaceDockTab[];
+  return mergeWorkspaceBuiltinTabs(workspaceId, cleaned);
+}
+
+function builtinTabsChanged(
+  workspaceId: string,
+  before: WorkspaceDockTab[] | undefined,
+  after: WorkspaceDockTab[],
+): boolean {
+  const prev = before ?? [];
+  if (prev.length !== after.length) return true;
+  for (let i = 0; i < after.length; i++) {
+    if (after[i]?.id !== prev[i]?.id) return true;
+    if (isWorkspaceBuiltinTabId(after[i]?.id ?? "") && prev[i]?.kind !== "builtin") {
+      return true;
+    }
+  }
+  return false;
 }
 
 /** 组件侧派生 tabs 时使用；勿放入 zustand selector。 */
 export function resolveWorkspaceTabs(
-  _workspace: WorkspaceInfo,
+  workspace: WorkspaceInfo,
   tabs: WorkspaceDockTab[] | undefined,
 ): WorkspaceDockTab[] {
-  const legacyTabs = (tabs ?? []) as Array<WorkspaceDockTab | { kind: "welcome" }>;
-  return legacyTabs.filter((tab) => tab.kind !== "welcome") as WorkspaceDockTab[];
+  return tabsNeedBuiltinMerge(workspace.id, tabs);
 }
 
 export function resolveWorkspaceActiveTabId(
@@ -106,29 +131,40 @@ export const useWorkspaceBottomDockStore = create<WorkspaceBottomDockState>()(
 
       ensureWorkspaceData: (workspaceId, workspace) => {
         const existing = get().tabsByWorkspace[workspaceId];
-        if (existing !== undefined) {
-          const cleaned = ensureWorkspaceTabs(workspace, existing);
-          if (cleaned.length === existing.length) return;
-          set((state) => ({
-            tabsByWorkspace: {
-              ...state.tabsByWorkspace,
-              [workspaceId]: cleaned,
-            },
-            layoutByWorkspace: {
-              ...state.layoutByWorkspace,
-              [workspaceId]: null,
-            },
-            activeTabByWorkspace: {
-              ...state.activeTabByWorkspace,
-              [workspaceId]: cleaned[0]?.id ?? "",
-            },
-          }));
+        const merged = tabsNeedBuiltinMerge(workspaceId, existing);
+        if (existing !== undefined && !builtinTabsChanged(workspaceId, existing, merged)) {
           return;
         }
+
+        workspaceAddDebug("ensureWorkspaceData:apply", {
+          workspaceId,
+          existingTabIds: existing?.map((t) => t.id) ?? null,
+          mergedTabIds: merged.map((t) => t.id),
+          resetLayout:
+            existing === undefined || builtinTabsChanged(workspaceId, existing, merged),
+        });
+
+        const prevActive = get().activeTabByWorkspace[workspaceId];
+        const nextActive =
+          prevActive && merged.some((tab) => tab.id === prevActive)
+            ? prevActive
+            : defaultWorkspaceBuiltinActiveTabId(workspaceId);
+
         set((state) => ({
           tabsByWorkspace: {
             ...state.tabsByWorkspace,
-            [workspaceId]: [],
+            [workspaceId]: merged,
+          },
+          layoutByWorkspace: {
+            ...state.layoutByWorkspace,
+            [workspaceId]:
+              existing === undefined || builtinTabsChanged(workspaceId, existing, merged)
+                ? null
+                : state.layoutByWorkspace[workspaceId] ?? null,
+          },
+          activeTabByWorkspace: {
+            ...state.activeTabByWorkspace,
+            [workspaceId]: nextActive,
           },
         }));
       },
@@ -151,7 +187,7 @@ export const useWorkspaceBottomDockStore = create<WorkspaceBottomDockState>()(
           closable: tab.closable !== false,
         };
         set((state) => {
-          const current = ensureWorkspaceTabs(_workspace, state.tabsByWorkspace[workspaceId]);
+          const current = tabsNeedBuiltinMerge(_workspace.id, state.tabsByWorkspace[workspaceId]);
           if (current.length >= MAX_WORKSPACE_PANELS && !current.some((item) => item.id === nextTab.id)) {
             return state;
           }
@@ -183,12 +219,15 @@ export const useWorkspaceBottomDockStore = create<WorkspaceBottomDockState>()(
           panelType: tab.panelType ?? tab.payload.module,
           closable: tab.closable !== false,
         };
+        let rejectedReason: string | null = null;
         set((state) => {
-          const current = ensureWorkspaceTabs(_workspace, state.tabsByWorkspace[workspaceId]);
+          const current = tabsNeedBuiltinMerge(_workspace.id, state.tabsByWorkspace[workspaceId]);
           if (current.length >= MAX_WORKSPACE_PANELS && !current.some((item) => item.id === nextTab.id)) {
+            rejectedReason = "max_panels";
             return state;
           }
-          const tabs = current.some((item) => item.id === nextTab.id)
+          const isUpdate = current.some((item) => item.id === nextTab.id);
+          const tabs = isUpdate
             ? current.map((item) => (item.id === nextTab.id ? nextTab : item))
             : [...current, nextTab];
           return {
@@ -199,6 +238,15 @@ export const useWorkspaceBottomDockStore = create<WorkspaceBottomDockState>()(
             },
           };
         });
+        workspaceAddDebug("addPayloadTab", {
+          workspaceId,
+          tabId: nextTab.id,
+          label: nextTab.label,
+          rejectedReason,
+          tabCount: get().tabsByWorkspace[workspaceId]?.length ?? 0,
+          activeTab: get().activeTabByWorkspace[workspaceId] ?? null,
+          isUpdate: get().tabsByWorkspace[workspaceId]?.some((t) => t.id === nextTab.id) ?? false,
+        });
         return nextTab;
       },
 
@@ -206,7 +254,7 @@ export const useWorkspaceBottomDockStore = create<WorkspaceBottomDockState>()(
         set((state) => {
           const current = state.tabsByWorkspace[workspaceId] ?? [];
           const removed = current.find((tab) => tab.id === tabId);
-          if (!removed) return state;
+          if (!removed || isWorkspaceBuiltinTab(removed)) return state;
           const tabs = current.filter((tab) => tab.id !== tabId);
           const dockedOriginByScope = { ...state.dockedOriginByScope };
           if (removed.originScope && removed.originPanelId) {
@@ -261,7 +309,7 @@ export const useWorkspaceBottomDockStore = create<WorkspaceBottomDockState>()(
 
       removeWorkspaceData: (workspaceId) => {
         set((state) => {
-          const tabs = ensureWorkspaceTabs({ id: workspaceId, name: "", description: "" }, state.tabsByWorkspace[workspaceId]);
+          const tabs = tabsNeedBuiltinMerge(workspaceId, state.tabsByWorkspace[workspaceId]);
           const dockedOriginByScope = { ...state.dockedOriginByScope };
           for (const tab of tabs) {
             if (!tab.originScope || !tab.originPanelId) continue;
@@ -299,7 +347,7 @@ export const useWorkspaceBottomDockStore = create<WorkspaceBottomDockState>()(
     }),
     {
       name: "omnipanel.workspace-bottom-dock.v3",
-      version: 4,
+      version: 5,
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
         tabsByWorkspace: state.tabsByWorkspace,
@@ -307,8 +355,7 @@ export const useWorkspaceBottomDockStore = create<WorkspaceBottomDockState>()(
         activeTabByWorkspace: state.activeTabByWorkspace,
         dockedOriginByScope: state.dockedOriginByScope,
       }),
-      migrate: (persistedState, _fromVersion) => {
-        // v1 期间可能写入了 panels↔views 漂移的 layout；逐个工作区校验。
+      migrate: (persistedState, fromVersion) => {
         const p = persistedState as
           | {
               layoutByWorkspace?: Record<string, SerializedDockview | null>;
@@ -317,24 +364,24 @@ export const useWorkspaceBottomDockStore = create<WorkspaceBottomDockState>()(
           | undefined;
         if (p?.tabsByWorkspace) {
           for (const [wsId, tabs] of Object.entries(p.tabsByWorkspace)) {
-            p.tabsByWorkspace[wsId] = ensureWorkspaceTabs(
-              { id: wsId, name: "", description: "" },
-              tabs,
-            );
+            p.tabsByWorkspace[wsId] = tabsNeedBuiltinMerge(wsId, tabs);
+          }
+        }
+        if (fromVersion < 5 && p?.tabsByWorkspace) {
+          for (const wsId of Object.keys(p.tabsByWorkspace)) {
+            if (p.layoutByWorkspace) {
+              p.layoutByWorkspace[wsId] = null;
+            }
           }
         }
         if (p?.layoutByWorkspace) {
           const cleaned: Record<string, SerializedDockview | null> = {};
           for (const [wsId, layout] of Object.entries(p.layoutByWorkspace)) {
-            const cleanedTabs = ensureWorkspaceTabs(
-              { id: wsId, name: "", description: "" },
-              p.tabsByWorkspace?.[wsId],
-            );
+            const cleanedTabs = tabsNeedBuiltinMerge(wsId, p.tabsByWorkspace?.[wsId]);
             if (p.tabsByWorkspace) {
               p.tabsByWorkspace[wsId] = cleanedTabs;
             }
             const tabIds = cleanedTabs.map((t) => t.id);
-            // 已有 layout 且指向当前 tabs 的 panel：保留；否则丢弃。
             if (isLayoutUsable(layout)) {
               const viewsHaveAll = tabIds.every((id) => collectPanelIds(layout).has(id));
               cleaned[wsId] = viewsHaveAll ? layout : null;

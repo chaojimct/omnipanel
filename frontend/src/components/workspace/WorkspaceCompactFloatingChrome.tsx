@@ -21,7 +21,6 @@ export function WorkspaceCompactFloatingChrome({
       <div className="workspace-compact-float workspace-compact-float--left drag-ignore">
         <WorkspaceSwitcher
           placement="below"
-          showHome={false}
           compact={compactSwitcher}
         />
       </div>

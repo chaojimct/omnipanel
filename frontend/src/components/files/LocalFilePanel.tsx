@@ -42,9 +42,9 @@ function isLocalRoot(path: string): boolean {
   return parent === path;
 }
 
-export function LocalFilePanel() {
+export function LocalFilePanel({ initialPath }: { initialPath?: string } = {}) {
   const { t } = useI18n();
-  const [path, setPath] = useState("");
+  const [path, setPath] = useState(initialPath ?? "");
   const [entries, setEntries] = useState<FileEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);

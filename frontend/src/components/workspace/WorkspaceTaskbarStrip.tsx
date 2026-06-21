@@ -74,7 +74,7 @@ export function WorkspaceTaskbarStrip({
   return (
     <div className="workspace-taskbar-strip">
       <div className="workspace-taskbar-strip__switcher drag-ignore">
-        <WorkspaceSwitcher placement="below" showHome={false} compact />
+        <WorkspaceSwitcher placement="below" compact />
       </div>
       <div className="workspace-taskbar-strip__tabs" role="tablist">
         {tabs.map((tab) => (

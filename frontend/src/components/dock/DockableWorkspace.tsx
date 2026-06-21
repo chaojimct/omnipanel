@@ -9,6 +9,8 @@ import {
   type ReactNode,
 } from "react";
 import { useCtrlKeyHeld } from "../../hooks/useCtrlKeyHeld";
+import { isPointerCopyModifier } from "../../lib/platform";
+import { workspaceAddDebug } from "../../lib/workspaceAddDebug";
 import {
   DockviewReact,
   type DockviewApi,
@@ -57,6 +59,21 @@ import type { DockableTab } from "./dockableTab";
 
 const COPY_OVERLAY_CLASS = "dock-panel-copy-overlay";
 const COPY_TARGET_CONTAINER_CLASS = "dock-panel--copy-target";
+
+/** 只取当前 DockableWorkspace 实例拥有的 panel tabId，避免嵌套 dock 误命中 */
+function resolveOwnedDockTabId(
+  container: HTMLElement,
+  dockRoot: HTMLElement,
+): string | undefined {
+  for (const surface of container.querySelectorAll<HTMLElement>(
+    ".dock-pane-surface[data-dock-tab-id]",
+  )) {
+    if (surface.closest(".dockable-workspace") === dockRoot) {
+      return surface.dataset.dockTabId;
+    }
+  }
+  return undefined;
+}
 
 export type { DockableTab } from "./dockableTab";
 
@@ -226,6 +243,16 @@ export function DockableWorkspace({
   onCtrlCopyTabRef.current = onCtrlCopyTab;
   const ctrlHeld = useCtrlKeyHeld();
   const copyModeActive = ctrlHeld && Boolean(onCtrlCopyTab);
+
+  useEffect(() => {
+    workspaceAddDebug("DockableWorkspace:copyMode", {
+      copyModeActive,
+      ctrlHeld,
+      hasOnCtrlCopyTab: Boolean(onCtrlCopyTab),
+      dockScope,
+      tabCount: tabs.length,
+    });
+  }, [copyModeActive, ctrlHeld, onCtrlCopyTab, dockScope, tabs.length]);
   const highlightedGroupRef = useRef<HTMLElement | null>(null);
   const lastPointerRef = useRef<{ x: number; y: number } | null>(null);
   const onPanelTransferredOutRef = useRef(onPanelTransferredOut);
@@ -341,9 +368,18 @@ export function DockableWorkspace({
             data-dock-tab-id={tabId}
             onClick={(e) => {
               const onCopy = onCtrlCopyTabRef.current;
-              if (!onCopy || !e.ctrlKey) return;
+              const mod = isPointerCopyModifier(e);
+              workspaceAddDebug("DockableWorkspace:panel_click", {
+                tabId,
+                hasOnCopy: Boolean(onCopy),
+                mod,
+                ctrlKey: e.ctrlKey,
+                metaKey: e.metaKey,
+              });
+              if (!onCopy || !mod) return;
               e.preventDefault();
               e.stopPropagation();
+              workspaceAddDebug("DockableWorkspace:panel_click:copy", { tabId });
               onCopy(tabId);
             }}
           >
@@ -402,10 +438,20 @@ export function DockableWorkspace({
         : undefined;
       const handleCtrlCopyPointerUp = onCtrlCopyTabRef.current
         ? (e: ReactPointerEvent) => {
-            if (e.button !== 0 || !e.ctrlKey) return;
+            const mod = isPointerCopyModifier(e);
+            workspaceAddDebug("DockableWorkspace:tab_pointer_up", {
+              tabId,
+              button: e.button,
+              mod,
+              ctrlKey: e.ctrlKey,
+              metaKey: e.metaKey,
+              isCloseBtn: Boolean((e.target as HTMLElement).closest(".dv-default-tab-action")),
+            });
+            if (e.button !== 0 || !mod) return;
             if ((e.target as HTMLElement).closest(".dv-default-tab-action")) return;
             e.preventDefault();
             e.stopPropagation();
+            workspaceAddDebug("DockableWorkspace:tab_pointer_up:copy", { tabId });
             onCtrlCopyTabRef.current?.(tabId);
           }
         : undefined;
@@ -558,6 +604,10 @@ export function DockableWorkspace({
     const findContentContainer = (target: EventTarget | null): HTMLElement | null => {
       const el = target as HTMLElement | null;
       if (!el) return null;
+      const nestedDock = el.closest(".dockable-workspace");
+      if (nestedDock && nestedDock !== root) {
+        return null;
+      }
       const direct = el.closest(".dv-content-container") as HTMLElement | null;
       if (direct && root.contains(direct)) return direct;
       const group = el.closest(".dv-groupview") as HTMLElement | null;
@@ -579,13 +629,22 @@ export function DockableWorkspace({
       overlay.setAttribute("aria-hidden", "true");
       overlay.addEventListener("click", (e) => {
         const onCopy = onCtrlCopyTabRef.current;
-        if (!onCopy || !e.ctrlKey) return;
+        const mod = isPointerCopyModifier(e);
+        const tabId = resolveOwnedDockTabId(container, root);
+        workspaceAddDebug("DockableWorkspace:overlay_click", {
+          tabId,
+          hasOnCopy: Boolean(onCopy),
+          mod,
+          ctrlKey: e.ctrlKey,
+          metaKey: e.metaKey,
+        });
+        if (!onCopy || !mod) return;
         e.preventDefault();
         e.stopPropagation();
-        const tabId = container
-          .querySelector<HTMLElement>(".dock-pane-surface[data-dock-tab-id]")
-          ?.dataset.dockTabId;
-        if (tabId) onCopy(tabId);
+        if (tabId) {
+          workspaceAddDebug("DockableWorkspace:overlay_click:copy", { tabId });
+          onCopy(tabId);
+        }
       });
       container.appendChild(overlay);
       highlightedGroupRef.current = container;

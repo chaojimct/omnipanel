@@ -46,6 +46,8 @@ import { useAiDrawerShortcut } from "./hooks/useAiDrawerShortcut";
 import { useBottomWorkspaceShortcut } from "./hooks/useBottomWorkspaceShortcut";
 import { useWorkspaceStore } from "./stores/workspaceStore";
 import { goWorkspaceHome, navigateToFeature } from "./lib/workspaceNavigation";
+import { workspaceAddDebug } from "./lib/workspaceAddDebug";
+import "./lib/workspaceComponentRegistry";
 import { useActionStore, getPendingRiskAction } from "./stores/actionStore";
 import { useTopbarStore } from "./stores/topbarStore";
 import { getResourceById } from "./lib/resourceRegistry";
@@ -292,6 +294,7 @@ function AppShell() {
     const handler = (event: Event) => {
       const path = (event as CustomEvent<{ path: string }>).detail?.path;
       if (!path) return;
+      workspaceAddDebug("App:omnipanel-navigate", { path, isWorkspace: isWorkspacePath(path) });
       if (isWorkspacePath(path)) {
         useWorkspaceStore.getState().setActivePath(path);
         navigate(path);
@@ -316,13 +319,10 @@ function AppShell() {
   const aiDockWidth = useSettingsStore((s) => s.aiDockWidth);
   const setAiDockWidth = useSettingsStore((s) => s.setAiDockWidth);
   const workspaceMode = useBottomPanelStore((s) => s.workspaceMode);
-  const isHomeActive = useBottomPanelStore((s) => s.isHomeActive);
   const isBottomFullscreen = useBottomPanelStore((s) => s.isFullscreen);
   const wsState = workspaceShellState(workspaceMode);
   const embeddedModeClass =
-    workspaceMode !== "fullscreen" &&
-    workspaceMode !== "home" &&
-    workspaceMode !== "hidden"
+    workspaceMode !== "fullscreen" && workspaceMode !== "hidden"
       ? ` workspace--mode-${workspaceMode}`
       : "";
   const dockWidth =
@@ -330,13 +330,9 @@ function AppShell() {
   const dockOpen = aiDisplayMode === "dockview" && drawerOpen;
   const dragging = useRef(false);
 
-  // 工作区模式 → URL 同步：内部模式切换（任务栏/缩略图/chrome 图标）时保持 URL 一致
+  // 工作区模式 → URL 同步：内部模式切换时保持 URL 一致
   useEffect(() => {
-    if (workspaceMode === "home") {
-      if (location.pathname !== WORKSPACE_PATHS.default) {
-        navigate(WORKSPACE_PATHS.default, { replace: true });
-      }
-    } else if (workspaceMode === "fullscreen") {
+    if (workspaceMode === "fullscreen" || workspaceMode === "home") {
       if (!isWorkspacePath(location.pathname)) {
         const id = useWorkspaceStore.getState().workspace.id;
         navigate(WORKSPACE_PATHS.dashboard(id), { replace: true });
@@ -426,7 +422,7 @@ function AppShell() {
     <div className="app">
       <Sidebar />
       <div
-        className={`workspace workspace--${wsState}${isHomeActive ? " workspace--home-active" : ""}${isBottomFullscreen ? " workspace--bottom-fullscreen" : ""}${embeddedModeClass}`}
+        className={`workspace workspace--${wsState}${isBottomFullscreen ? " workspace--bottom-fullscreen" : ""}${embeddedModeClass}`}
         style={{ "--ai-dock-w": dockWidth } as React.CSSProperties}
       >
         <Topbar title={title} hidden>
@@ -446,9 +442,7 @@ function AppShell() {
         </div>
         {isBottomFullscreen ? (
           <div className="workspace-bottom-fullscreen-shell">
-            <WorkspaceBottomHost
-              key={isHomeActive ? "home-workspace" : `engineering-workspace:${currentWorkspaceId}`}
-            />
+            <WorkspaceBottomHost key={`engineering-workspace:${currentWorkspaceId}`} />
           </div>
         ) : null}
         <StatusBar />

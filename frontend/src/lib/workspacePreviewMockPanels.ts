@@ -1,8 +1,9 @@
 import type { WorkspaceDockTab } from "../stores/workspaceBottomDockStore";
+import { MAX_WORKSPACE_PANELS } from "../stores/workspaceBottomDockStore";
 import type { WorkspaceTabPreviewData } from "./workspaceTabPreview";
 
-/** 开启后 WorkspacePreview 每个工作区展示 10 个假面板（仅 UI 测试） */
-export const WORKSPACE_PREVIEW_USE_MOCK_PANELS = true;
+/** 开启后 WorkspacePreview 每个工作区展示假面板（仅 UI 测试） */
+export const WORKSPACE_PREVIEW_USE_MOCK_PANELS = false;
 
 const MOCK_PREVIEW_SAMPLES: WorkspaceTabPreviewData[] = [
   {
@@ -85,19 +86,22 @@ export function resolveMockWorkspaceTabPreview(tabId: string): WorkspaceTabPrevi
   return { ...sample };
 }
 
-/** 为指定工作区生成 10 个假面板 Tab（仅预览 UI，不写入 store） */
+/** 为指定工作区生成假面板 Tab（仅预览 UI，不写入 store） */
 export function buildMockWorkspacePreviewPanels(workspaceId: string): WorkspaceDockTab[] {
-  return MOCK_PREVIEW_SAMPLES.map((sample, index) => ({
-    id: `ws-preview-mock:${workspaceId}:${index}`,
-    label: sample.title,
-    kind: "payload" as const,
-    panelType: sample.kind.startsWith("database")
-      ? "database"
-      : sample.kind.startsWith("docker")
-        ? "docker"
-        : sample.kind === "terminal"
-          ? "terminal"
-          : "workspace",
-    closable: false,
-  }));
+  return Array.from({ length: MAX_WORKSPACE_PANELS }, (_, index) => {
+    const sample = MOCK_PREVIEW_SAMPLES[index % MOCK_PREVIEW_SAMPLES.length];
+    return {
+      id: `ws-preview-mock:${workspaceId}:${index}`,
+      label: sample.title,
+      kind: "payload" as const,
+      panelType: sample.kind.startsWith("database")
+        ? "database"
+        : sample.kind.startsWith("docker")
+          ? "docker"
+          : sample.kind === "terminal"
+            ? "terminal"
+            : "workspace",
+      closable: false,
+    };
+  });
 }

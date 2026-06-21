@@ -4,6 +4,8 @@ import { useTerminalStore } from "../stores/terminalStore";
 import { getDockerLogPreview, dockerPreviewKey } from "../stores/workspacePreviewStore";
 import type { WorkspaceTabSnapshot } from "../stores/workspaceTabStore";
 import { resolveMockWorkspaceTabPreview } from "./workspacePreviewMockPanels";
+import { resolveWorkspaceComponentPreviewKind } from "./workspaceComponentRegistry";
+import { isComponentSnapshot } from "./workspaceComponentTypes";
 
 export type WorkspacePreviewKind =
   | "terminal"
@@ -11,6 +13,8 @@ export type WorkspacePreviewKind =
   | "database-table"
   | "docker-logs"
   | "docker-terminal"
+  | "board"
+  | "ai"
   | "fallback";
 
 export interface WorkspaceTabPreviewData {
@@ -120,6 +124,22 @@ function payloadPreview(payload: WorkspaceTabSnapshot): WorkspaceTabPreviewData 
       lines: logLines,
     };
   }
+  if (payload.module === "route") {
+    return {
+      kind: "fallback",
+      title: payload.label,
+      source: payload.label.split(" · ")[0] ?? "模块",
+      lines: [payload.path],
+    };
+  }
+  if (payload.module === "component" || isComponentSnapshot(payload)) {
+    return {
+      kind: resolveWorkspaceComponentPreviewKind(payload.componentType),
+      title: payload.label,
+      source: payload.componentType,
+      lines: [payload.label],
+    };
+  }
   const _exhaustive: never = payload;
   return fallbackPreview(String(_exhaustive), "快照");
 }
@@ -133,6 +153,12 @@ export function resolveWorkspaceTabPreview(tab: WorkspaceDockTab): WorkspaceTabP
   if (tab.id.startsWith("ws-preview-mock:")) {
     const mock = resolveMockWorkspaceTabPreview(tab.id);
     if (mock) return mock;
+  }
+  if (tab.kind === "builtin" && tab.builtin === "board") {
+    return { kind: "board", title: tab.label, source: "看板", lines: ["工作区概览"] };
+  }
+  if (tab.kind === "builtin" && tab.builtin === "ai") {
+    return { kind: "ai", title: tab.label, source: "AI", lines: ["AI 助手"] };
   }
   if (tab.kind === "payload" && tab.payload) {
     return payloadPreview(tab.payload);

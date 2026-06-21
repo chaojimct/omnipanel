@@ -1,13 +1,10 @@
 import { useWorkspaceStore } from "../../stores/workspaceStore";
-import { useBottomPanelStore } from "../../stores/bottomPanelStore";
-import { HomeWorkspacePanel } from "./HomeWorkspacePanel";
 import { WorkspacePanel } from "./WorkspacePanel";
 
 /**
- * 工作区容器：首页特殊工作区与工程工作区互斥挂载，避免 dockview 实例冲突。
+ * 工作区容器：按当前工作区挂载 dockview 面板。
  */
 export function WorkspaceBottomHost() {
-  const isHomeActive = useBottomPanelStore((state) => state.isHomeActive);
   const workspaces = useWorkspaceStore((state) => state.workspaces);
   const currentId = useWorkspaceStore((state) => state.workspace.id);
   const current =
@@ -15,11 +12,7 @@ export function WorkspaceBottomHost() {
 
   return (
     <div className="workspace-bottom-host">
-      {isHomeActive ? (
-        <HomeWorkspacePanel />
-      ) : current ? (
-        <WorkspacePanel workspace={current} />
-      ) : null}
+      {current ? <WorkspacePanel workspace={current} /> : null}
     </div>
   );
 }

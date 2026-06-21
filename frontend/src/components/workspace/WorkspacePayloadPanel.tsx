@@ -8,6 +8,10 @@ import { DockerWorkspaceTabPane } from "../../modules/docker/DockerWorkspaceTabP
 import { getMirroredDbTabSnapshot } from "../../stores/dbWorkspaceMirrorStore";
 import type { WorkspaceDockTab } from "../../stores/workspaceBottomDockStore";
 import { ensureTerminalTabFromSnapshot } from "../../lib/workspaceTabActions";
+import { isModuleRouteSnapshot } from "../../lib/workspaceModuleRoutes";
+import { WorkspaceModuleRoutePanel } from "./WorkspaceModuleRoutePanel";
+import { WorkspaceComponentPanel } from "./WorkspaceComponentPanel";
+import { isComponentSnapshot } from "../../lib/workspaceComponentTypes";
 
 interface WorkspacePayloadPanelProps {
   tab: WorkspaceDockTab;
@@ -68,6 +72,14 @@ export function WorkspacePayloadPanel({ tab, isActive }: WorkspacePayloadPanelPr
 
   if (payload.module === "docker") {
     return <DockerWorkspaceTabPane snapshot={payload} isActive={isActive} />;
+  }
+
+  if (isModuleRouteSnapshot(payload)) {
+    return <WorkspaceModuleRoutePanel snapshot={payload} />;
+  }
+
+  if (isComponentSnapshot(payload)) {
+    return <WorkspaceComponentPanel snapshot={payload} />;
   }
 
   return (

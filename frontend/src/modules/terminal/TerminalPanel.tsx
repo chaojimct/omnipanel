@@ -20,6 +20,7 @@ import { clearTerminalPaneSender } from "./terminalPaneSenders";
 import { useWorkspaceBottomDockStore } from "../../stores/workspaceBottomDockStore";
 import { useWorkspaceTabStore, type TerminalTabSnapshot } from "../../stores/workspaceTabStore";
 import { terminalTabToSnapshot, addSnapshotToWorkspace } from "../../lib/workspaceTabActions";
+import { workspaceAddDebug } from "../../lib/workspaceAddDebug";
 import { subscribeDockviewTransfer } from "../../lib/dockviewRegistry";
 import { ModuleSegmentDock } from "../../components/dock";
 import {
@@ -329,7 +330,14 @@ export function TerminalPanel() {
   const handleCtrlCopyTab = useCallback(
     (tabId: string) => {
       const ctxTab = visibleTabs.find((tab) => tab.id === tabId);
-      if (!ctxTab) return;
+      if (!ctxTab) {
+        workspaceAddDebug("TerminalPanel:ctrl_copy:abort", {
+          tabId,
+          knownTabIds: visibleTabs.map((tab) => tab.id),
+          reason: "not_a_terminal_session_tab",
+        });
+        return;
+      }
       const newId = addLocalTerminalTab(ctxTab.title);
       const created = useTerminalStore.getState().tabs.find((tab) => tab.id === newId);
       if (created) {

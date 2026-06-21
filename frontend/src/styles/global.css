@@ -406,11 +406,6 @@
     flex-direction: column;
 }
 
-.ws-state-off .workspace-host--off .dock-panel-bottom,
-.workspace-host--off:not(.workspace-host--half):not(.workspace-host--full) .dock-panel-bottom {
-    /* off 时由 SidebarBottom 折叠底栏 */
-}
-
 .ws-state-half .content-routes,
 .workspace-host--half .content-routes {
     flex: 1;
@@ -428,7 +423,7 @@
     min-height: 0;
     min-width: 0;
     display: grid;
-    grid-template-rows: minmax(0, 1fr) 180px;
+    grid-template-rows: minmax(0, 1fr) var(--workspace-preview-height, 180px);
     overflow: hidden;
 }
 
@@ -518,13 +513,13 @@
 }
 
 .workspace-preview__panels {
-    display: flex;
-    flex-direction: row;
-    align-items: stretch;
+    display: grid;
+    grid-template-columns: repeat(var(--workspace-preview-columns, 15), minmax(0, 1fr));
     gap: 6px;
     width: 100%;
     min-width: 0;
     min-height: 0;
+    overflow: hidden;
 }
 
 .workspace-preview__panels-empty {
@@ -536,34 +531,84 @@
 
 .workspace-preview__panel-tile {
     display: flex;
-    flex: 1 1 0;
     flex-direction: column;
     align-items: center;
     gap: 4px;
+    width: 100%;
     min-width: 0;
-    padding: 4px 2px;
+    padding: 0;
     border: none;
     background: transparent;
-    cursor: pointer;
     border-radius: 6px;
     font: inherit;
     color: inherit;
+    cursor: default;
+    user-select: none;
 }
 
-.workspace-preview__panel-tile:hover {
-    background: color-mix(in srgb, var(--accent) 10%, transparent);
+.workspace-preview__panel-tile--empty {
+    pointer-events: none;
 }
 
-.workspace-preview__panel-tile--active .workspace-preview__panel-thumb {
-    box-shadow:
-        0 0 0 2px var(--accent),
-        0 2px 8px color-mix(in srgb, var(--accent) 25%, transparent);
-}
-
-.workspace-preview__panel-thumb {
+.workspace-preview__panel-tile--removable .workspace-preview__panel-icon-box {
     position: relative;
+}
+
+.workspace-preview__panel-remove {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    border: none;
+    border-radius: 4px;
+    background: color-mix(in srgb, var(--danger, #c53030) 88%, #000 12%);
+    color: #fff;
+    font-size: 14px;
+    line-height: 1;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+}
+
+.workspace-preview__panel-tile--removable:hover .workspace-preview__panel-remove,
+.workspace-preview__panel-remove:focus-visible {
+    opacity: 1;
+}
+
+.workspace-component-root {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    flex: 1;
+}
+
+.workspace-component-root--copy-ready {
+    outline: 2px dashed color-mix(in srgb, var(--accent) 55%, transparent);
+    outline-offset: -2px;
+    cursor: copy;
+}
+
+.workspace-component-panel {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    flex: 1;
+    overflow: hidden;
+}
+
+.workspace-component-panel--missing {
+    align-items: center;
+    justify-content: center;
+    padding: var(--sp-4);
+    color: var(--meta);
+}
+
+.workspace-preview__panel-icon-box {
     width: 100%;
-    aspect-ratio: 16 / 10;
+    height: 100px;
+    flex-shrink: 0;
     border-radius: 6px;
     border: 1px solid color-mix(in srgb, var(--border) 70%, #fff 30%);
     background: linear-gradient(
@@ -574,56 +619,39 @@
     box-shadow:
         0 1px 2px rgba(0, 0, 0, 0.14),
         inset 0 1px 0 rgba(255, 255, 255, 0.35);
-    overflow: hidden;
-    display: flex;
-    align-items: flex-start;
-    justify-content: flex-start;
-}
-
-.workspace-preview__panel-thumb-lines {
-    margin: 0;
-    padding: 5px 6px 18px;
-    width: 100%;
-    height: 100%;
-    box-sizing: border-box;
-    font-family: var(--font-mono, ui-monospace, monospace);
-    font-size: 8px;
-    line-height: 1.35;
-    color: color-mix(in srgb, var(--fg) 72%, var(--meta) 28%);
-    white-space: pre-wrap;
-    word-break: break-all;
-    overflow: hidden;
-    pointer-events: none;
-    user-select: none;
-}
-
-.workspace-preview__panel-icon {
-    position: absolute;
-    right: 4px;
-    bottom: 4px;
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 24px;
-    height: 24px;
-    border-radius: 4px;
-    background: color-mix(in srgb, var(--surface) 88%, transparent);
     color: var(--accent);
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
 }
 
-.workspace-preview__panel-thumb[data-kind="terminal"] .workspace-preview__panel-icon,
-.workspace-preview__panel-thumb[data-kind="docker-terminal"] .workspace-preview__panel-icon {
+.workspace-preview__panel-icon-box[data-kind="terminal"],
+.workspace-preview__panel-icon-box[data-kind="docker-terminal"] {
     color: #2d8f4e;
 }
 
-.workspace-preview__panel-thumb[data-kind="database-sql"] .workspace-preview__panel-icon,
-.workspace-preview__panel-thumb[data-kind="database-table"] .workspace-preview__panel-icon {
+.workspace-preview__panel-icon-box[data-kind="database-sql"],
+.workspace-preview__panel-icon-box[data-kind="database-table"] {
     color: #2b6cb0;
 }
 
-.workspace-preview__panel-thumb[data-kind="docker-logs"] .workspace-preview__panel-icon {
+.workspace-preview__panel-icon-box[data-kind="docker-logs"] {
     color: #0e7490;
+}
+
+.workspace-preview__panel-icon-box[data-kind="board"] {
+    color: var(--accent);
+}
+
+.workspace-preview__panel-icon-box[data-kind="ai"] {
+    color: #7c3aed;
+}
+
+.workspace-preview__panel-icon-box--empty {
+    border-style: dashed;
+    border-color: color-mix(in srgb, var(--border) 55%, transparent);
+    background: color-mix(in srgb, var(--bg) 92%, var(--surface) 8%);
+    box-shadow: none;
 }
 
 .workspace-preview__panel-label {
@@ -635,6 +663,10 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+.workspace-preview__panel-label--empty {
+    min-height: 14px;
 }
 
 .workspace-switcher--home .workspace-switcher-trigger {
@@ -904,6 +936,30 @@
     flex: 1;
     min-height: 0;
     height: 100%;
+}
+
+/* 用户工作区详情页（/workspace/:id） */
+.user-workspace {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    min-width: 0;
+    height: 100%;
+    width: 100%;
+    overflow: hidden;
+}
+
+.user-workspace-dock {
+    flex: 1;
+    min-height: 0;
+    height: 100%;
+    width: 100%;
+}
+
+.user-workspace-overview {
+    flex: 1;
+    min-height: 0;
 }
 
 /* 空工作区占位层不拦截拖放，仅恢复输入控件可点击 */

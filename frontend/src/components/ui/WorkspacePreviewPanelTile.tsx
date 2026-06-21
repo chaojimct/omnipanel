@@ -1,53 +1,13 @@
-import { useSyncExternalStore } from "react";
+import { useCallback, type MouseEvent } from "react";
+
+import { appConfirm } from "../../lib/appConfirm";
+import { isWorkspaceBuiltinTab } from "../../lib/workspaceBuiltinPanels";
 import type { WorkspaceDockTab } from "../../stores/workspaceBottomDockStore";
-import {
-  getMirroredDbTabVersion,
-  subscribeMirroredDbTab,
-} from "../../stores/dbWorkspaceMirrorStore";
-import { useTerminalStore } from "../../stores/terminalStore";
 import {
   resolveWorkspaceTabPreview,
   type WorkspacePreviewKind,
 } from "../../lib/workspaceTabPreview";
-
-function usePreviewRevision(tab: WorkspaceDockTab): void {
-  const terminalVersion = useTerminalStore((s) => {
-    const id =
-      tab.originScope === "terminal" && tab.originPanelId
-        ? tab.originPanelId
-        : tab.payload?.module === "terminal"
-          ? tab.payload.id
-          : null;
-    if (!id) return 0;
-    const t = s.tabs.find((item) => item.id === id);
-    return t?.terminal ? t.terminal.buffer.active.length : 0;
-  });
-
-  useSyncExternalStore(
-    (onStoreChange) => {
-      const id =
-        tab.originScope === "database" && tab.originPanelId
-          ? tab.originPanelId
-          : tab.payload?.module === "database"
-            ? tab.payload.id
-            : null;
-      if (!id) return () => undefined;
-      return subscribeMirroredDbTab(id, onStoreChange);
-    },
-    () => {
-      const id =
-        tab.originScope === "database" && tab.originPanelId
-          ? tab.originPanelId
-          : tab.payload?.module === "database"
-            ? tab.payload.id
-            : null;
-      return id ? getMirroredDbTabVersion(id) : 0;
-    },
-    () => 0,
-  );
-
-  void terminalVersion;
-}
+import { useI18n } from "../../i18n";
 
 function PreviewKindIcon({ kind }: { kind: WorkspacePreviewKind }) {
   const props = {
@@ -55,8 +15,8 @@ function PreviewKindIcon({ kind }: { kind: WorkspacePreviewKind }) {
     fill: "none",
     stroke: "currentColor",
     strokeWidth: 1.6,
-    width: 22,
-    height: 22,
+    width: 40,
+    height: 40,
     "aria-hidden": true,
   } as const;
 
@@ -93,6 +53,25 @@ function PreviewKindIcon({ kind }: { kind: WorkspacePreviewKind }) {
       </svg>
     );
   }
+  if (kind === "board") {
+    return (
+      <svg {...props}>
+        <rect x="4" y="4" width="7" height="7" rx="1.5" />
+        <rect x="13" y="4" width="7" height="7" rx="1.5" />
+        <rect x="4" y="13" width="7" height="7" rx="1.5" />
+        <rect x="13" y="13" width="7" height="7" rx="1.5" />
+      </svg>
+    );
+  }
+  if (kind === "ai") {
+    return (
+      <svg {...props}>
+        <path d="M12 2a4 4 0 014 4v1a4 4 0 01-8 0V6a4 4 0 014-4z" />
+        <path d="M8 14a4 4 0 008 0" />
+        <path d="M12 17v4M8 21h8" strokeLinecap="round" />
+      </svg>
+    );
+  }
   return (
     <svg {...props}>
       <rect x="4" y="5" width="16" height="14" rx="2" />
@@ -103,35 +82,69 @@ function PreviewKindIcon({ kind }: { kind: WorkspacePreviewKind }) {
 
 export interface WorkspacePreviewPanelTileProps {
   tab: WorkspaceDockTab;
-  active?: boolean;
-  onClick: () => void;
+  workspaceId: string;
+  onRemove?: (workspaceId: string, tabId: string) => void;
 }
 
-/** Windows 任务视图风格：上方缩略图/图标，底部标题。 */
+/** 120px 图标 + 底部标题；非内置面板可删除 */
 export function WorkspacePreviewPanelTile({
   tab,
-  active,
-  onClick,
+  workspaceId,
+  onRemove,
 }: WorkspacePreviewPanelTileProps) {
-  usePreviewRevision(tab);
+  const { t } = useI18n();
   const preview = resolveWorkspaceTabPreview(tab);
+  const removable = !isWorkspaceBuiltinTab(tab) && Boolean(onRemove);
+
+  const handleRemove = useCallback(
+    async (event: MouseEvent) => {
+      event.stopPropagation();
+      if (!onRemove) return;
+      const ok = await appConfirm(
+        t("shell.workspacePreview.confirmRemovePanel", { name: preview.title }),
+        t("shell.workspacePreview.confirmRemoveTitle"),
+      );
+      if (!ok) return;
+      onRemove(workspaceId, tab.id);
+    },
+    [onRemove, preview.title, t, tab.id, workspaceId],
+  );
 
   return (
-    <button
-      type="button"
-      className={`workspace-preview__panel-tile${active ? " workspace-preview__panel-tile--active" : ""}`}
-      onClick={onClick}
+    <div
+      className={`workspace-preview__panel-tile${removable ? " workspace-preview__panel-tile--removable" : ""}`}
+      role="listitem"
       title={preview.title}
     >
-      <div className="workspace-preview__panel-thumb" data-kind={preview.kind}>
-        <pre className="workspace-preview__panel-thumb-lines" aria-hidden>
-          {preview.lines.slice(0, 4).join("\n")}
-        </pre>
-        <span className="workspace-preview__panel-icon" aria-hidden>
-          <PreviewKindIcon kind={preview.kind} />
-        </span>
+      <div className="workspace-preview__panel-icon-box" data-kind={preview.kind}>
+        <PreviewKindIcon kind={preview.kind} />
+        {removable ? (
+          <button
+            type="button"
+            className="workspace-preview__panel-remove"
+            title={t("shell.workspacePreview.removePanel")}
+            aria-label={t("shell.workspacePreview.removePanel")}
+            onClick={(event) => void handleRemove(event)}
+          >
+            ×
+          </button>
+        ) : null}
       </div>
       <span className="workspace-preview__panel-label">{preview.title}</span>
-    </button>
+    </div>
+  );
+}
+
+/** 空槽占位 */
+export function WorkspacePreviewPanelTileEmpty() {
+  return (
+    <div
+      className="workspace-preview__panel-tile workspace-preview__panel-tile--empty"
+      role="listitem"
+      aria-hidden
+    >
+      <div className="workspace-preview__panel-icon-box workspace-preview__panel-icon-box--empty" />
+      <span className="workspace-preview__panel-label workspace-preview__panel-label--empty" />
+    </div>
   );
 }

@@ -11,6 +11,14 @@ export function isModKeyPressed(e: KeyboardEvent): boolean {
   return isMacOS() ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
 }
 
+/** 指针/点击事件：是否按住「复制到工作区」修饰键（macOS ⌘，其它 Ctrl） */
+export function isPointerCopyModifier(e: {
+  ctrlKey?: boolean;
+  metaKey?: boolean;
+}): boolean {
+  return isMacOS() ? Boolean(e.metaKey) : Boolean(e.ctrlKey);
+}
+
 /** 修饰键展示标签：macOS 为 ⌘，其它为 Ctrl */
 export function modKeyLabel(): string {
   return isMacOS() ? "⌘" : "Ctrl";

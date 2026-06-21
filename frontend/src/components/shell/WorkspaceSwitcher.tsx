@@ -13,8 +13,6 @@ interface WorkspaceSwitcherProps {
   placement?: "above" | "below";
   /** dock：模块 Tab 栏；statusbar：状态栏右侧 */
   variant?: "dock" | "statusbar";
-  /** 半屏及以下为 false，隐藏首页入口 */
-  showHome?: boolean;
   /** 任务栏紧凑模式 */
   compact?: boolean;
   className?: string;
@@ -22,7 +20,7 @@ interface WorkspaceSwitcherProps {
   onSelectWorkspace?: (ws: WorkspaceInfo) => void;
 }
 
-function WorkspaceSwitcherIcon({ isHomeActive }: { isHomeActive: boolean }) {
+function WorkspaceSwitcherIcon() {
   return (
     <svg
       className="workspace-switcher-icon"
@@ -34,41 +32,33 @@ function WorkspaceSwitcherIcon({ isHomeActive }: { isHomeActive: boolean }) {
       height="14"
       aria-hidden
     >
-      {isHomeActive ? (
-        <path d="M3 9.5L12 3l9 6.5V20a1 1 0 01-1 1h-5v-6H9v6H4a1 1 0 01-1-1V9.5z" />
-      ) : (
-        <>
-          <rect x="3" y="4" width="18" height="16" rx="2" />
-          <path d="M3 9h18" />
-          <path d="M9 4v5" />
-        </>
-      )}
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <path d="M3 9h18" />
+      <path d="M9 4v5" />
     </svg>
   );
 }
 
 /**
- * 工作区切换器：触发器显示当前上下文名称（首页 / 工程工作区名），下拉可切换。
- * 半屏 dock 模式：图标单击进工程全屏，双击进首页；名称区打开切换列表。
+ * 工作区切换器：触发器显示当前工作区名称，下拉可切换。
+ * 半屏 dock 模式：图标单击进工程全屏，双击进默认工作区看板。
  */
 export function WorkspaceSwitcher({
   placement = "below",
   variant = "dock",
-  showHome = true,
   compact = false,
   className,
   onSelectWorkspace,
 }: WorkspaceSwitcherProps) {
   const { t } = useI18n();
   const workspace = useWorkspaceStore((state) => state.workspace);
-  const isHomeActive = useBottomPanelStore((state) => state.isHomeActive);
   const workspaceMode = useBottomPanelStore((state) => state.workspaceMode);
   const [open, setOpen] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const halfIconClickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const isHalfDock = workspaceMode === "half" && variant === "dock";
-  const displayLabel = isHomeActive ? t("shell.workspace.home") : workspace.name;
+  const displayLabel = workspace.name;
 
   /** 底部嵌入工作区（taskbar/缩略图/半屏）弹层向上展开，避免被屏幕底边裁切 */
   const popoverPlacement =
@@ -116,7 +106,6 @@ export function WorkspaceSwitcher({
     "workspace-switcher",
     variant === "dock" ? "drag-ignore" : "",
     compact ? "workspace-switcher--compact" : "",
-    isHomeActive ? "workspace-switcher--home" : "",
     isHalfDock ? "workspace-switcher--half-dock" : "",
     className,
   ]
@@ -127,13 +116,12 @@ export function WorkspaceSwitcher({
     <WorkspacePopover
       anchorRef={buttonRef}
       placement={popoverPlacement}
-      showHome={showHome}
       onClose={() => setOpen(false)}
       onSelectWorkspace={onSelectWorkspace}
     />
   ) : null;
 
-  const halfIconTitle = `${t("shell.workspacePanel.fullscreen")} · ${t("shell.workspace.home")}`;
+  const halfIconTitle = t("shell.workspacePanel.fullscreen");
 
   if (variant === "statusbar") {
     return (
@@ -147,7 +135,7 @@ export function WorkspaceSwitcher({
           aria-expanded={open}
           title={displayLabel}
         >
-          <WorkspaceSwitcherIcon isHomeActive={isHomeActive} />
+          <WorkspaceSwitcherIcon />
           <span className="statusbar-button-label">{displayLabel}</span>
           <svg
             className="statusbar-button-chevron"
@@ -187,7 +175,7 @@ export function WorkspaceSwitcher({
               onClick={handleHalfIconClick}
               onDoubleClick={handleHalfIconDoubleClick}
             >
-              <WorkspaceSwitcherIcon isHomeActive={isHomeActive} />
+              <WorkspaceSwitcherIcon />
             </span>
             <span
               className="workspace-switcher-menu-hit"
@@ -214,7 +202,7 @@ export function WorkspaceSwitcher({
           </>
         ) : (
           <>
-            <WorkspaceSwitcherIcon isHomeActive={isHomeActive} />
+            <WorkspaceSwitcherIcon />
             <span className="workspace-switcher-label">{displayLabel}</span>
             <svg
               className="workspace-switcher-chevron"

@@ -26,9 +26,9 @@ interface BottomPanelState {
 
   /** 底部工作区是否展开（嵌入态且非 hidden） */
   isOpen: boolean;
-  /** 是否全屏（工程或首页） */
+  /** 是否全屏（工程工作区） */
   isFullscreen: boolean;
-  /** 是否首页全屏 */
+  /** @deprecated 首页已移除，始终为 false */
   isHomeActive: boolean;
   /** @deprecated 使用 lastNonFullscreenMode */
   embeddedMode: WorkspaceEmbeddedMode;
@@ -41,11 +41,14 @@ interface BottomPanelState {
     options?: { fromUserDrag?: boolean; commit?: boolean },
   ) => void;
   enterFullscreen: () => void;
+  /** @deprecated 首页已移除，等同于 enterWorkspaceFullscreen */
   enterHomeWorkspace: () => void;
   enterWorkspaceFullscreen: () => void;
   exitFullscreen: () => void;
   leaveFullscreenForFeature: () => void;
+  /** @deprecated 首页已移除，等同于 leaveFullscreenForFeature */
   leaveHomeToFeature: () => void;
+  /** @deprecated 首页已移除，等同于 enterWorkspaceFullscreen */
   exitHomeToWorkspace: () => void;
   applyEmbeddedMode: () => void;
   toggleFullscreen: () => void;
@@ -53,20 +56,26 @@ interface BottomPanelState {
   toggleOpen: () => void;
   /** 全屏顶栏向下拖拽退出全屏，固定恢复半屏 */
   leaveFullscreenByDrag: () => void;
-  /** 半屏及以下右上角：先进工程全屏；工程全屏再进首页 */
+  /** 半屏及以下右上角：进入工程工作区全屏 */
   handleWorkspaceChromeIcon: () => void;
+}
+
+function normalizeWorkspaceMode(mode: WorkspaceMode): WorkspaceMode {
+  return mode === "home" ? "fullscreen" : mode;
 }
 
 function syncDerivedFlags(mode: WorkspaceMode): Pick<
   BottomPanelState,
   "isOpen" | "isFullscreen" | "isHomeActive" | "embeddedMode"
 > {
-  const isFullscreen = mode === "fullscreen" || mode === "home";
-  const isHomeActive = mode === "home";
-  const isOpen = isEmbeddedWorkspaceMode(mode) && mode !== "hidden";
+  const normalized = normalizeWorkspaceMode(mode);
+  const isFullscreen = normalized === "fullscreen";
+  const isOpen = isEmbeddedWorkspaceMode(normalized) && normalized !== "hidden";
   const embeddedMode: WorkspaceEmbeddedMode =
-    mode === "half" || mode === "thumbnail" || mode === "taskbar" ? "half" : "off";
-  return { isOpen, isFullscreen, isHomeActive, embeddedMode };
+    normalized === "half" || normalized === "thumbnail" || normalized === "taskbar"
+      ? "half"
+      : "off";
+  return { isOpen, isFullscreen, isHomeActive: false, embeddedMode };
 }
 
 export const useBottomPanelStore = create<BottomPanelState>()(
@@ -74,12 +83,12 @@ export const useBottomPanelStore = create<BottomPanelState>()(
     (set, get) => ({
       expandSignal: 0,
       collapseSignal: 0,
-      workspaceMode: "home",
+      workspaceMode: "hidden",
       workspaceHeightPx: 0,
       lastNonFullscreenMode: "half",
       isOpen: false,
-      isFullscreen: true,
-      isHomeActive: true,
+      isFullscreen: false,
+      isHomeActive: false,
       embeddedMode: "off",
 
       requestExpand: () => {
@@ -101,9 +110,10 @@ export const useBottomPanelStore = create<BottomPanelState>()(
 
       requestCollapse: () => {
         const { workspaceMode, lastNonFullscreenMode } = get();
+        const normalized = normalizeWorkspaceMode(workspaceMode);
         const remembered =
-          isEmbeddedWorkspaceMode(workspaceMode) && workspaceMode !== "hidden"
-            ? workspaceMode
+          isEmbeddedWorkspaceMode(normalized) && normalized !== "hidden"
+            ? normalized
             : lastNonFullscreenMode;
         set((state) => ({
           collapseSignal: state.collapseSignal + 1,
@@ -124,24 +134,23 @@ export const useBottomPanelStore = create<BottomPanelState>()(
 
       setWorkspaceHeight: (heightPx, options) => {
         const { workspaceMode } = get();
-        if (workspaceMode === "fullscreen" || workspaceMode === "home") return;
+        const normalized = normalizeWorkspaceMode(workspaceMode);
+        if (normalized === "fullscreen") return;
 
-        const currentEmbedded = isEmbeddedWorkspaceMode(workspaceMode)
-          ? workspaceMode
+        const currentEmbedded = isEmbeddedWorkspaceMode(normalized)
+          ? normalized
           : undefined;
 
-        // 拖拽进行中：只切换渲染形态，不动高度/记忆值，让面板跟手不回弹。
         if (options?.commit === false) {
           const liveMode = dragModeFromHeight(heightPx, currentEmbedded);
-          if (liveMode === workspaceMode) return;
+          if (liveMode === normalized) return;
           set({ workspaceMode: liveMode, ...syncDerivedFlags(liveMode) });
           return;
         }
 
-        // 松手提交：吸附到规范高度并记忆。
-        const { mode: nextMode, height: normalized } = resolveEmbeddedHeight(heightPx);
+        const { mode: nextMode, height: normalizedHeight } = resolveEmbeddedHeight(heightPx);
         const patch: Partial<BottomPanelState> = {
-          workspaceHeightPx: normalized,
+          workspaceHeightPx: normalizedHeight,
           workspaceMode: nextMode,
           ...syncDerivedFlags(nextMode),
         };
@@ -152,15 +161,11 @@ export const useBottomPanelStore = create<BottomPanelState>()(
       },
 
       enterFullscreen: () => {
-        get().enterHomeWorkspace();
+        get().enterWorkspaceFullscreen();
       },
 
       enterHomeWorkspace: () => {
-        set((state) => ({
-          workspaceMode: "home",
-          expandSignal: state.expandSignal + 1,
-          ...syncDerivedFlags("home"),
-        }));
+        get().enterWorkspaceFullscreen();
       },
 
       enterWorkspaceFullscreen: () => {
@@ -189,14 +194,12 @@ export const useBottomPanelStore = create<BottomPanelState>()(
       },
 
       exitFullscreen: () => {
-        set({ isFullscreen: false, isHomeActive: false });
         get().applyEmbeddedMode();
       },
 
       leaveFullscreenForFeature: () => {
         const { workspaceMode } = get();
-        if (workspaceMode !== "fullscreen" && workspaceMode !== "home") return;
-        set({ isFullscreen: false, isHomeActive: false });
+        if (normalizeWorkspaceMode(workspaceMode) !== "fullscreen") return;
         get().applyEmbeddedMode();
       },
 
@@ -217,39 +220,40 @@ export const useBottomPanelStore = create<BottomPanelState>()(
 
       handleWorkspaceChromeIcon: () => {
         const { workspaceMode } = get();
-        if (workspaceMode === "fullscreen") {
-          get().enterHomeWorkspace();
+        if (normalizeWorkspaceMode(workspaceMode) === "fullscreen") {
+          get().exitFullscreen();
           return;
         }
-        if (workspaceMode === "home") return;
         get().enterWorkspaceFullscreen();
       },
 
       toggleFullscreen: () => {
         const { workspaceMode } = get();
-        if (workspaceMode === "fullscreen" || workspaceMode === "home") {
+        if (normalizeWorkspaceMode(workspaceMode) === "fullscreen") {
           get().exitFullscreen();
         } else {
-          get().enterHomeWorkspace();
+          get().enterWorkspaceFullscreen();
         }
       },
 
       toggleEmbeddedWorkspace: () => {
         const { workspaceMode } = get();
-        if (workspaceMode === "hidden") {
+        const normalized = normalizeWorkspaceMode(workspaceMode);
+        if (normalized === "hidden") {
           get().requestExpand();
-        } else if (isEmbeddedWorkspaceMode(workspaceMode)) {
+        } else if (isEmbeddedWorkspaceMode(normalized)) {
           get().requestCollapse();
         }
       },
 
       toggleOpen: () => {
         const { workspaceMode } = get();
-        if (workspaceMode === "fullscreen" || workspaceMode === "home") {
+        const normalized = normalizeWorkspaceMode(workspaceMode);
+        if (normalized === "fullscreen") {
           get().exitFullscreen();
           return;
         }
-        if (workspaceMode === "hidden") {
+        if (normalized === "hidden") {
           const height = defaultHeightForMode("half");
           set((state) => ({
             expandSignal: state.expandSignal + 1,
@@ -265,7 +269,7 @@ export const useBottomPanelStore = create<BottomPanelState>()(
     }),
     {
       name: "omnipanel-bottom-panel",
-      version: 2,
+      version: 3,
       partialize: (state) => ({
         lastNonFullscreenMode: state.lastNonFullscreenMode,
         workspaceHeightPx: state.workspaceHeightPx,
@@ -273,7 +277,7 @@ export const useBottomPanelStore = create<BottomPanelState>()(
       }),
       migrate: (persisted, version) => {
         const p = persisted as Record<string, unknown> | undefined;
-        if (!p || version >= 2) return persisted as unknown as BottomPanelState;
+        if (!p || version >= 3) return persisted as unknown as BottomPanelState;
         const legacyEmbedded = p.embeddedMode === "half" ? "half" : "off";
         const lastNonFullscreenMode: EmbeddedWorkspaceMode = "half";
         const workspaceHeightPx =
@@ -281,13 +285,14 @@ export const useBottomPanelStore = create<BottomPanelState>()(
             ? p.workspaceHeightPx
             : defaultHeightForMode("half");
         const workspaceMode: WorkspaceMode =
-          legacyEmbedded === "half" ? "half" : "home";
+          legacyEmbedded === "half" ? "half" : "hidden";
         return {
           ...p,
           lastNonFullscreenMode,
           workspaceHeightPx: legacyEmbedded === "half" ? workspaceHeightPx : 0,
           workspaceMode,
           embeddedMode: legacyEmbedded,
+          isHomeActive: false,
         } as BottomPanelState;
       },
       merge: (persisted, current) => {
@@ -307,10 +312,15 @@ export const useBottomPanelStore = create<BottomPanelState>()(
           merged.workspaceHeightPx = resolveEmbeddedHeight(rawHeight).height;
           Object.assign(merged, syncDerivedFlags(mode));
         } else {
-          merged.workspaceMode = "home";
+          merged.workspaceMode = "hidden";
           merged.workspaceHeightPx = 0;
-          Object.assign(merged, syncDerivedFlags("home"));
+          Object.assign(merged, syncDerivedFlags("hidden"));
         }
+        if (merged.workspaceMode === "home") {
+          merged.workspaceMode = "hidden";
+          Object.assign(merged, syncDerivedFlags("hidden"));
+        }
+        merged.isHomeActive = false;
         return merged;
       },
     },
@@ -320,6 +330,7 @@ export const useBottomPanelStore = create<BottomPanelState>()(
 /** 当前嵌入态（非全屏时） */
 export function useEmbeddedWorkspaceMode(): EmbeddedWorkspaceMode {
   const mode = useBottomPanelStore((s) => s.workspaceMode);
-  if (isEmbeddedWorkspaceMode(mode)) return mode;
+  const normalized = normalizeWorkspaceMode(mode);
+  if (isEmbeddedWorkspaceMode(normalized)) return normalized;
   return "hidden";
 }

@@ -405,6 +405,7 @@ export const zhCN = {
       moveTo: "移动到工作区",
       noOther: "没有其他工作区",
       addToCurrent: "添加到当前工作区",
+      addPanelHint: "Ctrl+点击添加到当前工作区",
     },
     detailPanel: {
       modeDrawer: "切换为右侧抽屉",
@@ -438,7 +439,10 @@ export const zhCN = {
       },
     },
     workspacePreview: {
-      noPanels: "暂无面板，从模块拖入工作区",
+      noPanels: "暂无面板，Ctrl+点击侧边栏或模块内面板添加",
+      removePanel: "从工作区移除",
+      confirmRemoveTitle: "移除面板",
+      confirmRemovePanel: "确定从工作区移除面板「{name}」吗？",
     },
     workspacePopover: {
       title: "工作区",
@@ -519,10 +523,17 @@ export const zhCN = {
     default: "OmniPanel",
   },
   workspace: {
+    builtinTabs: {
+      board: "看板",
+      ai: "AI 助手",
+    },
     detail: {
       tabs: {
         overview: "概览",
       },
+      notFoundTitle: "工作区不存在",
+      notFoundPrompt: "请从工作区列表选择有效的工作区。",
+      emptyPanelsHint: "按住 Ctrl 点击侧边栏模块或模块内面板，将其添加到此工作区。",
     },
   },
   env: {
