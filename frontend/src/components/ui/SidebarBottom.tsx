@@ -185,6 +185,7 @@ export function SidebarBottom({
   );
 
   const applyTargetHeight = useCallback(() => {
+    if (userResizeActiveRef.current) return;
     const handle = bottomPanelRef.current;
     if (!handle || useBottomPanelStore.getState().isFullscreen) return;
     const state = useBottomPanelStore.getState();
@@ -225,7 +226,6 @@ export function SidebarBottom({
     const { height: target } = resolveEmbeddedHeight(raw);
     const currentPx = readBottomPanelPx();
     if (currentPx != null && Math.abs(currentPx - target) <= 1) {
-      scheduleWorkspaceDockRelayout();
       return;
     }
     snapPanelHeight(target);
@@ -321,22 +321,20 @@ export function SidebarBottom({
   const processLiveResize = useCallback(
     (heightPx: number) => {
       const store = useBottomPanelStore.getState();
+      if (store.isFullscreen) return;
       if (heightPx <= WS_HEIGHT_HIDDEN_MAX && store.workspaceMode === "hidden") {
-        return;
-      }
-      const mode = store.workspaceMode;
-      if (heightPx >= fullscreenThresholdPx && mode !== "half") {
-        enterFullscreenFromDrag(heightPx);
         return;
       }
       setWorkspaceHeight(heightPx, { commit: false });
     },
-    [enterFullscreenFromDrag, fullscreenThresholdPx, setWorkspaceHeight],
+    [setWorkspaceHeight],
   );
 
   /** 用户拖拽分隔条时由 react-resizable-panels 的 onLayoutChange 驱动（跟手切模式） */
   const handleBottomLayoutChange = useCallback(() => {
     if (bottomResizeLocked || shouldIgnorePanelResize()) return;
+    // 程序化 expand/snap 也会触发 onLayoutChange，不可当作用户拖拽
+    if (programmaticSyncRef.current || isSnappingRef.current) return;
     userResizeActiveRef.current = true;
     const px = readBottomPanelPx();
     if (px == null) return;
@@ -354,9 +352,7 @@ export function SidebarBottom({
     if (px == null) return;
 
     if (px >= fullscreenThresholdPx) {
-      if (useBottomPanelStore.getState().workspaceMode !== "half") {
-        enterFullscreenFromDrag(px);
-      }
+      enterFullscreenFromDrag(px);
       return;
     }
     if (px <= WS_HEIGHT_HIDDEN_MAX) {

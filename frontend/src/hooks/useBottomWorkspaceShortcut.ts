@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { useWorkspacePreviewCollapseStore } from "../stores/workspacePreviewCollapseStore";
+import { useBottomPanelStore } from "../stores/bottomPanelStore";
 import { getShortcutKeys, matchesShortcut } from "../stores/shortcutsStore";
 
 export function isBottomWorkspaceShortcut(e: KeyboardEvent): boolean {
@@ -13,7 +13,7 @@ export function triggerBottomWorkspaceToggle(e: KeyboardEvent): boolean {
   if (!isBottomWorkspaceShortcut(e)) return false;
   e.preventDefault();
   e.stopPropagation();
-  useWorkspacePreviewCollapseStore.getState().toggle();
+  useBottomPanelStore.getState().toggleEmbeddedWorkspace();
   return true;
 }
 

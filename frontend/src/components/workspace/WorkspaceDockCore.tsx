@@ -12,6 +12,7 @@ import {
 import { isWorkspaceBuiltinTabId } from "../../lib/workspaceBuiltinPanels";
 import { isLayoutUsable, collectPanelIds, mergePanelsIntoLayout } from "../dock/dockViewLayout";
 import { syncWorkspaceDockActiveTabSideEffects } from "../../lib/syncWorkspaceDockActiveTab";
+import { cleanupWorkspaceDockTerminalTab } from "../../lib/workspaceTabActions";
 import { WorkspaceDockTabPanel } from "./WorkspaceDockTabPanel";
 
 export interface WorkspaceDockCoreProps {
@@ -131,16 +132,20 @@ export function WorkspaceDockCore({
   const handleCloseTab = useCallback(
     (tabId: string) => {
       if (isWorkspaceBuiltinTabId(tabId)) return;
+      const tab = tabs.find((item) => item.id === tabId);
+      cleanupWorkspaceDockTerminalTab(tab);
       removeTab(workspaceId, workspace, tabId);
     },
-    [removeTab, workspace, workspaceId],
+    [removeTab, tabs, workspace, workspaceId],
   );
 
   const handlePanelTransferredOut = useCallback(
     (panelId: string) => {
+      const tab = tabs.find((item) => item.id === panelId);
+      cleanupWorkspaceDockTerminalTab(tab);
       removeTab(workspaceId, workspace, panelId);
     },
-    [removeTab, workspace, workspaceId],
+    [removeTab, tabs, workspace, workspaceId],
   );
 
   const handleActiveTabChange = useCallback(

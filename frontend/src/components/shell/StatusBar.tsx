@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useLocation } from "react-router-dom";
 import { useActionStore } from "../../stores/actionStore";
 import { useWorkspaceStore, type WorkspaceInfo } from "../../stores/workspaceStore";
+import { switchEmbeddedWorkspace } from "../../lib/workspaceNavigation";
 import { useBottomPanelStore, useEmbeddedWorkspaceMode } from "../../stores/bottomPanelStore";
 import { useStatusBarStore } from "../../stores/statusBarStore";
 import { getResourceById, type EnvironmentTag } from "../../lib/resourceRegistry";
@@ -52,15 +53,14 @@ function StatusBarWorkspacePanelToggle() {
 }
 
 function StatusBarWorkspaceControls() {
-  const switchWorkspace = useWorkspaceStore((state) => state.switchWorkspace);
   const requestExpand = useBottomPanelStore((state) => state.requestExpand);
 
   const handleSelectWorkspace = useCallback(
     (ws: WorkspaceInfo) => {
-      switchWorkspace(ws.id);
+      switchEmbeddedWorkspace(ws.id);
       requestExpand();
     },
-    [switchWorkspace, requestExpand],
+    [requestExpand],
   );
 
   return (
@@ -68,6 +68,7 @@ function StatusBarWorkspaceControls() {
       <WorkspaceSwitcher
         variant="statusbar"
         placement="above"
+        context="embedded"
         onSelectWorkspace={handleSelectWorkspace}
       />
       <StatusBarWorkspacePanelToggle />

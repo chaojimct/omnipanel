@@ -139,7 +139,7 @@ export function AdvanceTerminal({ tabId, isActive, onActivate }: AdvanceTerminal
     (sideTabId: string) => {
       const spec = resolveSidePanelSpec(sideTabId);
       if (!spec) return;
-      addComponentToWorkspace(workspaceId, spec, { activate: false });
+      addComponentToWorkspace(workspaceId, spec);
     },
     [resolveSidePanelSpec, workspaceId],
   );

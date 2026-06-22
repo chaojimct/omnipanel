@@ -45,6 +45,8 @@ export interface TerminalTab {
   id: string;
   title: string;
   session: TerminalSessionInfo;
+  /** 仅由底部工作区 payload 使用，不在终端模块 Dock 中展示 */
+  workspaceOnly?: boolean;
   backendSessionId: string | null;
   status: "connecting" | "connected" | "disconnected";
   terminal: Terminal | null;
@@ -236,7 +238,9 @@ export const useTerminalStore = create<TerminalState>()(
         };
         set((state) => ({
           tabs: [...state.tabs, newTab],
-          activeTabId: state.activeTabId ?? newTab.id,
+          activeTabId: tab.workspaceOnly
+            ? state.activeTabId
+            : (state.activeTabId ?? newTab.id),
         }));
         return newTab.id;
       },
@@ -383,12 +387,14 @@ export const useTerminalStore = create<TerminalState>()(
       version: TABS_STORAGE_VERSION,
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
-        tabs: state.tabs.map((tab) => ({
-          id: tab.id,
-          title: tab.title,
-          session: tab.session,
-          createdAt: tab.createdAt,
-        })),
+        tabs: state.tabs
+          .filter((tab) => !tab.workspaceOnly)
+          .map((tab) => ({
+            id: tab.id,
+            title: tab.title,
+            session: tab.session,
+            createdAt: tab.createdAt,
+          })),
         activeTabId: state.activeTabId,
       }),
       merge: (persistedState, currentState) => {

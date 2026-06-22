@@ -1,23 +1,20 @@
-import { useLocation } from "react-router-dom";
 import type { ReactNode } from "react";
 import { WorkspacePreview } from "../ui/WorkspacePreview";
 import { useBottomPanelStore } from "../../stores/bottomPanelStore";
 import { workspaceShellState } from "../../lib/workspaceMode";
-import { isWorkspacePath } from "../../lib/paths";
 
 interface WorkspaceHostProps {
   children: ReactNode;
 }
 
 /**
- * 应用级工作区宿主：统一 full / half / off 及嵌入子形态。
- * 工作区详情路由（/workspace/:id）下不渲染底部预览栏。
+ * 应用级工作区宿主：嵌入态包 WorkspacePreview；工程工作区全屏时仅渲染主内容。
+ * 全屏底栏由 App 层唯一挂载 WorkspaceBottomHost。
  */
 export function WorkspaceHost({ children }: WorkspaceHostProps) {
-  const location = useLocation();
   const workspaceMode = useBottomPanelStore((state) => state.workspaceMode);
+  const isBottomFullscreen = useBottomPanelStore((state) => state.isFullscreen);
   const wsState = workspaceShellState(workspaceMode);
-  const inWorkspaceDetail = isWorkspacePath(location.pathname);
   const embeddedModeClass =
     workspaceMode !== "fullscreen" &&
     workspaceMode !== "home" &&
@@ -25,7 +22,7 @@ export function WorkspaceHost({ children }: WorkspaceHostProps) {
       ? ` workspace-host--${workspaceMode}`
       : "";
 
-  if (inWorkspaceDetail) {
+  if (isBottomFullscreen) {
     return (
       <div className={`content-bottom workspace-host workspace-host--${wsState}`}>
         {children}

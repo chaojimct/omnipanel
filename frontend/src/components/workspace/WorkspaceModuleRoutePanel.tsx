@@ -1,4 +1,5 @@
 import type { ModuleRouteSnapshot } from "../../lib/workspaceModuleRoutes";
+import { TerminalPanel } from "../../modules/terminal/TerminalPanel";
 import { FilesPanel } from "../../modules/files/FilesPanel";
 import { KnowledgePanel } from "../../modules/knowledge/KnowledgePanel";
 import { ProtocolPanel } from "../../modules/protocol/ProtocolPanel";
@@ -13,6 +14,8 @@ interface WorkspaceModuleRoutePanelProps {
 /** 工作区 Dock 内嵌的整模块路由面板 */
 export function WorkspaceModuleRoutePanel({ snapshot }: WorkspaceModuleRoutePanelProps) {
   switch (snapshot.moduleKey) {
+    case "terminal":
+      return <TerminalPanel />;
     case "ssh":
       return <SshPanel />;
     case "server":

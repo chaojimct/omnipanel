@@ -23,7 +23,6 @@ export function useWorkspaceCtrlCopyTab(
       const label = tabLabel ? `${moduleLabel} · ${tabLabel}` : moduleLabel;
       addModuleRouteToWorkspace(workspaceId, moduleKey, label, {
         segmentTabId: tabId,
-        activate: false,
       });
     },
     [moduleKey, resolveTabLabel, t, workspaceId],

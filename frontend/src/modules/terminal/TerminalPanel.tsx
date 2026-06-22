@@ -19,7 +19,11 @@ import { TerminalTabDockPane } from "./TerminalTabDockPane";
 import { clearTerminalPaneSender } from "./terminalPaneSenders";
 import { useWorkspaceBottomDockStore } from "../../stores/workspaceBottomDockStore";
 import { useWorkspaceTabStore, type TerminalTabSnapshot } from "../../stores/workspaceTabStore";
-import { terminalTabToSnapshot, addSnapshotToWorkspace } from "../../lib/workspaceTabActions";
+import {
+  terminalTabToSnapshot,
+  copyTerminalTabToWorkspaceSnapshot,
+  addSnapshotToWorkspace,
+} from "../../lib/workspaceTabActions";
 import { subscribeDockviewTransfer } from "../../lib/dockviewRegistry";
 import { ModuleSegmentDock } from "../../components/dock";
 import {
@@ -95,7 +99,9 @@ export function TerminalPanel() {
       const wsTabStoreState = wsTabStore.getState();
 
       // 保存当前终端 tabs 到旧工作区
-      const snapshots = store.tabs.map(terminalTabToSnapshot);
+      const snapshots = store.tabs
+        .filter((tab) => !tab.workspaceOnly)
+        .map(terminalTabToSnapshot);
       wsTabStoreState.saveTabs(prevWorkspaceId, snapshots);
 
       // 恢复目标工作区的终端 tabs
@@ -190,7 +196,10 @@ export function TerminalPanel() {
   );
 
   const visibleTabs = useMemo(
-    () => tabs.filter((tab) => !isOriginDocked("terminal", tab.id)),
+    () =>
+      tabs.filter(
+        (tab) => !tab.workspaceOnly && !isOriginDocked("terminal", tab.id),
+      ),
     [tabs, isOriginDocked],
   );
 
@@ -332,16 +341,12 @@ export function TerminalPanel() {
       if (!ctxTab) {
         return;
       }
-      const newId = addLocalTerminalTab(ctxTab.title);
-      const created = useTerminalStore.getState().tabs.find((tab) => tab.id === newId);
-      if (created) {
-        addSnapshotToWorkspace(currentWorkspaceId, terminalTabToSnapshot(created), {
-          activate: false,
-        });
-      }
-      setActiveTab(newId);
+      addSnapshotToWorkspace(
+        currentWorkspaceId,
+        copyTerminalTabToWorkspaceSnapshot(ctxTab),
+      );
     },
-    [visibleTabs, addLocalTerminalTab, currentWorkspaceId, setActiveTab],
+    [visibleTabs, currentWorkspaceId],
   );
 
   return (

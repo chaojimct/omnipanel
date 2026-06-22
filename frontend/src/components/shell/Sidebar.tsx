@@ -7,10 +7,13 @@ import { useBottomPanelStore } from "../../stores/bottomPanelStore";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { useI18n } from "../../i18n";
 import { AppLogo } from "../ui/AppLogo";
-import { goWorkspaceHome, navigateToFeature } from "../../lib/workspaceNavigation";
-import { isDashboardPath, isWorkspacePath, MODULE_PATHS } from "../../lib/paths";
+import {
+  navigateToFeature,
+  toggleWorkspaceFromChromeIcon,
+} from "../../lib/workspaceNavigation";
+import { isDashboardPath, MODULE_PATHS } from "../../lib/paths";
 import { moduleKeyFromPath, moduleNavI18nKey } from "../../lib/workspaceModuleRoutes";
-import { addModuleRouteToWorkspace } from "../../lib/workspaceTabActions";
+import { addModulePanelToWorkspace } from "../../lib/workspaceTabActions";
 
 const navPaths = [
   {
@@ -121,6 +124,9 @@ export function Sidebar() {
   /** 看板或工作区全屏时高亮左上角入口 */
   const isWorkspaceHome =
     isDashboardPath(location.pathname) || isBottomFullscreen;
+  const logoTitle = isBottomFullscreen
+    ? t("shell.workspacePopover.home")
+    : t("shell.workspacePanel.fullscreen");
   const drawerOpen = useAiStore((s) => s.drawerOpen);
   const settingsOpen = useSettingsUiStore((s) => s.open);
   const openSettings = useSettingsUiStore((s) => s.openSettings);
@@ -143,9 +149,7 @@ export function Sidebar() {
       if (!moduleKey) {
         return;
       }
-      addModuleRouteToWorkspace(workspaceId, moduleKey, t(moduleNavI18nKey(moduleKey)), {
-        activate: false,
-      });
+      addModulePanelToWorkspace(workspaceId, moduleKey, t(moduleNavI18nKey(moduleKey)));
       return;
     }
     go(path);
@@ -168,8 +172,8 @@ export function Sidebar() {
       <button
         type="button"
         className={`sidebar-logo${isWorkspaceHome ? " active" : ""}`}
-        title={t("shell.nav.workspace")}
-        onClick={() => goWorkspaceHome()}
+        title={logoTitle}
+        onClick={() => toggleWorkspaceFromChromeIcon(navigate)}
       >
         <AppLogo size={36} className="sidebar-logo__img" />
       </button>

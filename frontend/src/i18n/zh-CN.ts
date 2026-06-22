@@ -452,6 +452,8 @@ export const zhCN = {
     },
     workspacePopover: {
       title: "工作区",
+      home: "首页",
+      homeDesc: "固定看板",
       newWorkspace: "新建工作区",
       namePlaceholder: "新工作区名称",
       nameRequired: "名称不能为空",

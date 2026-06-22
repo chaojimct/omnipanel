@@ -329,7 +329,7 @@ function AppShell() {
   const dockOpen = aiDisplayMode === "dockview" && drawerOpen;
   const dragging = useRef(false);
 
-  // 工程工作区全屏时同步 URL 到 /workspace/:id
+  // 工程工作区全屏时同步 URL 到 /workspace/:id（Logo/面板按钮已直接 navigate 时可跳过）
   useEffect(() => {
     if (workspaceMode !== "fullscreen" && workspaceMode !== "home") return;
     if (isWorkspacePath(location.pathname)) return;

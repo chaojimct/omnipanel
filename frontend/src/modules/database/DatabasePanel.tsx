@@ -2906,50 +2906,12 @@ export function DatabasePanel() {
     (tabId: string) => {
       const ctxTab = workspaceTabs.find((tab) => tab.id === tabId);
       if (!ctxTab) return;
-      const newTab: DbWorkspaceTab =
-        ctxTab.kind === "sql"
-          ? { id: makeSqlTabId(), kind: "sql", label: `${ctxTab.label} (副本)` }
-          : ctxTab.kind === "designer"
-            ? {
-                id: makeDesignerTabId(),
-                kind: "designer",
-                label: `${ctxTab.label} (副本)`,
-                connId: ctxTab.connId,
-                dbName: ctxTab.dbName,
-                tableName: ctxTab.tableName,
-              }
-            : ctxTab.kind === "connection"
-              ? {
-                  id: makeConnectionInfoTabId(),
-                  kind: "connection",
-                  label: `${ctxTab.label} (副本)`,
-                  connId: ctxTab.connId,
-                }
-              : {
-                  id: makeDatabaseTabId(),
-                  kind: "database",
-                  label: `${ctxTab.label} (副本)`,
-                  connId: ctxTab.connId,
-                  dbName: ctxTab.dbName,
-                };
-      setWorkspaceTabs((prev) => [...prev, newTab]);
-      setActiveWorkspaceTabId(newTab.id);
-      if (ctxTab.kind === "designer") {
-        const copiedState = tableDesignerStatesRef.current[ctxTab.id];
-        if (copiedState) {
-          setTableDesignerStates((prev) => ({
-            ...prev,
-            [newTab.id]: structuredClone(copiedState),
-          }));
-        }
-      }
       addSnapshotToWorkspace(
         currentWorkspaceId,
-        dbTabToSnapshot(newTab, tabModes[ctxTab.id]),
-        { activate: false },
+        dbTabToSnapshot(ctxTab, tabModes[ctxTab.id]),
       );
     },
-    [workspaceTabs, tabModes, currentWorkspaceId, setWorkspaceTabs, setActiveWorkspaceTabId],
+    [workspaceTabs, tabModes, currentWorkspaceId],
   );
 
   useEffect(() => {

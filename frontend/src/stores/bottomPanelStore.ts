@@ -2,7 +2,6 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import {
   defaultHeightForMode,
-  dragModeFromHeight,
   embeddedModeToDisplayPreference,
   halfHeightPx,
   isEmbeddedWorkspaceMode,
@@ -17,7 +16,6 @@ import {
   type WorkspaceDisplayPreference,
   type WorkspaceMode,
 } from "../lib/workspaceMode";
-import { useWorkspacePreviewCollapseStore } from "./workspacePreviewCollapseStore";
 
 /** @deprecated 兼容旧逻辑，映射到 hidden/half */
 export type WorkspaceEmbeddedMode = "off" | "half";
@@ -124,10 +122,6 @@ export const useBottomPanelStore = create<BottomPanelState>()(
         ) {
           return;
         }
-        const preview = useWorkspacePreviewCollapseStore.getState();
-        if (!preview.isOpen) {
-          preview.setIsOpen(true);
-        }
         get().applyWorkspaceDisplayPreference(workspaceDisplayPreference);
         set((state) => ({
           expandSignal: state.expandSignal + 1,
@@ -150,10 +144,6 @@ export const useBottomPanelStore = create<BottomPanelState>()(
             : defaultHeightForMode(
                 remembered === "hidden" ? "half" : remembered,
               );
-        const preview = useWorkspacePreviewCollapseStore.getState();
-        if (preview.isOpen) {
-          preview.setIsOpen(false);
-        }
         set((state) => ({
           collapseSignal: state.collapseSignal + 1,
           workspaceMode: "hidden",
@@ -177,14 +167,9 @@ export const useBottomPanelStore = create<BottomPanelState>()(
         const normalized = normalizeWorkspaceMode(workspaceMode);
         if (normalized === "fullscreen") return;
 
-        const currentEmbedded = isEmbeddedWorkspaceMode(normalized)
-          ? normalized
-          : undefined;
-
         if (options?.commit === false) {
-          const liveMode = dragModeFromHeight(heightPx, currentEmbedded);
-          if (liveMode === normalized) return;
-          set({ workspaceMode: liveMode, ...syncDerivedFlags(liveMode) });
+          // 拖拽跟手只更新高度，模式在松手时提交，避免 mid-drag 切换 UI 卸载 Separator
+          set({ workspaceHeightPx: Math.max(0, Math.round(heightPx)) });
           return;
         }
 
@@ -200,12 +185,6 @@ export const useBottomPanelStore = create<BottomPanelState>()(
           patch.workspaceDisplayPreference = embeddedModeToDisplayPreference(nextMode);
           if (nextMode === "half") {
             patch.lastExpandedHeightRatio = splitWindowHeightRatio(normalizedHeight);
-          }
-        } else {
-          // 高度提交为 hidden 时同步预览栏，避免 isOpen=true + hidden 触发 requestExpand 死循环
-          const preview = useWorkspacePreviewCollapseStore.getState();
-          if (preview.isOpen) {
-            preview.setIsOpen(false);
           }
         }
         set(patch);
@@ -244,14 +223,12 @@ export const useBottomPanelStore = create<BottomPanelState>()(
       toggleWorkspaceDisplayPreference: () => {
         const state = get();
         const normalized = normalizeWorkspaceMode(state.workspaceMode);
-        const preview = useWorkspacePreviewCollapseStore.getState();
 
         if (normalized === "fullscreen") {
           return;
         }
 
         if (normalized === "hidden") {
-          preview.setIsOpen(true);
           get().applyWorkspaceDisplayPreference(state.workspaceDisplayPreference);
           set((s) => ({ expandSignal: s.expandSignal + 1 }));
           return;
@@ -263,7 +240,6 @@ export const useBottomPanelStore = create<BottomPanelState>()(
             : "split-window";
         set({ workspaceDisplayPreference: next });
         get().applyWorkspaceDisplayPreference(next);
-        preview.setIsOpen(true);
         set((s) => ({ expandSignal: s.expandSignal + 1 }));
       },
 
@@ -278,7 +254,6 @@ export const useBottomPanelStore = create<BottomPanelState>()(
       enterWorkspaceFullscreen: () => {
         set((state) => ({
           workspaceMode: "fullscreen",
-          expandSignal: state.expandSignal + 1,
           ...syncDerivedFlags("fullscreen"),
         }));
       },
@@ -288,10 +263,6 @@ export const useBottomPanelStore = create<BottomPanelState>()(
       },
 
       applyEmbeddedMode: () => {
-        const preview = useWorkspacePreviewCollapseStore.getState();
-        if (!preview.isOpen) {
-          preview.setIsOpen(true);
-        }
         get().applyWorkspaceDisplayPreference(get().workspaceDisplayPreference);
         set((state) => ({ expandSignal: state.expandSignal + 1 }));
       },
@@ -331,8 +302,6 @@ export const useBottomPanelStore = create<BottomPanelState>()(
           get().exitFullscreen();
           return;
         }
-        // split-window 模式仅调整高度，不提供工程工作区全屏
-        if (workspaceMode === "half") return;
         get().enterWorkspaceFullscreen();
       },
 

@@ -1,15 +1,15 @@
 import { useCallback, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import { WorkspaceSwitcher } from "../shell/WorkspaceSwitcher";
 import { useI18n } from "../../i18n";
 import type { WorkspaceInfo } from "../../stores/workspaceStore";
 import { useBottomPanelStore, useEmbeddedWorkspaceMode } from "../../stores/bottomPanelStore";
+import { toggleEngineeringWorkspaceFullscreen } from "../../lib/workspaceNavigation";
 import {
-  resolveWorkspaceActiveTabId,
   resolveWorkspaceTabs,
   useWorkspaceBottomDockStore,
 } from "../../stores/workspaceBottomDockStore";
 import { WorkspaceDockCore } from "./WorkspaceDockCore";
-import { WorkspaceThumbnailStrip } from "./WorkspaceThumbnailStrip";
 import { WorkspaceFullscreenDragHandle } from "./WorkspaceFullscreenDragHandle";
 
 interface WorkspacePanelProps {
@@ -25,6 +25,7 @@ function workspaceDockScope(workspaceId: string): string {
  */
 export function WorkspacePanel({ workspace }: WorkspacePanelProps) {
   const { t } = useI18n();
+  const navigate = useNavigate();
   const workspaceId = workspace.id;
   const dockScope = workspaceDockScope(workspaceId);
   const workspaceMode = useBottomPanelStore((state) => state.workspaceMode);
@@ -33,41 +34,19 @@ export function WorkspacePanel({ workspace }: WorkspacePanelProps) {
   const isSplitWindow = embeddedMode === "half";
   const showWorkspaceFullscreenChrome =
     isEngineeringFullscreen || !isSplitWindow;
-  const handleWorkspaceChromeIcon = useBottomPanelStore(
-    (state) => state.handleWorkspaceChromeIcon,
-  );
-  const enterWorkspaceFullscreen = useBottomPanelStore(
-    (state) => state.enterWorkspaceFullscreen,
-  );
 
   const rawTabs = useWorkspaceBottomDockStore(
     (state) => state.tabsByWorkspace[workspaceId],
   );
-  const rawActiveTabId = useWorkspaceBottomDockStore(
-    (state) => state.activeTabByWorkspace[workspaceId],
-  );
-  const setActiveTabId = useWorkspaceBottomDockStore((state) => state.setActiveTabId);
 
   const tabs = useMemo(
     () => resolveWorkspaceTabs(workspace, rawTabs),
     [workspace, rawTabs],
   );
 
-  const activeTabId = useMemo(
-    () => resolveWorkspaceActiveTabId(workspace, tabs, rawActiveTabId),
-    [workspace, tabs, rawActiveTabId],
-  );
-
-  const handleActiveTabChange = useCallback(
-    (tabId: string) => {
-      setActiveTabId(workspaceId, tabId);
-    },
-    [setActiveTabId, workspaceId],
-  );
-
   const enterFullscreenFromChrome = useCallback(() => {
-    handleWorkspaceChromeIcon();
-  }, [handleWorkspaceChromeIcon]);
+    toggleEngineeringWorkspaceFullscreen(navigate);
+  }, [navigate]);
 
   const handleTopbarDoubleClick = useCallback(
     (event: React.MouseEvent) => {
@@ -84,13 +63,13 @@ export function WorkspacePanel({ workspace }: WorkspacePanelProps) {
       ) {
         return;
       }
-      enterWorkspaceFullscreen();
+      toggleEngineeringWorkspaceFullscreen(navigate);
     },
-    [enterWorkspaceFullscreen, isEngineeringFullscreen, isSplitWindow],
+    [isEngineeringFullscreen, isSplitWindow, navigate],
   );
 
   const preActions = useMemo(
-    () => <WorkspaceSwitcher placement="below" />,
+    () => <WorkspaceSwitcher placement="below" context="embedded" />,
     [],
   );
 
@@ -125,18 +104,6 @@ export function WorkspacePanel({ workspace }: WorkspacePanelProps) {
     </button>
   );
 
-  if (embeddedMode === "thumbnail") {
-    return (
-      <div className="workspace-panel-frame workspace-panel--thumbnail">
-        <WorkspaceThumbnailStrip
-          tabs={tabs}
-          activeTabId={activeTabId}
-          onSelectTab={handleActiveTabChange}
-        />
-      </div>
-    );
-  }
-
   if (embeddedMode === "taskbar") {
     // task-bar UI 由 WorkspacePreviewTaskBar 渲染；此处仅占位避免重复 switcher / 全屏按钮
     return null;
@@ -160,7 +127,7 @@ export function WorkspacePanel({ workspace }: WorkspacePanelProps) {
       <WorkspaceDockCore
         workspace={workspace}
         dockScope={dockScope}
-        preActions={isSplitWindow ? undefined : preActions}
+        preActions={preActions}
         windowControl={isEngineeringFullscreen}
       />
     </div>

@@ -8,11 +8,20 @@ import type {
   DbTabSnapshot,
   DockerTabSnapshot,
 } from "../stores/workspaceTabStore";
-import { useWorkspaceBottomDockStore } from "../stores/workspaceBottomDockStore";
-import { WORKSPACE_PATHS } from "./paths";
-import { navigateToWorkspace } from "./workspaceNavigation";
-import { useTerminalStore } from "../stores/terminalStore";
-import type { TerminalTab } from "../stores/terminalStore";
+import {
+  useWorkspaceBottomDockStore,
+  type WorkspaceDockTab,
+} from "../stores/workspaceBottomDockStore";
+import { useBottomPanelStore } from "../stores/bottomPanelStore";
+import { resolveResourceById } from "../stores/connectionStore";
+import {
+  useTerminalStore,
+  createTerminalTabId,
+  type TerminalTab,
+} from "../stores/terminalStore";
+import { disposeTabBackendSessions } from "../hooks/useTerminal";
+import { clearPaneBackendPending } from "../hooks/useTerminal";
+import { clearTerminalPaneSender } from "../modules/terminal/terminalPaneSenders";
 import type { DbWorkspaceTab } from "../modules/database/workspaceTabs";
 import {
   buildComponentSnapshot,
@@ -20,19 +29,38 @@ import {
 } from "./workspaceComponentTypes";
 import { getWorkspaceComponentDefinition } from "./workspaceComponentTypes";
 import { workspaceComponentRegistry } from "./workspaceComponentRegistry";
+import { syncWorkspaceDockActiveTabSideEffects } from "./syncWorkspaceDockActiveTab";
 
 // --- Snapshot factories ---
 
 export function terminalTabToSnapshot(tab: TerminalTab): TerminalTabSnapshot {
+  const resource = resolveResourceById(tab.session.resourceId);
   return {
     module: "terminal",
     id: tab.id,
-    label: tab.title,
+    label: resource?.name ?? tab.title ?? tab.session.shellLabel,
     sessionType: tab.session.type,
     resourceId: tab.session.resourceId,
     shellLabel: tab.session.shellLabel,
     cwd: tab.session.cwd,
     purpose: tab.session.purpose,
+  };
+}
+
+/** Ctrl+点击 / 添加入工作区：复制终端会话为独立 Tab（新 id、新后端连接） */
+export function copyTerminalTabToWorkspaceSnapshot(
+  source: TerminalTab,
+): TerminalTabSnapshot {
+  const resource = resolveResourceById(source.session.resourceId);
+  return {
+    module: "terminal",
+    id: createTerminalTabId(),
+    label: resource?.name ?? source.title ?? source.session.shellLabel,
+    sessionType: source.session.type,
+    resourceId: source.session.resourceId,
+    shellLabel: source.session.shellLabel,
+    cwd: source.session.cwd,
+    purpose: source.session.purpose,
   };
 }
 
@@ -77,9 +105,41 @@ export function payloadDockTabId(snapshot: WorkspaceTabSnapshot): string {
   return `ws-payload:${snapshot.module}:${snapshot.id}`;
 }
 
-function isViewingWorkspaceDetail(workspaceId: string): boolean {
-  if (typeof window === "undefined") return false;
-  return window.location.pathname === WORKSPACE_PATHS.detail(workspaceId);
+/** 展开底部工作区并激活指定 Dock Tab（不跳转路由） */
+function activateWorkspaceDockTab(workspaceId: string, tab: WorkspaceDockTab): void {
+  const bottom = useBottomPanelStore.getState();
+  if (!bottom.isFullscreen && bottom.workspaceMode === "hidden") {
+    bottom.requestExpand();
+  }
+
+  const applyActivation = () => {
+    const dockStore = useWorkspaceBottomDockStore.getState();
+    dockStore.setActiveTabId(workspaceId, tab.id);
+    syncWorkspaceDockActiveTabSideEffects(tab);
+    window.dispatchEvent(
+      new CustomEvent("omnipanel-workspace-dock-activate", {
+        detail: { workspaceId, tabId: tab.id },
+      }),
+    );
+  };
+
+  const needsExpand = !bottom.isFullscreen && bottom.workspaceMode === "hidden";
+  // 展开动画 / 挂载完成后再激活，避免 Dock 未挂载时丢失 focus
+  if (needsExpand) {
+    requestAnimationFrame(() => requestAnimationFrame(applyActivation));
+  } else {
+    queueMicrotask(applyActivation);
+  }
+}
+
+function resolveActiveTerminalTab(): TerminalTab | undefined {
+  const store = useTerminalStore.getState();
+  const moduleTabs = store.tabs.filter((tab) => !tab.workspaceOnly);
+  if (store.activeTabId) {
+    const active = moduleTabs.find((tab) => tab.id === store.activeTabId);
+    if (active) return active;
+  }
+  return moduleTabs[0];
 }
 
 /** 确保终端 store 中存在快照对应的 Tab，供工作区 payload 渲染 */
@@ -90,6 +150,7 @@ export function ensureTerminalTabFromSnapshot(snapshot: TerminalTabSnapshot): st
   store.addTab({
     id: snapshot.id,
     title: snapshot.label,
+    workspaceOnly: true,
     session: {
       type: snapshot.sessionType,
       resourceId: snapshot.resourceId,
@@ -100,6 +161,19 @@ export function ensureTerminalTabFromSnapshot(snapshot: TerminalTabSnapshot): st
     },
   });
   return snapshot.id;
+}
+
+/** 关闭工作区 Dock 中的终端 payload 时释放独立会话 */
+export function cleanupWorkspaceDockTerminalTab(tab: WorkspaceDockTab | undefined): void {
+  if (!tab) return;
+  if (tab.kind !== "payload" || tab.payload?.module !== "terminal") return;
+  const terminalId = tab.payload.id;
+  const terminalTab = useTerminalStore.getState().tabs.find((item) => item.id === terminalId);
+  if (!terminalTab?.workspaceOnly) return;
+  clearTerminalPaneSender(terminalId);
+  clearPaneBackendPending(terminalId);
+  disposeTabBackendSessions(terminalId);
+  useTerminalStore.getState().removeTab(terminalId);
 }
 
 function resolveWorkspaceInfo(workspaceId: string): WorkspaceInfo | null {
@@ -128,7 +202,7 @@ export function addSnapshotToWorkspace(
   dockStore.ensureWorkspaceData(workspaceId, workspace);
 
   const payloadId = payloadDockTabId(snapshot);
-  dockStore.addPayloadTab(workspaceId, workspace, {
+  const addedTab = dockStore.addPayloadTab(workspaceId, workspace, {
     id: payloadId,
     label: snapshot.label,
     payload: snapshot,
@@ -144,11 +218,29 @@ export function addSnapshotToWorkspace(
     return;
   }
 
-  if (isViewingWorkspaceDetail(workspaceId)) {
-    return;
+  activateWorkspaceDockTab(workspaceId, addedTab);
+}
+
+/** 侧边栏 Ctrl+点击：优先加入当前模块上下文（如终端会话），否则加入模块路由面板 */
+export function addModulePanelToWorkspace(
+  workspaceId: string,
+  moduleKey: ModuleKey,
+  label: string,
+  options?: { segmentTabId?: string; activate?: boolean },
+): void {
+  if (moduleKey === "terminal") {
+    const activeTab = resolveActiveTerminalTab();
+    if (activeTab) {
+      addSnapshotToWorkspace(
+        workspaceId,
+        copyTerminalTabToWorkspaceSnapshot(activeTab),
+        options,
+      );
+      return;
+    }
   }
 
-  navigateToWorkspace(workspaceId);
+  addModuleRouteToWorkspace(workspaceId, moduleKey, label, options);
 }
 
 /** 将模块路由面板加入工作区（侧边栏 Ctrl+点击、模块内 Ctrl+复制）— 情况 1：顶级路由面板 */

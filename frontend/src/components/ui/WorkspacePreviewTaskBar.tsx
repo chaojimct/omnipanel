@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type MouseEvent } from "reac
 import { appConfirm } from "../../lib/appConfirm";
 import { isWorkspaceBuiltinTab } from "../../lib/workspaceBuiltinPanels";
 import { syncWorkspaceDockActiveTabSideEffects } from "../../lib/syncWorkspaceDockActiveTab";
+import { cleanupWorkspaceDockTerminalTab } from "../../lib/workspaceTabActions";
 import { PreviewKindIcon } from "./WorkspacePreviewPanelTile";
 import {
   resolveWorkspaceActiveTabId,
@@ -16,6 +17,7 @@ import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { useI18n } from "../../i18n";
 import type { WorkspaceDockTab } from "../../stores/workspaceBottomDockStore";
 import { WorkspaceTaskBarPanelSubWindow } from "../workspace/WorkspaceTaskBarPanelSubWindow";
+import { WorkspaceSwitcher } from "../shell/WorkspaceSwitcher";
 
 function TaskBarPanelTile({
   tab,
@@ -114,6 +116,23 @@ export function WorkspacePreviewTaskBar() {
     [workspace, rawTabs],
   );
 
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<{ workspaceId: string; tabId: string }>).detail;
+      if (!detail || detail.workspaceId !== workspace.id) return;
+      const dockStore = useWorkspaceBottomDockStore.getState();
+      const raw = dockStore.tabsByWorkspace[workspace.id] ?? [];
+      const resolved = resolveWorkspaceTabs(workspace, raw);
+      const target = resolved.find((tab) => tab.id === detail.tabId);
+      if (!target) return;
+      setActiveTabId(workspace.id, detail.tabId);
+      syncWorkspaceDockActiveTabSideEffects(target);
+      setSubWindowTabId(detail.tabId);
+    };
+    window.addEventListener("omnipanel-workspace-dock-activate", handler);
+    return () => window.removeEventListener("omnipanel-workspace-dock-activate", handler);
+  }, [setActiveTabId, workspace]);
+
   const activeTabId = useMemo(
     () => resolveWorkspaceActiveTabId(workspace, tabs, rawActiveTabId),
     [workspace, tabs, rawActiveTabId],
@@ -148,14 +167,19 @@ export function WorkspacePreviewTaskBar() {
       if (subWindowTabId === tabId) {
         setSubWindowTabId(null);
       }
+      const tab = tabs.find((item) => item.id === tabId);
+      cleanupWorkspaceDockTerminalTab(tab);
       removeTab(workspace.id, workspace, tabId);
     },
-    [removeTab, subWindowTabId, workspace],
+    [removeTab, subWindowTabId, tabs, workspace],
   );
 
   return (
     <>
       <div className="workspace-preview-taskbar">
+        <div className="workspace-taskbar-strip__switcher drag-ignore">
+          <WorkspaceSwitcher placement="below" context="embedded" compact />
+        </div>
         <div className="workspace-preview-taskbar__panels" role="tablist">
           {tabs.length === 0 ? (
             <p className="workspace-preview-taskbar__empty">{t("shell.workspacePreview.noPanels")}</p>

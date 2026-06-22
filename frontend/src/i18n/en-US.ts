@@ -456,6 +456,8 @@ export const enUS: TranslationDict = {
     },
     workspacePopover: {
       title: "Workspaces",
+      home: "Home",
+      homeDesc: "Pinned dashboard",
       newWorkspace: "New workspace",
       namePlaceholder: "Workspace name",
       nameRequired: "Name is required",

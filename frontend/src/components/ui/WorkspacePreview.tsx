@@ -1,9 +1,8 @@
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { SidebarBottom } from "./SidebarBottom";
 import { WorkspacePreviewTaskBar } from "./WorkspacePreviewTaskBar";
 import { WorkspaceBottomHost } from "../workspace/WorkspaceBottomHost";
 import { useBottomPanelStore, useEmbeddedWorkspaceMode } from "../../stores/bottomPanelStore";
-import { useWorkspacePreviewCollapseStore } from "../../stores/workspacePreviewCollapseStore";
 import { relayoutDockviewInstances } from "../../lib/dockviewRegistry";
 import {
   WS_HEIGHT_HIDDEN_MAX,
@@ -82,23 +81,19 @@ function useWorkspacePreviewDockRelayout(
  * 显示模式由 `workspaceDisplayPreference` 用户偏好决定，持久化于 bottomPanelStore。
  */
 export function WorkspacePreview({ children, className }: WorkspacePreviewProps) {
-  const isPreviewOpen = useWorkspacePreviewCollapseStore((state) => state.isOpen);
   const workspaceMode = useBottomPanelStore((state) => state.workspaceMode);
   const isFullscreen = useBottomPanelStore((state) => state.isFullscreen);
-  const requestExpand = useBottomPanelStore((state) => state.requestExpand);
-  const requestCollapse = useBottomPanelStore((state) => state.requestCollapse);
   const embeddedMode = useEmbeddedWorkspaceMode();
+  /** 底部工作区是否展开：以 bottomPanelStore 为唯一来源，避免与 preview store 双向同步死循环 */
+  const isPreviewOpen =
+    !isFullscreen && workspaceMode !== "hidden" && embeddedMode !== "hidden";
   const workspaceDisplayPreference = useBottomPanelStore(
     (state) => state.workspaceDisplayPreference,
   );
 
   const displayMode = resolveDisplayMode(embeddedMode, workspaceDisplayPreference);
   const isPreviewCollapsed = !isPreviewOpen;
-  const isBottomPanelOpen =
-    isPreviewOpen &&
-    !isFullscreen &&
-    workspaceMode !== "hidden" &&
-    embeddedMode !== "hidden";
+  const isBottomPanelOpen = isPreviewOpen;
   const showSplitWindow = isBottomPanelOpen && displayMode === "split-window";
   const showTaskBar = isBottomPanelOpen && displayMode === "task-bar";
   const bottomStackRef = useRef<HTMLDivElement>(null);
@@ -107,9 +102,7 @@ export function WorkspacePreview({ children, className }: WorkspacePreviewProps)
 
   // 首次展开后保持底部子树挂载，避免反复 mount 触发 Windows 控制台闪现
   const [keepBottomMounted, setKeepBottomMounted] = useState(
-    () =>
-      useWorkspacePreviewCollapseStore.getState().isOpen &&
-      useBottomPanelStore.getState().workspaceMode !== "hidden",
+    () => useBottomPanelStore.getState().workspaceMode !== "hidden",
   );
 
   useEffect(() => {
@@ -117,18 +110,6 @@ export function WorkspacePreview({ children, className }: WorkspacePreviewProps)
       setKeepBottomMounted(true);
     }
   }, [isBottomPanelOpen]);
-
-  // 同步预览栏开关与 bottomPanelStore（layout 阶段执行，避免展开后首帧空白）
-  useLayoutEffect(() => {
-    if (isFullscreen) return;
-    if (!isPreviewOpen && workspaceMode !== "hidden") {
-      requestCollapse();
-      return;
-    }
-    if (isPreviewOpen && workspaceMode === "hidden") {
-      requestExpand();
-    }
-  }, [isPreviewOpen, isFullscreen, requestCollapse, requestExpand, workspaceMode]);
 
   const rootClass = [
     "workspace-preview",
@@ -139,23 +120,30 @@ export function WorkspacePreview({ children, className }: WorkspacePreviewProps)
     .filter(Boolean)
     .join(" ");
 
-  // 保持底部子树常驻，避免展开/收起时反复 mount 触发 Windows 控制台闪现等问题
-  const bottomPanel = keepBottomMounted ? (
-    <div ref={bottomStackRef} className="workspace-preview__bottom-stack">
-      <div
-        className="workspace-preview__dock"
-        data-visible={showSplitWindow ? "true" : "false"}
-        aria-hidden={!showSplitWindow}
-      >
-        <WorkspaceBottomHost />
-      </div>
-      <div
-        className="workspace-preview__taskbar-slot"
-        data-visible={showTaskBar ? "true" : "false"}
-        aria-hidden={!showTaskBar}
-      >
-        <WorkspacePreviewTaskBar />
-      </div>
+  // 全屏时底栏由 App 单独挂载；taskbar 模式仅渲染标签栏
+  const showBottomStack = keepBottomMounted && !isFullscreen;
+  const showEmbeddedDock = showBottomStack && showSplitWindow;
+
+  const bottomPanel = showBottomStack ? (
+    <div ref={showEmbeddedDock ? bottomStackRef : undefined} className="workspace-preview__bottom-stack">
+      {showEmbeddedDock ? (
+        <div
+          className="workspace-preview__dock"
+          data-visible="true"
+          aria-hidden={false}
+        >
+          <WorkspaceBottomHost />
+        </div>
+      ) : null}
+      {showTaskBar ? (
+        <div
+          className="workspace-preview__taskbar-slot"
+          data-visible="true"
+          aria-hidden={false}
+        >
+          <WorkspacePreviewTaskBar />
+        </div>
+      ) : null}
     </div>
   ) : (
     <div className="workspace-preview__bottom-stack workspace-preview__bottom-stack--placeholder" />
@@ -165,10 +153,8 @@ export function WorkspacePreview({ children, className }: WorkspacePreviewProps)
     <SidebarBottom
       className={rootClass}
       sidebar={bottomPanel}
-      bottomResizeLocked={showTaskBar}
-      sidebarMinPx={
-        showTaskBar ? WS_HEIGHT_TASKBAR_MAX : WS_HEIGHT_HIDDEN_MAX + 1
-      }
+      bottomResizeLocked={false}
+      sidebarMinPx={WS_HEIGHT_HIDDEN_MAX + 1}
     >
       <div className="workspace-preview__main">{children}</div>
     </SidebarBottom>
