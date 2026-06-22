@@ -9,7 +9,7 @@ import { Select } from "../../components/ui/Select";
 import { TableDataGrid } from "./TableDataGrid";
 import { SqlEditor } from "./SqlEditor";
 import { useI18n } from "../../i18n";
-import { createDefaultSqlTabState, NEW_ROW_KEY_PREFIX, PENDING_INSERT_ROW_KEY } from "./dbWorkspaceState";
+import { createDefaultSqlTabState, DEFAULT_QUERY_LIMIT, NEW_ROW_KEY_PREFIX, PENDING_INSERT_ROW_KEY, type SortState } from "./dbWorkspaceState";
 import { connectionHasTableSchemaChildren, isConnectionEnabled } from "./api";
 
 interface DbPanelSurfaceProps {
@@ -34,6 +34,14 @@ export const DbPanelSurface = memo(function DbPanelSurface({ tab }: DbPanelSurfa
   const tabDatabases = ws.getSqlTabDatabases(tab.id);
   const connectionForRun = ws.connectionForSqlTab(tab.id);
   const completionSchemas = ws.getSqlCompletionSchemas(tab.id);
+  const scopedSchemas = useMemo(() => {
+    if (!isPreviewTab || !preview?.tableName) return completionSchemas;
+    const tableName = preview.tableName;
+    return completionSchemas.map((db) => ({
+      ...db,
+      tables: db.tables.filter((t) => t.name === tableName),
+    }));
+  }, [completionSchemas, isPreviewTab, preview?.tableName]);
 
   const schemaKey =
     tabConn && tabState.database.trim()
@@ -109,6 +117,12 @@ export const DbPanelSurface = memo(function DbPanelSurface({ tab }: DbPanelSurfa
   const handlePreviewPageChange = useCallback(
     (page: number) => {
       ws.requestTabAction({ kind: "page", tabId: tab.id, page });
+    },
+    [ws.requestTabAction, tab.id],
+  );
+  const handlePreviewSortChange = useCallback(
+    (sort: SortState | null) => {
+      ws.requestTabAction({ kind: "sort", tabId: tab.id, sort });
     },
     [ws.requestTabAction, tab.id],
   );
@@ -280,7 +294,7 @@ export const DbPanelSurface = memo(function DbPanelSurface({ tab }: DbPanelSurfa
         }
         onRun={(sql) => void ws.runQuery(sql, tab.id)}
         onSave={() => void ws.saveSqlTab(tab.id)}
-        schemas={completionSchemas}
+        schemas={scopedSchemas}
       />
     </div>
   );
@@ -391,6 +405,9 @@ export const DbPanelSurface = memo(function DbPanelSurface({ tab }: DbPanelSurfa
             loading={false}
             columnMeta={colMeta}
             enableTranspose
+            enableSort
+            sort={preview.sort ?? null}
+            onSortChange={handlePreviewSortChange}
             toolbar={previewToolbar}
             onCellEdit={handlePreviewCellEdit}
             onRowEdit={handlePreviewRowEdit}
@@ -413,6 +430,11 @@ export const DbPanelSurface = memo(function DbPanelSurface({ tab }: DbPanelSurfa
           <span className="stat">
             Latency: <span className="stat-val">{tabState.elapsed ?? 0}ms</span>
           </span>
+          {rowCount >= DEFAULT_QUERY_LIMIT && (
+            <span className="stat db-exec-stats-truncated">
+              {t("database.results.truncated", { limit: DEFAULT_QUERY_LIMIT })}
+            </span>
+          )}
         </div>
       )}
     </div>

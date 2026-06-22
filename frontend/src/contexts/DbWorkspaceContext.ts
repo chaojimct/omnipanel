@@ -3,6 +3,7 @@ import type {
   SqlTabState,
   TablePreviewState,
   DbColumnMeta,
+  SortState,
 } from "../modules/database/dbWorkspaceState";
 import type { DbWorkspaceTab } from "../modules/database/workspaceTabs";
 import type { DbConnectionConfig } from "../modules/database/api";
@@ -12,9 +13,10 @@ import type { SqlEditorOpenMode } from "../modules/database/SqlEditor";
 import type { SchemaTableSelection } from "../modules/database/SchemaBrowser";
 
 export type DbTabAction = {
-  kind: "refresh" | "page" | "close";
+  kind: "refresh" | "page" | "close" | "sort";
   tabId: string;
   page?: number;
+  sort?: SortState | null;
 };
 
 export interface DbWorkspaceContextValue {
@@ -45,6 +47,8 @@ export interface DbWorkspaceContextValue {
     page: number,
   ) => void;
   requestTabAction: (action: DbTabAction) => void;
+  /** 直接设置表预览的排序状态并重新拉取首页数据。 */
+  setTableSort: (tabId: string, sort: SortState | null) => void;
   handleCellEdit: (
     tabId: string,
     cellInfo: { rowIndex: number; column: string; row: Record<string, unknown> },

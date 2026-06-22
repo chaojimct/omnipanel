@@ -52,11 +52,24 @@ impl DbDriver for PgDriver {
         run(&self.pool, sql).await
     }
 
-    async fn preview(&self, table: &str, limit: i64, offset: i64) -> OmniResult<QueryResult> {
+    async fn preview(
+        &self,
+        table: &str,
+        limit: i64,
+        offset: i64,
+        order_by: Option<&str>,
+    ) -> OmniResult<QueryResult> {
         let safe = table.replace('"', "");
+        let order_clause = match order_by {
+            Some(clause) if !clause.trim().is_empty() => {
+                format!(" ORDER BY {}", clause.trim())
+            }
+            _ => String::new(),
+        };
         let sql = format!(
-            "SELECT * FROM \"{}\" LIMIT {} OFFSET {}",
+            "SELECT * FROM \"{}\"{} LIMIT {} OFFSET {}",
             safe,
+            order_clause,
             limit.max(0),
             offset.max(0)
         );

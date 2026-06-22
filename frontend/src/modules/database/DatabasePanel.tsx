@@ -80,11 +80,14 @@ import { DatabaseToolbox } from "./toolbox/DatabaseToolbox";
 import {
   createDefaultSqlTabState,
   createDefaultTablePreviewState,
+  buildOrderByClause,
+  DEFAULT_QUERY_LIMIT,
   NEW_ROW_KEY_PREFIX,
   PENDING_INSERT_ROW_KEY,
   resolveSqlTabConnectionId,
   rowsToRecord,
   tabModeToEditorOpenMode,
+  type SortState,
   type SqlTabState,
   type TableDesignerTabState,
   type TablePreviewState,
@@ -703,6 +706,7 @@ export function DatabasePanel() {
           tableName: meta.tableName,
           page: meta.page,
           pageSize: meta.pageSize,
+          sort: meta.sort ?? null,
         };
       }
       setTablePreviews(restoredPreviews);
@@ -809,9 +813,11 @@ export function DatabasePanel() {
         })
         .catch(() => {});
 
+      const sort = meta.sort ?? null;
+      const orderBy = sort ? buildOrderByClause(sort, connection.db_type) : undefined;
       void Promise.all([
         countTable(connForSchema, meta.tableName, meta.dbName),
-        previewTable(connForSchema, meta.tableName, meta.pageSize, meta.page * meta.pageSize),
+        previewTable(connForSchema, meta.tableName, meta.pageSize, meta.page * meta.pageSize, orderBy),
       ])
         .then(([totalRows, data]) => {
           if (connection.db_type === "redis") {
@@ -833,6 +839,7 @@ export function DatabasePanel() {
               connId: meta.connId,
               dbName: meta.dbName,
               tableName: meta.tableName,
+              sort,
             },
           }));
         })
@@ -848,6 +855,7 @@ export function DatabasePanel() {
               tableName: meta.tableName,
               page: meta.page,
               pageSize: meta.pageSize,
+              sort,
             },
           }));
         });
@@ -1149,10 +1157,13 @@ export function DatabasePanel() {
         const existing = prev[tabId] ?? createDefaultTablePreviewState();
         const pageSize = existing.pageSize;
         const page = existing.page;
+        const orderBy = existing.sort
+          ? buildOrderByClause(existing.sort, connection.db_type)
+          : undefined;
 
         Promise.all([
           countTable(connForSchema, tableName, dbName),
-          previewTable(connForSchema, tableName, pageSize, page * pageSize),
+          previewTable(connForSchema, tableName, pageSize, page * pageSize, orderBy),
         ])
           .then(([totalRows, data]) => {
             setTablePreviews((p) => {
@@ -1183,8 +1194,11 @@ export function DatabasePanel() {
       setTablePreviews((prev) => {
         const existing = prev[tabId] ?? createDefaultTablePreviewState();
         const pageSize = existing.pageSize;
+        const orderBy = existing.sort
+          ? buildOrderByClause(existing.sort, connection.db_type)
+          : undefined;
 
-        previewTable(connForSchema, tableName, pageSize, page * pageSize)
+        previewTable(connForSchema, tableName, pageSize, page * pageSize, orderBy)
           .then((data) => {
             setTablePreviews((p) => {
               const cur = p[tabId];
@@ -1231,6 +1245,63 @@ export function DatabasePanel() {
       goToPage(tabId, preview.connId, preview.dbName, preview.tableName, page);
     },
     [tablePreviews, goToPage],
+  );
+
+  const setTableSort = useCallback(
+    (tabId: string, sort: SortState | null) => {
+      const preview = tablePreviews[tabId];
+      if (!preview?.connId || !preview?.dbName || !preview?.tableName) return;
+      const connection = connections.find((c) => c.id === preview.connId);
+      if (!connection) return;
+      const connForSchema = { ...connection, database: preview.dbName };
+
+      setTablePreviews((prev) => {
+        const existing = prev[tabId] ?? createDefaultTablePreviewState();
+        const pageSize = existing.pageSize;
+        const orderBy = sort ? buildOrderByClause(sort, connection.db_type) : undefined;
+
+        Promise.all([
+          countTable(connForSchema, preview.tableName!, preview.dbName!),
+          previewTable(connForSchema, preview.tableName!, pageSize, 0, orderBy),
+        ])
+          .then(([totalRows, data]) => {
+            setTablePreviews((p) => {
+              const cur = p[tabId];
+              if (!cur) return p;
+              return {
+                ...p,
+                [tabId]: {
+                  ...cur,
+                  loading: false,
+                  error: null,
+                  data,
+                  totalRows,
+                  page: 0,
+                  sort,
+                },
+              };
+            });
+          })
+          .catch((e) => {
+            setTablePreviews((p) => {
+              const cur = p[tabId];
+              if (!cur) return p;
+              return {
+                ...p,
+                [tabId]: {
+                  ...cur,
+                  loading: false,
+                  error: typeof e === "string" ? e : String(e),
+                  sort,
+                },
+              };
+            });
+          });
+
+        return { ...prev, [tabId]: { ...existing, loading: true, sort } };
+      });
+    },
+    [tablePreviews, connections],
   );
 
   const commitTabDirty = useCallback(
@@ -1510,6 +1581,7 @@ export function DatabasePanel() {
             tableName: meta.tableName,
             page: meta.page,
             pageSize: meta.pageSize,
+            sort: meta.sort ?? null,
           },
         }));
         const connection = connections.find((item) => item.id === meta.connId);
@@ -1541,20 +1613,22 @@ export function DatabasePanel() {
   );
 
   const executeTabAction = useCallback(
-    (action: { kind: "refresh" | "page" | "close"; tabId: string; page?: number }) => {
+    (action: { kind: "refresh" | "page" | "close" | "sort"; tabId: string; page?: number; sort?: SortState | null }) => {
       if (action.kind === "refresh") {
         refreshTabPreviewNow(action.tabId);
       } else if (action.kind === "page") {
         goToPageNow(action.tabId, action.page ?? 0);
+      } else if (action.kind === "sort") {
+        setTableSort(action.tabId, action.sort ?? null);
       } else {
         closeWorkspaceTab(action.tabId);
       }
     },
-    [refreshTabPreviewNow, goToPageNow, closeWorkspaceTab],
+    [refreshTabPreviewNow, goToPageNow, setTableSort, closeWorkspaceTab],
   );
 
   const requestTabAction = useCallback(
-    (action: { kind: "refresh" | "page" | "close"; tabId: string; page?: number }) => {
+    (action: { kind: "refresh" | "page" | "close" | "sort"; tabId: string; page?: number; sort?: SortState | null }) => {
       if (hasDirty(action.tabId)) {
         setPendingTabAction(action);
         return;
@@ -2527,6 +2601,8 @@ export function DatabasePanel() {
       const res = await invoke<QueryResult>("db_execute_query", {
         connection: conn,
         sql,
+        limit: DEFAULT_QUERY_LIMIT,
+        offset: 0,
       });
       updateSqlTabState(resolvedTabId, {
         result: res,
@@ -2670,6 +2746,7 @@ export function DatabasePanel() {
     refreshTablePreview,
     goToPage,
     requestTabAction,
+    setTableSort,
     handleCellEdit,
     handleRowEdit,
     handleCellSetNull,

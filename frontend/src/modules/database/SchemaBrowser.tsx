@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from "react";
 import { useI18n } from "../../i18n";
 import { Button } from "../../components/ui/Button";
-import { ScopedSearch } from "../../components/ui/ScopedSearch";
+import { ScopedSearch, type ScopedSearchHandle } from "../../components/ui/ScopedSearch";
 import {
   type DbConnectionConfig,
   connectionMatchesGroup,
@@ -420,6 +420,7 @@ export function SchemaBrowser({
   );
   const sidebarRef = useRef<HTMLDivElement>(null);
   const schemaTreeRef = useRef<HTMLDivElement>(null);
+  const scopedSearchRef = useRef<ScopedSearchHandle>(null);
   const connectionsRef = useRef(connections);
   const hydrateSchemaCache = useDbSchemaCacheStore((s) => s.hydrate);
   const replaceSchemaSnapshot = useDbSchemaCacheStore((s) => s.replaceSnapshot);
@@ -614,6 +615,21 @@ export function SchemaBrowser({
     }
   };
 
+  const handleTreeKeyDown = useCallback((e: ReactKeyboardEvent<HTMLDivElement>) => {
+    const target = e.target as HTMLElement | null;
+    if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) {
+      return;
+    }
+    if (e.ctrlKey || e.metaKey || e.altKey) {
+      return;
+    }
+    if (e.key.length !== 1) {
+      return;
+    }
+    e.preventDefault();
+    scopedSearchRef.current?.open(e.key);
+  }, []);
+
   const filtered = useMemo(() => {
     if (!search.trim()) {
       return connections;
@@ -745,13 +761,14 @@ export function SchemaBrowser({
     <div className="schema-browser" ref={sidebarRef}>
       {!section && toolbar}
       <ScopedSearch
+        ref={scopedSearchRef}
         className="schema-tree-scoped-search"
         value={search}
         onChange={setSearch}
         placeholder={t("database.sidebar.search")}
         enabled={filterDialogConnId === null && filterDialogTable === null}
       >
-        <div className="schema-tree" ref={schemaTreeRef} tabIndex={-1}>
+        <div className="schema-tree" ref={schemaTreeRef} tabIndex={-1} onKeyDown={handleTreeKeyDown}>
         {loading && (
           <div style={{ padding: "12px 16px", fontSize: "12px", color: "var(--text-secondary, #8e8e93)" }}>
             {t("common.loading")}

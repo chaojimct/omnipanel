@@ -1,7 +1,7 @@
-import { useCallback, useMemo, useState, type MouseEvent as ReactMouseEvent } from "react";
+import { useCallback, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from "react";
 import { useI18n } from "../../i18n";
 import { Button } from "../../components/ui/Button";
-import { ScopedSearch } from "../../components/ui/ScopedSearch";
+import { ScopedSearch, type ScopedSearchHandle } from "../../components/ui/ScopedSearch";
 import { ContextMenu } from "../../components/ui/ContextMenu";
 import { quickInput } from "../../lib/quickInput";
 import { textSearchMatches } from "../../lib/textSearchMatch";
@@ -142,6 +142,22 @@ export function SqlQueryFilePanel({ onOpenFile, section }: SqlQueryFilePanelProp
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set());
   const [activeFileId, setActiveFileId] = useState<string | null>(null);
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; node: DbSqlFileNode } | null>(null);
+  const scopedSearchRef = useRef<ScopedSearchHandle>(null);
+
+  const handleTreeKeyDown = useCallback((e: ReactKeyboardEvent<HTMLDivElement>) => {
+    const target = e.target as HTMLElement | null;
+    if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) {
+      return;
+    }
+    if (e.ctrlKey || e.metaKey || e.altKey) {
+      return;
+    }
+    if (e.key.length !== 1) {
+      return;
+    }
+    e.preventDefault();
+    scopedSearchRef.current?.open(e.key);
+  }, []);
 
   const toggleFolder = useCallback((id: string) => {
     setExpandedIds((prev) => {
@@ -229,12 +245,13 @@ export function SqlQueryFilePanel({ onOpenFile, section }: SqlQueryFilePanelProp
     <div className="sql-query-file-panel">
       {!section && toolbar}
       <ScopedSearch
+        ref={scopedSearchRef}
         className="sql-query-file-search"
         value={search}
         onChange={setSearch}
         placeholder={t("database.queryFiles.search")}
       >
-        <div className="sql-query-file-tree">
+        <div className="sql-query-file-tree" tabIndex={-1} onKeyDown={handleTreeKeyDown}>
           {rootCount === 0 ? (
             <div className="sql-query-file-empty">{t("database.queryFiles.empty")}</div>
           ) : (

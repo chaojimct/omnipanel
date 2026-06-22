@@ -1,4 +1,4 @@
-import type { SqlTabState, TableDesignerTabState, TablePreviewState } from "./dbWorkspaceState";
+import type { SqlTabState, SortState, TableDesignerTabState, TablePreviewState } from "./dbWorkspaceState";
 import type { DbWorkspaceTab } from "./workspaceTabs";
 import type { TableDesignerModel } from "./tableDesigner/types";
 
@@ -15,6 +15,7 @@ export interface DbTablePreviewMetaSnapshot {
   tableName: string;
   page: number;
   pageSize: number;
+  sort?: SortState | null;
 }
 
 export interface DbTableDesignerStateSnapshot {
@@ -157,6 +158,7 @@ export function buildWorkspaceSessionSnapshot(params: {
       tableName: preview.tableName,
       page: preview.page,
       pageSize: preview.pageSize,
+      sort: preview.sort ?? null,
     };
   }
 
@@ -234,6 +236,7 @@ export function buildClosedPanelEntry(params: {
       tableName: preview.tableName,
       page: preview.page,
       pageSize: preview.pageSize,
+      sort: preview.sort ?? null,
     };
   }
 

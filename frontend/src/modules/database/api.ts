@@ -288,8 +288,15 @@ export async function previewTable(
   table: string,
   limit = 200,
   offset = 0,
+  orderBy?: string,
 ): Promise<TablePreviewResult> {
-  return invoke<TablePreviewResult>("db_preview_table", { connection, table, limit, offset });
+  return invoke<TablePreviewResult>("db_preview_table", {
+    connection,
+    table,
+    limit,
+    offset,
+    orderBy,
+  });
 }
 
 export interface TableRowCount {

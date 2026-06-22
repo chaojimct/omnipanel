@@ -1,9 +1,11 @@
 import {
   createContext,
+  forwardRef,
   useCallback,
   useContext,
   useEffect,
   useId,
+  useImperativeHandle,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -30,6 +32,13 @@ export interface ScopedSearchProps {
   enabled?: boolean;
   children: ReactNode;
 }
+
+export type ScopedSearchHandle = {
+  /** 打开搜索框；传入 initialChar 时以该字符作为搜索词起始（光标定位到末尾），不传则沿用当前值并全选。 */
+  open: (initialChar?: string) => void;
+  /** 关闭搜索框并清空搜索词。 */
+  close: () => void;
+};
 
 interface ScopedSearchContextValue {
   query: string;
@@ -81,14 +90,14 @@ export function ScopedSearchText({ text, className }: ScopedSearchTextProps) {
  * 区域搜索：默认隐藏，在宿主区域内 hover / 聚焦时按 Ctrl+F（Mac: ⌘F）在右上方显示搜索框。
  * 搜索词非空时，自动在宿主内容区高亮匹配文本（Monaco 等编辑器区域除外）。
  */
-export function ScopedSearch({
+export const ScopedSearch = forwardRef<ScopedSearchHandle, ScopedSearchProps>(function ScopedSearch({
   value,
   onChange,
   placeholder,
   className,
   enabled = true,
   children,
-}: ScopedSearchProps) {
+}, ref) {
   const { t } = useI18n();
   const inputId = useId();
   const hostRef = useRef<HTMLDivElement>(null);
@@ -97,10 +106,12 @@ export function ScopedSearch({
   const [visible, setVisible] = useState(false);
   const enabledRef = useRef(enabled);
   const visibleRef = useRef(visible);
+  const valueRef = useRef(value);
   const applyingHighlightRef = useRef(false);
 
   enabledRef.current = enabled;
   visibleRef.current = visible;
+  valueRef.current = value;
 
   const contextValue = useMemo<ScopedSearchContextValue>(
     () => ({ query: value }),
@@ -127,6 +138,29 @@ export function ScopedSearch({
     setVisible(true);
     focusInput();
   }, [focusInput]);
+
+  useImperativeHandle(ref, () => ({
+    open: (initialChar?: string) => {
+      const wasVisible = visibleRef.current;
+      if (initialChar !== undefined) {
+        onChange(wasVisible ? valueRef.current + initialChar : initialChar);
+      }
+      setVisible(true);
+      requestAnimationFrame(() => {
+        const input = inputRef.current;
+        if (!input) {
+          return;
+        }
+        input.focus({ preventScroll: true });
+        const len = input.value.length;
+        input.setSelectionRange(len, len);
+      });
+    },
+    close: () => {
+      onChange("");
+      setVisible(false);
+    },
+  }), [onChange]);
 
   useEffect(() => {
     return registerScopedSearch({
@@ -241,4 +275,4 @@ export function ScopedSearch({
       </div>
     </ScopedSearchContext.Provider>
   );
-}
+});

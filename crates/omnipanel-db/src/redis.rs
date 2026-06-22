@@ -101,7 +101,13 @@ impl DbDriver for RedisDriver {
         to_query_result(value, name)
     }
 
-    async fn preview(&self, table: &str, limit: i64, _offset: i64) -> OmniResult<QueryResult> {
+    async fn preview(
+        &self,
+        table: &str,
+        limit: i64,
+        _offset: i64,
+        _order_by: Option<&str>,
+    ) -> OmniResult<QueryResult> {
         let mut conn = self.conn.clone();
         let key_type: String = redis::cmd("TYPE")
             .arg(table)

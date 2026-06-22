@@ -1112,12 +1112,13 @@ pub async fn db_preview_table(
     table: String,
     limit: u32,
     offset: u32,
+    order_by: Option<String>,
 ) -> Result<TableInfo, String> {
     let driver = omnipanel_db::connect(&to_params(&connection))
         .await
         .map_err(err_msg)?;
     let result = driver
-        .preview(&table, limit as i64, offset as i64)
+        .preview(&table, limit as i64, offset as i64, order_by.as_deref())
         .await
         .map_err(err_msg)?;
     Ok(to_table_info(table, result))
@@ -1167,15 +1168,26 @@ pub async fn db_count_tables(
 }
 
 /// 执行任意 SQL（SELECT 返回行集，DML 返回影响行数）。高风险写操作由前端经执行引擎确认后调用。
+/// `limit` / `offset` 非零时，SELECT/WITH 语句会被包裹为 `SELECT * FROM (...) LIMIT n OFFSET m`，防止超大结果集卡死前端。
 #[tauri::command]
 pub async fn db_execute_query(
     connection: DbConnectionConfig,
     sql: String,
+    limit: Option<u32>,
+    offset: Option<u32>,
 ) -> Result<QueryResult, String> {
+    let wrapped = match limit {
+        Some(n) if n > 0 => omnipanel_db::wrap_select_with_limit(
+            &sql,
+            n as i64,
+            offset.unwrap_or(0) as i64,
+        ),
+        _ => sql,
+    };
     let driver = omnipanel_db::connect(&to_params(&connection))
         .await
         .map_err(err_msg)?;
-    driver.execute(&sql).await.map_err(err_msg)
+    driver.execute(&wrapped).await.map_err(err_msg)
 }
 
 /// 将列式 QueryResult 转换为前端预览用的 TableInfo（行为 列名→值 的 map）。
