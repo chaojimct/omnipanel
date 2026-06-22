@@ -10,6 +10,13 @@ export type QueryResult = {
   rowsAffected: number;
 };
 
+export type SortDirection = "asc" | "desc";
+
+export type SortState = {
+  column: string;
+  direction: SortDirection;
+};
+
 export type TablePreviewState = {
   loading: boolean;
   error: string | null;
@@ -20,6 +27,7 @@ export type TablePreviewState = {
   connId?: string;
   dbName?: string;
   tableName?: string;
+  sort: SortState | null;
 };
 
 export type TableDesignerTabState = {
@@ -41,6 +49,8 @@ export type SqlTabState = {
 };
 
 export const DEFAULT_PAGE_SIZE = 100;
+/** SQL 编辑器执行查询时的默认行数上限（防止超大结果集卡死前端）。 */
+export const DEFAULT_QUERY_LIMIT = 1000;
 export const DEFAULT_SQL = `SELECT version();`;
 
 /** 未提交的新建行在 tabDirtyRows 中的 key 前缀 */
@@ -49,7 +59,22 @@ export const NEW_ROW_KEY_PREFIX = "__new__:";
 export const PENDING_INSERT_ROW_KEY = "__pendingRowKey";
 
 export function createDefaultTablePreviewState(): TablePreviewState {
-  return { loading: false, error: null, data: null, totalRows: 0, page: 0, pageSize: DEFAULT_PAGE_SIZE };
+  return { loading: false, error: null, data: null, totalRows: 0, page: 0, pageSize: DEFAULT_PAGE_SIZE, sort: null };
+}
+
+/**
+ * 按 db_type 转义列名引号，返回可直接拼入 `ORDER BY` 的子句（如 \`col\` ASC）。
+ * 仅用于本模块已通过 schema 反射拿到的列名；不接受外部输入以避免注入。
+ */
+export function buildOrderByClause(
+  sort: SortState,
+  dbType: string,
+): string {
+  const quote = dbType.toLowerCase() === "mysql" || dbType.toLowerCase() === "mariadb"
+    ? "`"
+    : '"';
+  const safe = sort.column.replace(quote, "");
+  return `${quote}${safe}${quote} ${sort.direction.toUpperCase()}`;
 }
 
 export function createDefaultSqlTabState(database = "", connId = ""): SqlTabState {

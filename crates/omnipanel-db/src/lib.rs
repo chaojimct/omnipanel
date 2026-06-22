@@ -48,8 +48,14 @@ pub trait DbDriver: Send + Sync {
     async fn list_tables(&self) -> OmniResult<Vec<String>>;
     /// 执行任意 SQL：SELECT 类返回行集，DML 返回影响行数。
     async fn execute(&self, sql: &str) -> OmniResult<QueryResult>;
-    /// 预览某张表前 N 行（支持偏移量）。
-    async fn preview(&self, table: &str, limit: i64, offset: i64) -> OmniResult<QueryResult>;
+    /// 预览某张表前 N 行（支持偏移量）。`order_by` 为已转义的 `ORDER BY` 子句（不含关键字），传 None 时不排序。
+    async fn preview(
+        &self,
+        table: &str,
+        limit: i64,
+        offset: i64,
+        order_by: Option<&str>,
+    ) -> OmniResult<QueryResult>;
     /// 查询某张表的总行数。
     async fn count(&self, table: &str) -> OmniResult<i64>;
 }
@@ -231,9 +237,48 @@ pub(crate) fn map_sqlx_err(err: sqlx::Error) -> OmniError {
     OmniError::database("数据库操作失败").with_cause(err.to_string())
 }
 
+/// 判断 SQL 语句是否可安全包裹为子查询（仅 SELECT / WITH / TABLE / VALUES）。
+/// SHOW / DESCRIBE / PRAGMA / EXPLAIN 等元数据查询不能作为子查询，跳过包裹。
+fn is_wrappable_select(sql: &str) -> bool {
+    let s = sql.trim_start().to_lowercase();
+    ["select", "with", "table", "values"]
+        .iter()
+        .any(|kw| s.starts_with(kw))
+}
+
+/// 将 SQL 中每条 SELECT/WITH 语句包裹为 `SELECT * FROM (...) AS __omnipanel_wrap__ LIMIT n OFFSET m`，
+/// 防止用户查询返回超大结果集导致前端卡死。非查询语句（DML）和不可包裹的元数据查询保持原样。
+///
+/// - `limit` ≤ 0 时不包裹，直接返回原始 SQL。
+/// - 已含 LIMIT 的查询包裹后仍正确（内层 LIMIT 先生效，外层 LIMIT 仅做兜底）。
+pub fn wrap_select_with_limit(sql: &str, limit: i64, offset: i64) -> String {
+    if limit <= 0 {
+        return sql.to_string();
+    }
+    let statements = split_statements(sql);
+    if statements.is_empty() {
+        return sql.to_string();
+    }
+    let off = offset.max(0);
+    let wrapped: Vec<String> = statements
+        .iter()
+        .map(|stmt| {
+            if is_wrappable_select(stmt) {
+                format!(
+                    "SELECT * FROM ({}) AS __omnipanel_wrap__ LIMIT {} OFFSET {}",
+                    stmt, limit, off
+                )
+            } else {
+                stmt.clone()
+            }
+        })
+        .collect();
+    wrapped.join("; ")
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{is_query, split_statements};
+    use super::{is_query, split_statements, wrap_select_with_limit};
 
     #[test]
     fn classifies_select_as_query() {
@@ -303,5 +348,33 @@ mod tests {
         let sql = ";;-- only comment\n;SELECT 1;/* c */;";
         let out = split_statements(sql);
         assert_eq!(out, vec!["SELECT 1".to_string()]);
+    }
+
+    #[test]
+    fn wrap_select_wraps_select_and_with() {
+        let out = wrap_select_with_limit("SELECT * FROM users", 1000, 0);
+        assert_eq!(
+            out,
+            "SELECT * FROM (SELECT * FROM users) AS __omnipanel_wrap__ LIMIT 1000 OFFSET 0"
+        );
+    }
+
+    #[test]
+    fn wrap_select_preserves_dml() {
+        let out = wrap_select_with_limit("INSERT INTO t VALUES (1); SELECT 1", 100, 0);
+        assert!(out.contains("INSERT INTO t VALUES (1)"));
+        assert!(out.contains("SELECT * FROM (SELECT 1) AS __omnipanel_wrap__ LIMIT 100 OFFSET 0"));
+    }
+
+    #[test]
+    fn wrap_select_skips_show_and_describe() {
+        let out = wrap_select_with_limit("SHOW TABLES", 1000, 0);
+        assert_eq!(out, "SHOW TABLES");
+    }
+
+    #[test]
+    fn wrap_select_noop_when_limit_zero() {
+        let out = wrap_select_with_limit("SELECT * FROM t", 0, 0);
+        assert_eq!(out, "SELECT * FROM t");
     }
 }

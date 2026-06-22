@@ -3113,6 +3113,65 @@
         box-sizing: border-box;
     }
 
+    .db-data-table-th--sortable {
+        user-select: none;
+    }
+
+    .db-data-table-th--selectable {
+        cursor: pointer;
+        user-select: none;
+    }
+
+    .db-data-table-th--select-all {
+        cursor: pointer;
+        user-select: none;
+    }
+
+    .db-data-table-th--select-all:hover {
+        background: color-mix(in srgb, var(--accent) 8%, transparent);
+    }
+
+    .db-data-table-th--selectable:hover {
+        background: var(--hover, rgba(0, 0, 0, 0.04));
+        color: var(--text);
+    }
+
+    .db-data-table-th--sort-asc,
+    .db-data-table-th--sort-desc {
+        color: var(--accent);
+        background: var(--accent-soft, rgba(0, 122, 255, 0.06));
+    }
+
+    .db-data-table-th-inner {
+        display: inline-flex;
+        align-items: center;
+        width: 100%;
+        overflow: hidden;
+    }
+
+    .db-data-table-th-label {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        flex: 1 1 auto;
+        min-width: 0;
+    }
+
+    .db-data-table-sort-indicator {
+        display: inline-flex;
+        align-items: center;
+        margin-left: auto;
+        padding-left: 4px;
+        flex-shrink: 0;
+        opacity: 0.45;
+        cursor: pointer;
+    }
+
+    .db-data-table-sort-indicator:hover,
+    .db-data-table-sort-indicator--active {
+        opacity: 1;
+    }
+
     .db-data-table td {
         box-sizing: border-box;
     }
@@ -3176,6 +3235,59 @@
         font-weight: 600;
     }
 
+    .db-data-table-cell--selected {
+        box-shadow: inset 0 0 0 1px var(--accent);
+        background: color-mix(in srgb, var(--accent) 10%, transparent);
+    }
+
+    .db-data-table-cell--selected.db-data-table-cell--dirty {
+        box-shadow: inset 0 0 0 1px var(--accent), inset 0 0 0 2px color-mix(in srgb, var(--warn) 55%, transparent);
+    }
+
+    .db-row-num-header,
+    .db-data-table-cell--rownum {
+        user-select: none;
+        text-align: center;
+    }
+
+    .db-row-num-header {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        color: var(--text-secondary);
+        font-size: 0.75rem;
+    }
+
+    .db-row-num-cell {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        height: 100%;
+        min-height: 28px;
+        cursor: pointer;
+        color: var(--text-secondary);
+        font-size: 0.75rem;
+        font-variant-numeric: tabular-nums;
+        border-radius: var(--radius-sm, 3px);
+        transition: background 0.1s, color 0.1s;
+    }
+
+    .db-row-num-cell:hover {
+        background: color-mix(in srgb, var(--accent) 14%, transparent);
+        color: var(--accent);
+    }
+
+    .db-data-table-cell--rownum {
+        padding: 0 !important;
+        vertical-align: middle;
+    }
+
+    .db-data-table-cell--selected.db-data-table-cell--rownum {
+        background: color-mix(in srgb, var(--accent) 8%, transparent);
+    }
+
     .db-data-table-cell--custom-h {
         white-space: pre-wrap;
         word-break: break-word;
@@ -3232,6 +3344,128 @@
 
     .db-transpose-toggle {
         flex-shrink: 0;
+    }
+
+    .db-col-visibility-toggle {
+        flex-shrink: 0;
+    }
+
+    .db-col-visibility-popover {
+        position: fixed;
+        z-index: 10050;
+        min-width: 220px;
+        max-width: 320px;
+        max-height: 360px;
+        display: flex;
+        flex-direction: column;
+        background: var(--bg-elevated, var(--bg-deeper));
+        border: 1px solid var(--border);
+        border-radius: var(--radius, 6px);
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+        font-size: 12px;
+        color: var(--text);
+    }
+
+    .db-col-visibility-popover-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--sp-2);
+        padding: var(--sp-2) var(--sp-3);
+        border-bottom: 1px solid var(--border);
+    }
+
+    .db-col-visibility-popover-title {
+        font-weight: 600;
+        color: var(--text);
+    }
+
+    .db-col-visibility-popover-count {
+        color: var(--meta);
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+    }
+
+    .db-col-visibility-popover-toolbar {
+        display: flex;
+        gap: var(--sp-1);
+        padding: var(--sp-2) var(--sp-3);
+        border-bottom: 1px solid var(--border);
+    }
+
+    .db-col-visibility-popover-search {
+        position: relative;
+        padding: var(--sp-2) var(--sp-3);
+        border-bottom: 1px solid var(--border);
+    }
+
+    .db-col-visibility-popover-search-icon {
+        position: absolute;
+        left: calc(var(--sp-3) + 2px);
+        top: 50%;
+        transform: translateY(-50%);
+        color: var(--meta);
+        pointer-events: none;
+    }
+
+    .db-col-visibility-popover-search-input {
+        width: 100%;
+        padding: 4px 6px 4px 24px;
+        font-size: 12px;
+        background: var(--bg-input, var(--bg));
+        border: 1px solid var(--border);
+        border-radius: var(--radius, 4px);
+        color: var(--text);
+    }
+
+    .db-col-visibility-popover-list {
+        list-style: none;
+        margin: 0;
+        padding: var(--sp-1) 0;
+        overflow-y: auto;
+        flex: 1;
+    }
+
+    .db-col-visibility-popover-item {
+        display: flex;
+        align-items: center;
+        gap: var(--sp-2);
+        padding: 4px var(--sp-3);
+        cursor: pointer;
+    }
+
+    .db-col-visibility-popover-item:hover {
+        background: var(--hover, rgba(0, 0, 0, 0.04));
+    }
+
+    .db-col-visibility-popover-item input[type="checkbox"] {
+        margin: 0;
+        flex-shrink: 0;
+    }
+
+    .db-col-visibility-popover-item-name {
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .db-col-visibility-popover-empty {
+        padding: var(--sp-3);
+        color: var(--meta);
+        text-align: center;
+    }
+
+    .db-data-table-all-hidden {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex: 1;
+        padding: var(--sp-4);
+        color: var(--meta);
+        font-size: 12px;
+        text-align: center;
     }
 
     .db-data-table-wrap--transposed .db-data-table-cell--field,
@@ -4082,6 +4316,11 @@
     .exec-stats .stat-val {
         color: var(--fg-2);
         font-weight: 500;
+    }
+
+    .db-exec-stats-truncated {
+        color: var(--color-warning, #cc8800);
+        font-style: italic;
     }
 
     .db-ai-panel {
