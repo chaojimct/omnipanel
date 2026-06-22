@@ -3,6 +3,8 @@ import type { DockviewApi, DockviewDidDropEvent, DockviewWillDropEvent } from "d
 export interface DockviewInstanceScope {
   scope: string;
   api: DockviewApi;
+  /** 返回 dockview 根节点，用于测量 layout 尺寸 */
+  getContainer?: () => HTMLElement | null;
   /** panel 被拖离本 dock 时回调（仅从布局移除，不销毁业务数据） */
   onPanelTransferredOut?: (panelId: string) => void;
 }
@@ -20,6 +22,42 @@ type TransferListener = (meta: TransferredPanelMeta) => void;
 const instancesByViewId = new Map<string, DockviewInstanceScope>();
 const scopeByViewId = new Map<string, string>();
 const transferListeners = new Set<TransferListener>();
+
+/** 容器尺寸变化后触发布局刷新（折叠/展开后 dockview 需重算） */
+export function relayoutDockviewInstances(
+  scopePrefix?: string,
+  size?: { width: number; height: number },
+): void {
+  for (const instance of instancesByViewId.values()) {
+    if (scopePrefix && !instance.scope.startsWith(scopePrefix)) continue;
+    try {
+      const api = instance.api as DockviewApi & {
+        layout?: (width: number, height: number, force?: boolean) => void;
+        element?: HTMLElement;
+      };
+      const container =
+        instance.getContainer?.() ??
+        (api.element?.closest(".dockable-workspace__dockview") as HTMLElement | null) ??
+        api.element ??
+        null;
+      const measured = container?.getBoundingClientRect();
+      const width = Math.round(
+        (measured && measured.width > 0 ? measured.width : size?.width) ?? 0,
+      );
+      const height = Math.round(
+        (measured && measured.height > 0 ? measured.height : size?.height) ?? 0,
+      );
+
+      if (typeof api.layout === "function" && width > 0 && height > 0) {
+        api.layout(width, height, true);
+      } else {
+        window.dispatchEvent(new Event("resize"));
+      }
+    } catch {
+      // teardown 或 transient 状态下 layout 可能失败，忽略
+    }
+  }
+}
 
 export function registerDockviewInstance(
   viewId: string,

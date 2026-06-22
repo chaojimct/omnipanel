@@ -1,9 +1,17 @@
-import type { ReactNode } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { Modal } from "./Modal";
 import { Button } from "./Button";
 import { FormDialogClipboardBar } from "./FormDialogClipboardBar";
 import { useI18n } from "../../i18n";
 import type { ClipboardSnapshot } from "../../lib/readLatestClipboard";
+import {
+  formFillInputFromClipboard,
+  resolveFormFillModelConfig,
+  runFormFillSimpleAI,
+  type FormFillFieldDef,
+  type FormFillValue,
+} from "../ai/simple/formFill";
+import { useAiModelsStore } from "../../stores/aiModelsStore";
 
 export { FormField, type FormFieldProps } from "./FormField";
 
@@ -50,7 +58,12 @@ export interface FormDialogProps {
   primaryAction?: FormDialogAction;
   /** 顶部剪贴板 AI 识别栏，默认开启 */
   clipboardAssist?: boolean;
-  onClipboardRecognize?: (snapshot: ClipboardSnapshot | null) => void;
+  onClipboardRecognize?: (snapshot: ClipboardSnapshot | null) => void | Promise<void>;
+  /** AI 识别目标字段；与 onAiFill 一起使用时点击「AI识别」会填充表单 */
+  aiFillFields?: FormFillFieldDef[];
+  onAiFill?: (values: Record<string, FormFillValue>) => void;
+  aiFillContext?: string;
+  aiModelSelectionId?: string | null;
 }
 
 function renderAction(action: FormDialogAction, fallbackKey: string) {
@@ -91,8 +104,71 @@ export function FormDialog({
   primaryAction,
   clipboardAssist = true,
   onClipboardRecognize,
+  aiFillFields,
+  onAiFill,
+  aiFillContext,
+  aiModelSelectionId,
 }: FormDialogProps) {
   const { t } = useI18n();
+  const providers = useAiModelsStore((s) => s.providers);
+  const [aiRecognizing, setAiRecognizing] = useState(false);
+  const [clipboardStatus, setClipboardStatus] = useState<{
+    kind: FormDialogStatusKind;
+    message: string;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!open) {
+      setClipboardStatus(null);
+      setAiRecognizing(false);
+    }
+  }, [open]);
+
+  const handleClipboardRecognize = useCallback(
+    async (snapshot: ClipboardSnapshot | null) => {
+      await onClipboardRecognize?.(snapshot);
+
+      if (!aiFillFields?.length || !onAiFill) {
+        return;
+      }
+
+      const input = formFillInputFromClipboard(snapshot, aiFillFields, aiFillContext);
+      if (!input) {
+        setClipboardStatus({ kind: "error", message: t("formDialog.clipboard.emptyClipboard") });
+        return;
+      }
+
+      const modelConfig = resolveFormFillModelConfig(providers, aiModelSelectionId);
+      if (!modelConfig) {
+        setClipboardStatus({ kind: "error", message: t("formDialog.clipboard.noModel") });
+        return;
+      }
+
+      setAiRecognizing(true);
+      setClipboardStatus({ kind: "info", message: t("formDialog.clipboard.recognizing") });
+      try {
+        const result = await runFormFillSimpleAI(modelConfig, input);
+        onAiFill(result.values);
+        setClipboardStatus({ kind: "success", message: t("formDialog.clipboard.recognizeSuccess") });
+      } catch (error) {
+        setClipboardStatus({
+          kind: "error",
+          message: t("formDialog.clipboard.recognizeFailed", { error: String(error) }),
+        });
+      } finally {
+        setAiRecognizing(false);
+      }
+    },
+    [
+      aiFillContext,
+      aiFillFields,
+      aiModelSelectionId,
+      onAiFill,
+      onClipboardRecognize,
+      providers,
+      t,
+    ],
+  );
 
   if (!open) {
     return null;
@@ -101,13 +177,14 @@ export function FormDialog({
   const handleCancel = onCancel ?? onClose;
   const showCancel = cancelLabel !== false;
   const resolvedCancelLabel = cancelLabel === undefined ? t("common.cancel") : cancelLabel;
+  const resolvedStatus = clipboardStatus ?? status;
 
   const dialogClass = ["modal-dialog", "form-dialog", `form-dialog--${size}`, className]
     .filter(Boolean)
     .join(" ");
 
   const defaultFooter =
-    showCancel || status || (actions && actions.length > 0) || primaryAction ? (
+    showCancel || resolvedStatus || (actions && actions.length > 0) || primaryAction ? (
       <div className="modal-footer">
         {showCancel && (
           <Button
@@ -115,23 +192,33 @@ export function FormDialog({
             variant={cancelVariant}
             size="sm"
             onClick={handleCancel}
-            disabled={cancelDisabled}
+            disabled={cancelDisabled || aiRecognizing}
           >
             {resolvedCancelLabel}
           </Button>
         )}
-        {status ? (
+        {resolvedStatus ? (
           <span
-            className={`modal-footer-status modal-footer-status--${status.kind}`}
-            title={status.message}
+            className={`modal-footer-status modal-footer-status--${resolvedStatus.kind}`}
+            title={resolvedStatus.message}
           >
-            {status.message}
+            {resolvedStatus.message}
           </span>
         ) : (
           <div className="modal-footer-spacer" />
         )}
-        {actions?.map((action, index) => renderAction(action, `action-${index}`))}
-        {primaryAction && renderAction({ ...primaryAction, variant: primaryAction.variant ?? "default" }, "primary")}
+        {actions?.map((action, index) =>
+          renderAction({ ...action, disabled: action.disabled || aiRecognizing }, `action-${index}`),
+        )}
+        {primaryAction &&
+          renderAction(
+            {
+              ...primaryAction,
+              variant: primaryAction.variant ?? "default",
+              disabled: primaryAction.disabled || aiRecognizing,
+            },
+            "primary",
+          )}
       </div>
     ) : null;
 
@@ -153,9 +240,9 @@ export function FormDialog({
             <Button
               type="button"
               variant="ghost"
-              size="icon"
+              size="icon-sm"
               onClick={onClose}
-              disabled={closeDisabled}
+              disabled={closeDisabled || aiRecognizing}
               aria-label={t("shell.topbar.close")}
             >
               {CLOSE_ICON}
@@ -164,7 +251,11 @@ export function FormDialog({
         </div>
 
         {clipboardAssist ? (
-          <FormDialogClipboardBar open={open} onRecognize={onClipboardRecognize} />
+          <FormDialogClipboardBar
+            open={open}
+            onRecognize={handleClipboardRecognize}
+            recognizing={aiRecognizing}
+          />
         ) : null}
 
         {beforeBody}

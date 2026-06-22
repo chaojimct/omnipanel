@@ -1,44 +1,28 @@
 import type { NavigateFunction } from "react-router-dom";
-import { defaultWorkspaceBuiltinActiveTabId } from "./workspaceBuiltinPanels";
 import { useBottomPanelStore } from "../stores/bottomPanelStore";
 import { DEFAULT_WORKSPACE, useWorkspaceStore } from "../stores/workspaceStore";
-import { useWorkspaceBottomDockStore } from "../stores/workspaceBottomDockStore";
-import { WORKSPACE_PATHS } from "./paths";
-import { workspaceAddDebug } from "./workspaceAddDebug";
+import { DASHBOARD_PATH, WORKSPACE_PATHS } from "./paths";
 
-/** 进入默认工作区看板（主内容区路由，非底部全屏） */
+/** 进入看板首页（/dashboard） */
 export function goWorkspaceHome(): void {
-  const workspaceId = DEFAULT_WORKSPACE.id;
-  useWorkspaceStore.getState().switchWorkspace(workspaceId);
-  useWorkspaceBottomDockStore.getState().ensureWorkspaceData(workspaceId, DEFAULT_WORKSPACE);
-  useWorkspaceBottomDockStore
-    .getState()
-    .setActiveTabId(workspaceId, defaultWorkspaceBuiltinActiveTabId(workspaceId));
+  useWorkspaceStore.getState().switchWorkspace(DEFAULT_WORKSPACE.id);
   useBottomPanelStore.getState().leaveFullscreenForFeature();
   window.dispatchEvent(
     new CustomEvent("omnipanel-navigate", {
-      detail: { path: WORKSPACE_PATHS.dashboard(workspaceId) },
+      detail: { path: DASHBOARD_PATH },
     }),
   );
 }
 
 /** 切换到指定工程工作区（URL 驱动，退出全屏但不进入工程全屏） */
 export function navigateToWorkspace(id: string): void {
-  workspaceAddDebug("navigateToWorkspace", {
-    id,
-    pathnameBefore: typeof window !== "undefined" ? window.location.pathname : null,
-    currentWorkspaceId: useWorkspaceStore.getState().workspace.id,
-  });
   useWorkspaceStore.getState().switchWorkspace(id);
   useBottomPanelStore.getState().leaveFullscreenForFeature();
   window.dispatchEvent(
     new CustomEvent("omnipanel-navigate", {
-      detail: { path: WORKSPACE_PATHS.dashboard(id) },
+      detail: { path: WORKSPACE_PATHS.detail(id) },
     }),
   );
-  workspaceAddDebug("navigateToWorkspace:dispatched", {
-    path: WORKSPACE_PATHS.dashboard(id),
-  });
 }
 
 /** 从全屏工作区离开并恢复上次记住的非全屏嵌入形态 */

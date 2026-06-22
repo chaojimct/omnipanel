@@ -19,7 +19,7 @@ export function DockLayout({
   return (
     <Group
       orientation={direction}
-      className={`dock-layout${className ? ` ${className}` : ""}`}
+      className={`dock-layout dock-layout--${direction}${className ? ` ${className}` : ""}`}
       onLayoutChange={onLayoutChange}
       onLayoutChanged={onLayoutChanged}
     >

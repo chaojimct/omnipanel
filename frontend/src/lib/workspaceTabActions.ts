@@ -14,7 +14,6 @@ import { navigateToWorkspace } from "./workspaceNavigation";
 import { useTerminalStore } from "../stores/terminalStore";
 import type { TerminalTab } from "../stores/terminalStore";
 import type { DbWorkspaceTab } from "../modules/database/workspaceTabs";
-import { workspaceAddDebug } from "./workspaceAddDebug";
 import {
   buildComponentSnapshot,
   type ComponentSnapshot,
@@ -80,7 +79,7 @@ export function payloadDockTabId(snapshot: WorkspaceTabSnapshot): string {
 
 function isViewingWorkspaceDetail(workspaceId: string): boolean {
   if (typeof window === "undefined") return false;
-  return window.location.pathname === WORKSPACE_PATHS.dashboard(workspaceId);
+  return window.location.pathname === WORKSPACE_PATHS.detail(workspaceId);
 }
 
 /** 确保终端 store 中存在快照对应的 Tab，供工作区 payload 渲染 */
@@ -120,35 +119,13 @@ export function addSnapshotToWorkspace(
   snapshot: WorkspaceTabSnapshot,
   options?: { activate?: boolean },
 ): void {
-  workspaceAddDebug("addSnapshotToWorkspace:enter", {
-    workspaceId,
-    snapshotModule: snapshot.module,
-    snapshotId: snapshot.id,
-    snapshotLabel: snapshot.label,
-    pathname: typeof window !== "undefined" ? window.location.pathname : null,
-    options,
-  });
-
   const workspace = resolveWorkspaceInfo(workspaceId);
   if (!workspace) {
-    workspaceAddDebug("addSnapshotToWorkspace:abort", {
-      reason: "workspace_not_found",
-      workspaceId,
-      knownWorkspaces: useWorkspaceStore.getState().workspaces.map((ws) => ws.id),
-    });
     return;
   }
 
   const dockStore = useWorkspaceBottomDockStore.getState();
-  const tabsBefore = dockStore.tabsByWorkspace[workspaceId]?.map((t) => t.id) ?? [];
   dockStore.ensureWorkspaceData(workspaceId, workspace);
-  const tabsAfterEnsure = useWorkspaceBottomDockStore.getState().tabsByWorkspace[workspaceId]?.map((t) => t.id) ?? [];
-  if (tabsAfterEnsure.join("|") !== tabsBefore.join("|")) {
-    workspaceAddDebug("addSnapshotToWorkspace:ensureWorkspaceData_changed_tabs", {
-      tabsBefore,
-      tabsAfterEnsure,
-    });
-  }
 
   const payloadId = payloadDockTabId(snapshot);
   dockStore.addPayloadTab(workspaceId, workspace, {
@@ -163,31 +140,14 @@ export function addSnapshotToWorkspace(
           : snapshot.module,
   });
 
-  const after = useWorkspaceBottomDockStore.getState();
-  const tabsAfter = after.tabsByWorkspace[workspaceId]?.map((t) => t.id) ?? [];
-  const activeTab = after.activeTabByWorkspace[workspaceId] ?? null;
-  workspaceAddDebug("addSnapshotToWorkspace:after_addPayloadTab", {
-    payloadId,
-    tabsAfter,
-    activeTab,
-    tabAdded: tabsAfter.includes(payloadId),
-  });
-
   if (options?.activate === false) {
-    workspaceAddDebug("addSnapshotToWorkspace:skip_navigate", { reason: "activate_false" });
     return;
   }
 
-  const onWorkspaceDetail = isViewingWorkspaceDetail(workspaceId);
-  if (onWorkspaceDetail) {
-    workspaceAddDebug("addSnapshotToWorkspace:skip_navigate", {
-      reason: "already_on_workspace_detail",
-      pathname: window.location.pathname,
-    });
+  if (isViewingWorkspaceDetail(workspaceId)) {
     return;
   }
 
-  workspaceAddDebug("addSnapshotToWorkspace:navigate", { workspaceId });
   navigateToWorkspace(workspaceId);
 }
 
@@ -198,12 +158,6 @@ export function addModuleRouteToWorkspace(
   label: string,
   options?: { segmentTabId?: string; activate?: boolean },
 ): void {
-  workspaceAddDebug("addModuleRouteToWorkspace:enter", {
-    workspaceId,
-    moduleKey,
-    label,
-    segmentTabId: options?.segmentTabId,
-  });
   addSnapshotToWorkspace(
     workspaceId,
     buildModuleRouteSnapshot(moduleKey, label, {
@@ -226,10 +180,6 @@ export function addComponentToWorkspace(
 ): void {
   const def = getWorkspaceComponentDefinition(workspaceComponentRegistry, input.componentType);
   if (!def) {
-    workspaceAddDebug("addComponentToWorkspace:abort", {
-      reason: "unknown_component_type",
-      componentType: input.componentType,
-    });
     return;
   }
   const snapshot: ComponentSnapshot = buildComponentSnapshot({
@@ -237,11 +187,6 @@ export function addComponentToWorkspace(
     label: input.label || def.defaultLabel || input.componentType,
     props: input.props,
     snapshotId: input.snapshotId,
-  });
-  workspaceAddDebug("addComponentToWorkspace:enter", {
-    workspaceId,
-    componentType: input.componentType,
-    snapshotId: snapshot.id,
   });
   addSnapshotToWorkspace(workspaceId, snapshot, options);
 }

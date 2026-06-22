@@ -8,10 +8,9 @@ import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { useI18n } from "../../i18n";
 import { AppLogo } from "../ui/AppLogo";
 import { goWorkspaceHome, navigateToFeature } from "../../lib/workspaceNavigation";
-import { isWorkspacePath, MODULE_PATHS } from "../../lib/paths";
+import { isDashboardPath, isWorkspacePath, MODULE_PATHS } from "../../lib/paths";
 import { moduleKeyFromPath, moduleNavI18nKey } from "../../lib/workspaceModuleRoutes";
 import { addModuleRouteToWorkspace } from "../../lib/workspaceTabActions";
-import { workspaceAddDebug } from "../../lib/workspaceAddDebug";
 
 const navPaths = [
   {
@@ -119,9 +118,9 @@ export function Sidebar() {
   const location = useLocation();
   const workspaceId = useWorkspaceStore((s) => s.workspace.id);
   const isBottomFullscreen = useBottomPanelStore((s) => s.isFullscreen);
-  /** 工作区全屏或位于工作区路由时高亮左上角入口 */
+  /** 看板或工作区全屏时高亮左上角入口 */
   const isWorkspaceHome =
-    isWorkspacePath(location.pathname) || isBottomFullscreen;
+    isDashboardPath(location.pathname) || isBottomFullscreen;
   const drawerOpen = useAiStore((s) => s.drawerOpen);
   const settingsOpen = useSettingsUiStore((s) => s.open);
   const openSettings = useSettingsUiStore((s) => s.openSettings);
@@ -141,18 +140,12 @@ export function Sidebar() {
     if (event.ctrlKey || event.metaKey) {
       event.preventDefault();
       const moduleKey = moduleKeyFromPath(path);
-      workspaceAddDebug("sidebar:ctrl_click", {
-        path,
-        moduleKey,
-        workspaceId,
-        ctrlKey: event.ctrlKey,
-        metaKey: event.metaKey,
-      });
       if (!moduleKey) {
-        workspaceAddDebug("sidebar:ctrl_click:abort", { reason: "unknown_module_path", path });
         return;
       }
-      addModuleRouteToWorkspace(workspaceId, moduleKey, t(moduleNavI18nKey(moduleKey)));
+      addModuleRouteToWorkspace(workspaceId, moduleKey, t(moduleNavI18nKey(moduleKey)), {
+        activate: false,
+      });
       return;
     }
     go(path);

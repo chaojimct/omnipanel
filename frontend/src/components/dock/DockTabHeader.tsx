@@ -29,8 +29,8 @@ export function DockTabHeader({
 }: DockTabHeaderProps) {
   const tabId = props.params?.tabId ?? props.api.id;
   const liveMeta = useDockTabLiveMeta(tabId);
-  const label = props.params?.label ?? tabId;
-  const icon = props.params?.icon;
+  const label = liveMeta.label ?? props.params?.label ?? tabId;
+  const icon = liveMeta.icon ?? props.params?.icon;
   const tooltip = props.params?.tooltip ?? label;
   const pageType: DockTabPageType | undefined =
     liveMeta.type ?? props.params?.type;

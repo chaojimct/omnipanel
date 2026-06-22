@@ -1,5 +1,6 @@
 import { useCallback } from "react";
 import { useSettingsStore, type Locale } from "../stores/settingsStore";
+import { DASHBOARD_PATH } from "../lib/paths";
 import { zhCN, type TranslationDict } from "./zh-CN";
 import { enUS } from "./en-US";
 
@@ -59,7 +60,8 @@ export function getResourceTypeLabel(type: keyof TranslationDict["resourceType"]
 
 export function getRouteTitle(path: string, locale?: Locale) {
   const map: Record<string, Path> = {
-    "/": "routes.workspace",
+    "/": "routes.dashboard",
+    [DASHBOARD_PATH]: "routes.dashboard",
     "/terminal": "routes.terminal",
     "/database": "routes.database",
     "/docker": "routes.docker",

@@ -1,4 +1,4 @@
-import type { MouseEvent, PointerEvent } from "react";
+import { createContext, useContext, type MouseEvent, type PointerEvent } from "react";
 import type { DockableTab } from "./dockableTab";
 
 export interface DockTabHeaderRuntime {
@@ -12,12 +12,10 @@ export interface DockTabHeaderRuntime {
   onCtrlCopyTabRef: { current: ((tabId: string) => void) | undefined };
 }
 
-let runtime: DockTabHeaderRuntime | null = null;
+export const DockTabHeaderRuntimeContext = createContext<DockTabHeaderRuntime | null>(
+  null,
+);
 
-export function registerDockTabHeaderRuntime(next: DockTabHeaderRuntime): void {
-  runtime = next;
-}
-
-export function getDockTabHeaderRuntime(): DockTabHeaderRuntime | null {
-  return runtime;
+export function useDockTabHeaderRuntime(): DockTabHeaderRuntime | null {
+  return useContext(DockTabHeaderRuntimeContext);
 }

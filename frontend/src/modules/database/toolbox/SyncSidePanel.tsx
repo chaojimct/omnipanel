@@ -48,6 +48,10 @@ interface SyncSidePanelProps {
   schemaTableDiffs?: Record<string, SchemaTableDiff>;
   /** 数据同步：逐条比对结果（行级 diff） */
   tableAnalysis?: Record<string, DataAnalysisResult>;
+  /** 当前打开冲突详情的表名（用于 tag 高亮） */
+  conflictDetailTable?: string | null;
+  /** 点击冲突 / 差异 tag 时打开详情 */
+  onViewConflictDetail?: (tableName: string) => void;
 }
 
 function TableSelectCheckbox({
@@ -119,7 +123,6 @@ function ConnectionDatabaseFilters({
         onChange={onConnectionChange}
         disabled={connections.length === 0}
         title={t("database.toolbox.side.connection")}
-        searchable={false}
         placeholder={t("database.toolbox.side.noConnection")}
         options={
           connections.length === 0
@@ -133,7 +136,6 @@ function ConnectionDatabaseFilters({
         onChange={onDatabaseChange}
         disabled={!conn || databasesLoading || databases.length === 0}
         title={t("database.toolbox.side.database")}
-        searchable={false}
         placeholder={t("database.toolbox.side.noDatabase")}
         options={
           !conn || databases.length === 0
@@ -158,7 +160,17 @@ function ConnectionDatabaseFilters({
   );
 }
 
-function TableTargetTag({ status }: { status: TableTargetStatus }) {
+function TableTargetTag({
+  status,
+  clickable,
+  expanded,
+  onClick,
+}: {
+  status: TableTargetStatus;
+  clickable?: boolean;
+  expanded?: boolean;
+  onClick?: () => void;
+}) {
   const { t } = useI18n();
   const label =
     status === "checking"
@@ -167,11 +179,34 @@ function TableTargetTag({ status }: { status: TableTargetStatus }) {
         ? t("database.toolbox.side.tagConflict")
         : t("database.toolbox.side.tagNew");
 
+  const className = [
+    "db-toolbox-sync-tag",
+    `db-toolbox-sync-tag--${status}`,
+    clickable ? "db-toolbox-sync-tag--clickable" : "",
+    expanded ? "db-toolbox-sync-tag--expanded" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  if (clickable && onClick) {
+    return (
+      <button
+        type="button"
+        className={className}
+        title={t("database.toolbox.side.viewConflictRows")}
+        aria-expanded={expanded}
+        onClick={(e) => {
+          e.stopPropagation();
+          onClick();
+        }}
+      >
+        {label}
+      </button>
+    );
+  }
+
   return (
-    <span
-      className={`db-toolbox-sync-tag db-toolbox-sync-tag--${status}`}
-      title={label}
-    >
+    <span className={className} title={label}>
       {label}
     </span>
   );
@@ -231,12 +266,16 @@ function TargetSyncTableRow({
   syncStrategy = "rewrite",
   onSyncStrategyChange,
   analysis,
+  detailOpen = false,
+  onViewConflictDetail,
 }: {
   tableName: string;
   targetStatus?: TableTargetStatus;
   syncStrategy?: DataSyncStrategy;
   onSyncStrategyChange?: (tableName: string, strategy: DataSyncStrategy) => void;
   analysis?: DataAnalysisResult;
+  detailOpen?: boolean;
+  onViewConflictDetail?: (tableName: string) => void;
 }) {
   const { t } = useI18n();
   const showStrategies = targetStatus === "conflict" && Boolean(onSyncStrategyChange);
@@ -254,17 +293,45 @@ function TargetSyncTableRow({
   const analysisTitle =
     analysisStatus === "error" && analysis?.error ? analysis.error : analysisLabel ?? undefined;
 
+  const conflictClickable = targetStatus === "conflict" && Boolean(onViewConflictDetail);
+  const diffClickable =
+    (analysisStatus === "diff" || analysisStatus === "error") && Boolean(onViewConflictDetail);
+
   return (
-    <li className={`db-toolbox-table-row db-toolbox-table-row--target${showStrategies ? " db-toolbox-table-row--conflict" : ""}`}>
+    <li
+      className={`db-toolbox-table-row db-toolbox-table-row--target db-toolbox-table-row--target-sync${showStrategies ? " db-toolbox-table-row--conflict" : ""}`}
+    >
       <span className="db-toolbox-table-row__name">{tableName}</span>
-      {targetStatus && <TableTargetTag status={targetStatus} />}
+      {targetStatus && (
+        <TableTargetTag
+          status={targetStatus}
+          clickable={conflictClickable}
+          expanded={detailOpen && conflictClickable}
+          onClick={conflictClickable ? () => onViewConflictDetail?.(tableName) : undefined}
+        />
+      )}
       {analysisLabel && (
-        <span
-          className={`db-toolbox-sync-tag db-toolbox-analysis-tag db-toolbox-analysis-tag--${analysisStatus}`}
-          title={analysisTitle}
-        >
-          {analysisLabel}
-        </span>
+        diffClickable ? (
+          <button
+            type="button"
+            className={`db-toolbox-sync-tag db-toolbox-analysis-tag db-toolbox-analysis-tag--${analysisStatus} db-toolbox-sync-tag--clickable${detailOpen ? " db-toolbox-sync-tag--expanded" : ""}`}
+            title={analysisTitle}
+            aria-expanded={detailOpen}
+            onClick={(e) => {
+              e.stopPropagation();
+              onViewConflictDetail?.(tableName);
+            }}
+          >
+            {analysisLabel}
+          </button>
+        ) : (
+          <span
+            className={`db-toolbox-sync-tag db-toolbox-analysis-tag db-toolbox-analysis-tag--${analysisStatus}`}
+            title={analysisTitle}
+          >
+            {analysisLabel}
+          </span>
+        )
       )}
       {showStrategies && (
         <SyncStrategyButtons
@@ -386,6 +453,8 @@ export function SyncSidePanel({
   onSyncStrategyChange,
   schemaTableDiffs = {},
   tableAnalysis = {},
+  conflictDetailTable = null,
+  onViewConflictDetail,
 }: SyncSidePanelProps) {
   const { t } = useI18n();
   const [search, setSearch] = useState("");
@@ -503,6 +572,8 @@ export function SyncSidePanel({
                   syncStrategy={row.strategy}
                   onSyncStrategyChange={onSyncStrategyChange}
                   analysis={row.analysis}
+                  detailOpen={conflictDetailTable === row.name}
+                  onViewConflictDetail={onViewConflictDetail}
                 />
               ))}
             </ul>

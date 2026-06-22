@@ -8,12 +8,15 @@ import {
 } from "react";
 import type { PanelImperativeHandle } from "react-resizable-panels";
 import { DockWorkspace } from "../dock";
+import { relayoutDockviewInstances } from "../../lib/dockviewRegistry";
 import { useBottomPanelStore } from "../../stores/bottomPanelStore";
 import {
   defaultHeightForMode,
   halfHeightPx,
   resolveEmbeddedHeight,
+  splitWindowHeightFromRatio,
   WS_HEIGHT_HIDDEN_MAX,
+  WS_HEIGHT_TASKBAR_MAX,
 } from "../../lib/workspaceMode";
 
 /** 程序化 resize 后短暂忽略面板回传，避免 snap 与拖拽打架 */
@@ -55,6 +58,8 @@ export interface SidebarBottomProps {
   sidebarMinPx?: number;
   sidebarMaxPx?: number;
   className?: string;
+  /** task-bar 模式：固定 40px，禁止拖拽调整高度 */
+  bottomResizeLocked?: boolean;
 }
 
 /**
@@ -67,11 +72,18 @@ export function SidebarBottom({
   sidebarMinPx = 21,
   sidebarMaxPx: sidebarMaxPxProp,
   className,
+  bottomResizeLocked = false,
 }: SidebarBottomProps) {
   const { maxPx: computedMaxPx, fullscreenThresholdPx } = useBottomPanelDragMetrics();
-  const sidebarMaxPx = sidebarMaxPxProp ?? computedMaxPx;
+  const sidebarMaxPx = bottomResizeLocked
+    ? WS_HEIGHT_TASKBAR_MAX
+    : (sidebarMaxPxProp ?? computedMaxPx);
+  const sidebarMinPxEffective = bottomResizeLocked
+    ? WS_HEIGHT_TASKBAR_MAX
+    : sidebarMinPx;
   const bottomPanelRef = useRef<PanelImperativeHandle | null>(null);
   const isSnappingRef = useRef(false);
+  const programmaticSyncRef = useRef(false);
   const userResizeActiveRef = useRef(false);
   const ignoreResizeUntilRef = useRef(0);
   const expandSignal = useBottomPanelStore((state) => state.expandSignal);
@@ -82,17 +94,32 @@ export function SidebarBottom({
   const lastNonFullscreenMode = useBottomPanelStore(
     (state) => state.lastNonFullscreenMode,
   );
+  const lastExpandedHeightPx = useBottomPanelStore(
+    (state) => state.lastExpandedHeightPx,
+  );
+  const workspaceDisplayPreference = useBottomPanelStore(
+    (state) => state.workspaceDisplayPreference,
+  );
+  const lastExpandedHeightRatio = useBottomPanelStore(
+    (state) => state.lastExpandedHeightRatio,
+  );
   const setWorkspaceHeight = useBottomPanelStore((state) => state.setWorkspaceHeight);
 
-  const targetBottomPx =
-    workspaceHeightPx > WS_HEIGHT_HIDDEN_MAX
-      ? workspaceHeightPx
-      : defaultHeightForMode(
-          lastNonFullscreenMode === "hidden" ? "half" : lastNonFullscreenMode,
-        );
+  const targetBottomPx = bottomResizeLocked
+    ? WS_HEIGHT_TASKBAR_MAX
+    : workspaceMode === "half" && workspaceDisplayPreference === "split-window"
+      ? splitWindowHeightFromRatio(lastExpandedHeightRatio)
+      : workspaceHeightPx > WS_HEIGHT_HIDDEN_MAX
+        ? workspaceHeightPx
+        : lastExpandedHeightPx > WS_HEIGHT_HIDDEN_MAX
+          ? lastExpandedHeightPx
+          : defaultHeightForMode(
+              lastNonFullscreenMode === "hidden" ? "half" : lastNonFullscreenMode,
+            );
 
   const shouldIgnorePanelResize = useCallback(() => {
     return (
+      programmaticSyncRef.current ||
       isSnappingRef.current ||
       performance.now() < ignoreResizeUntilRef.current ||
       useBottomPanelStore.getState().isFullscreen
@@ -112,26 +139,50 @@ export function SidebarBottom({
     const { workspaceMode: mode } = useBottomPanelStore.getState();
     const shouldExpand =
       mode === "half" || mode === "taskbar" || mode === "thumbnail";
-    if (shouldExpand) {
-      if (handle.isCollapsed()) handle.expand();
-    } else if (!handle.isCollapsed()) {
-      handle.collapse();
+    const needsExpand = shouldExpand && handle.isCollapsed();
+    const needsCollapse = !shouldExpand && !handle.isCollapsed();
+    if (!needsExpand && !needsCollapse) return;
+
+    programmaticSyncRef.current = true;
+    ignoreResizeUntilRef.current = performance.now() + SNAP_IGNORE_MS;
+    try {
+      if (needsExpand) {
+        handle.expand();
+      } else {
+        handle.collapse();
+      }
+    } finally {
+      requestAnimationFrame(() => {
+        programmaticSyncRef.current = false;
+      });
     }
   }, []);
 
-  const snapPanelHeight = useCallback((heightPx: number) => {
-    const handle = bottomPanelRef.current;
-    if (!handle || useBottomPanelStore.getState().isFullscreen) return;
-    isSnappingRef.current = true;
-    userResizeActiveRef.current = false;
-    ignoreResizeUntilRef.current = performance.now() + SNAP_IGNORE_MS;
+  const scheduleWorkspaceDockRelayout = useCallback(() => {
     requestAnimationFrame(() => {
-      handle.resize(`${heightPx}px`);
       requestAnimationFrame(() => {
-        isSnappingRef.current = false;
+        relayoutDockviewInstances("workspace-bottom");
       });
     });
   }, []);
+
+  const snapPanelHeight = useCallback(
+    (heightPx: number) => {
+      const handle = bottomPanelRef.current;
+      if (!handle || useBottomPanelStore.getState().isFullscreen) return;
+      isSnappingRef.current = true;
+      userResizeActiveRef.current = false;
+      ignoreResizeUntilRef.current = performance.now() + SNAP_IGNORE_MS;
+      requestAnimationFrame(() => {
+        handle.resize(`${heightPx}px`);
+        requestAnimationFrame(() => {
+          isSnappingRef.current = false;
+          scheduleWorkspaceDockRelayout();
+        });
+      });
+    },
+    [scheduleWorkspaceDockRelayout],
+  );
 
   const applyTargetHeight = useCallback(() => {
     const handle = bottomPanelRef.current;
@@ -144,24 +195,69 @@ export function SidebarBottom({
     ) {
       return;
     }
+    if (bottomResizeLocked) {
+      const target = WS_HEIGHT_TASKBAR_MAX;
+      const currentPx = readBottomPanelPx();
+      if (currentPx != null && Math.abs(currentPx - target) <= 1) {
+        return;
+      }
+      snapPanelHeight(target);
+      if (Math.abs(state.workspaceHeightPx - target) > 1) {
+        setWorkspaceHeight(target, { commit: true });
+      }
+      return;
+    }
     const raw =
-      state.workspaceHeightPx > WS_HEIGHT_HIDDEN_MAX
-        ? state.workspaceHeightPx
-        : state.workspaceMode === "half"
-          ? halfHeightPx()
-          : defaultHeightForMode(
-              state.lastNonFullscreenMode === "hidden"
-                ? "half"
-                : state.lastNonFullscreenMode,
-            );
+      state.workspaceMode === "half" &&
+      state.workspaceDisplayPreference === "split-window"
+        ? splitWindowHeightFromRatio(state.lastExpandedHeightRatio)
+        : state.workspaceHeightPx > WS_HEIGHT_HIDDEN_MAX
+          ? state.workspaceHeightPx
+          : state.lastExpandedHeightPx > WS_HEIGHT_HIDDEN_MAX
+            ? state.lastExpandedHeightPx
+            : state.workspaceMode === "half"
+              ? halfHeightPx()
+              : defaultHeightForMode(
+                  state.lastNonFullscreenMode === "hidden"
+                    ? "half"
+                    : state.lastNonFullscreenMode,
+                );
     const { height: target } = resolveEmbeddedHeight(raw);
+    const currentPx = readBottomPanelPx();
+    if (currentPx != null && Math.abs(currentPx - target) <= 1) {
+      scheduleWorkspaceDockRelayout();
+      return;
+    }
     snapPanelHeight(target);
-    setWorkspaceHeight(target, { commit: true });
-  }, [setWorkspaceHeight, snapPanelHeight]);
+    if (Math.abs(state.workspaceHeightPx - target) > 1) {
+      setWorkspaceHeight(target, { commit: true });
+    }
+  }, [
+    bottomResizeLocked,
+    readBottomPanelPx,
+    scheduleWorkspaceDockRelayout,
+    setWorkspaceHeight,
+    snapPanelHeight,
+  ]);
 
   useLayoutEffect(() => {
     syncOpenState();
   }, [workspaceMode, isFullscreen, syncOpenState]);
+
+  // 模式切换（task-bar ↔ split-window）须在首帧绘制前同步面板高度，否则 dockview 会在 40px 容器内 layout
+  useLayoutEffect(() => {
+    if (isFullscreen) return;
+    const mode = useBottomPanelStore.getState().workspaceMode;
+    if (mode !== "half" && mode !== "taskbar" && mode !== "thumbnail") return;
+    applyTargetHeight();
+  }, [
+    workspaceDisplayPreference,
+    lastExpandedHeightRatio,
+    workspaceMode,
+    workspaceHeightPx,
+    isFullscreen,
+    applyTargetHeight,
+  ]);
 
   useEffect(() => {
     if (expandSignal === 0) return;
@@ -169,12 +265,41 @@ export function SidebarBottom({
     applyTargetHeight();
   }, [expandSignal, syncOpenState, applyTargetHeight]);
 
+  // split-window 模式下窗口 resize 时按视口比例重算底栏高度并刷新 dockview
+  useEffect(() => {
+    let raf = 0;
+    const onViewportResize = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        const state = useBottomPanelStore.getState();
+        if (state.isFullscreen) return;
+        if (
+          state.workspaceMode === "half" &&
+          state.workspaceDisplayPreference === "split-window"
+        ) {
+          applyTargetHeight();
+          return;
+        }
+        scheduleWorkspaceDockRelayout();
+      });
+    };
+    window.addEventListener("resize", onViewportResize);
+    return () => {
+      window.removeEventListener("resize", onViewportResize);
+      cancelAnimationFrame(raf);
+    };
+  }, [applyTargetHeight, scheduleWorkspaceDockRelayout]);
+
   useEffect(() => {
     if (collapseSignal === 0) return;
     const handle = bottomPanelRef.current;
-    if (handle && !handle.isCollapsed()) {
-      handle.collapse();
-    }
+    if (!handle || handle.isCollapsed()) return;
+    programmaticSyncRef.current = true;
+    ignoreResizeUntilRef.current = performance.now() + SNAP_IGNORE_MS;
+    handle.collapse();
+    requestAnimationFrame(() => {
+      programmaticSyncRef.current = false;
+    });
   }, [collapseSignal]);
 
   const enterFullscreenFromDrag = useCallback(
@@ -195,7 +320,12 @@ export function SidebarBottom({
 
   const processLiveResize = useCallback(
     (heightPx: number) => {
-      if (heightPx >= fullscreenThresholdPx) {
+      const store = useBottomPanelStore.getState();
+      if (heightPx <= WS_HEIGHT_HIDDEN_MAX && store.workspaceMode === "hidden") {
+        return;
+      }
+      const mode = store.workspaceMode;
+      if (heightPx >= fullscreenThresholdPx && mode !== "half") {
         enterFullscreenFromDrag(heightPx);
         return;
       }
@@ -206,16 +336,16 @@ export function SidebarBottom({
 
   /** 用户拖拽分隔条时由 react-resizable-panels 的 onLayoutChange 驱动（跟手切模式） */
   const handleBottomLayoutChange = useCallback(() => {
-    if (shouldIgnorePanelResize()) return;
+    if (bottomResizeLocked || shouldIgnorePanelResize()) return;
     userResizeActiveRef.current = true;
     const px = readBottomPanelPx();
     if (px == null) return;
     processLiveResize(px);
-  }, [processLiveResize, readBottomPanelPx, shouldIgnorePanelResize]);
+  }, [bottomResizeLocked, processLiveResize, readBottomPanelPx, shouldIgnorePanelResize]);
 
   /** 松手提交：onLayoutChanged 在指针释放后触发 */
   const handleBottomLayoutChanged = useCallback(() => {
-    if (shouldIgnorePanelResize()) return;
+    if (bottomResizeLocked || shouldIgnorePanelResize()) return;
     if (!userResizeActiveRef.current) return;
     userResizeActiveRef.current = false;
 
@@ -224,10 +354,13 @@ export function SidebarBottom({
     if (px == null) return;
 
     if (px >= fullscreenThresholdPx) {
-      enterFullscreenFromDrag(px);
+      if (useBottomPanelStore.getState().workspaceMode !== "half") {
+        enterFullscreenFromDrag(px);
+      }
       return;
     }
     if (px <= WS_HEIGHT_HIDDEN_MAX) {
+      if (store.workspaceMode === "hidden") return;
       store.requestCollapse();
       return;
     }
@@ -250,8 +383,9 @@ export function SidebarBottom({
       main={children}
       bottom={sidebar}
       bottomSizePx={targetBottomPx}
-      bottomMinPx={sidebarMinPx}
+      bottomMinPx={sidebarMinPxEffective}
       bottomMaxPx={sidebarMaxPx}
+      bottomHandleDisabled={bottomResizeLocked}
       bottomPanelRef={bottomPanelRef}
       onBottomLayoutChange={handleBottomLayoutChange}
       onBottomResizeEnd={handleBottomLayoutChanged}

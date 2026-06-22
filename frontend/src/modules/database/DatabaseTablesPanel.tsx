@@ -69,8 +69,10 @@ function TableNameRow({
       <button
         type="button"
         className="db-tables-panel-item-main"
-        onClick={() => onPreviewTable(tableName)}
-        onDoubleClick={() => onOpenTable(tableName)}
+        onClick={() => {
+          onPreviewTable(tableName);
+          onOpenTable(tableName);
+        }}
       >
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" width="13" height="13" aria-hidden>
           <rect x="3" y="3" width="18" height="18" rx="2" />

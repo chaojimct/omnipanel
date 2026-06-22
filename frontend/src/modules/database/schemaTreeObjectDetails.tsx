@@ -25,7 +25,6 @@ type TreeNodeComponent = (props: {
   hasChildren: boolean;
   active?: boolean;
   onLabelClick?: () => void;
-  onLabelDoubleClick?: () => void;
   onContextMenu?: (e: ReactMouseEvent) => void;
   reorderScope?: string;
   reorderName?: string;
@@ -131,7 +130,7 @@ export function SchemaTreeObjectDetails({
         hasChildren={showTableSchemaChildren}
         active={activeTableKey === tableKey}
         labelComment={tbl.comment?.trim() || undefined}
-        onLabelDoubleClick={
+        onLabelClick={
           objectKind === "table" ? () => onSelectTable?.(selection) : undefined
         }
         onContextMenu={onContextTable ? (e) => onContextTable(selection, e) : undefined}

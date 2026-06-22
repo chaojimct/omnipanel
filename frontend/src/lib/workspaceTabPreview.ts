@@ -25,6 +25,12 @@ export interface WorkspaceTabPreviewData {
   lines: string[];
 }
 
+/** task-bar 等 UI 展示用：去掉 Ctrl+复制写入的「(副本)」后缀 */
+export function stripWorkspaceTabCopySuffix(title: string): string {
+  const stripped = title.replace(/\s*[（(]副本[)）]\s*$/u, "").trim();
+  return stripped || title;
+}
+
 function terminalBufferLines(terminalTabId: string, maxLines = 6): string[] {
   const tab = useTerminalStore.getState().tabs.find((item) => item.id === terminalTabId);
   const term = tab?.terminal;
@@ -153,12 +159,6 @@ export function resolveWorkspaceTabPreview(tab: WorkspaceDockTab): WorkspaceTabP
   if (tab.id.startsWith("ws-preview-mock:")) {
     const mock = resolveMockWorkspaceTabPreview(tab.id);
     if (mock) return mock;
-  }
-  if (tab.kind === "builtin" && tab.builtin === "board") {
-    return { kind: "board", title: tab.label, source: "看板", lines: ["工作区概览"] };
-  }
-  if (tab.kind === "builtin" && tab.builtin === "ai") {
-    return { kind: "ai", title: tab.label, source: "AI", lines: ["AI 助手"] };
   }
   if (tab.kind === "payload" && tab.payload) {
     return payloadPreview(tab.payload);

@@ -39,10 +39,24 @@ export type DataSyncStrategy = "rewrite" | "append" | "update";
 /** 逐条比对（行级 diff）状态：未执行 / 执行中 / 全部一致 / 存在差异 / 失败 */
 export type DataAnalysisStatus = "unchecked" | "analyzing" | "match" | "diff" | "error";
 
+/** 单行差异详情 */
+export interface TableRowDiff {
+  rowKey: string;
+  displayKey: string;
+  kind: "changed" | "sourceOnly" | "targetOnly";
+  changedFields?: string[];
+  sourceRow?: Record<string, unknown>;
+  targetRow?: Record<string, unknown>;
+}
+
 export interface DataAnalysisResult {
   status: DataAnalysisStatus;
   /** 不一致的行数（status === "diff" 时有值） */
   diffRows?: number;
+  /** 行级差异明细（status === "diff" 时有值，可能被截断） */
+  diffs?: TableRowDiff[];
+  /** 差异行数超过展示上限时为 true */
+  truncated?: boolean;
   /** 错误信息（status === "error" 时） */
   error?: string;
 }

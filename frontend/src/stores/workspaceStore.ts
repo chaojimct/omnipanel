@@ -6,7 +6,7 @@ import {
   type WorkspaceResource,
 } from "../lib/resourceRegistry";
 import { resolveResourceById } from "./connectionStore";
-import { WORKSPACE_PATHS } from "../lib/paths";
+import { DASHBOARD_PATH, WORKSPACE_PATHS } from "../lib/paths";
 
 export interface WorkspaceInfo {
   id: string;
@@ -83,7 +83,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
     (set, get) => ({
       workspace: DEFAULT_WORKSPACE,
       workspaces: [DEFAULT_WORKSPACE],
-      activePath: WORKSPACE_PATHS.default,
+      activePath: DASHBOARD_PATH,
       activeResourceId: "local-terminal",
       selectedResourceByPath: {},
 

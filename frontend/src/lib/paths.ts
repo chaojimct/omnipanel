@@ -1,5 +1,6 @@
 export const MODULE_PREFIX = "/module";
 export const WORKSPACE_PREFIX = "/workspace";
+export const DASHBOARD_PATH = "/dashboard";
 
 export const MODULE_PATHS = {
   terminal: `${MODULE_PREFIX}/terminal`,
@@ -17,9 +18,13 @@ export type ModuleKey = keyof typeof MODULE_PATHS;
 
 export const WORKSPACE_PATHS = {
   list: WORKSPACE_PREFIX,
-  dashboard: (id: string) => `${WORKSPACE_PREFIX}/${id}`,
+  detail: (id: string) => `${WORKSPACE_PREFIX}/${id}`,
   default: `${WORKSPACE_PREFIX}/default`,
 } as const;
+
+export function isDashboardPath(pathname: string): boolean {
+  return pathname === DASHBOARD_PATH;
+}
 
 export function modulePathForType(type: string): string {
   if (type === "file") return MODULE_PATHS.files;

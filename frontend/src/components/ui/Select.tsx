@@ -27,6 +27,7 @@ export interface SelectProps {
   onChange: (value: string) => void;
   options: SelectOptionsInput;
   placeholder?: string;
+  /** 是否显示搜索框；默认 true，显式传 false 可关闭 */
   searchable?: boolean;
   searchThreshold?: number;
   disabled?: boolean;
@@ -74,7 +75,6 @@ export function Select({
   options: optionsInput,
   placeholder,
   searchable,
-  searchThreshold = 8,
   disabled = false,
   size = "md",
   borderless = false,
@@ -99,8 +99,7 @@ export function Select({
   const [panelStyle, setPanelStyle] = useState<CSSProperties>({ visibility: "hidden" });
 
   const options = useMemo(() => normalizeOptions(optionsInput), [optionsInput]);
-  const enableSearch =
-    searchable ?? options.filter((opt) => !opt.disabled).length > searchThreshold;
+  const enableSearch = searchable !== false;
 
   const filteredOptions = useMemo(() => {
     const enabled = options.filter((opt) => !opt.disabled);
@@ -215,6 +214,19 @@ export function Select({
     if (disabled) return;
     if (event.key === "ArrowDown" || event.key === "Enter" || event.key === " ") {
       event.preventDefault();
+      setOpen(true);
+      return;
+    }
+    if (
+      enableSearch &&
+      event.key.length === 1 &&
+      !event.ctrlKey &&
+      !event.metaKey &&
+      !event.altKey
+    ) {
+      event.preventDefault();
+      setQuery(event.key);
+      setHighlightIndex(0);
       setOpen(true);
     }
   };

@@ -11,12 +11,11 @@ import {
 import type { WorkspaceTabSnapshot } from "./workspaceTabStore";
 import type { WorkspaceInfo } from "./workspaceStore";
 import {
-  defaultWorkspaceBuiltinActiveTabId,
+  defaultWorkspaceActiveTabId,
   isWorkspaceBuiltinTab,
   isWorkspaceBuiltinTabId,
-  mergeWorkspaceBuiltinTabs,
+  normalizeWorkspaceTabs,
 } from "../lib/workspaceBuiltinPanels";
-import { workspaceAddDebug } from "../lib/workspaceAddDebug";
 
 export type WorkspaceDockTabKind = "mirrored" | "payload" | "builtin";
 
@@ -35,7 +34,7 @@ export interface WorkspaceDockTab {
   originPanelId?: string;
   /** 序列化快照（复制/移动到工作区） */
   payload?: WorkspaceTabSnapshot;
-  /** 内置面板类型（看板 / AI 助手） */
+  /** @deprecated 旧版内置面板类型，迁移后不再创建 */
   builtin?: "board" | "ai";
   closable?: boolean;
 }
@@ -47,17 +46,13 @@ export function resolveWorkspaceDockPanelType(tab: WorkspaceDockTab): string {
   return "unknown";
 }
 
-function tabsNeedBuiltinMerge(
-  workspaceId: string,
+function tabsNeedNormalize(
   tabs: WorkspaceDockTab[] | undefined,
 ): WorkspaceDockTab[] {
-  const legacyTabs = (tabs ?? []) as Array<WorkspaceDockTab | { kind: "welcome" }>;
-  const cleaned = legacyTabs.filter((tab) => tab.kind !== "welcome") as WorkspaceDockTab[];
-  return mergeWorkspaceBuiltinTabs(workspaceId, cleaned);
+  return normalizeWorkspaceTabs(tabs);
 }
 
-function builtinTabsChanged(
-  workspaceId: string,
+function normalizedTabsChanged(
   before: WorkspaceDockTab[] | undefined,
   after: WorkspaceDockTab[],
 ): boolean {
@@ -65,9 +60,6 @@ function builtinTabsChanged(
   if (prev.length !== after.length) return true;
   for (let i = 0; i < after.length; i++) {
     if (after[i]?.id !== prev[i]?.id) return true;
-    if (isWorkspaceBuiltinTabId(after[i]?.id ?? "") && prev[i]?.kind !== "builtin") {
-      return true;
-    }
   }
   return false;
 }
@@ -77,7 +69,7 @@ export function resolveWorkspaceTabs(
   workspace: WorkspaceInfo,
   tabs: WorkspaceDockTab[] | undefined,
 ): WorkspaceDockTab[] {
-  return tabsNeedBuiltinMerge(workspace.id, tabs);
+  return tabsNeedNormalize(tabs);
 }
 
 export function resolveWorkspaceActiveTabId(
@@ -131,24 +123,16 @@ export const useWorkspaceBottomDockStore = create<WorkspaceBottomDockState>()(
 
       ensureWorkspaceData: (workspaceId, workspace) => {
         const existing = get().tabsByWorkspace[workspaceId];
-        const merged = tabsNeedBuiltinMerge(workspaceId, existing);
-        if (existing !== undefined && !builtinTabsChanged(workspaceId, existing, merged)) {
+        const merged = tabsNeedNormalize(existing);
+        if (existing !== undefined && !normalizedTabsChanged(existing, merged)) {
           return;
         }
-
-        workspaceAddDebug("ensureWorkspaceData:apply", {
-          workspaceId,
-          existingTabIds: existing?.map((t) => t.id) ?? null,
-          mergedTabIds: merged.map((t) => t.id),
-          resetLayout:
-            existing === undefined || builtinTabsChanged(workspaceId, existing, merged),
-        });
 
         const prevActive = get().activeTabByWorkspace[workspaceId];
         const nextActive =
           prevActive && merged.some((tab) => tab.id === prevActive)
             ? prevActive
-            : defaultWorkspaceBuiltinActiveTabId(workspaceId);
+            : defaultWorkspaceActiveTabId(merged);
 
         set((state) => ({
           tabsByWorkspace: {
@@ -158,7 +142,7 @@ export const useWorkspaceBottomDockStore = create<WorkspaceBottomDockState>()(
           layoutByWorkspace: {
             ...state.layoutByWorkspace,
             [workspaceId]:
-              existing === undefined || builtinTabsChanged(workspaceId, existing, merged)
+              existing === undefined || normalizedTabsChanged(existing, merged)
                 ? null
                 : state.layoutByWorkspace[workspaceId] ?? null,
           },
@@ -187,7 +171,7 @@ export const useWorkspaceBottomDockStore = create<WorkspaceBottomDockState>()(
           closable: tab.closable !== false,
         };
         set((state) => {
-          const current = tabsNeedBuiltinMerge(_workspace.id, state.tabsByWorkspace[workspaceId]);
+          const current = tabsNeedNormalize(state.tabsByWorkspace[workspaceId]);
           if (current.length >= MAX_WORKSPACE_PANELS && !current.some((item) => item.id === nextTab.id)) {
             return state;
           }
@@ -219,33 +203,31 @@ export const useWorkspaceBottomDockStore = create<WorkspaceBottomDockState>()(
           panelType: tab.panelType ?? tab.payload.module,
           closable: tab.closable !== false,
         };
-        let rejectedReason: string | null = null;
         set((state) => {
-          const current = tabsNeedBuiltinMerge(_workspace.id, state.tabsByWorkspace[workspaceId]);
+          const current = tabsNeedNormalize(state.tabsByWorkspace[workspaceId]);
           if (current.length >= MAX_WORKSPACE_PANELS && !current.some((item) => item.id === nextTab.id)) {
-            rejectedReason = "max_panels";
             return state;
           }
           const isUpdate = current.some((item) => item.id === nextTab.id);
           const tabs = isUpdate
             ? current.map((item) => (item.id === nextTab.id ? nextTab : item))
             : [...current, nextTab];
+          const tabIds = tabs.map((item) => item.id);
+          const prevLayout = state.layoutByWorkspace[workspaceId] ?? null;
+          const nextLayout =
+            mergePanelsIntoLayout(prevLayout, tabIds, nextTab.id) ??
+            createDefaultLayout(tabIds, nextTab.id);
           return {
             tabsByWorkspace: { ...state.tabsByWorkspace, [workspaceId]: tabs },
+            layoutByWorkspace: {
+              ...state.layoutByWorkspace,
+              [workspaceId]: nextLayout,
+            },
             activeTabByWorkspace: {
               ...state.activeTabByWorkspace,
               [workspaceId]: nextTab.id,
             },
           };
-        });
-        workspaceAddDebug("addPayloadTab", {
-          workspaceId,
-          tabId: nextTab.id,
-          label: nextTab.label,
-          rejectedReason,
-          tabCount: get().tabsByWorkspace[workspaceId]?.length ?? 0,
-          activeTab: get().activeTabByWorkspace[workspaceId] ?? null,
-          isUpdate: get().tabsByWorkspace[workspaceId]?.some((t) => t.id === nextTab.id) ?? false,
         });
         return nextTab;
       },
@@ -309,7 +291,7 @@ export const useWorkspaceBottomDockStore = create<WorkspaceBottomDockState>()(
 
       removeWorkspaceData: (workspaceId) => {
         set((state) => {
-          const tabs = tabsNeedBuiltinMerge(workspaceId, state.tabsByWorkspace[workspaceId]);
+          const tabs = tabsNeedNormalize(state.tabsByWorkspace[workspaceId]);
           const dockedOriginByScope = { ...state.dockedOriginByScope };
           for (const tab of tabs) {
             if (!tab.originScope || !tab.originPanelId) continue;
@@ -364,7 +346,7 @@ export const useWorkspaceBottomDockStore = create<WorkspaceBottomDockState>()(
           | undefined;
         if (p?.tabsByWorkspace) {
           for (const [wsId, tabs] of Object.entries(p.tabsByWorkspace)) {
-            p.tabsByWorkspace[wsId] = tabsNeedBuiltinMerge(wsId, tabs);
+            p.tabsByWorkspace[wsId] = tabsNeedNormalize(tabs);
           }
         }
         if (fromVersion < 5 && p?.tabsByWorkspace) {
@@ -377,7 +359,7 @@ export const useWorkspaceBottomDockStore = create<WorkspaceBottomDockState>()(
         if (p?.layoutByWorkspace) {
           const cleaned: Record<string, SerializedDockview | null> = {};
           for (const [wsId, layout] of Object.entries(p.layoutByWorkspace)) {
-            const cleanedTabs = tabsNeedBuiltinMerge(wsId, p.tabsByWorkspace?.[wsId]);
+            const cleanedTabs = tabsNeedNormalize(p.tabsByWorkspace?.[wsId]);
             if (p.tabsByWorkspace) {
               p.tabsByWorkspace[wsId] = cleanedTabs;
             }

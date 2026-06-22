@@ -1,12 +1,11 @@
 import type { MouseEvent, PointerEvent } from "react";
 import type { IDockviewPanelHeaderProps } from "dockview-react";
-import { workspaceAddDebug } from "../../lib/workspaceAddDebug";
 import { isPointerCopyModifier } from "../../lib/platform";
 import { DockTabHeader } from "./DockTabHeader";
 import { TopbarStyleDockTabHeader } from "./TopbarStyleDockTabHeader";
 import type { DockTabIconKind } from "./DockTabIcon";
 import type { DockTabPageType } from "./dockableTab";
-import { getDockTabHeaderRuntime } from "./dockTabHeaderRuntime";
+import { useDockTabHeaderRuntime } from "./dockTabHeaderRuntime";
 import { useDockTabLiveMeta } from "./dockTabLiveMeta";
 import type { TopbarTabDef } from "../../stores/topbarStore";
 
@@ -27,14 +26,14 @@ export function DockWorkspaceTabHeader(
 ) {
   const tabId = props.params?.tabId ?? props.api.id;
   const liveMeta = useDockTabLiveMeta(tabId);
-  const runtime = getDockTabHeaderRuntime();
+  const runtime = useDockTabHeaderRuntime();
   const tabsList = runtime?.tabsRef.current ?? [];
   const tab = tabsList.find((item) => item.id === tabId);
 
   const mergedParams: PanelParams = {
     tabId,
-    label: tab?.label ?? props.params?.label,
-    icon: tab?.icon ?? props.params?.icon,
+    label: tab?.label ?? liveMeta.label ?? props.params?.label,
+    icon: tab?.icon ?? liveMeta.icon ?? props.params?.icon,
     tooltip: tab?.tooltip ?? props.params?.tooltip ?? tab?.label,
     status: tab?.status ?? props.params?.status,
     type: tab?.type ?? props.params?.type ?? liveMeta.type,
@@ -70,19 +69,10 @@ export function DockWorkspaceTabHeader(
   const handleCtrlCopyPointerUp = runtime?.onCtrlCopyTabRef.current
     ? (e: PointerEvent) => {
         const mod = isPointerCopyModifier(e);
-        workspaceAddDebug("DockableWorkspace:tab_pointer_up", {
-          tabId,
-          button: e.button,
-          mod,
-          ctrlKey: e.ctrlKey,
-          metaKey: e.metaKey,
-          isCloseBtn: Boolean((e.target as HTMLElement).closest(".dv-default-tab-action")),
-        });
         if (e.button !== 0 || !mod) return;
         if ((e.target as HTMLElement).closest(".dv-default-tab-action")) return;
         e.preventDefault();
         e.stopPropagation();
-        workspaceAddDebug("DockableWorkspace:tab_pointer_up:copy", { tabId });
         runtime.onCtrlCopyTabRef.current?.(tabId);
       }
     : undefined;

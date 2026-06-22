@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useI18n } from "../../i18n";
 import { FormDialog, FormField } from "../../components/ui/FormDialog";
 import { Select } from "../../components/ui/Select";
 import { useSettingsStore } from "../../stores/settingsStore";
+import type { FormFillFieldDef, FormFillValue } from "../../components/ai/simple/formFill";
 import type { DbConnectionGroup } from "../../stores/dbGroupStore";
 import type { DbConnectionConfig } from "./api";
 import {
@@ -160,6 +161,57 @@ export function ConnectionDialog({
   const isFileBased = form.engine === "sqlite";
   const busy = testing || saving;
 
+  const aiFillFields = useMemo<FormFillFieldDef[]>(
+    () => [
+      { key: "name", label: t("database.dialog.name") },
+      {
+        key: "engine",
+        label: t("database.dialog.engine"),
+        description: "mysql, postgresql, sqlite, sqlserver, redis, mongodb",
+      },
+      { key: "host", label: t("database.dialog.host") },
+      { key: "port", label: t("database.dialog.port"), type: "number" },
+      { key: "database", label: t("database.dialog.database") },
+      { key: "username", label: t("database.dialog.username") },
+      { key: "password", label: t("database.dialog.password") },
+      { key: "group", label: t("database.dialog.group") },
+    ],
+    [t],
+  );
+
+  const handleAiFill = useCallback((values: Record<string, FormFillValue>) => {
+    setStatus(null);
+    setForm((prev) => {
+      const next = { ...prev };
+      for (const [key, raw] of Object.entries(values)) {
+        if (raw === null || raw === undefined || raw === "") {
+          continue;
+        }
+        if (key === "engine") {
+          const engine = String(raw).trim().toLowerCase();
+          if (engine in ENGINE_DEFAULTS) {
+            const typed = engine as DbEngine;
+            next.engine = typed;
+            next.port = ENGINE_DEFAULTS[typed].port;
+          }
+          continue;
+        }
+        if (key === "ssl") {
+          next.ssl = Boolean(raw);
+          continue;
+        }
+        if (key === "port") {
+          next.port = String(raw);
+          continue;
+        }
+        if (key in next) {
+          (next as Record<string, unknown>)[key] = String(raw);
+        }
+      }
+      return next;
+    });
+  }, []);
+
   return (
     <FormDialog
       open={open}
@@ -168,6 +220,8 @@ export function ConnectionDialog({
       onCancel={onClose}
       cancelDisabled={busy}
       status={status}
+      aiFillFields={aiFillFields}
+      onAiFill={handleAiFill}
       actions={[
         {
           label: testing ? t("database.dialog.testing") : t("database.dialog.test"),

@@ -9,7 +9,7 @@ import {
 } from "../../lib/workspaceTabPreview";
 import { useI18n } from "../../i18n";
 
-function PreviewKindIcon({ kind }: { kind: WorkspacePreviewKind }) {
+export function PreviewKindIcon({ kind }: { kind: WorkspacePreviewKind }) {
   const props = {
     viewBox: "0 0 24 24",
     fill: "none",

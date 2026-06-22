@@ -3,13 +3,21 @@ import { persist } from "zustand/middleware";
 import {
   defaultHeightForMode,
   dragModeFromHeight,
+  embeddedModeToDisplayPreference,
   halfHeightPx,
   isEmbeddedWorkspaceMode,
   resolveEmbeddedHeight,
+  splitWindowMinHeightPx,
+  splitWindowHeightFromRatio,
+  splitWindowHeightRatio,
+  WS_HALF_HEIGHT_RATIO,
   WS_HEIGHT_HIDDEN_MAX,
+  WS_HEIGHT_TASKBAR_MAX,
   type EmbeddedWorkspaceMode,
+  type WorkspaceDisplayPreference,
   type WorkspaceMode,
 } from "../lib/workspaceMode";
+import { useWorkspacePreviewCollapseStore } from "./workspacePreviewCollapseStore";
 
 /** @deprecated 兼容旧逻辑，映射到 hidden/half */
 export type WorkspaceEmbeddedMode = "off" | "half";
@@ -23,6 +31,12 @@ interface BottomPanelState {
   workspaceHeightPx: number;
   /** 离开全屏前记住的嵌入模式 */
   lastNonFullscreenMode: EmbeddedWorkspaceMode;
+  /** 折叠前记住的底部高度，展开时恢复 */
+  lastExpandedHeightPx: number;
+  /** split-window 高度占视口比例，窗口 resize 时等比缩放 */
+  lastExpandedHeightRatio: number;
+  /** 用户偏好：split-window（分屏 dock）或 task-bar（40px 标签栏） */
+  workspaceDisplayPreference: WorkspaceDisplayPreference;
 
   /** 底部工作区是否展开（嵌入态且非 hidden） */
   isOpen: boolean;
@@ -58,6 +72,12 @@ interface BottomPanelState {
   leaveFullscreenByDrag: () => void;
   /** 半屏及以下右上角：进入工程工作区全屏 */
   handleWorkspaceChromeIcon: () => void;
+  /** 状态栏：在 split-window ↔ task-bar 间切换（持久化偏好） */
+  toggleWorkspaceDisplayPreference: () => void;
+  /** 按用户偏好设置嵌入高度与模式 */
+  applyWorkspaceDisplayPreference: (
+    preference?: WorkspaceDisplayPreference,
+  ) => void;
 }
 
 function normalizeWorkspaceMode(mode: WorkspaceMode): WorkspaceMode {
@@ -86,40 +106,60 @@ export const useBottomPanelStore = create<BottomPanelState>()(
       workspaceMode: "hidden",
       workspaceHeightPx: 0,
       lastNonFullscreenMode: "half",
+      lastExpandedHeightPx: defaultHeightForMode("half"),
+      lastExpandedHeightRatio: WS_HALF_HEIGHT_RATIO,
+      workspaceDisplayPreference: "split-window",
       isOpen: false,
       isFullscreen: false,
       isHomeActive: false,
       embeddedMode: "off",
 
       requestExpand: () => {
-        const { lastNonFullscreenMode } = get();
-        const mode: EmbeddedWorkspaceMode =
-          lastNonFullscreenMode === "taskbar" ||
-          lastNonFullscreenMode === "thumbnail"
-            ? lastNonFullscreenMode
-            : "half";
-        const height = defaultHeightForMode(mode);
+        const { workspaceMode, workspaceDisplayPreference, lastExpandedHeightPx } =
+          get();
+        const normalized = normalizeWorkspaceMode(workspaceMode);
+        if (
+          isEmbeddedWorkspaceMode(normalized) &&
+          normalized !== "hidden"
+        ) {
+          return;
+        }
+        const preview = useWorkspacePreviewCollapseStore.getState();
+        if (!preview.isOpen) {
+          preview.setIsOpen(true);
+        }
+        get().applyWorkspaceDisplayPreference(workspaceDisplayPreference);
         set((state) => ({
           expandSignal: state.expandSignal + 1,
-          workspaceMode: mode,
-          workspaceHeightPx: height,
-          lastNonFullscreenMode: mode,
-          ...syncDerivedFlags(mode),
         }));
       },
 
       requestCollapse: () => {
-        const { workspaceMode, lastNonFullscreenMode } = get();
+        const { workspaceMode, lastNonFullscreenMode, workspaceHeightPx } = get();
         const normalized = normalizeWorkspaceMode(workspaceMode);
+        if (normalized === "hidden") {
+          return;
+        }
         const remembered =
           isEmbeddedWorkspaceMode(normalized) && normalized !== "hidden"
             ? normalized
             : lastNonFullscreenMode;
+        const lastExpandedHeightPx =
+          workspaceHeightPx > WS_HEIGHT_HIDDEN_MAX
+            ? workspaceHeightPx
+            : defaultHeightForMode(
+                remembered === "hidden" ? "half" : remembered,
+              );
+        const preview = useWorkspacePreviewCollapseStore.getState();
+        if (preview.isOpen) {
+          preview.setIsOpen(false);
+        }
         set((state) => ({
           collapseSignal: state.collapseSignal + 1,
           workspaceMode: "hidden",
           workspaceHeightPx: 0,
           lastNonFullscreenMode: remembered,
+          lastExpandedHeightPx,
           ...syncDerivedFlags("hidden"),
         }));
       },
@@ -156,8 +196,75 @@ export const useBottomPanelStore = create<BottomPanelState>()(
         };
         if (nextMode !== "hidden") {
           patch.lastNonFullscreenMode = nextMode;
+          patch.lastExpandedHeightPx = normalizedHeight;
+          patch.workspaceDisplayPreference = embeddedModeToDisplayPreference(nextMode);
+          if (nextMode === "half") {
+            patch.lastExpandedHeightRatio = splitWindowHeightRatio(normalizedHeight);
+          }
+        } else {
+          // 高度提交为 hidden 时同步预览栏，避免 isOpen=true + hidden 触发 requestExpand 死循环
+          const preview = useWorkspacePreviewCollapseStore.getState();
+          if (preview.isOpen) {
+            preview.setIsOpen(false);
+          }
         }
         set(patch);
+      },
+
+      applyWorkspaceDisplayPreference: (preference) => {
+        const pref = preference ?? get().workspaceDisplayPreference;
+        if (pref === "task-bar") {
+          const rememberedHeight =
+            get().lastExpandedHeightPx > WS_HEIGHT_TASKBAR_MAX
+              ? get().lastExpandedHeightPx
+              : defaultHeightForMode("half");
+          set({
+            workspaceMode: "taskbar",
+            workspaceHeightPx: WS_HEIGHT_TASKBAR_MAX,
+            lastNonFullscreenMode: "taskbar",
+            lastExpandedHeightPx: rememberedHeight,
+            workspaceDisplayPreference: "task-bar",
+            ...syncDerivedFlags("taskbar"),
+          });
+          return;
+        }
+        const ratio = get().lastExpandedHeightRatio;
+        const height = splitWindowHeightFromRatio(ratio);
+        set({
+          workspaceMode: "half",
+          workspaceHeightPx: height,
+          lastNonFullscreenMode: "half",
+          lastExpandedHeightPx: height,
+          lastExpandedHeightRatio: ratio,
+          workspaceDisplayPreference: "split-window",
+          ...syncDerivedFlags("half"),
+        });
+      },
+
+      toggleWorkspaceDisplayPreference: () => {
+        const state = get();
+        const normalized = normalizeWorkspaceMode(state.workspaceMode);
+        const preview = useWorkspacePreviewCollapseStore.getState();
+
+        if (normalized === "fullscreen") {
+          return;
+        }
+
+        if (normalized === "hidden") {
+          preview.setIsOpen(true);
+          get().applyWorkspaceDisplayPreference(state.workspaceDisplayPreference);
+          set((s) => ({ expandSignal: s.expandSignal + 1 }));
+          return;
+        }
+
+        const next: WorkspaceDisplayPreference =
+          state.workspaceDisplayPreference === "split-window"
+            ? "task-bar"
+            : "split-window";
+        set({ workspaceDisplayPreference: next });
+        get().applyWorkspaceDisplayPreference(next);
+        preview.setIsOpen(true);
+        set((s) => ({ expandSignal: s.expandSignal + 1 }));
       },
 
       enterFullscreen: () => {
@@ -181,16 +288,12 @@ export const useBottomPanelStore = create<BottomPanelState>()(
       },
 
       applyEmbeddedMode: () => {
-        const { lastNonFullscreenMode } = get();
-        const mode: EmbeddedWorkspaceMode =
-          lastNonFullscreenMode === "hidden" ? "half" : lastNonFullscreenMode;
-        const height = defaultHeightForMode(mode);
-        set((state) => ({
-          expandSignal: state.expandSignal + 1,
-          workspaceMode: mode,
-          workspaceHeightPx: height,
-          ...syncDerivedFlags(mode),
-        }));
+        const preview = useWorkspacePreviewCollapseStore.getState();
+        if (!preview.isOpen) {
+          preview.setIsOpen(true);
+        }
+        get().applyWorkspaceDisplayPreference(get().workspaceDisplayPreference);
+        set((state) => ({ expandSignal: state.expandSignal + 1 }));
       },
 
       exitFullscreen: () => {
@@ -213,6 +316,9 @@ export const useBottomPanelStore = create<BottomPanelState>()(
           workspaceMode: "half",
           workspaceHeightPx: halfHeight,
           lastNonFullscreenMode: "half",
+          lastExpandedHeightPx: halfHeight,
+          lastExpandedHeightRatio: splitWindowHeightRatio(halfHeight),
+          workspaceDisplayPreference: "split-window",
           ...syncDerivedFlags("half"),
         });
         set((state) => ({ expandSignal: state.expandSignal + 1 }));
@@ -220,10 +326,13 @@ export const useBottomPanelStore = create<BottomPanelState>()(
 
       handleWorkspaceChromeIcon: () => {
         const { workspaceMode } = get();
-        if (normalizeWorkspaceMode(workspaceMode) === "fullscreen") {
+        const normalized = normalizeWorkspaceMode(workspaceMode);
+        if (normalized === "fullscreen") {
           get().exitFullscreen();
           return;
         }
+        // split-window 模式仅调整高度，不提供工程工作区全屏
+        if (workspaceMode === "half") return;
         get().enterWorkspaceFullscreen();
       },
 
@@ -254,30 +363,58 @@ export const useBottomPanelStore = create<BottomPanelState>()(
           return;
         }
         if (normalized === "hidden") {
-          const height = defaultHeightForMode("half");
-          set((state) => ({
-            expandSignal: state.expandSignal + 1,
-            workspaceMode: "half",
-            workspaceHeightPx: height,
-            lastNonFullscreenMode: "half",
-            ...syncDerivedFlags("half"),
-          }));
-        } else {
-          get().requestCollapse();
+          get().requestExpand();
+          return;
         }
+        get().requestCollapse();
       },
     }),
     {
       name: "omnipanel-bottom-panel",
-      version: 3,
+      version: 6,
       partialize: (state) => ({
         lastNonFullscreenMode: state.lastNonFullscreenMode,
+        lastExpandedHeightPx: state.lastExpandedHeightPx,
+        lastExpandedHeightRatio: state.lastExpandedHeightRatio,
         workspaceHeightPx: state.workspaceHeightPx,
         embeddedMode: state.embeddedMode,
+        workspaceDisplayPreference: state.workspaceDisplayPreference,
       }),
       migrate: (persisted, version) => {
         const p = persisted as Record<string, unknown> | undefined;
-        if (!p || version >= 3) return persisted as unknown as BottomPanelState;
+        if (!p) return persisted as unknown as BottomPanelState;
+        if (version < 6 && typeof p.lastExpandedHeightRatio !== "number") {
+          const px =
+            typeof p.lastExpandedHeightPx === "number" &&
+            (p.lastExpandedHeightPx as number) > WS_HEIGHT_HIDDEN_MAX
+              ? (p.lastExpandedHeightPx as number)
+              : typeof p.workspaceHeightPx === "number" &&
+                  (p.workspaceHeightPx as number) > WS_HEIGHT_HIDDEN_MAX
+                ? (p.workspaceHeightPx as number)
+                : halfHeightPx();
+          p.lastExpandedHeightRatio = splitWindowHeightRatio(px);
+        }
+        if (version < 5 && typeof p.workspaceDisplayPreference !== "string") {
+          const mode = p.lastNonFullscreenMode;
+          p.workspaceDisplayPreference =
+            mode === "taskbar" || mode === "thumbnail"
+              ? "task-bar"
+              : "split-window";
+        }
+        if (version < 4 && typeof p.lastExpandedHeightPx !== "number") {
+          const mode =
+            p.lastNonFullscreenMode === "taskbar" ||
+            p.lastNonFullscreenMode === "thumbnail"
+              ? p.lastNonFullscreenMode
+              : "half";
+          const rawHeight =
+            typeof p.workspaceHeightPx === "number" &&
+            (p.workspaceHeightPx as number) > WS_HEIGHT_HIDDEN_MAX
+              ? (p.workspaceHeightPx as number)
+              : defaultHeightForMode(mode as EmbeddedWorkspaceMode);
+          p.lastExpandedHeightPx = resolveEmbeddedHeight(rawHeight).height;
+        }
+        if (version >= 3) return persisted as unknown as BottomPanelState;
         const legacyEmbedded = p.embeddedMode === "half" ? "half" : "off";
         const lastNonFullscreenMode: EmbeddedWorkspaceMode = "half";
         const workspaceHeightPx =
@@ -308,8 +445,20 @@ export const useBottomPanelStore = create<BottomPanelState>()(
           const rawHeight =
             typeof p.workspaceHeightPx === "number" && p.workspaceHeightPx > WS_HEIGHT_HIDDEN_MAX
               ? p.workspaceHeightPx
-              : defaultHeightForMode(mode);
+              : typeof p.lastExpandedHeightPx === "number" &&
+                  p.lastExpandedHeightPx > WS_HEIGHT_HIDDEN_MAX
+                ? p.lastExpandedHeightPx
+                : defaultHeightForMode(mode);
           merged.workspaceHeightPx = resolveEmbeddedHeight(rawHeight).height;
+          merged.lastExpandedHeightPx = merged.workspaceHeightPx;
+          merged.lastExpandedHeightRatio =
+            typeof p.lastExpandedHeightRatio === "number"
+              ? p.lastExpandedHeightRatio
+              : splitWindowHeightRatio(merged.workspaceHeightPx);
+          merged.workspaceDisplayPreference =
+            typeof p.workspaceDisplayPreference === "string"
+              ? (p.workspaceDisplayPreference as WorkspaceDisplayPreference)
+              : embeddedModeToDisplayPreference(mode);
           Object.assign(merged, syncDerivedFlags(mode));
         } else {
           merged.workspaceMode = "hidden";

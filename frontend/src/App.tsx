@@ -29,6 +29,7 @@ import { workspaceShellState } from "./lib/workspaceMode";
 import { useWorkspaceBottomDockStore } from "./stores/workspaceBottomDockStore";
 import { WindowResize } from "./components/shell/WindowResize";
 import { UserWorkspace } from "./modules/workspace/UserWorkspace";
+import { DashboardPage } from "./modules/workspace/DashboardPage";
 import { TerminalPanel } from "./modules/terminal/TerminalPanel";
 import { DatabasePanel } from "./modules/database/DatabasePanel";
 import { DockerPanel } from "./modules/docker/DockerPanel";
@@ -38,6 +39,7 @@ import { ProtocolPanel } from "./modules/protocol/ProtocolPanel";
 import { WorkflowPanel } from "./modules/workflow/WorkflowPanel";
 import { KnowledgePanel } from "./modules/knowledge/KnowledgePanel";
 import { SettingsWindow } from "./components/settings/SettingsWindow";
+import { SubWindowMinimizedStack } from "./components/ui/SubWindowMinimizedStack";
 import { useSettingsShortcut } from "./hooks/useSettingsShortcut";
 import { useSettingsUiStore } from "./stores/settingsUiStore";
 import { FilesPanel } from "./modules/files/FilesPanel";
@@ -46,7 +48,6 @@ import { useAiDrawerShortcut } from "./hooks/useAiDrawerShortcut";
 import { useBottomWorkspaceShortcut } from "./hooks/useBottomWorkspaceShortcut";
 import { useWorkspaceStore } from "./stores/workspaceStore";
 import { goWorkspaceHome, navigateToFeature } from "./lib/workspaceNavigation";
-import { workspaceAddDebug } from "./lib/workspaceAddDebug";
 import "./lib/workspaceComponentRegistry";
 import { useActionStore, getPendingRiskAction } from "./stores/actionStore";
 import { useTopbarStore } from "./stores/topbarStore";
@@ -56,7 +57,7 @@ import type { DangerCheckResult } from "./lib/commandGuard";
 import { getRouteTitle, useI18n } from "./i18n";
 import { useSettingsStore, AI_DOCK_WIDTH_MIN } from "./stores/settingsStore";
 import { useDockerTopbarStore } from "./stores/dockerTopbarStore";
-import { MODULE_PATHS, WORKSPACE_PATHS, isWorkspacePath } from "./lib/paths";
+import { DASHBOARD_PATH, MODULE_PATHS, WORKSPACE_PATHS, isWorkspacePath } from "./lib/paths";
 
 function TopbarPageActions() {
   const { t } = useI18n();
@@ -154,7 +155,7 @@ function TopbarPageActions() {
     );
   }
 
-  if (isWorkspacePath(path) || path === MODULE_PATHS.workflow) {
+  if (isWorkspacePath(path) || path === DASHBOARD_PATH || path === MODULE_PATHS.workflow) {
     return null;
   }
 
@@ -255,10 +256,6 @@ function AppShell() {
   }, [location.pathname, setActivePath]);
 
   useEffect(() => {
-    console.log("[route]", location.pathname);
-  }, [location.pathname]);
-
-  useEffect(() => {
     const bootToHome = () => {
       const { workspaceMode, embeddedMode } = useBottomPanelStore.getState();
       if (
@@ -278,10 +275,10 @@ function AppShell() {
     return useBottomPanelStore.persist.onFinishHydration(bootToHome);
   }, []);
 
-  // 根路径重定向到默认工作区
+  // 根路径重定向到看板
   useEffect(() => {
     if (location.pathname !== "/") return;
-    navigate(WORKSPACE_PATHS.default, { replace: true });
+    navigate(DASHBOARD_PATH, { replace: true });
   }, [location.pathname, navigate]);
 
   useEffect(() => {
@@ -294,7 +291,6 @@ function AppShell() {
     const handler = (event: Event) => {
       const path = (event as CustomEvent<{ path: string }>).detail?.path;
       if (!path) return;
-      workspaceAddDebug("App:omnipanel-navigate", { path, isWorkspace: isWorkspacePath(path) });
       if (isWorkspacePath(path)) {
         useWorkspaceStore.getState().setActivePath(path);
         navigate(path);
@@ -330,14 +326,12 @@ function AppShell() {
   const dockOpen = aiDisplayMode === "dockview" && drawerOpen;
   const dragging = useRef(false);
 
-  // 工作区模式 → URL 同步：内部模式切换时保持 URL 一致
+  // 工程工作区全屏时同步 URL 到 /workspace/:id
   useEffect(() => {
-    if (workspaceMode === "fullscreen" || workspaceMode === "home") {
-      if (!isWorkspacePath(location.pathname)) {
-        const id = useWorkspaceStore.getState().workspace.id;
-        navigate(WORKSPACE_PATHS.dashboard(id), { replace: true });
-      }
-    }
+    if (workspaceMode !== "fullscreen" && workspaceMode !== "home") return;
+    if (isWorkspacePath(location.pathname)) return;
+    const id = useWorkspaceStore.getState().workspace.id;
+    navigate(WORKSPACE_PATHS.detail(id), { replace: true });
   }, [workspaceMode, location.pathname, navigate]);
 
   const handleResizeMouseDown = useCallback(() => {
@@ -400,7 +394,8 @@ function AppShell() {
       >
         {otherRoutesMounted && (
           <Routes>
-            <Route path="/" element={<Navigate to={WORKSPACE_PATHS.default} replace />} />
+            <Route path="/" element={<Navigate to={DASHBOARD_PATH} replace />} />
+            <Route path={DASHBOARD_PATH} element={<DashboardPage />} />
             <Route path={`${WORKSPACE_PATHS.list}/:workspaceId`} element={<UserWorkspace />} />
             <Route path={MODULE_PATHS.terminal} element={null} />
             <Route path={MODULE_PATHS.ssh} element={<SshPanel />} />
@@ -411,7 +406,7 @@ function AppShell() {
             <Route path={MODULE_PATHS.workflow} element={<WorkflowPanel />} />
             <Route path={MODULE_PATHS.knowledge} element={<KnowledgePanel />} />
             <Route path={MODULE_PATHS.files} element={<FilesPanel />} />
-            <Route path="*" element={<Navigate to={WORKSPACE_PATHS.default} replace />} />
+            <Route path="*" element={<Navigate to={DASHBOARD_PATH} replace />} />
           </Routes>
         )}
       </div>
@@ -453,6 +448,7 @@ function AppShell() {
       <WindowResize />
       <QuickInputHost />
       <SettingsWindow />
+      <SubWindowMinimizedStack />
       {pendingRiskActionId && pendingRiskAction && riskResult && (
         <DangerConfirmDialog
           command={pendingRiskAction.command ?? pendingRiskAction.description}

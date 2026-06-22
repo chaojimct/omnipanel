@@ -1,11 +1,14 @@
 import { useSyncExternalStore } from "react";
 import type { DockableTab } from "./dockableTab";
 import type { DockTabPageType } from "./dockableTab";
+import type { DockTabIconKind } from "./DockTabIcon";
 
 export interface DockTabLiveMeta {
   type?: DockTabPageType;
   dirty?: boolean;
   saved?: boolean;
+  icon?: DockTabIconKind;
+  label?: string;
   rev: number;
 }
 
@@ -30,7 +33,7 @@ function getSnapshot(tabId: string): DockTabLiveMeta {
   return metaByTabId.get(tabId) ?? EMPTY_TAB_META;
 }
 
-/** 将业务 tabs 的 file 元数据同步到 Tab 头可订阅的快照（不依赖 dockview params 重绘时机）。 */
+/** 将业务 tabs 元数据同步到 Tab 头可订阅的快照（不依赖 dockview params 重绘时机）。 */
 export function publishDockTabMeta(tabs: DockableTab[]): void {
   const nextIds = new Set(tabs.map((tab) => tab.id));
   let changed = false;
@@ -41,7 +44,9 @@ export function publishDockTabMeta(tabs: DockableTab[]): void {
       prev &&
       prev.type === tab.type &&
       prev.dirty === tab.dirty &&
-      prev.saved === tab.saved
+      prev.saved === tab.saved &&
+      prev.icon === tab.icon &&
+      prev.label === tab.label
     ) {
       continue;
     }
@@ -49,6 +54,8 @@ export function publishDockTabMeta(tabs: DockableTab[]): void {
       type: tab.type,
       dirty: tab.dirty,
       saved: tab.saved,
+      icon: tab.icon,
+      label: tab.label,
       rev: (prev?.rev ?? 0) + 1,
     });
     changed = true;
@@ -84,6 +91,8 @@ export function patchDockTabFileMeta(
     type: patch.type,
     dirty: patch.dirty,
     saved: patch.saved,
+    icon: prev?.icon,
+    label: prev?.label,
     rev: (prev?.rev ?? 0) + 1,
   });
   emit();

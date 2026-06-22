@@ -9,14 +9,10 @@ import {
   buildDefaultWorkspaceLayout,
   useWorkspaceBottomDockStore,
 } from "../../stores/workspaceBottomDockStore";
-import { isWorkspaceBuiltinTab, isWorkspaceBuiltinTabId } from "../../lib/workspaceBuiltinPanels";
-import { useI18n } from "../../i18n";
+import { isWorkspaceBuiltinTabId } from "../../lib/workspaceBuiltinPanels";
 import { isLayoutUsable, collectPanelIds, mergePanelsIntoLayout } from "../dock/dockViewLayout";
-import { getDbWorkspaceMirrorContext } from "../../stores/dbWorkspaceMirrorStore";
-import { WorkspaceMirroredPanel } from "./WorkspaceMirroredPanel";
-import { WorkspacePayloadPanel } from "./WorkspacePayloadPanel";
-import { WorkspaceBuiltinPanel } from "./WorkspaceBuiltinPanel";
-import { workspaceAddDebug } from "../../lib/workspaceAddDebug";
+import { syncWorkspaceDockActiveTabSideEffects } from "../../lib/syncWorkspaceDockActiveTab";
+import { WorkspaceDockTabPanel } from "./WorkspaceDockTabPanel";
 
 export interface WorkspaceDockCoreProps {
   workspace: WorkspaceInfo;
@@ -44,7 +40,6 @@ export function WorkspaceDockCore({
   windowChromeVariant = "default",
   emptyContent = <div className="dashboard dashboard-home" />,
 }: WorkspaceDockCoreProps) {
-  const { t } = useI18n();
   const workspaceId = workspace.id;
 
   const rawTabs = useWorkspaceBottomDockStore(
@@ -73,15 +68,6 @@ export function WorkspaceDockCore({
     [workspace, rawTabs],
   );
 
-  useEffect(() => {
-    workspaceAddDebug("WorkspaceDockCore:tabs", {
-      workspaceId,
-      dockScope,
-      tabIds: tabs.map((t) => t.id),
-      activeTabId: rawActiveTabId ?? null,
-    });
-  }, [workspaceId, dockScope, tabs, rawActiveTabId]);
-
   const activeTabId = useMemo(
     () => resolveWorkspaceActiveTabId(workspace, tabs, rawActiveTabId),
     [workspace, tabs, rawActiveTabId],
@@ -91,18 +77,14 @@ export function WorkspaceDockCore({
     () =>
       tabs.map((tab) => ({
         id: tab.id,
-        label:
-          tab.kind === "builtin" && tab.builtin
-            ? t(`workspace.builtinTabs.${tab.builtin}`)
-            : tab.label,
-        closable: tab.closable !== false && !isWorkspaceBuiltinTab(tab),
+        label: tab.label,
+        closable: tab.closable !== false,
         panelType: resolveWorkspaceDockPanelType(tab),
       })),
-    [tabs, t],
+    [tabs],
   );
 
   const effectiveSavedLayout = tabs.length > 0 ? savedLayout : null;
-  const dockRemountKey = `${workspaceId}:${dockScope}:${dockTabs.map((tab) => tab.id).join("|")}`;
 
   useEffect(() => {
     if (tabs.length === 0) return;
@@ -110,14 +92,13 @@ export function WorkspaceDockCore({
     if (savedLayout && isLayoutUsable(savedLayout)) {
       const panelIds = collectPanelIds(savedLayout);
       if (tabs.every((tab) => panelIds.has(tab.id))) return;
-      const merged = mergePanelsIntoLayout(savedLayout, tabIds, activeTabId);
-      if (merged) {
-        setLayout(workspaceId, merged);
-      }
-      return;
     }
-    const nextLayout = buildDefaultWorkspaceLayout(workspace, tabs, activeTabId);
-    setLayout(workspaceId, nextLayout);
+    const merged =
+      mergePanelsIntoLayout(savedLayout, tabIds, activeTabId) ??
+      buildDefaultWorkspaceLayout(workspace, tabs, activeTabId);
+    if (merged) {
+      setLayout(workspaceId, merged);
+    }
   }, [activeTabId, savedLayout, setLayout, tabs, workspace, workspaceId]);
 
   useEffect(() => {
@@ -139,21 +120,13 @@ export function WorkspaceDockCore({
     (tabId: string) => {
       const tab = tabs.find((item) => item.id === tabId);
       if (!tab) return null;
-      if (tab.kind === "builtin" && tab.builtin) {
-        return <WorkspaceBuiltinPanel kind={tab.builtin} />;
-      }
-      if (tab.kind === "payload" && tab.payload) {
-        return <WorkspacePayloadPanel tab={tab} isActive={tabId === activeTabId} />;
-      }
-      return <WorkspaceMirroredPanel tab={tab} isActive={tabId === activeTabId} />;
+      return <WorkspaceDockTabPanel tab={tab} isActive={tabId === activeTabId} />;
     },
     [tabs, activeTabId],
   );
 
-  const panelContentKey = useMemo(
-    () => `${activeTabId}|${tabs.map((tab) => tab.id).join(",")}`,
-    [activeTabId, tabs],
-  );
+  // 仅随激活 Tab 刷新 panel 内容，避免新增 Tab 时 bump 全部 panel 导致整模块重挂载卡死
+  const panelContentKey = activeTabId;
 
   const handleCloseTab = useCallback(
     (tabId: string) => {
@@ -173,24 +146,13 @@ export function WorkspaceDockCore({
   const handleActiveTabChange = useCallback(
     (tabId: string) => {
       setActiveTabId(workspaceId, tabId);
-      const tab = tabs.find((item) => item.id === tabId);
-      if (
-        tab?.kind === "mirrored" &&
-        tab.originScope === "database" &&
-        tab.originPanelId
-      ) {
-        getDbWorkspaceMirrorContext()?.setActiveTabId(tab.originPanelId);
-      }
-      if (tab?.kind === "payload" && tab.payload?.module === "database") {
-        getDbWorkspaceMirrorContext()?.setActiveTabId(tab.payload.id);
-      }
+      syncWorkspaceDockActiveTabSideEffects(tabs.find((item) => item.id === tabId));
     },
     [setActiveTabId, tabs, workspaceId],
   );
 
   return (
     <DockableWorkspace
-      key={dockRemountKey}
       className={className}
       dockScope={dockScope}
       acceptExternalDrops={acceptExternalDrops}

@@ -79,7 +79,6 @@ interface TreeNodeProps {
   active?: boolean;
   onSelect?: () => void;
   onLabelClick?: () => void;
-  onLabelDoubleClick?: () => void;
   onContextMenu?: (e: ReactMouseEvent) => void;
   iconUrl?: string | null;
   reorderScope?: string;
@@ -129,7 +128,6 @@ function TreeNode({
   active,
   onSelect,
   onLabelClick,
-  onLabelDoubleClick,
   onContextMenu,
   iconUrl,
   reorderScope,
@@ -140,7 +138,6 @@ function TreeNode({
   connectionEnabled = true,
 }: TreeNodeProps) {
   const { t } = useI18n();
-  const labelClickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { type, label } = item;
   const indent = depth * 16 + 8;
   const draggable = isSchemaTreeItemDraggable(type);
@@ -150,14 +147,6 @@ function TreeNode({
       ? " tree-node--connection-enabled"
       : " tree-node--connection-disabled"
     : "";
-
-  useEffect(() => {
-    return () => {
-      if (labelClickTimerRef.current) {
-        clearTimeout(labelClickTimerRef.current);
-      }
-    };
-  }, []);
 
   const runLabelClick = () => {
     if (shouldSuppressSchemaTreeClick()) {
@@ -175,30 +164,7 @@ function TreeNode({
   };
 
   const handleLabelClick = () => {
-    if (onLabelDoubleClick) {
-      if (labelClickTimerRef.current) {
-        clearTimeout(labelClickTimerRef.current);
-      }
-      labelClickTimerRef.current = setTimeout(() => {
-        labelClickTimerRef.current = null;
-        runLabelClick();
-      }, 250);
-      return;
-    }
     runLabelClick();
-  };
-
-  const handleLabelDoubleClick = (event: ReactMouseEvent) => {
-    event.preventDefault();
-    event.stopPropagation();
-    if (labelClickTimerRef.current) {
-      clearTimeout(labelClickTimerRef.current);
-      labelClickTimerRef.current = null;
-    }
-    if (shouldSuppressSchemaTreeClick()) {
-      return;
-    }
-    onLabelDoubleClick?.();
   };
 
   return (
@@ -313,7 +279,6 @@ function TreeNode({
       <span
         className="tree-label"
         onClick={handleLabelClick}
-        onDoubleClick={onLabelDoubleClick ? handleLabelDoubleClick : undefined}
       >
         {label}
         {labelComment ? (

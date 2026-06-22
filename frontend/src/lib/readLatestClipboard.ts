@@ -42,19 +42,31 @@ async function readViaClipboardItems(): Promise<ClipboardSnapshot | null> {
   return null;
 }
 
-/** 读取剪贴板最新一条内容（优先图片，其次文本） */
+async function readViaClipboardText(): Promise<ClipboardTextSnapshot | null> {
+  if (!navigator.clipboard?.readText) return null;
+  const text = (await navigator.clipboard.readText()).trim();
+  return text ? { kind: "text", text } : null;
+}
+
+/** 读取剪贴板最新一条内容（优先文本，其次图片） */
 export async function readLatestClipboard(): Promise<ClipboardSnapshot | null> {
+  try {
+    const textSnapshot = await readViaClipboardText();
+    if (textSnapshot) return textSnapshot;
+  } catch {
+    // fall through
+  }
+
   try {
     const fromItems = await readViaClipboardItems();
     if (fromItems) return fromItems;
   } catch {
-    // fall through to readText
+    // fall through
   }
 
-  if (!navigator.clipboard?.readText) {
+  if (!navigator.clipboard?.readText && !navigator.clipboard?.read) {
     throw new Error("CLIPBOARD_UNAVAILABLE");
   }
 
-  const text = (await navigator.clipboard.readText()).trim();
-  return text ? { kind: "text", text } : null;
+  return null;
 }

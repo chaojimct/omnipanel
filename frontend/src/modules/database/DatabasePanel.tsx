@@ -2870,6 +2870,7 @@ export function DatabasePanel() {
       addSnapshotToWorkspace(
         currentWorkspaceId,
         dbTabToSnapshot(newTab, tabModes[ctxTab.id]),
+        { activate: false },
       );
     },
     [workspaceTabs, tabModes, currentWorkspaceId, setWorkspaceTabs, setActiveWorkspaceTabId],

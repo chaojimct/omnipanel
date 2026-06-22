@@ -14,6 +14,30 @@ declare global {
   }
 }
 
+/** Monaco 内部取消异步任务时 reject 的 CancellationError（如 WordHighlighter dispose）。 */
+function isMonacoCancellationError(reason: unknown): boolean {
+  if (!(reason instanceof Error)) {
+    return false;
+  }
+  return reason.name === "Canceled" && reason.message === "Canceled";
+}
+
+let monacoCancellationHandlersInstalled = false;
+
+/** 避免切换/卸载 SQL 编辑器时在控制台出现 Uncaught (in promise) Canceled。 */
+function installMonacoCancellationHandlers(): void {
+  if (monacoCancellationHandlersInstalled) {
+    return;
+  }
+  monacoCancellationHandlersInstalled = true;
+
+  window.addEventListener("unhandledrejection", (event) => {
+    if (isMonacoCancellationError(event.reason)) {
+      event.preventDefault();
+    }
+  });
+}
+
 if (!window.MonacoEnvironment) {
   window.MonacoEnvironment = {
     getWorker() {
@@ -23,3 +47,4 @@ if (!window.MonacoEnvironment) {
 }
 
 loader.config({ monaco });
+installMonacoCancellationHandlers();

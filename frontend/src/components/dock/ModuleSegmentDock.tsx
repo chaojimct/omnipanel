@@ -7,7 +7,6 @@ import {
 } from "./DockableWorkspace";
 import type { DockTabIconKind } from "./DockTabIcon";
 import type { TopbarTabDef } from "../../stores/topbarStore";
-import { workspaceAddDebug } from "../../lib/workspaceAddDebug";
 
 export interface ModuleSegmentTab {
   id: string;
@@ -101,11 +100,6 @@ export function ModuleSegmentDock({
     : "module-root-dock module-segment-dock";
 
   if (!enabled) {
-    workspaceAddDebug("ModuleSegmentDock:disabled", {
-      activeTabId,
-      hasOnCtrlCopyTab: Boolean(onCtrlCopyTab),
-      tabIds: tabs.map((t) => t.id),
-    });
     return <>{renderPanel(activeTabId)}</>;
   }
 

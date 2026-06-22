@@ -10,7 +10,6 @@ import {
 } from "../../stores/workspaceBottomDockStore";
 import { WorkspaceDockCore } from "./WorkspaceDockCore";
 import { WorkspaceThumbnailStrip } from "./WorkspaceThumbnailStrip";
-import { WorkspaceTaskbarStrip } from "./WorkspaceTaskbarStrip";
 import { WorkspaceFullscreenDragHandle } from "./WorkspaceFullscreenDragHandle";
 
 interface WorkspacePanelProps {
@@ -31,6 +30,9 @@ export function WorkspacePanel({ workspace }: WorkspacePanelProps) {
   const workspaceMode = useBottomPanelStore((state) => state.workspaceMode);
   const isEngineeringFullscreen = workspaceMode === "fullscreen";
   const embeddedMode = useEmbeddedWorkspaceMode();
+  const isSplitWindow = embeddedMode === "half";
+  const showWorkspaceFullscreenChrome =
+    isEngineeringFullscreen || !isSplitWindow;
   const handleWorkspaceChromeIcon = useBottomPanelStore(
     (state) => state.handleWorkspaceChromeIcon,
   );
@@ -69,7 +71,7 @@ export function WorkspacePanel({ workspace }: WorkspacePanelProps) {
 
   const handleTopbarDoubleClick = useCallback(
     (event: React.MouseEvent) => {
-      if (isEngineeringFullscreen) return;
+      if (isSplitWindow || isEngineeringFullscreen) return;
       const target = event.target as HTMLElement;
       const inHeader = target.closest(
         ".workspace-panel-empty-topbar, .dv-tabs-and-actions-container",
@@ -84,7 +86,7 @@ export function WorkspacePanel({ workspace }: WorkspacePanelProps) {
       }
       enterWorkspaceFullscreen();
     },
-    [enterWorkspaceFullscreen, isEngineeringFullscreen],
+    [enterWorkspaceFullscreen, isEngineeringFullscreen, isSplitWindow],
   );
 
   const preActions = useMemo(
@@ -136,18 +138,8 @@ export function WorkspacePanel({ workspace }: WorkspacePanelProps) {
   }
 
   if (embeddedMode === "taskbar") {
-    return (
-      <div className="workspace-panel-frame workspace-panel--taskbar">
-        <div className="workspace-taskbar-bar">
-          <WorkspaceTaskbarStrip
-            tabs={tabs}
-            activeTabId={activeTabId}
-            onSelectTab={handleActiveTabChange}
-          />
-          {fullscreenButton}
-        </div>
-      </div>
-    );
+    // task-bar UI 由 WorkspacePreviewTaskBar 渲染；此处仅占位避免重复 switcher / 全屏按钮
+    return null;
   }
 
   const frameClassName = [
@@ -164,11 +156,11 @@ export function WorkspacePanel({ workspace }: WorkspacePanelProps) {
       onDoubleClickCapture={handleTopbarDoubleClick}
     >
       {isEngineeringFullscreen ? <WorkspaceFullscreenDragHandle /> : null}
-      {fullscreenButton}
+      {showWorkspaceFullscreenChrome ? fullscreenButton : null}
       <WorkspaceDockCore
         workspace={workspace}
         dockScope={dockScope}
-        preActions={preActions}
+        preActions={isSplitWindow ? undefined : preActions}
         windowControl={isEngineeringFullscreen}
       />
     </div>

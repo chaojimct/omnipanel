@@ -45,6 +45,8 @@ interface DockWorkspaceProps {
   onBottomLayoutChange?: () => void;
   /** 底部面板拖拽结束或布局稳定后触发 */
   onBottomResizeEnd?: () => void;
+  /** task-bar 等固定高度模式：隐藏拖拽把手并锁定高度 */
+  bottomHandleDisabled?: boolean;
   className?: string;
 }
 
@@ -68,6 +70,7 @@ export function DockWorkspace({
   onBottomPanelHeightChange,
   onBottomLayoutChange,
   onBottomResizeEnd,
+  bottomHandleDisabled = false,
   className,
 }: DockWorkspaceProps) {
   const handleBottomHeight = useCallback(
@@ -95,11 +98,11 @@ export function DockWorkspace({
       <DockPanel>
         {main}
       </DockPanel>
-      <DockHandle direction="vertical" />
+      {!bottomHandleDisabled ? <DockHandle direction="vertical" /> : null}
       <DockPanel
-        defaultSize={bottomSizePx}
+        defaultSize={`${bottomSizePx}px`}
         minSize={`${bottomMinPx}px`}
-        maxSize={bottomMaxPx}
+        maxSize={`${bottomMaxPx}px`}
         collapsible
         collapsedSize={0}
         groupResizeBehavior="preserve-pixel-size"

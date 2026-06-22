@@ -16,7 +16,7 @@ export interface WorkspaceComponentRootProps {
   props?: SerializableProps;
   /** 可选：固定快照 id（同 props 去重） */
   snapshotId?: string;
-  /** 加入工作区后是否跳转到工作区详情页，默认 true */
+  /** 加入工作区后是否跳转到工作区详情页，默认 false（Ctrl+点击仅写入底部工作区） */
   navigateOnAdd?: boolean;
   className?: string;
   children: ReactNode;
@@ -31,7 +31,7 @@ export function WorkspaceComponent({
   label,
   props: componentProps,
   snapshotId,
-  navigateOnAdd = true,
+  navigateOnAdd = false,
   className,
   children,
 }: WorkspaceComponentRootProps) {

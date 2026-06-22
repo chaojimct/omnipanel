@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useLocation } from "react-router-dom";
 import { useActionStore } from "../../stores/actionStore";
 import { useWorkspaceStore, type WorkspaceInfo } from "../../stores/workspaceStore";
-import { useWorkspacePreviewCollapseStore } from "../../stores/workspacePreviewCollapseStore";
+import { useBottomPanelStore, useEmbeddedWorkspaceMode } from "../../stores/bottomPanelStore";
 import { useStatusBarStore } from "../../stores/statusBarStore";
 import { getResourceById, type EnvironmentTag } from "../../lib/resourceRegistry";
 import { isWorkspacePath } from "../../lib/paths";
@@ -12,29 +12,39 @@ import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
 
 function StatusBarWorkspacePanelToggle() {
   const { t } = useI18n();
-  const isOpen = useWorkspacePreviewCollapseStore((state) => state.isOpen);
-  const toggle = useWorkspacePreviewCollapseStore((state) => state.toggle);
+  const embeddedMode = useEmbeddedWorkspaceMode();
+  const workspaceDisplayPreference = useBottomPanelStore(
+    (state) => state.workspaceDisplayPreference,
+  );
+  const toggleDisplayMode = useBottomPanelStore(
+    (state) => state.toggleWorkspaceDisplayPreference,
+  );
 
-  const toggleLabel = isOpen
-    ? t("shell.statusbar.collapseWorkspace")
-    : t("shell.statusbar.expandWorkspace");
+  const isHidden = embeddedMode === "hidden";
+  const isTaskBar = workspaceDisplayPreference === "task-bar";
+
+  const toggleLabel = isHidden
+    ? t("shell.statusbar.expandWorkspace")
+    : isTaskBar
+      ? t("shell.statusbar.switchToSplitWindow")
+      : t("shell.statusbar.switchToTaskBar");
 
   return (
     <button
       type="button"
-      className={`statusbar-item statusbar-button statusbar-workspace-toggle${isOpen ? " statusbar-workspace-toggle--open" : ""}`}
-      onClick={() => toggle()}
+      className={`statusbar-item statusbar-button statusbar-workspace-toggle${!isHidden && !isTaskBar ? " statusbar-workspace-toggle--open" : ""}`}
+      onClick={() => toggleDisplayMode()}
       title={toggleLabel}
       aria-label={toggleLabel}
-      aria-pressed={isOpen}
+      aria-pressed={!isHidden && !isTaskBar}
     >
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="12" height="12" aria-hidden>
         <rect x="3" y="4" width="18" height="16" rx="1.5" />
         <path d="M3 15h18" />
-        {isOpen ? (
-          <polyline points="8 18 12 14 16 18" />
-        ) : (
+        {isHidden || isTaskBar ? (
           <polyline points="8 11 12 7 16 11" />
+        ) : (
+          <polyline points="8 18 12 14 16 18" />
         )}
       </svg>
     </button>
@@ -43,14 +53,14 @@ function StatusBarWorkspacePanelToggle() {
 
 function StatusBarWorkspaceControls() {
   const switchWorkspace = useWorkspaceStore((state) => state.switchWorkspace);
-  const expandPreview = useWorkspacePreviewCollapseStore((state) => state.expand);
+  const requestExpand = useBottomPanelStore((state) => state.requestExpand);
 
   const handleSelectWorkspace = useCallback(
     (ws: WorkspaceInfo) => {
       switchWorkspace(ws.id);
-      expandPreview();
+      requestExpand();
     },
-    [switchWorkspace, expandPreview],
+    [switchWorkspace, requestExpand],
   );
 
   return (

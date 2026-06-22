@@ -11,10 +11,11 @@ import aigenIcon from "../../assets/aigen.svg";
 
 export type FormDialogClipboardBarProps = {
   open: boolean;
-  onRecognize?: (snapshot: ClipboardSnapshot | null) => void;
+  onRecognize?: (snapshot: ClipboardSnapshot | null) => void | Promise<void>;
+  recognizing?: boolean;
 };
 
-export function FormDialogClipboardBar({ open, onRecognize }: FormDialogClipboardBarProps) {
+export function FormDialogClipboardBar({ open, onRecognize, recognizing = false }: FormDialogClipboardBarProps) {
   const { t } = useI18n();
   const [snapshot, setSnapshot] = useState<ClipboardSnapshot | null>(null);
   const [loading, setLoading] = useState(false);
@@ -30,34 +31,26 @@ export function FormDialogClipboardBar({ open, onRecognize }: FormDialogClipboar
     });
   }, []);
 
-  const loadClipboard = useCallback(
-    async (opts?: { showEmptyError?: boolean }) => {
-      setLoading(true);
-      setError(null);
-      try {
-        const data = await readLatestClipboard();
-        replaceSnapshot(data);
-        onRecognizeRef.current?.(data);
-        if (!data && opts?.showEmptyError) {
-          setError(t("formDialog.clipboard.emptyClipboard"));
-        }
-        return data;
-      } catch (e) {
-        const message = String(e);
-        setError(
-          message.includes("CLIPBOARD_UNAVAILABLE")
-            ? t("formDialog.clipboard.unavailable")
-            : t("formDialog.clipboard.readFailed"),
-        );
-        replaceSnapshot(null);
-        onRecognizeRef.current?.(null);
-        return null;
-      } finally {
-        setLoading(false);
-      }
-    },
-    [replaceSnapshot, t],
-  );
+  const loadClipboardPreview = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await readLatestClipboard();
+      replaceSnapshot(data);
+      return data;
+    } catch (e) {
+      const message = String(e);
+      setError(
+        message.includes("CLIPBOARD_UNAVAILABLE")
+          ? t("formDialog.clipboard.unavailable")
+          : t("formDialog.clipboard.readFailed"),
+      );
+      replaceSnapshot(null);
+      return null;
+    } finally {
+      setLoading(false);
+    }
+  }, [replaceSnapshot, t]);
 
   useEffect(() => {
     if (!open) {
@@ -78,7 +71,6 @@ export function FormDialogClipboardBar({ open, onRecognize }: FormDialogClipboar
           return;
         }
         replaceSnapshot(data);
-        onRecognizeRef.current?.(data);
       } catch (e) {
         if (cancelled) return;
         const message = String(e);
@@ -88,7 +80,6 @@ export function FormDialogClipboardBar({ open, onRecognize }: FormDialogClipboar
             : t("formDialog.clipboard.readFailed"),
         );
         replaceSnapshot(null);
-        onRecognizeRef.current?.(null);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -107,15 +98,29 @@ export function FormDialogClipboardBar({ open, onRecognize }: FormDialogClipboar
   );
 
   const handleRecognize = () => {
-    void loadClipboard({ showEmptyError: true });
+    void (async () => {
+      const data = await loadClipboardPreview();
+      if (!data) {
+        setError((prev) => prev ?? t("formDialog.clipboard.emptyClipboard"));
+        await onRecognizeRef.current?.(null);
+        return;
+      }
+      try {
+        await onRecognizeRef.current?.(data);
+      } catch (e) {
+        setError(String(e));
+      }
+    })();
   };
+
+  const busy = loading || recognizing;
 
   return (
     <div className="form-dialog-clipboard-bar">
       <div className="form-dialog-clipboard-bar__preview">
         {error ? (
           <span className="form-dialog-clipboard-bar__error">{error}</span>
-        ) : loading && !snapshot ? (
+        ) : busy && !snapshot ? (
           <span className="form-dialog-clipboard-bar__placeholder">{t("common.loading")}</span>
         ) : snapshot?.kind === "text" ? (
           <span className="form-dialog-clipboard-bar__text" title={snapshot.text}>
@@ -131,12 +136,13 @@ export function FormDialogClipboardBar({ open, onRecognize }: FormDialogClipboar
       </div>
       <Button
         type="button"
-        variant="icon"
+        variant="ghost"
+        size="icon-sm"
         className="form-dialog-clipboard-bar__action"
-        disabled={loading}
+        disabled={busy}
         onClick={handleRecognize}
         title={t("formDialog.clipboard.aiRecognize")}
-        aria-label={loading ? t("common.loading") : t("formDialog.clipboard.aiRecognize")}
+        aria-label={busy ? t("common.loading") : t("formDialog.clipboard.aiRecognize")}
       >
         <img
           src={aigenIcon}

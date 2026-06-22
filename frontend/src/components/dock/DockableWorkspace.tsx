@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -10,7 +11,6 @@ import {
 } from "react";
 import { useCtrlKeyHeld } from "../../hooks/useCtrlKeyHeld";
 import { isPointerCopyModifier } from "../../lib/platform";
-import { workspaceAddDebug } from "../../lib/workspaceAddDebug";
 import {
   DockviewReact,
   type DockviewApi,
@@ -40,7 +40,10 @@ import {
 } from "../../lib/dockviewRegistry";
 import { syncTabGroupsByPanelType, clearTabGroups } from "./dockTabGroups";
 import { DockWorkspaceTabHeader } from "./DockWorkspaceTabHeader";
-import { registerDockTabHeaderRuntime } from "./dockTabHeaderRuntime";
+import {
+  DockTabHeaderRuntimeContext,
+  type DockTabHeaderRuntime,
+} from "./dockTabHeaderRuntime";
 import { TopbarTabAddButton } from "../ui/TopbarTabAddButton";
 import type { TopbarAddMenuItem } from "../../stores/topbarStore";
 import type { TopbarTabDef } from "../../stores/topbarStore";
@@ -243,21 +246,14 @@ export function DockableWorkspace({
   const ctrlHeld = useCtrlKeyHeld();
   const copyModeActive = ctrlHeld && Boolean(onCtrlCopyTab);
 
-  useEffect(() => {
-    workspaceAddDebug("DockableWorkspace:copyMode", {
-      copyModeActive,
-      ctrlHeld,
-      hasOnCtrlCopyTab: Boolean(onCtrlCopyTab),
-      dockScope,
-      tabCount: tabs.length,
-    });
-  }, [copyModeActive, ctrlHeld, onCtrlCopyTab, dockScope, tabs.length]);
   const highlightedGroupRef = useRef<HTMLElement | null>(null);
   const lastPointerRef = useRef<{ x: number; y: number } | null>(null);
   const onPanelTransferredOutRef = useRef(onPanelTransferredOut);
   onPanelTransferredOutRef.current = onPanelTransferredOut;
   const tabsRef = useRef(tabs);
   tabsRef.current = tabs;
+  const activeTabIdRef = useRef(activeTabId);
+  activeTabIdRef.current = activeTabId;
   const resolveTabGroupMetaRef = useRef(resolveTabGroupMeta);
   resolveTabGroupMetaRef.current = resolveTabGroupMeta;
   const defaultHeaderPositionRef = useRef(defaultHeaderPosition);
@@ -315,12 +311,15 @@ export function DockableWorkspace({
   const tabStyleRef = useRef(tabStyle);
   tabStyleRef.current = tabStyle;
 
-  registerDockTabHeaderRuntime({
-    tabsRef,
-    tabStyleRef,
-    onTabContextMenuRef,
-    onCtrlCopyTabRef,
-  });
+  const tabHeaderRuntime = useMemo(
+    (): DockTabHeaderRuntime => ({
+      tabsRef,
+      tabStyleRef,
+      onTabContextMenuRef,
+      onCtrlCopyTabRef,
+    }),
+    [],
+  );
   const addTabConfigRef = useRef(addTabConfig);
   addTabConfigRef.current = addTabConfig;
   const preActionsRef = useRef(preActions);
@@ -375,17 +374,9 @@ export function DockableWorkspace({
             onClick={(e) => {
               const onCopy = onCtrlCopyTabRef.current;
               const mod = isPointerCopyModifier(e);
-              workspaceAddDebug("DockableWorkspace:panel_click", {
-                tabId,
-                hasOnCopy: Boolean(onCopy),
-                mod,
-                ctrlKey: e.ctrlKey,
-                metaKey: e.metaKey,
-              });
               if (!onCopy || !mod) return;
               e.preventDefault();
               e.stopPropagation();
-              workspaceAddDebug("DockableWorkspace:panel_click:copy", { tabId });
               onCopy(tabId);
             }}
           >
@@ -562,18 +553,10 @@ export function DockableWorkspace({
         const onCopy = onCtrlCopyTabRef.current;
         const mod = isPointerCopyModifier(e);
         const tabId = resolveOwnedDockTabId(container, root);
-        workspaceAddDebug("DockableWorkspace:overlay_click", {
-          tabId,
-          hasOnCopy: Boolean(onCopy),
-          mod,
-          ctrlKey: e.ctrlKey,
-          metaKey: e.metaKey,
-        });
         if (!onCopy || !mod) return;
         e.preventDefault();
         e.stopPropagation();
         if (tabId) {
-          workspaceAddDebug("DockableWorkspace:overlay_click:copy", { tabId });
           onCopy(tabId);
         }
       });
@@ -718,7 +701,7 @@ export function DockableWorkspace({
             component: COMPONENT_NAME,
             params: tabParamsFromDockableTab(tab),
             title: tab.label,
-            inactive: true,
+            inactive: tab.id !== activeTabIdRef.current,
           };
           if (firstPanel) {
             options.position = {
@@ -727,6 +710,7 @@ export function DockableWorkspace({
             };
           }
           api.addPanel(options);
+          syncPanelTabParams(api, tab);
           existing.add(tab.id);
         } catch (err) {
           // 防御性兜底：dockview 抛 "panel already exists" 时跳过
@@ -755,7 +739,7 @@ export function DockableWorkspace({
             component: COMPONENT_NAME,
             params: tabParamsFromDockableTab(tab),
             title: tab.label,
-            inactive: true,
+            inactive: tab.id !== activeTabIdRef.current,
           };
           if (firstPanel) {
             options.position = {
@@ -764,6 +748,7 @@ export function DockableWorkspace({
             };
           }
           api.addPanel(options);
+          syncPanelTabParams(api, tab);
           existingAfterLoad.add(tab.id);
         } catch (err) {
           console.warn("[DockableWorkspace] ensure panel after initial layout failed for", tab.id, err);
@@ -813,7 +798,7 @@ export function DockableWorkspace({
               component: COMPONENT_NAME,
               params: tabParamsFromDockableTab(tab),
               title: tab.label,
-              inactive: true,
+              inactive: tab.id !== activeTabIdRef.current,
             };
             if (firstPanel) {
               options.position = {
@@ -822,6 +807,7 @@ export function DockableWorkspace({
               };
             }
             api.addPanel(options);
+            syncPanelTabParams(api, tab);
           } else {
             syncPanelTabParams(api, tab);
           }
@@ -836,7 +822,7 @@ export function DockableWorkspace({
   );
 
   // 同步 tab 变更（添加/删除/重命名）
-  useEffect(() => {
+  useLayoutEffect(() => {
     publishDockTabMeta(tabs);
   }, [tabs]);
 
@@ -991,6 +977,10 @@ export function DockableWorkspace({
         registerDockviewInstance(api.id, {
           scope,
           api,
+          getContainer: () =>
+            wrapperRef.current?.querySelector<HTMLElement>(
+              ".dockable-workspace__dockview",
+            ) ?? null,
           onPanelTransferredOut: (panelId) => {
             transferredOutRef.current.add(panelId);
             onPanelTransferredOutRef.current?.(panelId);
@@ -1068,9 +1058,10 @@ export function DockableWorkspace({
       applyInitialLayout(api);
       syncWindowChromeHostRef.current(api);
 
-      // 同步当前 active tab
-      if (activeTabId) {
-        const target = api.getPanel(activeTabId);
+      // 同步当前 active tab（用 ref，避免 onReady 因 activeTabId 变化反复注册）
+      const initialActiveTabId = activeTabIdRef.current;
+      if (initialActiveTabId) {
+        const target = api.getPanel(initialActiveTabId);
         if (target) {
           isSyncingRef.current = true;
           try {
@@ -1081,7 +1072,7 @@ export function DockableWorkspace({
         }
       }
     },
-    [activeTabId, applyInitialLayout, syncTabGroups],
+    [applyInitialLayout, syncTabGroups],
   );
 
   // 卸载时清理
@@ -1118,23 +1109,25 @@ export function DockableWorkspace({
             {emptyContent}
           </div>
         ) : null}
-        <DockviewReact
-          className="dockable-workspace__dockview"
-          components={components}
-          defaultTabComponent={defaultTabComponent}
-          leftHeaderActionsComponent={
-            createPanelRequest || addTabConfig?.show ? leftHeaderActions : undefined
-          }
-          prefixHeaderActionsComponent={preActions ? prefixHeaderActions : undefined}
-          rightHeaderActionsComponent={
-            windowControl ? rightHeaderActions : undefined
-          }
-          noPanelsOverlay={acceptExternalDrops ? "emptyGroup" : undefined}
-          theme={themeDark}
-          dndStrategy="pointer"
-          defaultHeaderPosition={defaultHeaderPosition}
-          onReady={handleReady}
-        />
+        <DockTabHeaderRuntimeContext.Provider value={tabHeaderRuntime}>
+          <DockviewReact
+            className="dockable-workspace__dockview"
+            components={components}
+            defaultTabComponent={defaultTabComponent}
+            leftHeaderActionsComponent={
+              createPanelRequest || addTabConfig?.show ? leftHeaderActions : undefined
+            }
+            prefixHeaderActionsComponent={preActions ? prefixHeaderActions : undefined}
+            rightHeaderActionsComponent={
+              windowControl ? rightHeaderActions : undefined
+            }
+            noPanelsOverlay={acceptExternalDrops ? "emptyGroup" : undefined}
+            theme={themeDark}
+            dndStrategy="pointer"
+            defaultHeaderPosition={defaultHeaderPosition}
+            onReady={handleReady}
+          />
+        </DockTabHeaderRuntimeContext.Provider>
       </DockErrorBoundary>
     </div>
   );

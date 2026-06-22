@@ -16,10 +16,13 @@ fn path_exists(path: &Path) -> bool {
 fn command_exists(name: &str) -> bool {
     #[cfg(windows)]
     {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
         Command::new("where")
             .arg(name)
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
+            .creation_flags(CREATE_NO_WINDOW)
             .status()
             .map(|s| s.success())
             .unwrap_or(false)
