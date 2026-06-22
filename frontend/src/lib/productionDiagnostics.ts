@@ -1,5 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 
+import { isMonacoCancellationError } from "./monacoCancellation";
+
 const MAX_ERRORS = 8;
 const errors: string[] = [];
 let panel: HTMLDivElement | null = null;
@@ -149,6 +151,7 @@ export function initProductionDiagnostics(): void {
   });
 
   window.addEventListener("unhandledrejection", (event) => {
+    if (isMonacoCancellationError(event.reason)) return;
     pushError(`[unhandledrejection] ${formatError(event.reason)}`);
   });
 
