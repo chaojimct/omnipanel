@@ -25,7 +25,18 @@ export type TableDesignerWorkspaceTab = {
   tableName: string;
 };
 
-export type DbWorkspaceTab = SqlWorkspaceTab | DatabaseListWorkspaceTab | TableDesignerWorkspaceTab;
+export type ConnectionInfoWorkspaceTab = {
+  id: string;
+  kind: "connection";
+  label: string;
+  connId: string;
+};
+
+export type DbWorkspaceTab =
+  | SqlWorkspaceTab
+  | DatabaseListWorkspaceTab
+  | TableDesignerWorkspaceTab
+  | ConnectionInfoWorkspaceTab;
 
 export function isSqlWorkspaceTab(tab: DbWorkspaceTab): tab is SqlWorkspaceTab {
   return tab.kind === "sql";
@@ -37,6 +48,10 @@ export function isDatabaseListTab(tab: DbWorkspaceTab): tab is DatabaseListWorks
 
 export function isTableDesignerTab(tab: DbWorkspaceTab): tab is TableDesignerWorkspaceTab {
   return tab.kind === "designer";
+}
+
+export function isConnectionInfoTab(tab: DbWorkspaceTab): tab is ConnectionInfoWorkspaceTab {
+  return tab.kind === "connection";
 }
 
 export function makeSqlTabId(): string {
@@ -51,6 +66,10 @@ export function makeDesignerTabId(): string {
   return `design:${Date.now()}`;
 }
 
+export function makeConnectionInfoTabId(): string {
+  return `conninfo:${Date.now()}`;
+}
+
 export function makeTableDesignerTabLabel(dbName: string, tableName: string): string {
   return `${dbName}.${tableName}`;
 }
@@ -61,6 +80,11 @@ export function makeSqlTabLabel(sqlTabCount: number): string {
 
 export function makeTableTabLabel(dbName: string, tableName: string) {
   return `${dbName}.${tableName}`;
+}
+
+/** 连接信息 Tab 唯一键 */
+export function makeConnectionTabKey(connId: string): string {
+  return `conn:${connId}`;
 }
 
 /** 数据库列表 Tab 唯一键：连接 + 库名 */
@@ -111,6 +135,14 @@ export function findTabIdForDatabase(
   return tabs.find(
     (tab) => tab.kind === "database" && tab.connId === connId && tab.dbName === dbName,
   )?.id;
+}
+
+/** 查找已打开指定连接的连接信息 Tab */
+export function findTabIdForConnection(
+  tabs: DbWorkspaceTab[],
+  connId: string,
+): string | undefined {
+  return tabs.find((tab) => tab.kind === "connection" && tab.connId === connId)?.id;
 }
 
 /** 查找已打开指定表的工作区 Tab，未找到返回 undefined */

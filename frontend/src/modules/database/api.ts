@@ -122,6 +122,14 @@ export function isToolboxCapableConnection(
   );
 }
 
+/** 连接信息面板支持的连接（MySQL / MariaDB 专有 STATUS / PROCESSLIST）。 */
+export function isMysqlConnectionInfoCapable(
+  connection: Pick<DbConnectionConfig, "db_type">,
+): boolean {
+  const engine = connection.db_type.toLowerCase();
+  return engine === "mysql" || engine === "mariadb";
+}
+
 export async function listConnections(): Promise<DbConnectionConfig[]> {
   return invoke<DbConnectionConfig[]>("db_list_connections");
 }

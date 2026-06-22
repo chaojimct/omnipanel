@@ -10,6 +10,7 @@ import { WorkspaceEmptyPage } from "../../components/ui/WorkspaceEmptyPage";
 import type { SchemaDatabaseSelection, SchemaTableSelection } from "./SchemaBrowser";
 import { DatabaseSchemaSidebar } from "./DatabaseSchemaSidebar";
 import { DatabaseTablesPanel } from "./DatabaseTablesPanel";
+import { DatabaseConnectionInfoPanel } from "./DatabaseConnectionInfoPanel";
 import { ConnectionDialog } from "./ConnectionDialog";
 import { ContextMenu } from "../../components/ui/ContextMenu";
 import { FormDialog, FormField } from "../../components/ui/FormDialog";
@@ -56,13 +57,16 @@ import {
   makeDatabaseTabId,
   makeDatabaseTabKey,
   findTabIdForDatabase,
+  findTabIdForConnection,
   findTabIdForSqlFile,
   makeTableTabLabel,
   makeTableTabKey,
   findTabIdForTable,
   findTabIdForDesigner,
   makeDesignerTabId,
+  makeConnectionInfoTabId,
   makeTableDesignerTabLabel,
+  type ConnectionInfoWorkspaceTab,
   type DatabaseListWorkspaceTab,
   type DbWorkspaceTab,
   type SqlWorkspaceTab,
@@ -106,7 +110,7 @@ import { useWorkspaceBottomDockStore } from "../../stores/workspaceBottomDockSto
 import { publishDbWorkspaceMirror } from "../../stores/dbWorkspaceMirrorStore";
 import { usePersistedModuleTab } from "../../hooks/usePersistedModuleTab";
 import { useWorkspaceStore, onWorkspaceSwitch } from "../../stores/workspaceStore";
-import { dbTabToSnapshot, addSnapshotToWorkspace } from "../../lib/workspaceTabActions";
+import { dbTabToSnapshot, addSnapshotToWorkspace, syncDatabaseTableTabToWorkspace } from "../../lib/workspaceTabActions";
 import { useWorkspaceTabStore, type DbTabSnapshot } from "../../stores/workspaceTabStore";
 import {
   canAcceptSchemaTreeDrop,
@@ -703,7 +707,7 @@ export function DatabasePanel() {
       setTableDesignerStates(restoredDesigner);
 
       const activeTab = session.tabs.find((tab) => tab.id === session.activeTabId);
-      if (activeTab?.kind === "database") {
+      if (activeTab?.kind === "database" || activeTab?.kind === "connection") {
         setActiveConnId(activeTab.connId);
       } else if (activeTab?.kind === "designer") {
         setActiveConnId(activeTab.connId);
@@ -1406,6 +1410,15 @@ export function DatabasePanel() {
           tab.connId,
           tab.dbName,
         );
+        if (existing) {
+          setActiveWorkspaceTabId(existing);
+          removeRecentClosedPanel(entry.closedAt);
+          return;
+        }
+      }
+
+      if (tab.kind === "connection") {
+        const existing = findTabIdForConnection(workspaceTabsRef.current, tab.connId);
         if (existing) {
           setActiveWorkspaceTabId(existing);
           removeRecentClosedPanel(entry.closedAt);
@@ -2165,6 +2178,10 @@ export function DatabasePanel() {
       );
       if (existingTabId) {
         setActiveWorkspaceTabId(existingTabId);
+        const existingTab = workspaceTabs.find((item) => item.id === existingTabId);
+        if (existingTab) {
+          syncDatabaseTableTabToWorkspace(existingTab, tabModes[existingTabId] ?? "data");
+        }
         if (selection.connection.db_type !== "redis") {
           queueMicrotask(() => {
             void introspectTable(selection.connection, selection.dbName, selection.tableName)
@@ -2181,18 +2198,17 @@ export function DatabasePanel() {
       }
 
       const tabId = makeSqlTabId();
+      const newTab: SqlWorkspaceTab = {
+        id: tabId,
+        kind: "sql",
+        label: makeTableTabLabel(selection.dbName, selection.tableName),
+      };
 
       // Create a SQL tab with collapsed editor for table preview
-      setWorkspaceTabs((prev) => {
-        const tab: SqlWorkspaceTab = {
-          id: tabId,
-          kind: "sql",
-          label: makeTableTabLabel(selection.dbName, selection.tableName),
-        };
-        return [...prev, tab];
-      });
+      setWorkspaceTabs((prev) => [...prev, newTab]);
       setActiveWorkspaceTabId(tabId);
       setTabModes((prev) => ({ ...prev, [tabId]: "data" }));
+      syncDatabaseTableTabToWorkspace(newTab, "data");
 
       // Set the database for the SQL tab
       setSqlTabStates((prev) => ({
@@ -2225,7 +2241,7 @@ export function DatabasePanel() {
         }
       });
     },
-    [loadTablePreview, tablePreviews, workspaceTabs],
+    [loadTablePreview, tabModes, tablePreviews, workspaceTabs],
   );
 
   const handleSelectDatabase = useCallback(
@@ -2264,7 +2280,7 @@ export function DatabasePanel() {
   }, [activeWorkspaceTab]);
 
   useEffect(() => {
-    if (activeWorkspaceTab?.kind === "database") {
+    if (activeWorkspaceTab?.kind === "database" || activeWorkspaceTab?.kind === "connection") {
       setActiveConnId(activeWorkspaceTab.connId);
     }
   }, [activeWorkspaceTab]);
@@ -2447,8 +2463,24 @@ export function DatabasePanel() {
       if (group) {
         setActiveGroupId(group.id);
       }
+
+      const existingTabId = findTabIdForConnection(workspaceTabs, connId);
+      if (existingTabId) {
+        setActiveWorkspaceTabId(existingTabId);
+        return;
+      }
+
+      const tabId = makeConnectionInfoTabId();
+      const tab: ConnectionInfoWorkspaceTab = {
+        id: tabId,
+        kind: "connection",
+        label: conn.name,
+        connId,
+      };
+      setWorkspaceTabs((prev) => [...prev, tab]);
+      setActiveWorkspaceTabId(tabId);
     },
-    [connections, groups, setActiveConnId, setActiveGroupId],
+    [connections, groups, setActiveConnId, setActiveGroupId, workspaceTabs],
   );
 
   const runQuery = useCallback(async (sqlOverride?: string, tabIdOverride?: string) => {
@@ -2696,6 +2728,16 @@ export function DatabasePanel() {
               closable: true,
             };
           }
+          if (tab.kind === "connection") {
+            return {
+              id: tab.id,
+              label: tab.label,
+              panelType: "database",
+              icon: "database" as const,
+              tooltip: t("database.connectionInfo.subtitle"),
+              closable: true,
+            };
+          }
           if (tab.kind === "designer") {
             const dirty = isDesignerTabDirty(tab.id);
             return {
@@ -2786,6 +2828,25 @@ export function DatabasePanel() {
         );
       }
 
+      if (tab.kind === "connection") {
+        const resolved = resolveConnection(tab.connId);
+        if (resolved === "pending") {
+          return (
+            <div className="db-workspace-pane db-dock-pane">
+              <div className="db-table-designer-state">{t("common.loading")}</div>
+            </div>
+          );
+        }
+        if (!resolved) {
+          return null;
+        }
+        return (
+          <div className="db-workspace-pane db-dock-pane">
+            <DatabaseConnectionInfoPanel connection={resolved} />
+          </div>
+        );
+      }
+
       if (tab.kind === "designer") {
         const resolved = resolveConnection(tab.connId);
         if (resolved === "pending") {
@@ -2849,13 +2910,20 @@ export function DatabasePanel() {
                 dbName: ctxTab.dbName,
                 tableName: ctxTab.tableName,
               }
-            : {
-                id: makeDatabaseTabId(),
-                kind: "database",
-                label: `${ctxTab.label} (副本)`,
-                connId: ctxTab.connId,
-                dbName: ctxTab.dbName,
-              };
+            : ctxTab.kind === "connection"
+              ? {
+                  id: makeConnectionInfoTabId(),
+                  kind: "connection",
+                  label: `${ctxTab.label} (副本)`,
+                  connId: ctxTab.connId,
+                }
+              : {
+                  id: makeDatabaseTabId(),
+                  kind: "database",
+                  label: `${ctxTab.label} (副本)`,
+                  connId: ctxTab.connId,
+                  dbName: ctxTab.dbName,
+                };
       setWorkspaceTabs((prev) => [...prev, newTab]);
       setActiveWorkspaceTabId(newTab.id);
       if (ctxTab.kind === "designer") {

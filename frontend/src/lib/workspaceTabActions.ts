@@ -190,3 +190,21 @@ export function addComponentToWorkspace(
   });
   addSnapshotToWorkspace(workspaceId, snapshot, options);
 }
+
+/** 工程工作区已有数据库面板时，将表数据 Tab 同步到底部 Dock 并激活 */
+export function syncDatabaseTableTabToWorkspace(
+  tab: DbWorkspaceTab,
+  tabMode: "data" | "sql" = "data",
+): void {
+  const workspaceId = useWorkspaceStore.getState().workspace.id;
+  const dockTabs = useWorkspaceBottomDockStore.getState().tabsByWorkspace[workspaceId] ?? [];
+  const hasDatabaseDockPanel = dockTabs.some(
+    (item) =>
+      (item.kind === "payload" && item.payload?.module === "database") ||
+      (item.kind === "mirrored" && item.originScope === "database"),
+  );
+  if (!hasDatabaseDockPanel) {
+    return;
+  }
+  addSnapshotToWorkspace(workspaceId, dbTabToSnapshot(tab, tabMode), { activate: true });
+}

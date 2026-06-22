@@ -72,6 +72,9 @@ export function sanitizeWorkspaceSession(
     if (tab.kind === "designer") {
       return Boolean(tab.connId && tab.dbName && tab.tableName);
     }
+    if (tab.kind === "connection") {
+      return Boolean(tab.connId);
+    }
     return false;
   });
   if (tabs.length === 0) {

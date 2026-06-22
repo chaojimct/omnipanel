@@ -738,6 +738,11 @@ export const enUS: TranslationDict = {
       viewTree: "Tree view",
       viewList: "List view",
     },
+    connectionInfo: {
+      subtitle: "Process list",
+      unsupportedEngine: "Engine {engine} does not support connection info (MySQL / MariaDB only)",
+      empty: "No rows",
+    },
     tableDesigner: {
       tabTooltip: "Design table · {label}",
       commentPlaceholder: "Table comment",

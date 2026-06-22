@@ -734,6 +734,11 @@ export const zhCN = {
       viewTree: "树形显示",
       viewList: "列表显示",
     },
+    connectionInfo: {
+      subtitle: "进程列表",
+      unsupportedEngine: "当前引擎（{engine}）不支持连接信息查询，仅 MySQL / MariaDB 可用",
+      empty: "无结果",
+    },
     tableDesigner: {
       tabTooltip: "设计表 · {label}",
       commentPlaceholder: "表注释",
