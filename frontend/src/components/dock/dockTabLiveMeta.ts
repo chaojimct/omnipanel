@@ -1,7 +1,6 @@
 import { useSyncExternalStore } from "react";
 import type { DockableTab } from "./dockableTab";
 import type { DockTabPageType } from "./dockableTab";
-import { logDockTabFile } from "./dockTabFileDebug";
 
 export interface DockTabLiveMeta {
   type?: DockTabPageType;
@@ -52,14 +51,6 @@ export function publishDockTabMeta(tabs: DockableTab[]): void {
       saved: tab.saved,
       rev: (prev?.rev ?? 0) + 1,
     });
-    if (tab.type === "file") {
-      logDockTabFile("publish", {
-        tabId: tab.id,
-        label: tab.label,
-        prev: prev ?? null,
-        next: metaByTabId.get(tab.id),
-      });
-    }
     changed = true;
   }
 
@@ -73,6 +64,29 @@ export function publishDockTabMeta(tabs: DockableTab[]): void {
   if (changed) {
     emit();
   }
+}
+
+/** 编辑/保存等操作时即时刷新 Tab 头（不等待 dockview tabs prop 同步）。 */
+export function patchDockTabFileMeta(
+  tabId: string,
+  patch: Pick<DockTabLiveMeta, "type" | "dirty" | "saved">,
+): void {
+  const prev = metaByTabId.get(tabId);
+  if (
+    prev &&
+    prev.type === patch.type &&
+    prev.dirty === patch.dirty &&
+    prev.saved === patch.saved
+  ) {
+    return;
+  }
+  metaByTabId.set(tabId, {
+    type: patch.type,
+    dirty: patch.dirty,
+    saved: patch.saved,
+    rev: (prev?.rev ?? 0) + 1,
+  });
+  emit();
 }
 
 export function useDockTabLiveMeta(tabId: string): DockTabLiveMeta {

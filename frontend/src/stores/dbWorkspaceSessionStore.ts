@@ -54,7 +54,10 @@ export const useDbWorkspaceSessionStore = create<DbWorkspaceSessionState>()(
           recentClosedPanels?: DbClosedPanelEntry[];
         };
         if (persisted?.session) {
-          persisted.session = sanitizeWorkspaceSession(persisted.session);
+          persisted.session = sanitizeWorkspaceSession({
+            ...persisted.session,
+            tableDesignerStates: persisted.session.tableDesignerStates ?? {},
+          });
         }
         if (!Array.isArray(persisted.recentClosedPanels)) {
           persisted.recentClosedPanels = [];

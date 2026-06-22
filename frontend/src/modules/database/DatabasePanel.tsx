@@ -60,10 +60,16 @@ import {
   makeTableTabLabel,
   makeTableTabKey,
   findTabIdForTable,
+  findTabIdForDesigner,
+  makeDesignerTabId,
+  makeTableDesignerTabLabel,
   type DatabaseListWorkspaceTab,
   type DbWorkspaceTab,
   type SqlWorkspaceTab,
+  type TableDesignerWorkspaceTab,
 } from "./workspaceTabs";
+import { TableDesignerDockPane } from "./tableDesigner/TableDesignerDockPane";
+import { supportsTableDesign, resolveTableDesignerDriver } from "./tableDesigner/resolveTableDesignerDriver";
 import { DatabaseTableEditorHost } from "./DatabaseTableEditorHost";
 import { DatabaseToolbox } from "./toolbox/DatabaseToolbox";
 import {
@@ -75,12 +81,13 @@ import {
   rowsToRecord,
   tabModeToEditorOpenMode,
   type SqlTabState,
+  type TableDesignerTabState,
   type TablePreviewState,
   type QueryResult,
 } from "./dbWorkspaceState";
 import { DbPanelSurface } from "./DbPanelSurface";
 import { DockableWorkspace, ModuleSegmentDock } from "../../components/dock";
-import { logDockTabFile, summarizeFileDockTabs } from "../../components/dock/dockTabFileDebug";
+import { patchDockTabFileMeta } from "../../components/dock/dockTabLiveMeta";
 import { DbWorkspaceProvider, type DbWorkspaceContextValue } from "../../contexts/DbWorkspaceContext";
 import { useDbDockLayoutStore } from "../../stores/dbDockLayoutStore";
 import {
@@ -90,6 +97,7 @@ import {
 import {
   buildClosedPanelEntry,
   buildWorkspaceSessionSnapshot,
+  restoreTableDesignerStateFromSnapshot,
   sanitizeWorkspaceSession,
   type DbClosedPanelEntry,
   type DbSqlTabStateSnapshot,
@@ -329,11 +337,11 @@ export function DatabasePanel() {
   const [workspaceTabs, setWorkspaceTabs] = useState<DbWorkspaceTab[]>([]);
   const [activeWorkspaceTabId, setActiveWorkspaceTabId] = useState("");
   const [workspaceInitialized, setWorkspaceInitialized] = useState(false);
-  const dirtySqlFileIds = useDbSqlFileStore((s) => s.dirtyFileIds);
   const recentClosedPanels = useDbWorkspaceSessionStore((s) => s.recentClosedPanels);
   const pushRecentClosedPanel = useDbWorkspaceSessionStore((s) => s.pushRecentClosedPanel);
   const removeRecentClosedPanel = useDbWorkspaceSessionStore((s) => s.removeRecentClosedPanel);
-  const [dirtyEphemeralTabIds, setDirtyEphemeralTabIds] = useState<Set<string>>(
+  /** SQL 工作区 Tab 未保存标记（按 tabId；与 store.dirtyFileIds 解耦，保证 Tab 头即时更新） */
+  const [dirtySqlWorkspaceTabIds, setDirtySqlWorkspaceTabIds] = useState<Set<string>>(
     () => new Set(),
   );
   const tablePreviewRestoreDoneRef = useRef(false);
@@ -341,6 +349,7 @@ export function DatabasePanel() {
   const [activeTableKey, setActiveTableKey] = useState<string | null>(null);
   const [tableColumnMeta, setTableColumnMeta] = useState<Record<string, DbColumnMeta[]>>({});
   const [tabModes, setTabModes] = useState<Record<string, "data" | "sql">>({});
+  const [tableDesignerStates, setTableDesignerStates] = useState<Record<string, TableDesignerTabState>>({});
   const [databasesByConnId, setDatabasesByConnId] = useState<Record<string, string[]>>({});
   const [schemaByKey, setSchemaByKey] = useState<Record<string, DatabaseSchema>>({});
   const [schemaLoadingKey] = useState<string | null>(null);
@@ -421,6 +430,8 @@ export function DatabasePanel() {
   tablePreviewsRef.current = tablePreviews;
   const tabModesRef = useRef(tabModes);
   tabModesRef.current = tabModes;
+  const tableDesignerStatesRef = useRef(tableDesignerStates);
+  tableDesignerStatesRef.current = tableDesignerStates;
 
   // 工作区切换时：保存当前数据库 tab 快照 → 恢复目标工作区的快照
   useEffect(() => {
@@ -537,6 +548,23 @@ export function DatabasePanel() {
     store.updateFileBinding(tab.sqlFileId, state.connId, state.database);
   }, []);
 
+  const syncSqlFileTabHeaderMeta = useCallback(
+    (tabId: string, dirty: boolean, savedOverride?: boolean) => {
+      const tab = workspaceTabsRef.current.find(
+        (item): item is SqlWorkspaceTab => item.id === tabId && item.kind === "sql",
+      );
+      if (!tab || tablePreviewsRef.current[tab.id]?.tableName) {
+        return;
+      }
+      patchDockTabFileMeta(tabId, {
+        type: "file",
+        dirty,
+        saved: savedOverride ?? (Boolean(tab.sqlFileId) && !dirty),
+      });
+    },
+    [],
+  );
+
   const updateSqlTabState = useCallback((tabId: string, patch: Partial<SqlTabState>) => {
     const shouldPersist =
       patch.sql !== undefined || patch.connId !== undefined || patch.database !== undefined;
@@ -551,36 +579,51 @@ export function DatabasePanel() {
     });
 
     if (nextStateForPersist) {
-      const state = nextStateForPersist;
-      queueMicrotask(() => persistSqlFileState(tabId, state));
+      persistSqlFileState(tabId, nextStateForPersist);
     }
 
     if (patch.sql !== undefined || patch.connId !== undefined || patch.database !== undefined) {
       const tab = workspaceTabsRef.current.find((item) => item.id === tabId);
       if (tab?.kind === "sql") {
-        logDockTabFile("database:edit", {
-          tabId,
-          sqlFileId: tab.sqlFileId ?? null,
-          ephemeral: !tab.sqlFileId,
-          dirtyFileIds: useDbSqlFileStore.getState().dirtyFileIds,
-        });
-      }
-      if (tab?.kind === "sql" && !tab.sqlFileId) {
-        setDirtyEphemeralTabIds((prev) => {
+        setDirtySqlWorkspaceTabIds((prev) => {
           if (prev.has(tabId)) return prev;
           const next = new Set(prev);
           next.add(tabId);
           return next;
         });
+        syncSqlFileTabHeaderMeta(tabId, true);
       }
     }
-  }, [persistSqlFileState]);
+  }, [persistSqlFileState, syncSqlFileTabHeaderMeta]);
 
   const setSqlTabConnection = useCallback(
     (tabId: string, connId: string | null) => {
       updateSqlTabState(tabId, { connId: connId ?? "", database: "" });
     },
     [updateSqlTabState],
+  );
+
+  const updateTableDesignerState = useCallback((tabId: string, state: TableDesignerTabState) => {
+    setTableDesignerStates((prev) => ({ ...prev, [tabId]: state }));
+  }, []);
+
+  const isDesignerTabDirty = useCallback(
+    (tabId: string) => {
+      const tab = workspaceTabs.find((item) => item.id === tabId);
+      if (!tab || tab.kind !== "designer") {
+        return false;
+      }
+      const state = tableDesignerStates[tabId];
+      if (!state) {
+        return false;
+      }
+      const connection = connections.find((item) => item.id === tab.connId);
+      if (!connection) {
+        return false;
+      }
+      return resolveTableDesignerDriver(connection).hasModelChanges(state.baseline, state.model);
+    },
+    [connections, tableDesignerStates, workspaceTabs],
   );
 
   const refreshConnections = useCallback(async () => {
@@ -653,8 +696,16 @@ export function DatabasePanel() {
       setTablePreviews(restoredPreviews);
       setTabModes(session.tabModes);
 
+      const restoredDesigner: Record<string, TableDesignerTabState> = {};
+      for (const [tabId, snap] of Object.entries(session.tableDesignerStates ?? {})) {
+        restoredDesigner[tabId] = restoreTableDesignerStateFromSnapshot(snap);
+      }
+      setTableDesignerStates(restoredDesigner);
+
       const activeTab = session.tabs.find((tab) => tab.id === session.activeTabId);
       if (activeTab?.kind === "database") {
+        setActiveConnId(activeTab.connId);
+      } else if (activeTab?.kind === "designer") {
         setActiveConnId(activeTab.connId);
       } else {
         const activeMeta = session.tablePreviewMeta[session.activeTabId];
@@ -692,6 +743,7 @@ export function DatabasePanel() {
         sqlTabStates,
         tablePreviews,
         tabModes,
+        tableDesignerStates,
       }),
     );
   }, [
@@ -701,6 +753,7 @@ export function DatabasePanel() {
     sqlTabStates,
     tablePreviews,
     tabModes,
+    tableDesignerStates,
   ]);
 
   useEffect(() => {
@@ -1261,11 +1314,12 @@ export function DatabasePanel() {
           tab,
           sqlTabStates: sqlTabStatesRef.current,
           tablePreviews: tablePreviewsRef.current,
+          tableDesignerStates: tableDesignerStatesRef.current,
           tabModes: tabModesRef.current,
         }),
       );
     }
-    setDirtyEphemeralTabIds((prev) => {
+    setDirtySqlWorkspaceTabIds((prev) => {
       if (!prev.has(tabId)) return prev;
       const next = new Set(prev);
       next.delete(tabId);
@@ -1302,6 +1356,14 @@ export function DatabasePanel() {
       return next;
     });
     setTabModes((prev) => {
+      const next = { ...prev };
+      delete next[tabId];
+      return next;
+    });
+    setTableDesignerStates((prev) => {
+      if (!(tabId in prev)) {
+        return prev;
+      }
       const next = { ...prev };
       delete next[tabId];
       return next;
@@ -1351,6 +1413,20 @@ export function DatabasePanel() {
         }
       }
 
+      if (tab.kind === "designer") {
+        const existing = findTabIdForDesigner(
+          workspaceTabsRef.current,
+          tab.connId,
+          tab.dbName,
+          tab.tableName,
+        );
+        if (existing) {
+          setActiveWorkspaceTabId(existing);
+          removeRecentClosedPanel(entry.closedAt);
+          return;
+        }
+      }
+
       if (entry.tablePreviewMeta) {
         const meta = entry.tablePreviewMeta;
         const existing = findTabIdForTable(
@@ -1392,6 +1468,13 @@ export function DatabasePanel() {
 
       if (entry.tabMode) {
         setTabModes((prev) => ({ ...prev, [tab.id]: entry.tabMode! }));
+      }
+
+      if (entry.tableDesignerState) {
+        setTableDesignerStates((prev) => ({
+          ...prev,
+          [tab.id]: restoreTableDesignerStateFromSnapshot(entry.tableDesignerState!),
+        }));
       }
 
       if (entry.tablePreviewMeta) {
@@ -1877,6 +1960,38 @@ export function DatabasePanel() {
       .catch((err) => console.error("[db.copyDdl] fetchTableDdl failed", err));
   }, [tableCtxMenu]);
 
+  const handleDesignTable = useCallback(
+    (selection: SchemaTableSelection) => {
+      if (!supportsTableDesign(selection.connection)) {
+        return;
+      }
+
+      const existingTabId = findTabIdForDesigner(
+        workspaceTabs,
+        selection.connId,
+        selection.dbName,
+        selection.tableName,
+      );
+      if (existingTabId) {
+        setActiveWorkspaceTabId(existingTabId);
+        return;
+      }
+
+      const tabId = makeDesignerTabId();
+      const tab: TableDesignerWorkspaceTab = {
+        id: tabId,
+        kind: "designer",
+        label: makeTableDesignerTabLabel(selection.dbName, selection.tableName),
+        connId: selection.connId,
+        dbName: selection.dbName,
+        tableName: selection.tableName,
+      };
+      setWorkspaceTabs((prev) => [...prev, tab]);
+      setActiveWorkspaceTabId(tabId);
+    },
+    [workspaceTabs],
+  );
+
   const buildTableContextMenuItems = useCallback(() => {
     const copyIcon = (
       <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden>
@@ -1884,7 +1999,25 @@ export function DatabasePanel() {
         <path d="M3 11V3.5A1.5 1.5 0 0 1 4.5 2H11" />
       </svg>
     );
+    const designIcon = (
+      <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden>
+        <rect x="2.5" y="2.5" width="11" height="11" rx="1.5" />
+        <path d="M5 8h6M8 5v6" />
+      </svg>
+    );
+    const selection = tableCtxMenu?.selection;
+    const canDesign = selection ? supportsTableDesign(selection.connection) : false;
     return [
+      {
+        id: "design-table",
+        label: t("database.contextMenu.designTable"),
+        icon: designIcon,
+        disabled: !canDesign,
+        onClick: () => {
+          if (!selection) return;
+          handleDesignTable(selection);
+        },
+      },
       {
         id: "copy",
         label: t("database.contextMenu.copy"),
@@ -1908,7 +2041,7 @@ export function DatabasePanel() {
         ],
       },
     ];
-  }, [t, copyDdlForCurrentTable, copyNameForCurrentTable]);
+  }, [t, copyDdlForCurrentTable, copyNameForCurrentTable, handleDesignTable, tableCtxMenu?.selection]);
 
   const refreshConnDatabases = useCallback(
     (connId: string) => {
@@ -2183,6 +2316,10 @@ export function DatabasePanel() {
       const existingTabId = findTabIdForSqlFile(workspaceTabs, file.id);
       if (existingTabId) {
         setActiveWorkspaceTabId(existingTabId);
+        syncSqlFileTabHeaderMeta(
+          existingTabId,
+          dirtySqlWorkspaceTabIds.has(existingTabId),
+        );
         return;
       }
       const tabId = makeSqlTabId();
@@ -2202,8 +2339,9 @@ export function DatabasePanel() {
       setWorkspaceTabs((prev) => [...prev, tab]);
       setActiveWorkspaceTabId(tabId);
       setTabModes((prev) => ({ ...prev, [tabId]: "sql" }));
+      syncSqlFileTabHeaderMeta(tabId, false);
     },
-    [workspaceTabs],
+    [workspaceTabs, dirtySqlWorkspaceTabIds, syncSqlFileTabHeaderMeta],
   );
 
   const renameWorkspaceTab = useCallback((tabId: string, label: string) => {
@@ -2398,17 +2536,8 @@ export function DatabasePanel() {
   }, [activeWorkspaceTabId, sqlTabStates, runQuery]);
 
   const isSqlTabDirty = useCallback(
-    (tabId: string) => {
-      const tab = workspaceTabsRef.current.find((item) => item.id === tabId);
-      if (!tab || tab.kind !== "sql") {
-        return false;
-      }
-      if (tab.sqlFileId) {
-        return dirtySqlFileIds.includes(tab.sqlFileId);
-      }
-      return dirtyEphemeralTabIds.has(tabId);
-    },
-    [dirtySqlFileIds, dirtyEphemeralTabIds],
+    (tabId: string) => dirtySqlWorkspaceTabIds.has(tabId),
+    [dirtySqlWorkspaceTabIds],
   );
 
   const saveSqlTab = useCallback(
@@ -2428,6 +2557,13 @@ export function DatabasePanel() {
         store.updateFileSql(tab.sqlFileId, state.sql);
         store.updateFileBinding(tab.sqlFileId, state.connId, state.database);
         await store.flushToDisk();
+        setDirtySqlWorkspaceTabIds((prev) => {
+          if (!prev.has(tabId)) return prev;
+          const next = new Set(prev);
+          next.delete(tabId);
+          return next;
+        });
+        syncSqlFileTabHeaderMeta(tabId, false);
         return;
       }
 
@@ -2453,15 +2589,16 @@ export function DatabasePanel() {
             : item,
         ),
       );
-      setDirtyEphemeralTabIds((prev) => {
+      setDirtySqlWorkspaceTabIds((prev) => {
         if (!prev.has(tabId)) return prev;
         const next = new Set(prev);
         next.delete(tabId);
         return next;
       });
+      syncSqlFileTabHeaderMeta(tabId, false, true);
       await store.flushToDisk();
     },
-    [activeWorkspaceTabId, sqlTabStates, t],
+    [activeWorkspaceTabId, sqlTabStates, t, syncSqlFileTabHeaderMeta],
   );
 
   useEffect(() => {
@@ -2559,14 +2696,22 @@ export function DatabasePanel() {
               closable: true,
             };
           }
-          const isTableTab =
-            tabModes[tab.id] === "data" ||
-            Boolean(tablePreviews[tab.id]?.tableName);
-          const dirty = isTableTab
-            ? false
-            : tab.sqlFileId
-              ? dirtySqlFileIds.includes(tab.sqlFileId)
-              : dirtyEphemeralTabIds.has(tab.id);
+          if (tab.kind === "designer") {
+            const dirty = isDesignerTabDirty(tab.id);
+            return {
+              id: tab.id,
+              label: tab.label,
+              panelType: "database",
+              type: "file" as const,
+              dirty,
+              saved: !dirty,
+              icon: "table" as const,
+              tooltip: t("database.tableDesigner.tabTooltip", { label: tab.label }),
+              closable: true,
+            };
+          }
+          const isTableTab = Boolean(tablePreviews[tab.id]?.tableName);
+          const dirty = isTableTab ? false : dirtySqlWorkspaceTabIds.has(tab.id);
           const saved = !isTableTab && Boolean(tab.sqlFileId) && !dirty;
           return {
             id: tab.id,
@@ -2580,19 +2725,8 @@ export function DatabasePanel() {
             closable: true,
           };
         }),
-    [workspaceTabs, isOriginDocked, tablePreviews, tabModes, dirtySqlFileIds, dirtyEphemeralTabIds],
+    [workspaceTabs, isOriginDocked, tablePreviews, dirtySqlWorkspaceTabIds, isDesignerTabDirty, t],
   );
-
-  useEffect(() => {
-    const fileTabs = summarizeFileDockTabs(dockTabs);
-    if (fileTabs.length === 0) return;
-    logDockTabFile("database:dockTabs", {
-      fileTabs,
-      dirtySqlFileIds,
-      dirtyEphemeralTabIds: [...dirtyEphemeralTabIds],
-      activeWorkspaceTabId,
-    });
-  }, [dockTabs, dirtySqlFileIds, dirtyEphemeralTabIds, activeWorkspaceTabId]);
 
   const recentClosedActionItems = useMemo(
     () =>
@@ -2613,21 +2747,71 @@ export function DatabasePanel() {
       const tab = workspaceTabs.find((item) => item.id === tabId);
       if (!tab) return null;
 
+      const resolveConnection = (connId: string) => {
+        const connection = connections.find((item) => item.id === connId);
+        if (connection) {
+          return connection;
+        }
+        if (connections.length === 0) {
+          return "pending" as const;
+        }
+        return null;
+      };
+
       if (tab.kind === "database") {
-        const connection = connections.find((item) => item.id === tab.connId);
-        if (!connection) {
+        const resolved = resolveConnection(tab.connId);
+        if (resolved === "pending") {
+          return (
+            <div className="db-workspace-pane db-dock-pane">
+              <div className="db-table-designer-state">{t("common.loading")}</div>
+            </div>
+          );
+        }
+        if (!resolved) {
           return null;
         }
         const selection: SchemaDatabaseSelection = {
           connId: tab.connId,
           dbName: tab.dbName,
-          connection,
+          connection: resolved,
         };
         return (
           <div className="db-workspace-pane db-dock-pane">
             <DatabaseTablesPanel
               selection={selection}
               onSelectTable={handleSelectTable}
+              onDesignTable={handleDesignTable}
+            />
+          </div>
+        );
+      }
+
+      if (tab.kind === "designer") {
+        const resolved = resolveConnection(tab.connId);
+        if (resolved === "pending") {
+          return (
+            <div className="db-workspace-pane db-dock-pane db-workspace-pane--designer">
+              <div className="db-table-designer-state">{t("common.loading")}</div>
+            </div>
+          );
+        }
+        if (!resolved) {
+          return (
+            <div className="db-workspace-pane db-dock-pane db-workspace-pane--designer">
+              <div className="db-table-designer-state db-table-designer-state--error">
+                {t("database.tableDesigner.loadFailed")}
+              </div>
+            </div>
+          );
+        }
+        return (
+          <div className="db-workspace-pane db-dock-pane db-workspace-pane--designer">
+            <TableDesignerDockPane
+              connection={resolved}
+              dbName={tab.dbName}
+              tableName={tab.tableName}
+              persistedState={tableDesignerStates[tab.id] ?? null}
+              onPersistState={(state) => updateTableDesignerState(tab.id, state)}
             />
           </div>
         );
@@ -2639,7 +2823,7 @@ export function DatabasePanel() {
         </div>
       );
     },
-    [workspaceTabs, connections, handleSelectTable],
+    [workspaceTabs, connections, handleSelectTable, handleDesignTable, tableDesignerStates, updateTableDesignerState, t],
   );
 
   const handleDockTabContextMenu = useCallback(
@@ -2656,15 +2840,33 @@ export function DatabasePanel() {
       const newTab: DbWorkspaceTab =
         ctxTab.kind === "sql"
           ? { id: makeSqlTabId(), kind: "sql", label: `${ctxTab.label} (副本)` }
-          : {
-              id: makeDatabaseTabId(),
-              kind: "database",
-              label: `${ctxTab.label} (副本)`,
-              connId: ctxTab.connId,
-              dbName: ctxTab.dbName,
-            };
+          : ctxTab.kind === "designer"
+            ? {
+                id: makeDesignerTabId(),
+                kind: "designer",
+                label: `${ctxTab.label} (副本)`,
+                connId: ctxTab.connId,
+                dbName: ctxTab.dbName,
+                tableName: ctxTab.tableName,
+              }
+            : {
+                id: makeDatabaseTabId(),
+                kind: "database",
+                label: `${ctxTab.label} (副本)`,
+                connId: ctxTab.connId,
+                dbName: ctxTab.dbName,
+              };
       setWorkspaceTabs((prev) => [...prev, newTab]);
       setActiveWorkspaceTabId(newTab.id);
+      if (ctxTab.kind === "designer") {
+        const copiedState = tableDesignerStatesRef.current[ctxTab.id];
+        if (copiedState) {
+          setTableDesignerStates((prev) => ({
+            ...prev,
+            [newTab.id]: structuredClone(copiedState),
+          }));
+        }
+      }
       addSnapshotToWorkspace(
         currentWorkspaceId,
         dbTabToSnapshot(newTab, tabModes[ctxTab.id]),
@@ -2694,6 +2896,7 @@ export function DatabasePanel() {
         activeGroupId ?? "",
         activeConnId ?? "",
         connections.map((c) => `${c.id}:${c.enabled !== false ? 1 : 0}`).join(","),
+        Object.keys(tableDesignerStates).sort().join(","),
         dockTabs.map((tab) => tab.id).join(","),
         dialogOpen ? "1" : "0",
         createDbDialog?.connId ?? "",
@@ -2710,6 +2913,7 @@ export function DatabasePanel() {
       activeGroupId,
       activeConnId,
       connections,
+      tableDesignerStates,
       dockTabs,
       dialogOpen,
       createDbDialog?.connId,
@@ -2800,6 +3004,7 @@ export function DatabasePanel() {
             savedLayout={dockLayout}
             onSavedLayoutChange={setDockLayout}
             renderPanel={renderDockPanel}
+            panelContentKey={queryPanelContentKey}
             onTabContextMenu={handleDockTabContextMenu}
             onCtrlCopyTab={handleCtrlCopyTab}
             canAcceptExternalDrop={canAcceptSchemaTreeDrop}

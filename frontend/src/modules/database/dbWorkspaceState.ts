@@ -1,5 +1,6 @@
 import type { SqlEditorOpenMode } from "./SqlEditor";
 import type { TablePreviewResult, DbColumnMeta } from "./api";
+import type { TableDesignerModel } from "./tableDesigner/types";
 
 export { type DbWorkspaceTab, type SqlWorkspaceTab } from "./workspaceTabs";
 
@@ -19,6 +20,11 @@ export type TablePreviewState = {
   connId?: string;
   dbName?: string;
   tableName?: string;
+};
+
+export type TableDesignerTabState = {
+  model: TableDesignerModel;
+  baseline: TableDesignerModel;
 };
 
 export type SqlTabState = {

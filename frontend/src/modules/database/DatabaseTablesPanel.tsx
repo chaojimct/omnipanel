@@ -4,6 +4,7 @@ import { textSearchMatches } from "../../lib/textSearchMatch";
 import { ScopedSearch } from "../../components/ui/ScopedSearch";
 import { DockHandle, DockLayout, DockPanel } from "../../components/dock";
 import { fetchTableDdl } from "./api";
+import { supportsTableDesign } from "./tableDesigner/resolveTableDesignerDriver";
 import { formatSqlDdl } from "./formatSqlDdl";
 import type { SchemaDatabaseSelection, SchemaTableSelection } from "./SchemaBrowser";
 import { TableDdlViewer } from "./TableDdlViewer";
@@ -20,6 +21,7 @@ import { getCachedTableCommentMap, getCachedTableNames } from "./schemaCacheMerg
 interface DatabaseTablesPanelProps {
   selection: SchemaDatabaseSelection;
   onSelectTable: (selection: SchemaTableSelection) => void;
+  onDesignTable?: (selection: SchemaTableSelection) => void;
 }
 
 type TablesPanelViewMode = "tree" | "list";
@@ -44,6 +46,8 @@ function TableNameRow({
   selected,
   onPreviewTable,
   onOpenTable,
+  onDesignTable,
+  canDesign,
   tableComments,
 }: {
   tableName: string;
@@ -51,33 +55,57 @@ function TableNameRow({
   selected: boolean;
   onPreviewTable: (tableName: string) => void;
   onOpenTable: (tableName: string) => void;
+  onDesignTable: (tableName: string) => void;
+  canDesign: boolean;
   tableComments: ReadonlyMap<string, string>;
 }) {
+  const { t } = useI18n();
   const comment = tableComments.get(tableName);
   return (
-    <button
-      type="button"
-      className={`db-tables-panel-item db-tables-panel-tree-table${selected ? " is-selected" : ""}`}
+    <div
+      className={`db-tables-panel-item${selected ? " is-selected" : ""}`}
       style={{ paddingLeft: depth * 16 + 8 }}
-      onClick={() => onPreviewTable(tableName)}
-      onDoubleClick={() => onOpenTable(tableName)}
     >
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" width="13" height="13" aria-hidden>
-        <rect x="3" y="3" width="18" height="18" rx="2" />
-        <path d="M3 9h18M3 15h18M9 3v18" />
-      </svg>
-      <span
-        className="db-tables-panel-item-name"
-        title={comment ? `${tableName} — ${comment}` : tableName}
+      <button
+        type="button"
+        className="db-tables-panel-item-main"
+        onClick={() => onPreviewTable(tableName)}
+        onDoubleClick={() => onOpenTable(tableName)}
       >
-        {tableName}
-        {comment ? (
-          <span className="db-tables-panel-item-comment" title={comment}>
-            {comment}
-          </span>
-        ) : null}
-      </span>
-    </button>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" width="13" height="13" aria-hidden>
+          <rect x="3" y="3" width="18" height="18" rx="2" />
+          <path d="M3 9h18M3 15h18M9 3v18" />
+        </svg>
+        <span
+          className="db-tables-panel-item-name"
+          title={comment ? `${tableName} — ${comment}` : tableName}
+        >
+          {tableName}
+          {comment ? (
+            <span className="db-tables-panel-item-comment" title={comment}>
+              {comment}
+            </span>
+          ) : null}
+        </span>
+      </button>
+      {canDesign && (
+        <button
+          type="button"
+          className="btn-icon db-tables-panel-design-btn"
+          title={t("database.contextMenu.designTable")}
+          aria-label={t("database.contextMenu.designTable")}
+          onClick={(event) => {
+            event.stopPropagation();
+            onDesignTable(tableName);
+          }}
+        >
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" width="14" height="14" aria-hidden>
+            <rect x="2.5" y="2.5" width="11" height="11" rx="1.5" />
+            <path d="M5 8h6M8 5v6" />
+          </svg>
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -89,6 +117,8 @@ function TableNameTreeBranch({
   previewTableName,
   onPreviewTable,
   onOpenTable,
+  onDesignTable,
+  canDesign,
   tableComments,
 }: {
   node: TableNameTreeNode;
@@ -98,6 +128,8 @@ function TableNameTreeBranch({
   previewTableName: string | null;
   onPreviewTable: (tableName: string) => void;
   onOpenTable: (tableName: string) => void;
+  onDesignTable: (tableName: string) => void;
+  canDesign: boolean;
   tableComments: ReadonlyMap<string, string>;
 }) {
   if (node.kind === "folder") {
@@ -130,6 +162,8 @@ function TableNameTreeBranch({
               previewTableName={previewTableName}
               onPreviewTable={onPreviewTable}
               onOpenTable={onOpenTable}
+              onDesignTable={onDesignTable}
+              canDesign={canDesign}
               tableComments={tableComments}
             />
           ))}
@@ -145,6 +179,8 @@ function TableNameTreeBranch({
       selected={selected}
       onPreviewTable={onPreviewTable}
       onOpenTable={onOpenTable}
+      onDesignTable={onDesignTable}
+      canDesign={canDesign}
       tableComments={tableComments}
     />
   );
@@ -153,6 +189,7 @@ function TableNameTreeBranch({
 export function DatabaseTablesPanel({
   selection,
   onSelectTable,
+  onDesignTable,
 }: DatabaseTablesPanelProps) {
   const { t } = useI18n();
   const hydrateSchemaCache = useDbSchemaCacheStore((s) => s.hydrate);
@@ -277,6 +314,20 @@ export function DatabaseTablesPanel({
     [onSelectTable, selection.connId, selection.dbName, selection.connection],
   );
 
+  const handleDesignTable = useCallback(
+    (tableName: string) => {
+      onDesignTable?.({
+        connId: selection.connId,
+        dbName: selection.dbName,
+        tableName,
+        connection: selection.connection,
+      });
+    },
+    [onDesignTable, selection.connId, selection.dbName, selection.connection],
+  );
+
+  const canDesign = Boolean(onDesignTable) && supportsTableDesign(selection.connection);
+
   const toggleFolder = useCallback((key: string) => {
     setExpandedFolders((prev) => {
       const next = new Set(prev);
@@ -351,6 +402,8 @@ export function DatabaseTablesPanel({
                     previewTableName={previewTableName}
                     onPreviewTable={handlePreviewTable}
                     onOpenTable={handleOpenTable}
+                    onDesignTable={handleDesignTable}
+                    canDesign={canDesign}
                     tableComments={tableComments}
                   />
                 ))}
@@ -364,6 +417,8 @@ export function DatabaseTablesPanel({
                     selected={previewTableName === tableName}
                     onPreviewTable={handlePreviewTable}
                     onOpenTable={handleOpenTable}
+                    onDesignTable={handleDesignTable}
+                    canDesign={canDesign}
                     tableComments={tableComments}
                   />
                 ))}

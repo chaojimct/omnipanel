@@ -1,5 +1,6 @@
-import type { SqlTabState, TablePreviewState } from "./dbWorkspaceState";
+import type { SqlTabState, TableDesignerTabState, TablePreviewState } from "./dbWorkspaceState";
 import type { DbWorkspaceTab } from "./workspaceTabs";
+import type { TableDesignerModel } from "./tableDesigner/types";
 
 export interface DbSqlTabStateSnapshot {
   connId?: string;
@@ -16,6 +17,11 @@ export interface DbTablePreviewMetaSnapshot {
   pageSize: number;
 }
 
+export interface DbTableDesignerStateSnapshot {
+  model: TableDesignerModel;
+  baseline: TableDesignerModel;
+}
+
 /** 数据库模块右侧 dock 工作区会话（不含查询结果、脏数据等运行时状态）。 */
 export interface DbWorkspaceSessionSnapshot {
   tabs: DbWorkspaceTab[];
@@ -23,6 +29,7 @@ export interface DbWorkspaceSessionSnapshot {
   sqlTabStates: Record<string, DbSqlTabStateSnapshot>;
   tablePreviewMeta: Record<string, DbTablePreviewMetaSnapshot>;
   tabModes: Record<string, "data" | "sql">;
+  tableDesignerStates: Record<string, DbTableDesignerStateSnapshot>;
 }
 
 /** 最近关闭的工作区面板（欢迎页可重新打开）。 */
@@ -31,10 +38,24 @@ export interface DbClosedPanelEntry {
   tab: DbWorkspaceTab;
   sqlTabState?: DbSqlTabStateSnapshot;
   tablePreviewMeta?: DbTablePreviewMetaSnapshot;
+  tableDesignerState?: DbTableDesignerStateSnapshot;
   tabMode?: "data" | "sql";
 }
 
 export const DB_RECENT_CLOSED_PANEL_LIMIT = 5;
+
+function isValidDesignerState(state: DbTableDesignerStateSnapshot | undefined): state is DbTableDesignerStateSnapshot {
+  return Boolean(state?.model?.fields && state?.baseline?.fields);
+}
+
+export function restoreTableDesignerStateFromSnapshot(
+  snap: DbTableDesignerStateSnapshot,
+): TableDesignerTabState {
+  return {
+    model: structuredClone(snap.model),
+    baseline: structuredClone(snap.baseline),
+  };
+}
 
 export function sanitizeWorkspaceSession(
   session: DbWorkspaceSessionSnapshot | null | undefined,
@@ -47,6 +68,9 @@ export function sanitizeWorkspaceSession(
     if (tab.kind === "sql") return true;
     if (tab.kind === "database") {
       return Boolean(tab.connId && tab.dbName);
+    }
+    if (tab.kind === "designer") {
+      return Boolean(tab.connId && tab.dbName && tab.tableName);
     }
     return false;
   });
@@ -63,12 +87,24 @@ export function sanitizeWorkspaceSession(
   const pick = <T,>(record: Record<string, T>): Record<string, T> =>
     Object.fromEntries(Object.entries(record).filter(([key]) => tabIds.has(key)));
 
+  const tableDesignerStates: Record<string, DbTableDesignerStateSnapshot> = {};
+  for (const [tabId, state] of Object.entries(session.tableDesignerStates ?? {})) {
+    if (!tabIds.has(tabId) || !isValidDesignerState(state)) {
+      continue;
+    }
+    tableDesignerStates[tabId] = {
+      model: state.model,
+      baseline: state.baseline,
+    };
+  }
+
   return {
     tabs,
     activeTabId,
     sqlTabStates: pick(session.sqlTabStates ?? {}),
     tablePreviewMeta: pick(session.tablePreviewMeta ?? {}),
     tabModes: pick(session.tabModes ?? {}),
+    tableDesignerStates,
   };
 }
 
@@ -78,6 +114,7 @@ export function buildWorkspaceSessionSnapshot(params: {
   sqlTabStates: Record<string, SqlTabState>;
   tablePreviews: Record<string, TablePreviewState>;
   tabModes: Record<string, "data" | "sql">;
+  tableDesignerStates: Record<string, TableDesignerTabState>;
 }): DbWorkspaceSessionSnapshot {
   const tabIds = new Set(params.tabs.map((tab) => tab.id));
 
@@ -128,12 +165,29 @@ export function buildWorkspaceSessionSnapshot(params: {
     }
   }
 
+  const tableDesignerStates: Record<string, DbTableDesignerStateSnapshot> = {};
+  for (const tabId of tabIds) {
+    const tab = params.tabs.find((item) => item.id === tabId);
+    if (tab?.kind !== "designer") {
+      continue;
+    }
+    const state = params.tableDesignerStates[tabId];
+    if (!state?.model || !state?.baseline) {
+      continue;
+    }
+    tableDesignerStates[tabId] = {
+      model: state.model,
+      baseline: state.baseline,
+    };
+  }
+
   return {
     tabs: params.tabs,
-    activeTabId: params.activeTabId,
+    activeTabId: tabIds.has(params.activeTabId) ? params.activeTabId : params.tabs[0]?.id ?? "",
     sqlTabStates,
     tablePreviewMeta,
     tabModes,
+    tableDesignerStates,
   };
 }
 
@@ -141,11 +195,13 @@ export function buildClosedPanelEntry(params: {
   tab: DbWorkspaceTab;
   sqlTabStates: Record<string, SqlTabState>;
   tablePreviews: Record<string, TablePreviewState>;
+  tableDesignerStates: Record<string, TableDesignerTabState>;
   tabModes: Record<string, "data" | "sql">;
 }): DbClosedPanelEntry {
   const { tab } = params;
   const sqlState = params.sqlTabStates[tab.id];
   const preview = params.tablePreviews[tab.id];
+  const designerState = params.tableDesignerStates[tab.id];
   const mode = params.tabModes[tab.id];
 
   let sqlTabState: DbSqlTabStateSnapshot | undefined;
@@ -178,11 +234,20 @@ export function buildClosedPanelEntry(params: {
     };
   }
 
+  let tableDesignerState: DbTableDesignerStateSnapshot | undefined;
+  if (tab.kind === "designer" && designerState?.model && designerState?.baseline) {
+    tableDesignerState = {
+      model: designerState.model,
+      baseline: designerState.baseline,
+    };
+  }
+
   return {
     closedAt: Date.now(),
     tab: { ...tab },
     sqlTabState,
     tablePreviewMeta,
+    tableDesignerState,
     tabMode: mode,
   };
 }

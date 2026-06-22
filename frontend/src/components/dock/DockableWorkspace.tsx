@@ -17,7 +17,6 @@ import {
   type DockviewReadyEvent,
   type IDockviewHeaderActionsProps,
   type IDockviewPanel,
-  type IDockviewPanelHeaderProps,
   type IDockviewPanelProps,
   type SerializedDockview,
   type DockviewDidDropEvent,
@@ -40,8 +39,8 @@ import {
   unregisterDockviewInstance,
 } from "../../lib/dockviewRegistry";
 import { syncTabGroupsByPanelType, clearTabGroups } from "./dockTabGroups";
-import { DockTabHeader } from "./DockTabHeader";
-import { TopbarStyleDockTabHeader } from "./TopbarStyleDockTabHeader";
+import { DockWorkspaceTabHeader } from "./DockWorkspaceTabHeader";
+import { registerDockTabHeaderRuntime } from "./dockTabHeaderRuntime";
 import { TopbarTabAddButton } from "../ui/TopbarTabAddButton";
 import type { TopbarAddMenuItem } from "../../stores/topbarStore";
 import type { TopbarTabDef } from "../../stores/topbarStore";
@@ -315,6 +314,13 @@ export function DockableWorkspace({
 
   const tabStyleRef = useRef(tabStyle);
   tabStyleRef.current = tabStyle;
+
+  registerDockTabHeaderRuntime({
+    tabsRef,
+    tabStyleRef,
+    onTabContextMenuRef,
+    onCtrlCopyTabRef,
+  });
   const addTabConfigRef = useRef(addTabConfig);
   addTabConfigRef.current = addTabConfig;
   const preActionsRef = useRef(preActions);
@@ -400,83 +406,8 @@ export function DockableWorkspace({
     bumpPanelContentRev(api);
   }, [panelContentKey, bumpPanelContentRev]);
 
-  // 自定义 tab：元数据通过 panel params 同步，确保图标/标题更新能触发重渲染
-  const defaultTabComponent = useCallback(
-    (props: IDockviewPanelHeaderProps<PanelParams>) => {
-      const tabId = props.params?.tabId ?? props.api.id;
-      const tabsList = tabsRef.current;
-      const tab = tabsList.find((t) => t.id === tabId);
-      const mergedParams: PanelParams = {
-        tabId,
-        label: tab?.label ?? props.params?.label,
-        icon: tab?.icon ?? props.params?.icon,
-        tooltip: tab?.tooltip ?? props.params?.tooltip ?? tab?.label,
-        status: tab?.status ?? props.params?.status,
-        type: tab?.type ?? props.params?.type,
-        dirty:
-          tab?.type === "file"
-            ? tab.dirty
-            : props.params?.type === "file"
-              ? props.params?.dirty
-              : undefined,
-        saved:
-          tab?.type === "file"
-            ? tab.saved
-            : props.params?.type === "file"
-              ? props.params?.saved
-              : undefined,
-      };
-      const closable = tab?.closable !== false;
-      const onCtx = onTabContextMenuRef.current;
-      const handleContextMenu = onCtx
-        ? (e: ReactMouseEvent) => {
-            e.preventDefault();
-            e.stopPropagation();
-            const index = tabsList.findIndex((t) => t.id === tabId);
-            onCtx(e, tabId, index >= 0 ? index : 0);
-          }
-        : undefined;
-      const handleCtrlCopyPointerUp = onCtrlCopyTabRef.current
-        ? (e: ReactPointerEvent) => {
-            const mod = isPointerCopyModifier(e);
-            workspaceAddDebug("DockableWorkspace:tab_pointer_up", {
-              tabId,
-              button: e.button,
-              mod,
-              ctrlKey: e.ctrlKey,
-              metaKey: e.metaKey,
-              isCloseBtn: Boolean((e.target as HTMLElement).closest(".dv-default-tab-action")),
-            });
-            if (e.button !== 0 || !mod) return;
-            if ((e.target as HTMLElement).closest(".dv-default-tab-action")) return;
-            e.preventDefault();
-            e.stopPropagation();
-            workspaceAddDebug("DockableWorkspace:tab_pointer_up:copy", { tabId });
-            onCtrlCopyTabRef.current?.(tabId);
-          }
-        : undefined;
-      const headerProps = { ...props, params: mergedParams };
-      if (tabStyleRef.current === "topbar") {
-        return (
-          <TopbarStyleDockTabHeader
-            {...headerProps}
-            closable={closable}
-            onContextMenu={handleContextMenu}
-            onPointerUp={handleCtrlCopyPointerUp}
-          />
-        );
-      }
-      return (
-        <DockTabHeader
-          {...headerProps}
-          closable={closable}
-          onContextMenu={handleContextMenu}
-          onPointerUp={handleCtrlCopyPointerUp}
-        />
-      );
-    },
-    [],
-  );
+  // 自定义 tab：元数据通过 panel params + DockWorkspaceTabHeader 内 liveMeta 同步
+  const defaultTabComponent = DockWorkspaceTabHeader;
 
   const rightHeaderActions = useCallback(
     (props: IDockviewHeaderActionsProps) => {

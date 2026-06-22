@@ -2,12 +2,17 @@ import type { IDockviewPanelHeaderProps } from "dockview-react";
 import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from "react";
 import type { TopbarTabDef } from "../../stores/topbarStore";
 import { DockTabChrome } from "./DockTabChrome";
+import type { DockTabPageType } from "./dockableTab";
+import { useDockTabLiveMeta } from "./dockTabLiveMeta";
 
 interface PanelParams {
   tabId: string;
   label?: string;
   status?: TopbarTabDef["status"];
   tooltip?: string;
+  type?: DockTabPageType;
+  dirty?: boolean;
+  saved?: boolean;
 }
 
 interface TopbarStyleDockTabHeaderProps
@@ -30,9 +35,25 @@ export function TopbarStyleDockTabHeader({
   onPointerUp,
   ...props
 }: TopbarStyleDockTabHeaderProps) {
-  const label = props.params?.label ?? props.params?.tabId ?? props.api.id;
+  const tabId = props.params?.tabId ?? props.api.id;
+  const liveMeta = useDockTabLiveMeta(tabId);
+  const label = props.params?.label ?? tabId;
   const status = props.params?.status;
   const tooltip = props.params?.tooltip ?? label;
+  const pageType: DockTabPageType | undefined =
+    liveMeta.type ?? props.params?.type;
+  const dirty =
+    pageType === "file" ? Boolean(liveMeta.dirty || props.params?.dirty) : undefined;
+  const saved =
+    pageType === "file"
+      ? !dirty && Boolean(liveMeta.saved ?? props.params?.saved)
+      : undefined;
+
+  const statusMark = dirty ? (
+    <span className="dock-tab-dirty" aria-label="未保存" />
+  ) : saved ? (
+    <span className="dock-tab-saved" aria-label="已保存" />
+  ) : null;
 
   return (
     <DockTabChrome
@@ -46,6 +67,7 @@ export function TopbarStyleDockTabHeader({
         <span className={`topbar-tab-dot ${tabStatusClass(status)}`} />
       ) : null}
       <span className="dock-tab-label">{label}</span>
+      {statusMark}
     </DockTabChrome>
   );
 }

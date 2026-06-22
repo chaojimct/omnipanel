@@ -2905,10 +2905,14 @@
     align-items: center;
     gap: var(--sp-2);
     min-width: 0;
-    overflow: hidden;
+    max-width: 220px;
+    /* 仅裁切标题；未保存/已保存圆点需保持可见 */
+    overflow: visible;
 }
 
 .dock-tab-label {
+    flex: 1 1 auto;
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -2919,35 +2923,31 @@
 }
 
 .dock-tab-dirty {
-    width: 6px;
-    height: 6px;
+    width: 7px;
+    height: 7px;
     border-radius: 50%;
     flex-shrink: 0;
     background: var(--warn);
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--warn) 40%, transparent);
     margin-left: 2px;
 }
 
 .dock-tab-saved {
-    width: 6px;
-    height: 6px;
+    width: 7px;
+    height: 7px;
     border-radius: 50%;
     flex-shrink: 0;
-    box-sizing: border-box;
-    border: 1.5px solid var(--meta);
-    background: transparent;
+    background: var(--success);
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--success) 40%, transparent);
     margin-left: 2px;
 }
 
-.dock-tab-dirty--side {
+.dock-tab-dirty--side,
+.dock-tab-saved--side {
     position: absolute;
     top: 4px;
     right: 4px;
     margin-left: 0;
-}
-
-.dock-tab-saved.dock-tab-dirty--side {
-    background: transparent;
-    border: 1.5px solid var(--meta);
 }
 
 .dockable-workspace.dock-header-left .dv-default-tab,
@@ -11477,10 +11477,21 @@
     .db-tables-panel-item {
         display: flex;
         align-items: center;
-        gap: var(--sp-2);
+        gap: var(--sp-1);
         width: 100%;
-        padding: var(--sp-2) var(--sp-2);
+        padding: 0 var(--sp-1) 0 0;
         margin-bottom: 2px;
+        border-radius: var(--r-sm);
+        transition: background 0.12s, color 0.12s;
+    }
+
+    .db-tables-panel-item-main {
+        display: flex;
+        align-items: center;
+        gap: var(--sp-2);
+        flex: 1;
+        min-width: 0;
+        padding: var(--sp-2) var(--sp-2);
         border: none;
         border-radius: var(--r-sm);
         background: transparent;
@@ -11492,14 +11503,33 @@
         transition: background 0.12s, color 0.12s;
     }
 
-    .db-tables-panel-item:hover {
+    .db-tables-panel-item:hover,
+    .db-tables-panel-item.is-selected {
         background: var(--surface);
-        color: var(--fg);
     }
 
     .db-tables-panel-item.is-selected {
         background: var(--accent-soft);
+    }
+
+    .db-tables-panel-item:hover .db-tables-panel-item-main,
+    .db-tables-panel-item.is-selected .db-tables-panel-item-main {
+        color: var(--fg);
+    }
+
+    .db-tables-panel-item.is-selected .db-tables-panel-item-main {
         color: var(--accent);
+    }
+
+    .db-tables-panel-design-btn {
+        flex-shrink: 0;
+        opacity: 0;
+        transition: opacity 0.12s;
+    }
+
+    .db-tables-panel-item:hover .db-tables-panel-design-btn,
+    .db-tables-panel-item.is-selected .db-tables-panel-design-btn {
+        opacity: 1;
     }
 
     .db-tables-panel-item.is-active {
@@ -13772,6 +13802,249 @@
         color: var(--fg-2);
         min-width: 64px;
         text-align: center;
+    }
+
+    .db-workspace-pane--designer,
+    .db-table-designer {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+    }
+
+    .db-table-designer-state {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: var(--sp-6);
+        font-size: 13px;
+        color: var(--meta);
+    }
+
+    .db-table-designer-state--error {
+        color: var(--danger);
+        white-space: pre-wrap;
+        text-align: center;
+    }
+
+    .db-table-designer-toolbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--sp-3);
+        padding: var(--sp-2) var(--sp-4);
+        border-bottom: 1px solid var(--border);
+        background: var(--bg);
+        flex-shrink: 0;
+    }
+
+    .db-table-designer-toolbar-main {
+        display: flex;
+        align-items: center;
+        gap: var(--sp-3);
+        min-width: 0;
+        flex: 1;
+    }
+
+    .db-table-designer-engine {
+        font-size: 11px;
+        font-weight: 600;
+        color: var(--accent);
+        background: var(--accent-soft);
+        padding: 2px 8px;
+        border-radius: var(--r-sm);
+        flex-shrink: 0;
+    }
+
+    .db-table-designer-title {
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--fg);
+        flex-shrink: 0;
+    }
+
+    .db-table-designer-comment {
+        flex: 1;
+        min-width: 120px;
+        max-width: 360px;
+        padding: 6px 10px;
+        font-size: 12px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--r-sm);
+        color: var(--fg);
+    }
+
+    .db-table-designer-toolbar-actions {
+        display: flex;
+        align-items: center;
+        gap: var(--sp-2);
+        flex-shrink: 0;
+    }
+
+    .db-table-designer-validation {
+        padding: var(--sp-2) var(--sp-4);
+        font-size: 12px;
+        color: var(--danger);
+        background: color-mix(in srgb, var(--danger) 8%, transparent);
+        border-bottom: 1px solid color-mix(in srgb, var(--danger) 20%, transparent);
+        flex-shrink: 0;
+    }
+
+    .db-table-designer-notice {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--sp-3);
+        padding: var(--sp-2) var(--sp-4);
+        font-size: 12px;
+        flex-shrink: 0;
+        border-bottom: 1px solid var(--border);
+    }
+
+    .db-table-designer-notice--success {
+        color: var(--success);
+        background: color-mix(in srgb, var(--success) 10%, transparent);
+        border-bottom-color: color-mix(in srgb, var(--success) 22%, transparent);
+    }
+
+    .db-table-designer-notice--error {
+        color: var(--danger);
+        background: color-mix(in srgb, var(--danger) 8%, transparent);
+        border-bottom-color: color-mix(in srgb, var(--danger) 20%, transparent);
+    }
+
+    .db-table-designer-notice-dismiss {
+        border: none;
+        background: transparent;
+        color: inherit;
+        cursor: pointer;
+        font-size: 16px;
+        line-height: 1;
+        padding: 0 var(--sp-1);
+        opacity: 0.75;
+    }
+
+    .db-table-designer-notice-dismiss:hover {
+        opacity: 1;
+    }
+
+    .db-table-designer-split,
+    .db-table-designer-main-split {
+        flex: 1;
+        min-height: 0;
+    }
+
+    .db-table-designer-main-pane,
+    .db-table-designer-fields-pane,
+    .db-table-designer-indexes-pane,
+    .db-table-designer-sql-pane {
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+    }
+
+    .db-table-designer-section {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+    }
+
+    .db-table-designer-section-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--sp-2);
+        padding: var(--sp-2) var(--sp-3);
+        border-bottom: 1px solid var(--border);
+        background: var(--bg-deeper);
+        flex-shrink: 0;
+    }
+
+    .db-table-designer-section-header h3 {
+        margin: 0;
+        font-size: 12px;
+        font-weight: 600;
+    }
+
+    .db-table-designer-preview-hint {
+        font-size: 11px;
+        color: var(--meta);
+    }
+
+    .db-table-designer-grid-wrap {
+        flex: 1;
+        min-height: 0;
+        overflow: auto;
+    }
+
+    .db-table-designer-grid {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 12px;
+    }
+
+    .db-table-designer-grid th,
+    .db-table-designer-grid td {
+        padding: 6px 8px;
+        border-bottom: 1px solid var(--border-soft);
+        vertical-align: middle;
+        white-space: nowrap;
+    }
+
+    .db-table-designer-grid th {
+        position: sticky;
+        top: 0;
+        z-index: 1;
+        background: var(--bg);
+        font-weight: 600;
+        color: var(--meta);
+        text-align: left;
+    }
+
+    .db-table-designer-grid input,
+    .db-table-designer-grid select {
+        width: 100%;
+        min-width: 72px;
+        padding: 4px 6px;
+        font-size: 12px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--r-sm);
+        color: var(--fg);
+    }
+
+    .db-table-designer-cell-center {
+        text-align: center;
+    }
+
+    .db-table-designer-empty-row {
+        text-align: center;
+        color: var(--meta);
+        padding: var(--sp-4);
+    }
+
+    .db-table-designer-remove {
+        color: var(--meta);
+    }
+
+    .db-table-designer-remove:hover {
+        color: var(--danger);
+    }
+
+    .db-table-designer-section--sql .db-table-designer-sql-content {
+        flex: 1;
+        min-height: 0;
+        overflow: hidden;
+    }
+
+    .db-table-designer-section--sql .table-ddl-viewer {
+        height: 100%;
     }
 
     /* ─── Cell Editor ────────────────────────────────────────────── */

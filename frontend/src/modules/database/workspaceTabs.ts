@@ -16,7 +16,16 @@ export type DatabaseListWorkspaceTab = {
   dbName: string;
 };
 
-export type DbWorkspaceTab = SqlWorkspaceTab | DatabaseListWorkspaceTab;
+export type TableDesignerWorkspaceTab = {
+  id: string;
+  kind: "designer";
+  label: string;
+  connId: string;
+  dbName: string;
+  tableName: string;
+};
+
+export type DbWorkspaceTab = SqlWorkspaceTab | DatabaseListWorkspaceTab | TableDesignerWorkspaceTab;
 
 export function isSqlWorkspaceTab(tab: DbWorkspaceTab): tab is SqlWorkspaceTab {
   return tab.kind === "sql";
@@ -26,12 +35,24 @@ export function isDatabaseListTab(tab: DbWorkspaceTab): tab is DatabaseListWorks
   return tab.kind === "database";
 }
 
+export function isTableDesignerTab(tab: DbWorkspaceTab): tab is TableDesignerWorkspaceTab {
+  return tab.kind === "designer";
+}
+
 export function makeSqlTabId(): string {
   return `sql:${Date.now()}`;
 }
 
 export function makeDatabaseTabId(): string {
   return `dbtab:${Date.now()}`;
+}
+
+export function makeDesignerTabId(): string {
+  return `design:${Date.now()}`;
+}
+
+export function makeTableDesignerTabLabel(dbName: string, tableName: string): string {
+  return `${dbName}.${tableName}`;
 }
 
 export function makeSqlTabLabel(sqlTabCount: number): string {
@@ -50,6 +71,27 @@ export function makeDatabaseTabKey(connId: string, dbName: string): string {
 /** 表 Tab 唯一键：连接 + 库 + 表名 */
 export function makeTableTabKey(connId: string, dbName: string, tableName: string): string {
   return `tbl:${connId}:${dbName}:${tableName}`;
+}
+
+/** 表设计器 Tab 唯一键 */
+export function makeTableDesignerTabKey(connId: string, dbName: string, tableName: string): string {
+  return `design:${connId}:${dbName}:${tableName}`;
+}
+
+/** 查找已打开的表设计器 Tab */
+export function findTabIdForDesigner(
+  tabs: DbWorkspaceTab[],
+  connId: string,
+  dbName: string,
+  tableName: string,
+): string | undefined {
+  return tabs.find(
+    (tab) =>
+      tab.kind === "designer" &&
+      tab.connId === connId &&
+      tab.dbName === dbName &&
+      tab.tableName === tableName,
+  )?.id;
 }
 
 /** 查找已打开指定 SQL 文件的工作区 Tab */
