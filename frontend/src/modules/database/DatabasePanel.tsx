@@ -1,4 +1,4 @@
-ï»¿import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { useLocation } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
@@ -178,7 +178,7 @@ function applyDefaultWorkspaceSession(
 }
 
 
-/** æŠŠè¡Œä¸»é”®æ‹¼æˆçš„å­—ç¬¦ä¸²ï¿½?col=val&col=val"ï¼‰è§£æå›å•åˆ—å€¼ï¼ŒrowKey ä¸­ç©ºå­—ç¬¦ä¸²è¡¨ï¿½?NULLï¿½?*/
+/** °ÑĞĞÖ÷¼üÆ´³ÉµÄ×Ö·û´®??col=val&col=val"£©½âÎö»Øµ¥ÁĞÖµ£¬rowKey ÖĞ¿Õ×Ö·û´®±í??NULL??*/
 function readRowKeyValue(rowKey: string, colName: string): string {
   for (const part of rowKey.split("&")) {
     const eq = part.indexOf("=");
@@ -378,7 +378,7 @@ export function DatabasePanel() {
   const recentClosedPanels = useDbWorkspaceSessionStore((s) => s.recentClosedPanels);
   const pushRecentClosedPanel = useDbWorkspaceSessionStore((s) => s.pushRecentClosedPanel);
   const removeRecentClosedPanel = useDbWorkspaceSessionStore((s) => s.removeRecentClosedPanel);
-  /** SQL å·¥ä½œï¿½?Tab æœªä¿å­˜æ ‡è®°ï¼ˆï¿½?tabIdï¼›ä¸ store.dirtyFileIds è§£è€¦ï¼Œä¿è¯ Tab å¤´å³æ—¶æ›´æ–°ï¼‰ */
+  /** SQL ¹¤×÷??Tab Î´±£´æ±ê¼Ç£¨??tabId£»Óë store.dirtyFileIds ½âñî£¬±£Ö¤ Tab Í·¼´Ê±¸üĞÂ£© */
   const [dirtySqlWorkspaceTabIds, setDirtySqlWorkspaceTabIds] = useState<Set<string>>(
     () => new Set(),
   );
@@ -398,7 +398,7 @@ export function DatabasePanel() {
     row: Record<string, unknown>;
     isNewRow?: boolean;
   } | null>(null);
-  /** æ¯ä¸ª tab çš„ã€Œæœªæäº¤ä¿®æ”¹ã€ï¼šè¡Œé”® -> {åˆ—å: æ–°å€¼}ã€‚æäº¤æˆ–å›æ»šåæ¸…ç©ºå¯¹ï¿½?tabï¿½?*/
+  /** Ã¿¸ö tab µÄ¡¸Î´Ìá½»ĞŞ¸Ä¡¹£ºĞĞ¼ü -> {ÁĞÃû: ĞÂÖµ}¡£Ìá½»»ò»Ø¹öºóÇå¿Õ¶Ô??tab??*/
   const [pendingTabAction, setPendingTabAction] = useState<
     | {
         kind: "refresh" | "page" | "close" | "sort";
@@ -421,7 +421,7 @@ export function DatabasePanel() {
 
   const referencedDatabaseTabIds = useWorkspaceBottomDockStore(
     useShallow((s) => {
-      const ids = new Set<string>(s.dockedOriginByScope.database ?? []);
+      const ids = new Set<string>();
       for (const tabs of Object.values(s.tabsByWorkspace)) {
         for (const tab of tabs ?? []) {
           if (tab.kind === "payload" && tab.payload?.module === "database") {
@@ -645,7 +645,7 @@ export function DatabasePanel() {
         return inGroup?.id ?? pickEnabled(list)?.id ?? null;
       });
     } catch {
-      // è¿æ¥åˆ—è¡¨åŠ è½½å¤±è´¥æ—¶ä¿ç•™å½“å‰çŠ¶ï¿½?
+      // Á¬½ÓÁĞ±í¼ÓÔØÊ§°ÜÊ±±£Áôµ±Ç°×´??
     } finally {
       setConnectionsLoading(false);
     }
@@ -1031,7 +1031,7 @@ export function DatabasePanel() {
           }));
         })
         .catch(() => {
-          // å¿½ç•¥ï¼šç”¨æˆ·å¯ï¿½?Schema ä¾§æ æ‰‹åŠ¨åˆ·æ–°
+          // ºöÂÔ£ºÓÃ»§¿É??Schema ²àÀ¸ÊÖ¶¯Ë¢ĞÂ
         });
     }
     return () => {
@@ -1083,7 +1083,7 @@ export function DatabasePanel() {
       const defaultState = createDefaultTablePreviewState();
       const prev = defaultState;
 
-      // 1) æŸ¥è¯¢æ€»æ•°
+      // 1) ²éÑ¯×ÜÊı
       setTablePreviews((prevMap) => ({
         ...prevMap,
         [tabId]: { ...(prevMap[tabId] ?? defaultState), loading: true, error: null },
@@ -1103,7 +1103,7 @@ export function DatabasePanel() {
         return;
       }
 
-      // 2) æŸ¥è¯¢å½“å‰é¡µæ•°ï¿½?
+      // 2) ²éÑ¯µ±Ç°Ò³Êı??
       const pageSize = prev.pageSize;
       if (connection.db_type !== "redis") {
         void introspectTable(connection, dbName, tableName)
@@ -1615,7 +1615,7 @@ export function DatabasePanel() {
     try {
       await commitTabDirty(tabId);
     } catch {
-      // æäº¤å¤±è´¥æ—¶ä¸æ¸…ç©º dirtyï¼Œæç¤ºç”¨æˆ·å»å¤„ç†
+      // Ìá½»Ê§°ÜÊ±²»Çå¿Õ dirty£¬ÌáÊ¾ÓÃ»§È¥´¦Àí
       return;
     }
     executeTabAction(pendingTabAction);
@@ -2650,10 +2650,10 @@ export function DatabasePanel() {
     enqueueAction({
       type: "sql",
       title: t("database.actions.runQuery"),
-      description: `${conn.name} Â· ${t("database.actions.runQueryDesc")}`,
+      description: `${conn.name} ¡¤ ${t("database.actions.runQueryDesc")}`,
       command: sql,
       resourceId: conn.id,
-      source: "ç”¨æˆ·",
+      source: "ÓÃ»§",
     });
     const started = performance.now();
     try {
@@ -2684,7 +2684,7 @@ export function DatabasePanel() {
     updateSqlTabState,
   ]);
 
-  // è¡¨é¢„è§ˆï¼ˆdataï¼‰æ¨¡å¼ï¼šç¼–è¾‘å™¨å¸¸æŠ˜å ä¸”æ— ç„¦ç‚¹ï¼Œåœ¨æ­¤ç»Ÿä¸€å¤„ç† ï¿½?Ctrl+Enterï¿½?
+  // ±íÔ¤ÀÀ£¨data£©Ä£Ê½£º±à¼­Æ÷³£ÕÛµşÇÒÎŞ½¹µã£¬ÔÚ´ËÍ³Ò»´¦Àí ??Ctrl+Enter??
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.isComposing) return;
