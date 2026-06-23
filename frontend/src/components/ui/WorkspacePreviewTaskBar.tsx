@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type MouseEvent } from "reac
 import { appConfirm } from "../../lib/appConfirm";
 import { isWorkspaceBuiltinTab } from "../../lib/workspaceBuiltinPanels";
 import { syncWorkspaceDockActiveTabSideEffects } from "../../lib/syncWorkspaceDockActiveTab";
-import { cleanupWorkspaceDockTerminalTab } from "../../lib/workspaceTabActions";
+import { cleanupWorkspaceDockTab } from "../../lib/workspaceTabActions";
 import { PreviewKindIcon } from "./WorkspacePreviewPanelTile";
 import {
   resolveWorkspaceActiveTabId,
@@ -170,7 +170,7 @@ export function WorkspacePreviewTaskBar() {
         setSubWindowTabId(null);
       }
       const tab = tabs.find((item) => item.id === tabId);
-      cleanupWorkspaceDockTerminalTab(tab);
+      cleanupWorkspaceDockTab(tab);
       removeTab(workspace.id, workspace, tabId);
     },
     [removeTab, subWindowTabId, tabs, workspace],
