@@ -2453,6 +2453,9 @@ export function DatabasePanel() {
       setWorkspaceTabs((prev) => [...prev, newTab]);
       setTabModes((prev) => ({ ...prev, [newTabId]: tabModes[ctxTab.id] }));
 
+      const tabStoreState = useDbWorkspaceTabStore.getState();
+      const sqlTabStates = tabStoreState.sqlTabStates;
+      const tablePreviews = tabStoreState.tablePreviews;
       if (sqlTabStates[ctxTab.id]) {
         setSqlTabStates((prev) => ({
           ...prev,
@@ -2474,7 +2477,7 @@ export function DatabasePanel() {
         dbTabToSnapshot(newTab, tabModes[ctxTab.id]),
       );
     },
-    [workspaceTabs, tabModes, sqlTabStates, tablePreviews, tableDesignerStates, updateTableDesignerState, activeWorkspaceId],
+    [workspaceTabs, tabModes, tableDesignerStates, updateTableDesignerState, activeWorkspaceId],
   );
 
   const handleContextAction = useCallback(
