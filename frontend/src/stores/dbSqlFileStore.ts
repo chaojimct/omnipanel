@@ -212,7 +212,6 @@ function commitNodesInMemory(
   nodes: DbSqlFileNode[],
   dirtyIds: string[] = [],
 ) {
-  writeNodesCache(nodes);
   set((state) => ({
     nodes,
     dirtyFileIds: markDirtyIds(state.dirtyFileIds, dirtyIds),
@@ -394,10 +393,6 @@ export async function initDbSqlFilesStore(force = false): Promise<void> {
   })();
 
   await initPromise;
-}
-
-export async function persistDbSqlFilesStore(): Promise<void> {
-  await useDbSqlFileStore.getState().flushToDisk();
 }
 
 /** 从侧栏 SQL 文件恢复 Tab 编辑器状态（文件内容为权威来源）。 */

@@ -129,10 +129,6 @@ export function initAcpServicesStore(): void {
   }
 }
 
-export function persistAcpServicesStore(): void {
-  useAcpServicesStore.persist.rehydrate();
-}
-
 export function getActiveAcpService(services: AcpService[]): AcpService | null {
   return services.find((s) => s.isActive) ?? null;
 }
