@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from "react";import { DbWorkspaceProvider } from "../../contexts/DbWorkspaceContext";
+import { useSyncExternalStore, useMemo } from "react";import { DbWorkspaceProvider } from "../../contexts/DbWorkspaceContext";
 import {
   getMirroredDbTabSnapshot,
   getMirroredDbTabVersion,
@@ -35,8 +35,17 @@ export function DatabaseTabDockPane({ tabId, isActive: _isActive }: DatabaseTabD
 
   const { ctx, tab } = snapshot;
 
+  // IMPORTANT: The snapshot's ctx contains the active tab of the SOURCE dock (DatabasePanel).
+  // But this pane is rendered in the BOTTOM dock, which has its own active state (_isActive).
+  // We must override activeTab so that inner components (like DbPanelSurface -> SqlEditor)
+  // correctly recognize themselves as active and do not hide their content.
+  const overriddenCtx = useMemo(() => ({
+    ...ctx,
+    activeTab: _isActive ? tab : null,
+  }), [ctx, tab, _isActive]);
+
   return (
-    <DbWorkspaceProvider value={ctx}>
+    <DbWorkspaceProvider value={overriddenCtx}>
       <div className="workspace-database-mirror db-dock-workspace">
         <div className="db-workspace-pane db-dock-pane">
           {isConnectionInfoTab(tab) ? (
