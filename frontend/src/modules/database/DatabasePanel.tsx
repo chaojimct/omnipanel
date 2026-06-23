@@ -3112,8 +3112,8 @@ export function DatabasePanel() {
   useEffect(() => {
     if (isActiveRoute) return;
     setCtxMenu(null);
-    setTableCtxMenu(null);
-    setConnCtxMenu(null);
+
+
     setExportMenu(null);
   }, [isActiveRoute]);
 
