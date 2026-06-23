@@ -198,7 +198,7 @@ export function buildPaginationPatchesForScrollTarget(
   return patch;
 }
 
-export function scrollSchemaTreeToNode(
+export function isSchemaTreeNodeInView(
   container: HTMLElement,
   targetId: string,
 ): boolean {
@@ -208,6 +208,29 @@ export function scrollSchemaTreeToNode(
   if (!node) {
     return false;
   }
-  node.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  const containerRect = container.getBoundingClientRect();
+  const nodeRect = node.getBoundingClientRect();
+  return (
+    nodeRect.bottom > containerRect.top &&
+    nodeRect.top < containerRect.bottom &&
+    nodeRect.right > containerRect.left &&
+    nodeRect.left < containerRect.right
+  );
+}
+
+export function scrollSchemaTreeToNode(
+  container: HTMLElement,
+  targetId: string,
+): boolean {
+  if (isSchemaTreeNodeInView(container, targetId)) {
+    return true;
+  }
+  const node = container.querySelector<HTMLElement>(
+    `[data-schema-node-id="${CSS.escape(targetId)}"]`,
+  );
+  if (!node) {
+    return false;
+  }
+  node.scrollIntoView({ block: "nearest", behavior: "auto" });
   return true;
 }

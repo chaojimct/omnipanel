@@ -1,4 +1,4 @@
-import type { DbWorkspaceMirrorContextValue } from "../contexts/DbWorkspaceContext";
+import type { DbWorkspaceMirrorContextValue } from "../contexts/DbWorkspaceContext.types";
 import type { DbWorkspaceTab } from "../modules/database/workspaceTabs";
 import { resolveSqlTabConnectionId } from "../modules/database/dbWorkspaceState";
 

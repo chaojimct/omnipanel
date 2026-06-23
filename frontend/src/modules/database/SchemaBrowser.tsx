@@ -740,52 +740,68 @@ export function SchemaBrowser({
     [activeTableKey, activeDatabaseKey, activeConnId],
   );
 
+  const sidebarLinkageRafRef = useRef<number | null>(null);
+
   useEffect(() => {
     if (!sidebarScrollTargetId || loading || search.trim()) {
       return;
     }
 
-    const groupId = resolveScrollTargetGroupId(sidebarScrollTargetId, {
-      groups,
-      connections,
-      activeGroupId,
-      activeConnId,
-    });
-    const expandIds = collectExpandedIdsForScrollTarget(sidebarScrollTargetId, groupId);
-
-    updateExpanded((prev) => {
-      let changed = false;
-      const next = new Set(prev);
-      for (const id of expandIds) {
-        if (!next.has(id)) {
-          next.add(id);
-          changed = true;
-        }
-      }
-      return changed ? next : prev;
-    });
-
-    if (connections.length === 0) {
-      return;
+    if (sidebarLinkageRafRef.current != null) {
+      cancelAnimationFrame(sidebarLinkageRafRef.current);
     }
 
-    setChildVisibleLimits((prev) => {
-      const patch = buildPaginationPatchesForScrollTarget(
-        sidebarScrollTargetId,
-        {
-          groups,
-          connections,
-          activeGroupId,
-          databaseFilters,
-          tableFilters,
-        },
-        prev,
-      );
-      if (Object.keys(patch).length === 0) {
-        return prev;
+    sidebarLinkageRafRef.current = requestAnimationFrame(() => {
+      sidebarLinkageRafRef.current = null;
+
+      const groupId = resolveScrollTargetGroupId(sidebarScrollTargetId, {
+        groups,
+        connections,
+        activeGroupId,
+        activeConnId,
+      });
+      const expandIds = collectExpandedIdsForScrollTarget(sidebarScrollTargetId, groupId);
+
+      updateExpanded((prev) => {
+        let changed = false;
+        const next = new Set(prev);
+        for (const id of expandIds) {
+          if (!next.has(id)) {
+            next.add(id);
+            changed = true;
+          }
+        }
+        return changed ? next : prev;
+      });
+
+      if (connections.length === 0) {
+        return;
       }
-      return { ...prev, ...patch };
+
+      setChildVisibleLimits((prev) => {
+        const patch = buildPaginationPatchesForScrollTarget(
+          sidebarScrollTargetId,
+          {
+            groups,
+            connections,
+            activeGroupId,
+            databaseFilters,
+            tableFilters,
+          },
+          prev,
+        );
+        if (Object.keys(patch).length === 0) {
+          return prev;
+        }
+        return { ...prev, ...patch };
+      });
     });
+
+    return () => {
+      if (sidebarLinkageRafRef.current != null) {
+        cancelAnimationFrame(sidebarLinkageRafRef.current);
+      }
+    };
   }, [
     sidebarScrollTargetId,
     loading,

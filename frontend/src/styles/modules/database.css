@@ -2306,6 +2306,35 @@
         overflow: hidden;
     }
 
+    .db-workspace-pane--data {
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        flex: 1;
+    }
+
+    .db-workspace-pane--data .db-sql-results {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+    }
+
+    .db-workspace-pane--data .db-data-table-panel {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+    }
+
+    .db-workspace-pane--data .db-data-table-wrap {
+        flex: 1;
+        min-height: 0;
+        overflow: auto;
+    }
+
     .db-workspace-pane--sql {
         display: flex;
         flex-direction: column;

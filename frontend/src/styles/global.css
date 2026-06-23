@@ -2185,6 +2185,15 @@
     min-height: 0;
 }
 
+.sql-monaco-editor--inactive {
+    visibility: hidden;
+    pointer-events: none;
+    position: absolute;
+    width: 0;
+    height: 0;
+    overflow: hidden;
+}
+
 .context-panel {
     height: 100%;
     display: flex;
