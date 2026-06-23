@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { persist, createJSONStorage } from "zustand/middleware";
 
 import { commands } from "../ipc/bindings";
 import type { SqlTabState } from "../modules/database/dbWorkspaceState";
@@ -232,7 +233,9 @@ export function getSqlFileChildren(
     });
 }
 
-export const useDbSqlFileStore = create<DbSqlFileState>()((set, get) => ({
+export const useDbSqlFileStore = create<DbSqlFileState>()(
+  persist(
+    (set, get) => ({
   nodes: [],
   dirtyFileIds: [],
 
@@ -331,7 +334,14 @@ export const useDbSqlFileStore = create<DbSqlFileState>()((set, get) => ({
   },
 
   getNode: (id) => get().nodes.find((node) => node.id === id),
-}));
+}),
+    {
+      name: "omnipanel-db-sql-files",
+      storage: createJSONStorage(() => localStorage),
+      partialize: (state) => ({ nodes: state.nodes }),
+    },
+  ),
+);
 
 export async function initDbSqlFilesStore(force = false): Promise<void> {
   if (!force && useDbSqlFileStore.getState().nodes.length > 0) {

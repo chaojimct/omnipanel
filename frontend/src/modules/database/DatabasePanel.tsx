@@ -2993,6 +2993,15 @@ export function DatabasePanel() {
     [moduleTab],
   );
 
+  const moduleSoftRefreshKey = useMemo(
+    () => [
+      connections.map((c) => c.id).join(","),
+      connectionsLoading ? "1" : "0",
+      workspaceTabs.map((t) => t.id).join(","),
+    ].join("|"),
+    [connections, connectionsLoading, workspaceTabs],
+  );
+
   const panelContentKeysByTab = useMemo(
     () =>
       buildDatabasePanelContentKeysByTab({
@@ -3051,6 +3060,7 @@ export function DatabasePanel() {
       className="db-module-dock"
       enabled={moduleLive}
       panelContentKey={modulePanelContentKey}
+      softRefreshKey={moduleSoftRefreshKey}
       tabs={moduleSegmentTabs}
       activeTabId={moduleTab}
       onActiveTabChange={(id) => setModuleTab(id as DbModuleTab)}

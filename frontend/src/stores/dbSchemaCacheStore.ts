@@ -16,12 +16,16 @@ interface DbSchemaCacheState {
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 
-function schedulePersist(snapshot: SchemaCacheSnapshot) {
+function schedulePersist(getState: () => DbSchemaCacheState) {
   if (saveTimer) {
     clearTimeout(saveTimer);
   }
   saveTimer = setTimeout(() => {
     saveTimer = null;
+    const { snapshot, hydrated } = getState();
+    if (!hydrated) {
+      return;
+    }
     void saveSchemaCache(snapshot).catch(() => {});
   }, 400);
 }
@@ -45,7 +49,7 @@ export const useDbSchemaCacheStore = create<DbSchemaCacheState>((set, get) => ({
 
   replaceSnapshot: async (snapshot) => {
     set({ snapshot, hydrated: true });
-    schedulePersist(snapshot);
+    schedulePersist(get);
   },
 
   patchConnection: async (connId, entry) => {
@@ -56,7 +60,7 @@ export const useDbSchemaCacheStore = create<DbSchemaCacheState>((set, get) => ({
       },
     };
     set({ snapshot: next, hydrated: true });
-    schedulePersist(next);
+    schedulePersist(get);
   },
 
   setConnectionRefreshing: (connId, refreshing) => {

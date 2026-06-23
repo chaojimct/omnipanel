@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { persist, createJSONStorage } from "zustand/middleware";
 
 import { commands } from "../ipc/bindings";
 import { fetchProviderModelList, mergeModelCatalog } from "../lib/fetchProviderModels";
@@ -280,7 +281,9 @@ async function persistProviders(providers: AiModelProvider[]): Promise<void> {
  * 之后由各 action（addProvider/removeProvider/updateProvider/resetProviders）
  * 在更新 store 后立即调用 `persistProviders(next)` 触发。
  */
-export const useAiModelsStore = create<AiModelsState>()((set, get) => ({
+export const useAiModelsStore = create<AiModelsState>()(
+  persist(
+    (set, get) => ({
   providers: [],
   addProvider: (input) => {
     const provider: AiModelProvider = {
@@ -378,7 +381,14 @@ export const useAiModelsStore = create<AiModelsState>()((set, get) => ({
     set({ providers: [] });
     void persistProviders([]);
   },
-}));
+}),
+    {
+      name: "omnipanel-ai-models",
+      storage: createJSONStorage(() => localStorage),
+      partialize: (state) => ({ providers: state.providers }),
+    },
+  ),
+);
 
 const HMR_STATE_KEY = "aiModelsProviders";
 
