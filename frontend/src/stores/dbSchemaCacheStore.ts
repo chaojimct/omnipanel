@@ -11,6 +11,7 @@ interface DbSchemaCacheState {
   replaceSnapshot: (snapshot: SchemaCacheSnapshot) => Promise<void>;
   patchConnection: (connId: string, entry: SchemaCacheSnapshot["connections"][string]) => Promise<void>;
   setConnectionRefreshing: (connId: string, refreshing: boolean) => void;
+  clearConnectionRefreshing: () => void;
 }
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
@@ -68,5 +69,9 @@ export const useDbSchemaCacheStore = create<DbSchemaCacheState>((set, get) => ({
       }
       return { refreshingConnectionIds: next };
     });
+  },
+
+  clearConnectionRefreshing: () => {
+    set({ refreshingConnectionIds: {} });
   },
 }));

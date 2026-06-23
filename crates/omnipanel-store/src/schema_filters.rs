@@ -14,6 +14,8 @@ use crate::paths;
 pub struct SchemaFilterRecord {
     pub ordered_names: Vec<String>,
     pub visible_names: Vec<String>,
+    #[serde(default)]
+    pub pinned_names: Vec<String>,
 }
 
 /// 全部连接的 Schema 过滤快照。

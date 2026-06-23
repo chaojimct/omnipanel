@@ -213,6 +213,11 @@ export function DockableWorkspace({
   const viewIdRef = useRef<string | null>(null);
   const transferredOutRef = useRef(new Set<string>());
   const layoutLoadedRef = useRef(false);
+  const [layoutReady, setLayoutReady] = useState(false);
+  const markLayoutReady = useCallback(() => {
+    layoutLoadedRef.current = true;
+    setLayoutReady(true);
+  }, []);
   const isSyncingRef = useRef(false);
   const pendingSavedLayoutRef = useRef<SerializedDockview | null>(savedLayout);
   // 跟踪最近一次主动写回 store 的布局；useEffect 用它来识别"自己写回去"vs"外部变更"
@@ -389,8 +394,10 @@ export function DockableWorkspace({
     () => ({
       [COMPONENT_NAME]: (props: IDockviewPanelProps<PanelParams>) => {
         const tabId = props.params.tabId;
+        const contentRev = props.params.contentRev ?? 0;
         return (
           <div
+            key={`${tabId}:${contentRev}`}
             className="dock-pane-surface"
             data-dock-tab-id={tabId}
             onClick={(e) => {
@@ -435,7 +442,7 @@ export function DockableWorkspace({
     if (lastBumpedPanelContentKeyRef.current === panelContentKey) return;
     lastBumpedPanelContentKeyRef.current = panelContentKey;
     bumpPanelContentRev(api);
-  }, [panelContentKey, panelContentKeysByTab, bumpPanelContentRev, bumpPanelContentRevForTabIds]);
+  }, [panelContentKey, panelContentKeysByTab, layoutReady, bumpPanelContentRev, bumpPanelContentRevForTabIds]);
 
   // 自定义 tab：元数据通过 panel params + DockWorkspaceTabHeader 内 liveMeta 同步
   const defaultTabComponent = DockWorkspaceTabHeader;
@@ -667,7 +674,7 @@ export function DockableWorkspace({
         api.removePanel(panel);
       }
       ensureExternalDropTarget(api);
-      layoutLoadedRef.current = true;
+      markLayoutReady();
       syncWindowChromeHostRef.current(api);
       return;
     }
@@ -718,7 +725,7 @@ export function DockableWorkspace({
       } finally {
         isSyncingRef.current = false;
       }
-      layoutLoadedRef.current = true;
+      markLayoutReady();
       syncTabGroups(api);
       if (acceptExternalDropsRef.current) {
         ensureExternalDropTarget(api);
@@ -760,7 +767,7 @@ export function DockableWorkspace({
     } finally {
       isSyncingRef.current = false;
     }
-    layoutLoadedRef.current = true;
+    markLayoutReady();
     syncTabGroups(api);
     if (acceptExternalDropsRef.current) {
       ensureExternalDropTarget(api);
@@ -796,7 +803,7 @@ export function DockableWorkspace({
       }
       syncTabGroups(api);
     }
-  }, [syncTabGroups, bumpPanelContentRev]);
+  }, [syncTabGroups, bumpPanelContentRev, markLayoutReady]);
 
   /** 将 tabs 元数据同步到 dockview api（布局被 clear 后亦需调用以恢复 panel） */
   const syncTabsToApi = useCallback(
