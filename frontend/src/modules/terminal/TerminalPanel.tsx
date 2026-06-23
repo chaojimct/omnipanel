@@ -89,7 +89,7 @@ export function TerminalPanel() {
         : meta.originPanelId;
       setActiveTab(originTerminalId);
     });
-  }, [removeDockedOrigin, setActiveTab]);
+  }, [setActiveTab]);
 
   const [ctxMenu, setCtxMenu] = useState<{
     x: number;
