@@ -2445,8 +2445,8 @@ export function DatabasePanel() {
       // Generate a new ID based on kind
       const newTabId =
         ctxTab.kind === "designer"
-          ? `designer:${ctxTab.connId}:${ctxTab.dbName}:${ctxTab.tableName}:${Date.now()}`
-          : `sql:${Date.now()}`;
+          ? `designer:${ctxTab.connId}:${ctxTab.dbName}:${ctxTab.tableName}:${Date.now()}_${Math.random().toString(36).substring(2, 7)}`
+          : `sql:${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
 
       const newTab = { ...ctxTab, id: newTabId, workspaceOnly: true } as DbWorkspaceTab;
 
@@ -2456,6 +2456,11 @@ export function DatabasePanel() {
       const tabStoreState = useDbWorkspaceTabStore.getState();
       const sqlTabStates = tabStoreState.sqlTabStates;
       const tablePreviews = tabStoreState.tablePreviews;
+      const tableColumnMeta = tabStoreState.tableColumnMeta;
+      const tabDirtyRows = tabStoreState.tabDirtyRows;
+      const setTableColumnMeta = useDbWorkspaceTabStore.getState().setTableColumnMeta;
+      const setTabDirtyRows = useDbWorkspaceTabStore.getState().setTabDirtyRows;
+      
       if (sqlTabStates[ctxTab.id]) {
         setSqlTabStates((prev) => ({
           ...prev,
@@ -2466,6 +2471,18 @@ export function DatabasePanel() {
         setTablePreviews((prev) => ({
           ...prev,
           [newTabId]: { ...tablePreviews[ctxTab.id] },
+        }));
+      }
+      if (tableColumnMeta[ctxTab.id]) {
+        setTableColumnMeta((prev) => ({
+          ...prev,
+          [newTabId]: [...tableColumnMeta[ctxTab.id]],
+        }));
+      }
+      if (tabDirtyRows[ctxTab.id]) {
+        setTabDirtyRows((prev) => ({
+          ...prev,
+          [newTabId]: { ...tabDirtyRows[ctxTab.id] },
         }));
       }
       if (tableDesignerStates[ctxTab.id]) {
