@@ -1358,7 +1358,7 @@ export function DatabasePanel() {
           await invoke("db_execute_query", { connection: connForSchema, sql });
         }
         clearTabDirty(tabId);
-        refreshTablePreviewNow(tabId);
+        refreshTabPreviewNow(tabId);
       } catch (err) {
         console.error("[db.commit] failed", err);
         throw err;
@@ -1370,15 +1370,15 @@ export function DatabasePanel() {
         });
       }
     },
-    [connections, clearTabDirty, refreshTablePreviewNow],
+    [connections, clearTabDirty, refreshTabPreviewNow],
   );
 
   const rollbackTabDirty = useCallback(
     (tabId: string) => {
       clearTabDirty(tabId);
-      refreshTablePreviewNow(tabId);
+      refreshTabPreviewNow(tabId);
     },
-    [clearTabDirty, refreshTablePreviewNow],
+    [clearTabDirty, refreshTabPreviewNow],
   );
 
   const closeWorkspaceTab = useCallback((tabId: string) => {
