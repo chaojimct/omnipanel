@@ -29,20 +29,19 @@ function useMirroredDbTabSnapshot(tabId: string) {
 export function DatabaseTabDockPane({ tabId, isActive: _isActive }: DatabaseTabDockPaneProps) {
   const snapshot = useMirroredDbTabSnapshot(tabId);
 
-  if (!snapshot) {
+  const overriddenCtx = useMemo(() => {
+    if (!snapshot) return null;
+    return {
+      ...snapshot.ctx,
+      activeTab: _isActive ? snapshot.tab : null,
+    };
+  }, [snapshot, _isActive]);
+
+  if (!snapshot || !overriddenCtx) {
     return null;
   }
 
-  const { ctx, tab } = snapshot;
-
-  // IMPORTANT: The snapshot's ctx contains the active tab of the SOURCE dock (DatabasePanel).
-  // But this pane is rendered in the BOTTOM dock, which has its own active state (_isActive).
-  // We must override activeTab so that inner components (like DbPanelSurface -> SqlEditor)
-  // correctly recognize themselves as active and do not hide their content.
-  const overriddenCtx = useMemo(() => ({
-    ...ctx,
-    activeTab: _isActive ? tab : null,
-  }), [ctx, tab, _isActive]);
+  const { tab } = snapshot;
 
   return (
     <DbWorkspaceProvider value={overriddenCtx}>
