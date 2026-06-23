@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
+﻿import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { useLocation } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
@@ -178,7 +178,7 @@ function applyDefaultWorkspaceSession(
 }
 
 
-/** 把行主键拼成的字符串�?col=val&col=val"）解析回单列值，rowKey 中空字符串表�?NULL�?*/
+/** 把行主键拼成的字符串�?col=val&col=val"）解析回单列值，rowKey 中空字符串表�?NULL�?*/
 function readRowKeyValue(rowKey: string, colName: string): string {
   for (const part of rowKey.split("&")) {
     const eq = part.indexOf("=");
@@ -378,7 +378,7 @@ export function DatabasePanel() {
   const recentClosedPanels = useDbWorkspaceSessionStore((s) => s.recentClosedPanels);
   const pushRecentClosedPanel = useDbWorkspaceSessionStore((s) => s.pushRecentClosedPanel);
   const removeRecentClosedPanel = useDbWorkspaceSessionStore((s) => s.removeRecentClosedPanel);
-  /** SQL 工作�?Tab 未保存标记（�?tabId；与 store.dirtyFileIds 解耦，保证 Tab 头即时更新） */
+  /** SQL 工作�?Tab 未保存标记（�?tabId；与 store.dirtyFileIds 解耦，保证 Tab 头即时更新） */
   const [dirtySqlWorkspaceTabIds, setDirtySqlWorkspaceTabIds] = useState<Set<string>>(
     () => new Set(),
   );
@@ -398,7 +398,7 @@ export function DatabasePanel() {
     row: Record<string, unknown>;
     isNewRow?: boolean;
   } | null>(null);
-  /** 每个 tab 的「未提交修改」：行键 -> {列名: 新值}。提交或回滚后清空对�?tab�?*/
+  /** 每个 tab 的「未提交修改」：行键 -> {列名: 新值}。提交或回滚后清空对�?tab�?*/
   const [pendingTabAction, setPendingTabAction] = useState<
     | {
         kind: "refresh" | "page" | "close" | "sort";
@@ -645,7 +645,7 @@ export function DatabasePanel() {
         return inGroup?.id ?? pickEnabled(list)?.id ?? null;
       });
     } catch {
-      // 连接列表加载失败时保留当前状�?
+      // 连接列表加载失败时保留当前状�?
     } finally {
       setConnectionsLoading(false);
     }
@@ -1031,7 +1031,7 @@ export function DatabasePanel() {
           }));
         })
         .catch(() => {
-          // 忽略：用户可�?Schema 侧栏手动刷新
+          // 忽略：用户可�?Schema 侧栏手动刷新
         });
     }
     return () => {
@@ -1103,7 +1103,7 @@ export function DatabasePanel() {
         return;
       }
 
-      // 2) 查询当前页数�?
+      // 2) 查询当前页数�?
       const pageSize = prev.pageSize;
       if (connection.db_type !== "redis") {
         void introspectTable(connection, dbName, tableName)
@@ -2198,13 +2198,6 @@ export function DatabasePanel() {
       );
       if (existingTabId) {
         activateWorkspaceTab(existingTabId);
-        const existingTab = workspaceTabs.find((item) => item.id === existingTabId);
-        if (existingTab) {
-
-            existingTab,
-            useDbWorkspaceTabStore.getState().tabModes[existingTabId] ?? "data",
-          );
-        }
         if (selection.connection.db_type !== "redis") {
           queueMicrotask(() => {
             void introspectTable(selection.connection, selection.dbName, selection.tableName)
@@ -2691,7 +2684,7 @@ export function DatabasePanel() {
     updateSqlTabState,
   ]);
 
-  // 表预览（data）模式：编辑器常折叠且无焦点，在此统一处理 �?Ctrl+Enter�?
+  // 表预览（data）模式：编辑器常折叠且无焦点，在此统一处理 �?Ctrl+Enter�?
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.isComposing) return;
