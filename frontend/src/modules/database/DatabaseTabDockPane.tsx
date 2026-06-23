@@ -33,9 +33,9 @@ export function DatabaseTabDockPane({ tabId, isActive: _isActive }: DatabaseTabD
     if (!snapshot) return null;
     return {
       ...snapshot.ctx,
-      activeTab: _isActive ? snapshot.tab : null,
+      activeTabId: _isActive ? tabId : "",
     };
-  }, [snapshot, _isActive]);
+  }, [snapshot, _isActive, tabId]);
 
   if (!snapshot || !overriddenCtx) {
     return null;

@@ -877,13 +877,17 @@ export function DockableWorkspace({
             ) {
               continue;
             }
-            api.removePanel(panel);
+            if (typeof panel.api?.close === "function") {
+              panel.api.close();
+            } else {
+              api.removePanel(panel);
+            }
           }
         }
         const existing = new Set(api.panels.map((p) => p.id));
         for (const tab of currentTabs) {
           if (!existing.has(tab.id)) {
-            const firstPanel = api.panels[0];
+            const firstPanel = api.panels.find(p => desiredIds.has(p.id));
             const options: Parameters<typeof api.addPanel>[0] = {
               id: tab.id,
               component: COMPONENT_NAME,
