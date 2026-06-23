@@ -5,7 +5,6 @@ import { WorkspaceEmptyPage } from "../ui/WorkspaceEmptyPage";
 import { TerminalTabDockPane } from "../../modules/terminal/TerminalTabDockPane";
 import { DatabaseTabDockPane } from "../../modules/database/DatabaseTabDockPane";
 import { DockerWorkspaceTabPane } from "../../modules/docker/DockerWorkspaceTabPane";
-import { getMirroredDbTabSnapshot } from "../../stores/dbWorkspaceMirrorStore";
 import type { WorkspaceDockTab } from "../../stores/workspaceBottomDockStore";
 import { ensureTerminalTabFromSnapshot } from "../../lib/workspaceTabActions";
 import { isModuleRouteSnapshot } from "../../lib/workspaceModuleRoutes";
@@ -61,13 +60,7 @@ export function WorkspacePayloadPanel({ tab, isActive }: WorkspacePayloadPanelPr
   }
 
   if (payload.module === "database") {
-    const mirror = getMirroredDbTabSnapshot(payload.id);
-    if (mirror) {
-      return <DatabaseTabDockPane tabId={payload.id} isActive={isActive} />;
-    }
-    return (
-      <PayloadFallback module="database" label={payload.label} path="/database" />
-    );
+    return <DatabaseTabDockPane tabId={payload.id} isActive={isActive} />;
   }
 
   if (payload.module === "docker") {
