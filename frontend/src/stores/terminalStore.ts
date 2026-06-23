@@ -45,6 +45,7 @@ export interface TerminalTab {
   id: string;
   title: string;
   session: TerminalSessionInfo;
+  workspaceId?: string;
   /** 仅由底部工作区 payload 使用，不在终端模块 Dock 中展示 */
   workspaceOnly?: boolean;
   backendSessionId: string | null;
@@ -96,6 +97,8 @@ interface TerminalState {
   setTabResource: (tabId: string, session: TerminalSessionInfo) => void;
   /** 调整 Tab 标题（如资源改名） */
   renameTab: (tabId: string, title: string) => void;
+  /** 设置 tab 是否仅在工作区中显示 */
+  setTabWorkspaceOnly: (tabId: string, workspaceOnly: boolean) => void;
   upsertEmbeddedPane: (
     pane: Omit<TerminalPane, "terminal" | "status" | "backendSessionId">,
   ) => string;
@@ -211,6 +214,7 @@ function normalizePersistedTab(tab: unknown): TerminalTab | null {
     id: raw.id,
     title: raw.title,
     session,
+    workspaceId: raw.workspaceId as string | undefined,
     backendSessionId: null,
     status: "connecting",
     terminal: null,
@@ -298,8 +302,17 @@ export const useTerminalStore = create<TerminalState>()(
           })),
         })),
 
-      renameTab: (tabId, title) =>
-        set((state) => ({ tabs: updateTabById(state.tabs, tabId, (tab) => ({ ...tab, title })) })),
+      renameTab: (tabId, title) => {
+        set((state) => ({
+          tabs: updateTabById(state.tabs, tabId, (tab) => ({ ...tab, title })),
+        }));
+      },
+
+      setTabWorkspaceOnly: (tabId, workspaceOnly) => {
+        set((state) => ({
+          tabs: updateTabById(state.tabs, tabId, (tab) => ({ ...tab, workspaceOnly })),
+        }));
+      },
 
       upsertEmbeddedPane: (pane) => {
         const id = pane.id;
@@ -333,7 +346,7 @@ export const useTerminalStore = create<TerminalState>()(
       findTabByResourceId: (resourceId, type) =>
         get().tabs.find(
           (tab) =>
-            tab.session.resourceId === resourceId && (type ? tab.session.type === type : true),
+            tab.session.resourceId === resourceId && (type ? tab.session.type === type : true) && !tab.workspaceOnly,
         ),
 
       openOrFocusSshTab: (hostId, title) => {
@@ -354,10 +367,11 @@ export const useTerminalStore = create<TerminalState>()(
         return get().addLocalTerminalTab(title);
       },
 
-      addLocalTerminalTab: (title = "本地终端") =>
-        get().addTab({
+      addLocalTerminalTab: (title = "本地终端", workspaceId?: string) => {
+        return get().addTab({
           id: createTerminalTabId(),
           title,
+          workspaceId,
           session: {
             type: "local",
             resourceId: "local-terminal",
@@ -366,12 +380,14 @@ export const useTerminalStore = create<TerminalState>()(
             purpose: "Local Workspace",
             commandPack: [],
           },
-        }),
+        });
+      },
 
-      addSshTerminalTab: (hostId, title) =>
-        get().addTab({
+      addSshTerminalTab: (hostId, title, workspaceId?: string) => {
+        return get().addTab({
           id: createTerminalTabId(),
           title,
+          workspaceId,
           session: {
             type: "remote",
             resourceId: hostId,
@@ -380,7 +396,8 @@ export const useTerminalStore = create<TerminalState>()(
             purpose: "SSH Workbench",
             commandPack: [],
           },
-        }),
+        });
+      },
     }),
     {
       name: TABS_STORAGE_KEY,

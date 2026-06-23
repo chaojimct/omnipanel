@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { pathToRemoteDir, shellCdCommand } from "../modules/server/ssh/utils/parseCommandPaths";
 import type { DetailTab } from "../modules/server/ssh/types";
+import type { SftpEntry } from "../components/sftp/sftpUtils";
 
 type PendingSftp = {
   resourceId: string;
@@ -14,18 +15,26 @@ type PendingTerminal = {
   nonce: number;
 };
 
+export type SftpCache = {
+  path: string;
+  entries: SftpEntry[];
+};
+
 type SshDetailNavigationState = {
   pendingSftp: PendingSftp | null;
   pendingTerminal: PendingTerminal | null;
+  sftpCaches: Record<string, SftpCache>;
   requestSftp: (resourceId: string, path: string) => void;
   requestTerminal: (resourceId: string, path: string) => void;
   consumeSftpPath: (resourceId: string) => PendingSftp | null;
   consumeTerminalCommand: (resourceId: string) => PendingTerminal | null;
+  setSftpCache: (resourceId: string, cache: SftpCache) => void;
 };
 
 export const useSshDetailNavigationStore = create<SshDetailNavigationState>((set, get) => ({
   pendingSftp: null,
   pendingTerminal: null,
+  sftpCaches: {},
   requestSftp: (resourceId, path) => {
     set({
       pendingSftp: {
@@ -55,6 +64,11 @@ export const useSshDetailNavigationStore = create<SshDetailNavigationState>((set
     if (!pending || pending.resourceId !== resourceId) return null;
     set({ pendingTerminal: null });
     return pending;
+  },
+  setSftpCache: (resourceId, cache) => {
+    set((state) => ({
+      sftpCaches: { ...state.sftpCaches, [resourceId]: cache },
+    }));
   },
 }));
 

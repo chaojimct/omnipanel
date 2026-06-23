@@ -10,7 +10,7 @@ import {
   resolveResourceById,
   useSshHostResources,
 } from "../../stores/connectionStore";
-import { useWorkspaceStore, onWorkspaceSwitch } from "../../stores/workspaceStore";
+import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { useI18n } from "../../i18n";
 import type { TopbarTabDef } from "../../stores/topbarStore";
 import { navigateToPath } from "../../lib/terminalSession";
@@ -18,10 +18,9 @@ import { LOCAL_TERMINAL_RESOURCE_ID } from "./paneResource";
 import { TerminalTabDockPane } from "./TerminalTabDockPane";
 import { clearTerminalPaneSender } from "./terminalPaneSenders";
 import { useWorkspaceBottomDockStore } from "../../stores/workspaceBottomDockStore";
-import { useWorkspaceTabStore, type TerminalTabSnapshot } from "../../stores/workspaceTabStore";
 import {
-  terminalTabToSnapshot,
   copyTerminalTabToWorkspaceSnapshot,
+  moveTerminalTabToWorkspaceSnapshot,
   addSnapshotToWorkspace,
 } from "../../lib/workspaceTabActions";
 import { subscribeDockviewTransfer } from "../../lib/dockviewRegistry";
@@ -54,7 +53,11 @@ export function TerminalPanel() {
   const { t } = useI18n();
   const location = useLocation();
   const isActiveRoute = location.pathname === "/module/terminal";
-  const tabs = useTerminalStore((state) => state.tabs);
+  const allTabs = useTerminalStore((state) => state.tabs);
+  const tabs = useMemo(
+    () => allTabs.filter((tab) => !tab.workspaceOnly),
+    [allTabs]
+  );
   const activeTabId = useTerminalStore((state) => state.activeTabId);
   const removeTab = useTerminalStore((state) => state.removeTab);
   const setActiveTab = useTerminalStore((state) => state.setActiveTab);
@@ -74,10 +77,7 @@ export function TerminalPanel() {
     resolveResourceById(LOCAL_TERMINAL_RESOURCE_ID);
   const selectResource = useWorkspaceStore((state) => state.selectResource);
 
-  const isOriginDocked = useWorkspaceBottomDockStore((s) => s.isOriginDocked);
-  const removeDockedOrigin = useWorkspaceBottomDockStore((s) => s.removeDockedOrigin);
-  const currentWorkspaceId = useWorkspaceStore((s) => s.workspace.id);
-  const wsTabStore = useWorkspaceTabStore;
+  const activeWorkspaceId = useWorkspaceStore((s) => s.workspace.id);
 
   useEffect(() => {
     return subscribeDockviewTransfer((meta) => {
@@ -87,51 +87,9 @@ export function TerminalPanel() {
       const originTerminalId = meta.originPanelId.startsWith(prefix)
         ? meta.originPanelId.slice(prefix.length)
         : meta.originPanelId;
-      removeDockedOrigin("terminal", originTerminalId);
       setActiveTab(originTerminalId);
     });
   }, [removeDockedOrigin, setActiveTab]);
-
-  useEffect(() => {
-    return onWorkspaceSwitch(({ prevWorkspaceId, nextWorkspaceId }) => {
-      const store = useTerminalStore.getState();
-      const wsTabStoreState = wsTabStore.getState();
-
-      const snapshots = store.tabs
-        .filter((tab) => !tab.workspaceOnly)
-        .map(terminalTabToSnapshot);
-      wsTabStoreState.saveTabs(prevWorkspaceId, snapshots);
-
-      const targetSnapshots = wsTabStoreState.getTabs(nextWorkspaceId).filter(
-        (s): s is TerminalTabSnapshot => s.module === "terminal",
-      );
-      if (targetSnapshots.length === 0) return;
-
-      for (const tab of [...store.tabs]) {
-        clearTerminalPaneSender(tab.id);
-        clearPaneBackendPending(tab.id);
-        disposeTabBackendSessions(tab.id);
-        store.removeTab(tab.id);
-      }
-      for (const snap of targetSnapshots) {
-        store.addTab({
-          id: snap.id,
-          title: snap.label,
-          session: {
-            type: snap.sessionType,
-            resourceId: snap.resourceId,
-            shellLabel: snap.shellLabel,
-            cwd: snap.cwd,
-            purpose: snap.purpose,
-            commandPack: [],
-          },
-        });
-      }
-      if (targetSnapshots.length > 0) {
-        store.setActiveTab(targetSnapshots[0].id);
-      }
-    });
-  }, []);
 
   const [ctxMenu, setCtxMenu] = useState<{
     x: number;
@@ -191,9 +149,9 @@ export function TerminalPanel() {
   const visibleTabs = useMemo(
     () =>
       tabs.filter(
-        (tab) => !tab.workspaceOnly && !isOriginDocked("terminal", tab.id),
+        (tab) => !tab.workspaceOnly,
       ),
-    [tabs, isOriginDocked],
+    [tabs],
   );
 
   const dockTabs = useMemo(
@@ -280,6 +238,25 @@ export function TerminalPanel() {
         setCtxMenu(null);
         return;
       }
+      if (action === "copyToWorkspace") {
+        if (!activeWorkspaceId) return;
+        const ctxTab = visibleTabs.find((tab) => tab.id === ctxMenu.tabId);
+        if (ctxTab) {
+          addSnapshotToWorkspace(activeWorkspaceId, copyTerminalTabToWorkspaceSnapshot(ctxTab));
+        }
+        setCtxMenu(null);
+        return;
+      }
+      if (action === "moveToWorkspace") {
+        if (!activeWorkspaceId) return;
+        const ctxTab = visibleTabs.find((tab) => tab.id === ctxMenu.tabId);
+        if (ctxTab) {
+          useTerminalStore.getState().setTabWorkspaceOnly(ctxTab.id, true);
+          addSnapshotToWorkspace(activeWorkspaceId, moveTerminalTabToWorkspaceSnapshot(ctxTab));
+        }
+        setCtxMenu(null);
+        return;
+      }
       const idx = ctxMenu.index;
       const tabList = visibleTabs;
       if (action === "close") {
@@ -297,7 +274,7 @@ export function TerminalPanel() {
       }
       setCtxMenu(null);
     },
-    [ctxMenu, handleCloseTab, visibleTabs],
+    [ctxMenu, handleCloseTab, visibleTabs, activeWorkspaceId],
   );
 
   const renderDockPanel = useCallback(
@@ -330,16 +307,17 @@ export function TerminalPanel() {
 
   const handleCtrlCopyTab = useCallback(
     (tabId: string) => {
+      if (!activeWorkspaceId) return;
       const ctxTab = visibleTabs.find((tab) => tab.id === tabId);
       if (!ctxTab) {
         return;
       }
       addSnapshotToWorkspace(
-        currentWorkspaceId,
+        activeWorkspaceId,
         copyTerminalTabToWorkspaceSnapshot(ctxTab),
       );
     },
-    [visibleTabs, currentWorkspaceId],
+    [visibleTabs, activeWorkspaceId],
   );
 
   return (
@@ -369,6 +347,7 @@ export function TerminalPanel() {
           visibleTabs.length,
           ctxMenu.index,
           handleContextAction,
+          { showWorkspaceActions: true },
         );
         return (
           <ContextMenu

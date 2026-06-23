@@ -2,7 +2,7 @@ import type { ContextMenuItem } from "./ContextMenu";
 
 export type TabCloseAction = "close" | "closeLeft" | "closeRight" | "closeOthers" | "closeAll";
 
-export type TabContextMenuAction = TabCloseAction | "rename";
+export type TabContextMenuAction = TabCloseAction | "rename" | "copyToWorkspace" | "moveToWorkspace";
 
 type Translate = (key: string) => string;
 
@@ -11,6 +11,8 @@ export interface BuildTabCloseMenuOptions {
   showRename?: boolean;
   /** 重命名菜单文案 i18n key，默认 shell.topbar.rename */
   renameLabelKey?: string;
+  /** 是否显示加入工作区相关菜单项（复制/移动到工作区） */
+  showWorkspaceActions?: boolean;
 }
 
 /** 顶栏 / 工作区标签页通用的关闭类右键菜单项 */
@@ -32,8 +34,25 @@ export function buildTabCloseMenuItems(
       ]
     : [];
 
+  const workspaceItems: ContextMenuItem[] = options?.showWorkspaceActions
+    ? [
+        {
+          id: "tab-copy-to-workspace",
+          label: t("shell.workspace.copyTo"),
+          onClick: () => onAction("copyToWorkspace"),
+        },
+        {
+          id: "tab-move-to-workspace",
+          label: t("shell.workspace.moveTo"),
+          onClick: () => onAction("moveToWorkspace"),
+        },
+        { id: "tab-sep-workspace", separator: true, label: "" },
+      ]
+    : [];
+
   return [
     ...renameItem,
+    ...workspaceItems,
     {
       id: "tab-close",
       label: t("shell.topbar.closeCurrent"),

@@ -93,6 +93,7 @@ export function DockerPanel() {
   const location = useLocation();
   const isActiveRoute = location.pathname === "/module/docker";
   const navigate = useNavigate();
+  const activeWorkspaceId = useWorkspaceStore((state) => state.workspace.id);
   const enqueueAction = useActionStore((s) => s.enqueueAction);
   const setAiDraft = useAiStore((s) => s.setDraftPrompt);
   const openAiDrawer = useAiStore((s) => s.openDrawer);
@@ -1420,7 +1421,7 @@ function ContainerDrawerBody({
 }: ContainerDrawerBodyProps) {
   const [logsMounted, setLogsMounted] = useState(false);
   const [terminalMounted, setTerminalMounted] = useState(false);
-  const currentWorkspaceId = useWorkspaceStore((s) => s.workspace.id);
+
 
   const canShowTerminal = Boolean(
     !loading && detail?.summary.running && canExec && connectionId && containerId,
@@ -1482,11 +1483,12 @@ function ContainerDrawerBody({
         {(drawerTab === "logs" || drawerTab === "terminal") && connectionId && containerId && (
           <button
             className="subtab subtab--action"
-            title="添加到工作区"
+            title="复制到工作区"
             onClick={() => {
+              if (!activeWorkspaceId) return;
               const name = detail?.summary.name ?? containerId;
               const snapshot = dockerTabToSnapshot(drawerTab, connectionId, containerId, name);
-              addSnapshotToWorkspace(currentWorkspaceId, snapshot);
+              addSnapshotToWorkspace(activeWorkspaceId, snapshot);
             }}
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="12" height="12">

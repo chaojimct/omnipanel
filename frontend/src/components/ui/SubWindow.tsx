@@ -47,6 +47,8 @@ export interface SubWindowProps {
   noOverlay?: boolean;
   /** 自定义最小化行为，不传则使用内置最小化（右侧浮动条） */
   onMinimize?: () => void;
+  /** 当提供时，最大化按钮改为切换到全屏工作区模式（关闭弹窗并激活 tab） */
+  onMaximizeToWorkspace?: () => void;
 }
 
 type SubWindowVisualState = "normal" | "maximized" | "minimized";
@@ -83,6 +85,7 @@ export function SubWindow({
   windowChrome = true,
   noOverlay = false,
   onMinimize,
+  onMaximizeToWorkspace,
 }: SubWindowProps) {
   const { t } = useI18n();
   const subWindowId = useId();
@@ -390,6 +393,7 @@ export function SubWindow({
                 onMinimize={handleMinimize}
                 onToggleMaximize={handleToggleMaximize}
                 onClose={onClose}
+                onMaximizeToWorkspace={onMaximizeToWorkspace}
               />
             ) : (
               <Button
@@ -456,6 +460,7 @@ export function SubWindow({
                   onMinimize={handleMinimize}
                   onToggleMaximize={handleToggleMaximize}
                   onClose={onClose}
+                  onMaximizeToWorkspace={onMaximizeToWorkspace}
                 />
               ) : (
                 <Button

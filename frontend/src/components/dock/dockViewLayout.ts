@@ -255,6 +255,7 @@ function firstLeafWithPanels(
 function addMissingPanels(
   layout: SerializedDockview,
   missing: string[],
+  activeTabId?: string,
 ): SerializedDockview {
   const next = cloneLayout(layout);
   // 必须同时补 panels 字典和 group 的 views，否则 fromJSON 在
@@ -275,7 +276,7 @@ function addMissingPanels(
   const target = firstLeafWithPanels(root, panels);
   if (target) {
     const updatedViews = [...(target.views ?? []), ...missing];
-    const updatedActive = target.activeView ?? missing[0];
+    const updatedActive = activeTabId ?? target.activeView ?? missing[0];
     const updated = mapRoot(root, (leaf) => {
       if ((leaf.data.views ?? []).some((id) => allowed.has(id))) {
         return {
@@ -294,7 +295,7 @@ function addMissingPanels(
     next.grid.root = toGridNode(updated);
   } else {
     // 没有可用 group，创建一个新的 leaf，并包一层 branch（dockview 要求）
-    const activeId = missing[0];
+    const activeId = activeTabId ?? missing[0];
     const groupId = `group-${activeId}`;
     const newLeaf: SerializedLeaf = {
       type: "leaf",
@@ -435,12 +436,32 @@ export function mergePanelsIntoLayout(
   // 当且仅当 panels 字典里有内容但 grid 中没有匹配 leaf 时出现，视为
   // "views 漂移"，必须走 addMissingPanels 重建 grid。
   if (!isLayoutUsable(cleaned)) {
-    return stripSideHeaderLayout(addMissingPanels(cleaned, tabIds));
+    return stripSideHeaderLayout(addMissingPanels(cleaned, tabIds, activeTabId));
   }
   const missing = tabIds.filter((id) => !collectPanelIds(cleaned).has(id));
-  if (missing.length === 0) return stripSideHeaderLayout(cleaned);
+  if (missing.length === 0) {
+    // 即使没有 missing panels，如果 activeTabId 和当前 layout 内部的 activeView 不一致，强制更新
+    const withUpdatedActive = cloneLayout(cleaned);
+    const root = fromGridNode(withUpdatedActive.grid.root);
+    let updatedActiveView = false;
+    const updated = mapRoot(root, (leaf) => {
+      if ((leaf.data.views ?? []).includes(activeTabId)) {
+        updatedActiveView = true;
+        return {
+          ...leaf,
+          data: { ...leaf.data, activeView: activeTabId },
+        };
+      }
+      return leaf;
+    });
+    if (updatedActiveView) {
+      withUpdatedActive.grid.root = toGridNode(updated);
+      return stripSideHeaderLayout(withUpdatedActive);
+    }
+    return stripSideHeaderLayout(cleaned);
+  }
 
-  return stripSideHeaderLayout(addMissingPanels(cleaned, missing));
+  return stripSideHeaderLayout(addMissingPanels(cleaned, missing, activeTabId));
 }
 
 /** 从布局中移除指定 panel；空布局返回 null */

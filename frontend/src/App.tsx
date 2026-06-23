@@ -193,6 +193,7 @@ function AppShell() {
   const aiDisplayMode = useSettingsStore((s) => s.aiDisplayMode);
   const drawerOpen = useAiStore((s) => s.drawerOpen);
   const setActivePath = useWorkspaceStore((state) => state.setActivePath);
+  const workspaces = useWorkspaceStore((state) => state.workspaces);
   const currentWorkspaceId = useWorkspaceStore((state) => state.workspace.id);
   const workspaceActivePath = useWorkspaceStore((state) => state.activePath);
   const confirmAction = useActionStore((state) => state.confirmAction);

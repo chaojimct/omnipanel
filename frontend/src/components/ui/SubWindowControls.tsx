@@ -5,6 +5,8 @@ interface SubWindowControlsProps {
   onMinimize: () => void;
   onToggleMaximize: () => void;
   onClose: () => void;
+  /** 当提供时，最大化按钮改为切换到全屏工作区模式 */
+  onMaximizeToWorkspace?: () => void;
 }
 
 /** SubWindow 内嵌窗口控制（最小化 / 最大化 / 关闭） */
@@ -13,8 +15,13 @@ export function SubWindowControls({
   onMinimize,
   onToggleMaximize,
   onClose,
+  onMaximizeToWorkspace,
 }: SubWindowControlsProps) {
   const { t } = useI18n();
+
+  const handleMaximize = onMaximizeToWorkspace ?? onToggleMaximize;
+  // 当 onMaximizeToWorkspace 存在时始终显示"最大化"图标（不会处于已最大化状态）
+  const showRestoreIcon = !onMaximizeToWorkspace && isMaximized;
 
   return (
     <div className="win-controls subwindow-win-controls">
@@ -32,11 +39,11 @@ export function SubWindowControls({
       <button
         type="button"
         className="win-btn maximize"
-        title={isMaximized ? t("shell.topbar.restore") : t("shell.topbar.maximize")}
-        aria-label={isMaximized ? t("shell.topbar.restore") : t("shell.topbar.maximize")}
-        onClick={onToggleMaximize}
+        title={showRestoreIcon ? t("shell.topbar.restore") : t("shell.topbar.maximize")}
+        aria-label={showRestoreIcon ? t("shell.topbar.restore") : t("shell.topbar.maximize")}
+        onClick={handleMaximize}
       >
-        {isMaximized ? (
+        {showRestoreIcon ? (
           <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden>
             <rect x="0.5" y="0.5" width="5.5" height="5.5" stroke="currentColor" strokeWidth="1.2" />
             <rect x="4" y="4" width="5.5" height="5.5" fill="var(--bg)" stroke="currentColor" strokeWidth="1.2" />

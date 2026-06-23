@@ -12,7 +12,7 @@ export interface DatabaseWorkspaceDockProps {
   dockLayout: SerializedDockview | null;
   onDockLayoutChange: (layout: SerializedDockview | null) => void;
   renderDockPanel: (tabId: string) => ReactNode;
-  panelContentKeysByTab: Record<string, string>;
+  softRefreshKey?: string;
   onTabContextMenu: (event: React.MouseEvent, tabId: string, index: number) => void;
   onCtrlCopyTab: (tabId: string) => void;
   recentClosedActionItems: Array<{ id: string; label: string; meta: string; onClick: () => void }>;
@@ -30,7 +30,7 @@ export function DatabaseWorkspaceDock({
   dockLayout,
   onDockLayoutChange,
   renderDockPanel,
-  panelContentKeysByTab,
+  softRefreshKey,
   onTabContextMenu,
   onCtrlCopyTab,
   recentClosedActionItems,
@@ -70,7 +70,7 @@ export function DatabaseWorkspaceDock({
       savedLayout={dockLayout}
       onSavedLayoutChange={onDockLayoutChange}
       renderPanel={renderDockPanel}
-      panelContentKeysByTab={panelContentKeysByTab}
+      softRefreshKey={softRefreshKey}
       onTabContextMenu={onTabContextMenu}
       onCtrlCopyTab={onCtrlCopyTab}
       windowControl={false}

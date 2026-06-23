@@ -146,7 +146,7 @@ import {
 } from "../../stores/dbWorkspaceTabStore";
 import { usePersistedModuleTab } from "../../hooks/usePersistedModuleTab";
 import { useWorkspaceStore, onWorkspaceSwitch } from "../../stores/workspaceStore";
-import { dbTabToSnapshot, addSnapshotToWorkspace, syncDatabaseTableTabToWorkspace } from "../../lib/workspaceTabActions";
+import { dbTabToSnapshot, addSnapshotToWorkspace } from "../../lib/workspaceTabActions";
 import { useWorkspaceTabStore, type DbTabSnapshot } from "../../stores/workspaceTabStore";
 import { connectionNodeId } from "./schemaTreeExpanded";
 
@@ -178,7 +178,7 @@ function applyDefaultWorkspaceSession(
 }
 
 
-/** 把行主键拼成的字符串（"col=val&col=val"）解析回单列值，rowKey 中空字符串表示 NULL。 */
+/** 把行主键拼成的字符串�?col=val&col=val"）解析回单列值，rowKey 中空字符串表�?NULL�?*/
 function readRowKeyValue(rowKey: string, colName: string): string {
   for (const part of rowKey.split("&")) {
     const eq = part.indexOf("=");
@@ -378,7 +378,7 @@ export function DatabasePanel() {
   const recentClosedPanels = useDbWorkspaceSessionStore((s) => s.recentClosedPanels);
   const pushRecentClosedPanel = useDbWorkspaceSessionStore((s) => s.pushRecentClosedPanel);
   const removeRecentClosedPanel = useDbWorkspaceSessionStore((s) => s.removeRecentClosedPanel);
-  /** SQL 工作区 Tab 未保存标记（按 tabId；与 store.dirtyFileIds 解耦，保证 Tab 头即时更新） */
+  /** SQL 工作�?Tab 未保存标记（�?tabId；与 store.dirtyFileIds 解耦，保证 Tab 头即时更新） */
   const [dirtySqlWorkspaceTabIds, setDirtySqlWorkspaceTabIds] = useState<Set<string>>(
     () => new Set(),
   );
@@ -398,7 +398,7 @@ export function DatabasePanel() {
     row: Record<string, unknown>;
     isNewRow?: boolean;
   } | null>(null);
-  /** 每个 tab 的「未提交修改」：行键 -> {列名: 新值}。提交或回滚后清空对应 tab。 */
+  /** 每个 tab 的「未提交修改」：行键 -> {列名: 新值}。提交或回滚后清空对�?tab�?*/
   const [pendingTabAction, setPendingTabAction] = useState<
     | {
         kind: "refresh" | "page" | "close" | "sort";
@@ -418,7 +418,7 @@ export function DatabasePanel() {
   >(null);
   const dockLayout = useDbDockLayoutStore((s) => s.savedLayout);
   const setDockLayout = useDbDockLayoutStore((s) => s.setSavedLayout);
-  const isOriginDocked = useWorkspaceBottomDockStore((s) => s.isOriginDocked);
+
   const referencedDatabaseTabIds = useWorkspaceBottomDockStore(
     useShallow((s) => {
       const ids = new Set<string>(s.dockedOriginByScope.database ?? []);
@@ -433,7 +433,6 @@ export function DatabasePanel() {
       return [...ids].sort();
     }),
   );
-  const currentWorkspaceId = useWorkspaceStore((s) => s.workspace.id);
   const wsTabStore = useWorkspaceTabStore;
 
   // Refs for workspace switch (access current state from event listener)
@@ -472,53 +471,6 @@ export function DatabasePanel() {
     },
     [syncConnForTabId],
   );
-
-  // 工作区切换时：保存当前数据库 tab 快照 → 恢复目标工作区的快照
-  useEffect(() => {
-    return onWorkspaceSwitch(({ prevWorkspaceId, nextWorkspaceId }) => {
-      const wsTabStoreState = wsTabStore.getState();
-
-      // 保存当前数据库 tabs 到旧工作区
-      const currentTabs = workspaceTabsRef.current;
-      const currentTabModes = useDbWorkspaceTabStore.getState().tabModes;
-      const dbSnapshots = currentTabs.map((tab) => dbTabToSnapshot(tab, currentTabModes[tab.id]));
-      // 合并到已有快照（保留 terminal/docker 快照）
-      const existing = wsTabStoreState.getTabs(prevWorkspaceId).filter(
-        (s) => s.module !== "database",
-      );
-      wsTabStoreState.saveTabs(prevWorkspaceId, [...existing, ...dbSnapshots]);
-
-      // 恢复目标工作区的数据库 tabs
-      const targetDbSnapshots = wsTabStoreState.getTabs(nextWorkspaceId).filter(
-        (s): s is DbTabSnapshot => s.module === "database",
-      );
-      // 通过全局事件通知 DatabasePanel 恢复 tabs
-      window.dispatchEvent(
-        new CustomEvent("omnipanel:db-restore-tabs", {
-          detail: { snapshots: targetDbSnapshots },
-        }),
-      );
-    });
-  }, []);
-
-  // 监听数据库 tab 恢复事件
-  useEffect(() => {
-    const handler = (e: Event) => {
-      const { snapshots } = (e as CustomEvent<{ snapshots: DbTabSnapshot[] }>).detail;
-      // 目标工作区没有保存过数据库快照 → 保留当前 tab（新工作区继承）
-      if (!snapshots || snapshots.length === 0) return;
-      const restoredTabs: DbWorkspaceTab[] = snapshots.map((s) => s.tab);
-      const restoredTabModes: Record<string, "data" | "sql"> = {};
-      for (const s of snapshots) {
-        if (s.tabMode) restoredTabModes[s.id] = s.tabMode;
-      }
-      setWorkspaceTabs(restoredTabs);
-      setTabModes((prev) => ({ ...prev, ...restoredTabModes }));
-      activateWorkspaceTab(restoredTabs[0]?.id ?? "");
-    };
-    window.addEventListener("omnipanel:db-restore-tabs", handler);
-    return () => window.removeEventListener("omnipanel:db-restore-tabs", handler);
-  }, []);
 
   const activeGroupNameFromStore = useMemo(
     () => getGroupName(activeGroupId),
@@ -693,7 +645,7 @@ export function DatabasePanel() {
         return inGroup?.id ?? pickEnabled(list)?.id ?? null;
       });
     } catch {
-      // 连接列表加载失败时保留当前状态
+      // 连接列表加载失败时保留当前状�?
     } finally {
       setConnectionsLoading(false);
     }
@@ -1079,7 +1031,7 @@ export function DatabasePanel() {
           }));
         })
         .catch(() => {
-          // 忽略：用户可在 Schema 侧栏手动刷新
+          // 忽略：用户可�?Schema 侧栏手动刷新
         });
     }
     return () => {
@@ -1151,7 +1103,7 @@ export function DatabasePanel() {
         return;
       }
 
-      // 2) 查询当前页数据
+      // 2) 查询当前页数�?
       const pageSize = prev.pageSize;
       if (connection.db_type !== "redis") {
         void introspectTable(connection, dbName, tableName)
@@ -1406,7 +1358,7 @@ export function DatabasePanel() {
           await invoke("db_execute_query", { connection: connForSchema, sql });
         }
         clearTabDirty(tabId);
-        refreshTabPreviewNow(tabId);
+        refreshTablePreviewNow(tabId);
       } catch (err) {
         console.error("[db.commit] failed", err);
         throw err;
@@ -1418,15 +1370,15 @@ export function DatabasePanel() {
         });
       }
     },
-    [connections, clearTabDirty, refreshTabPreviewNow],
+    [connections, clearTabDirty, refreshTablePreviewNow],
   );
 
   const rollbackTabDirty = useCallback(
     (tabId: string) => {
       clearTabDirty(tabId);
-      refreshTabPreviewNow(tabId);
+      refreshTablePreviewNow(tabId);
     },
-    [clearTabDirty, refreshTabPreviewNow],
+    [clearTabDirty, refreshTablePreviewNow],
   );
 
   const closeWorkspaceTab = useCallback((tabId: string) => {
@@ -2248,7 +2200,7 @@ export function DatabasePanel() {
         activateWorkspaceTab(existingTabId);
         const existingTab = workspaceTabs.find((item) => item.id === existingTabId);
         if (existingTab) {
-          syncDatabaseTableTabToWorkspace(
+
             existingTab,
             useDbWorkspaceTabStore.getState().tabModes[existingTabId] ?? "data",
           );
@@ -2279,7 +2231,7 @@ export function DatabasePanel() {
       setWorkspaceTabs((prev) => [...prev, newTab]);
       activateWorkspaceTab(tabId);
       setTabModes((prev) => ({ ...prev, [tabId]: "data" }));
-      syncDatabaseTableTabToWorkspace(newTab, "data");
+
 
       // Set the database for the SQL tab
       setSqlTabStates((prev) => ({
@@ -2488,6 +2440,49 @@ export function DatabasePanel() {
     [workspaceTabs, t, renameWorkspaceTab],
   );
 
+  const activeWorkspaceId = useWorkspaceStore((state) => state.workspace.id);
+
+  const performCopyTabToWorkspace = useCallback(
+    (tabId: string) => {
+      if (!activeWorkspaceId) return;
+      const ctxTab = workspaceTabs.find((tab) => tab.id === tabId);
+      if (!ctxTab) return;
+
+      // Generate a new ID based on kind
+      const newTabId =
+        ctxTab.kind === "designer"
+          ? `designer:${ctxTab.connId}:${ctxTab.dbName}:${ctxTab.tableName}:${Date.now()}`
+          : `sql:${Date.now()}`;
+
+      const newTab = { ...ctxTab, id: newTabId, workspaceOnly: true } as DbWorkspaceTab;
+
+      setWorkspaceTabs((prev) => [...prev, newTab]);
+      setTabModes((prev) => ({ ...prev, [newTabId]: tabModes[ctxTab.id] }));
+
+      if (sqlTabStates[ctxTab.id]) {
+        setSqlTabStates((prev) => ({
+          ...prev,
+          [newTabId]: { ...sqlTabStates[ctxTab.id] },
+        }));
+      }
+      if (tablePreviews[ctxTab.id]) {
+        setTablePreviews((prev) => ({
+          ...prev,
+          [newTabId]: { ...tablePreviews[ctxTab.id] },
+        }));
+      }
+      if (tableDesignerStates[ctxTab.id]) {
+        updateTableDesignerState(newTabId, tableDesignerStates[ctxTab.id]);
+      }
+
+      addSnapshotToWorkspace(
+        activeWorkspaceId,
+        dbTabToSnapshot(newTab, tabModes[ctxTab.id]),
+      );
+    },
+    [workspaceTabs, tabModes, sqlTabStates, tablePreviews, tableDesignerStates, updateTableDesignerState, activeWorkspaceId],
+  );
+
   const handleContextAction = useCallback(
     (action: TabContextMenuAction) => {
       if (!ctxMenu) return;
@@ -2498,6 +2493,26 @@ export function DatabasePanel() {
       if (action === "rename") {
         setCtxMenu(null);
         void handleRenameTab(tabId);
+        return;
+      }
+      if (action === "copyToWorkspace") {
+        performCopyTabToWorkspace(ctxMenu.tabId);
+        setCtxMenu(null);
+        return;
+      }
+      if (action === "moveToWorkspace") {
+        if (!activeWorkspaceId) return;
+        const ctxTab = workspaceTabs.find((tab) => tab.id === ctxMenu.tabId);
+        if (ctxTab) {
+          setWorkspaceTabs((prev) =>
+            prev.map((t) => (t.id === ctxTab.id ? { ...t, workspaceOnly: true } : t)),
+          );
+          addSnapshotToWorkspace(
+            activeWorkspaceId,
+            dbTabToSnapshot(ctxTab, tabModes[ctxTab.id]),
+          );
+        }
+        setCtxMenu(null);
         return;
       }
 
@@ -2517,9 +2532,20 @@ export function DatabasePanel() {
       }
       setCtxMenu(null);
     },
-    [ctxMenu, workspaceTabs, closeWorkspaceTab, handleRenameTab, setDockLayout],
+    [ctxMenu, workspaceTabs, closeWorkspaceTab, handleRenameTab, setDockLayout, performCopyTabToWorkspace, activeWorkspaceId, tabModes],
   );
 
+
+  useEffect(() => {
+    const handleCloseEvent = (e: Event) => {
+      const customEvent = e as CustomEvent<string>;
+      closeWorkspaceTab(customEvent.detail);
+    };
+    window.addEventListener("omnipanel:close-db-workspace-tab", handleCloseEvent);
+    return () => {
+      window.removeEventListener("omnipanel:close-db-workspace-tab", handleCloseEvent);
+    };
+  }, [closeWorkspaceTab]);
 
   const handleCreateGroup = useCallback(async () => {
     const name = await quickInput({
@@ -2665,7 +2691,7 @@ export function DatabasePanel() {
     updateSqlTabState,
   ]);
 
-  // 表预览（data）模式：编辑器常折叠且无焦点，在此统一处理 ⌘/Ctrl+Enter。
+  // 表预览（data）模式：编辑器常折叠且无焦点，在此统一处理 �?Ctrl+Enter�?
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.isComposing) return;
@@ -2896,7 +2922,7 @@ export function DatabasePanel() {
   const dockTabs = useMemo(
     () =>
       workspaceTabs
-        .filter((tab) => !isOriginDocked("database", tab.id))
+        .filter((tab) => !tab.workspaceOnly)
         .map((tab) => {
           if (tab.kind === "database") {
             return {
@@ -2957,7 +2983,7 @@ export function DatabasePanel() {
             closable: true,
           };
         }),
-    [workspaceTabs, isOriginDocked, tablePreviewTabIds, dirtySqlWorkspaceTabIds, isDesignerTabDirty, t],
+    [workspaceTabs, tablePreviewTabIds, dirtySqlWorkspaceTabIds, isDesignerTabDirty, t],
   );
 
   const recentClosedActionItems = useMemo(
@@ -3077,16 +3103,13 @@ export function DatabasePanel() {
     [],
   );
 
+
+
   const handleCtrlCopyTab = useCallback(
     (tabId: string) => {
-      const ctxTab = workspaceTabs.find((tab) => tab.id === tabId);
-      if (!ctxTab) return;
-      addSnapshotToWorkspace(
-        currentWorkspaceId,
-        dbTabToSnapshot(ctxTab, useDbWorkspaceTabStore.getState().tabModes[ctxTab.id]),
-      );
+      performCopyTabToWorkspace(tabId);
     },
-    [workspaceTabs, currentWorkspaceId],
+    [performCopyTabToWorkspace],
   );
 
   useEffect(() => {
@@ -3235,7 +3258,7 @@ export function DatabasePanel() {
             dockLayout={dockLayout}
             onDockLayoutChange={setDockLayout}
             renderDockPanel={renderDockPanel}
-            panelContentKeysByTab={panelContentKeysByTab}
+            softRefreshKey={activeWorkspaceTabId}
             onTabContextMenu={handleDockTabContextMenu}
             onCtrlCopyTab={handleCtrlCopyTab}
             recentClosedActionItems={recentClosedActionItems}
@@ -3330,13 +3353,13 @@ export function DatabasePanel() {
       onRowCancel={() => setRowEdit(null)}
     />
     {isActiveRoute && ctxMenu && (() => {
-      const closeItems = buildTabCloseMenuItems(
-        t,
-        workspaceTabs.length,
-        ctxMenu.index,
-        handleContextAction,
-        { showRename: true },
-      );
+        const closeItems = buildTabCloseMenuItems(
+          t,
+          workspaceTabs.length,
+          ctxMenu.index,
+          handleContextAction,
+          { showWorkspaceActions: true, showRename: true },
+        );
       return (
         <ContextMenu
           items={closeItems}

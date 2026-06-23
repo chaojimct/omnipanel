@@ -36,9 +36,35 @@ export function WorkspaceBottomHost() {
     return () => observer.disconnect();
   }, [currentId]);
 
+  // 当工作区切换时，手动触发一次 relayout，确保 display:block 后正确计算尺寸
+  useEffect(() => {
+    if (hostRef.current) {
+      const rect = hostRef.current.getBoundingClientRect();
+      if (rect.width > 0 && rect.height > 0) {
+        requestAnimationFrame(() => {
+          relayoutDockviewInstances("workspace-bottom", { width: rect.width, height: rect.height });
+        });
+      }
+    }
+  }, [currentId]);
+
   return (
-    <div ref={hostRef} className="workspace-bottom-host">
-      {current ? <WorkspacePanel workspace={current} /> : null}
+    <div ref={hostRef} className="workspace-bottom-host" style={{ position: "relative", width: "100%", height: "100%" }}>
+      {workspaces.map((ws) => (
+        <div
+          key={ws.id}
+          style={{
+            display: ws.id === currentId ? "block" : "none",
+            width: "100%",
+            height: "100%",
+            position: "absolute",
+            top: 0,
+            left: 0,
+          }}
+        >
+          <WorkspacePanel workspace={ws} />
+        </div>
+      ))}
     </div>
   );
 }
