@@ -64,6 +64,23 @@ export function copyTerminalTabToWorkspaceSnapshot(
   };
 }
 
+/** 移动终端会话到工作区（保持原 id 和连接，但会从原面板隐藏） */
+export function moveTerminalTabToWorkspaceSnapshot(
+  source: TerminalTab,
+): TerminalTabSnapshot {
+  const resource = resolveResourceById(source.session.resourceId);
+  return {
+    module: "terminal",
+    id: source.id,
+    label: resource?.name ?? source.title ?? source.session.shellLabel,
+    sessionType: source.session.type,
+    resourceId: source.session.resourceId,
+    shellLabel: source.session.shellLabel,
+    cwd: source.session.cwd,
+    purpose: source.session.purpose,
+  };
+}
+
 export function dbTabToSnapshot(
   tab: DbWorkspaceTab,
   tabMode?: "data" | "sql",
@@ -85,7 +102,7 @@ export function dockerTabToSnapshot(
 ): DockerTabSnapshot {
   return {
     module: "docker",
-    id: `docker:${subTab}:${containerId}`,
+    id: `docker:${subTab}:${containerId}:${Date.now()}`,
     label: `${containerName} · ${subTab === "logs" ? "日志" : "终端"}`,
     subTab,
     connectionId,
@@ -206,6 +223,14 @@ export function addSnapshotToWorkspace(
     id: payloadId,
     label: snapshot.label,
     payload: snapshot,
+    originScope:
+      snapshot.module === "database" || snapshot.module === "terminal" || snapshot.module === "docker"
+        ? snapshot.module
+        : undefined,
+    originPanelId:
+      snapshot.module === "database" || snapshot.module === "terminal" || snapshot.module === "docker"
+        ? snapshot.id
+        : undefined,
     panelType:
       snapshot.module === "route"
         ? snapshot.moduleKey

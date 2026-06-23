@@ -22,8 +22,27 @@ const QUICK_PATHS = [
 
 export function SftpPanel({ resourceId }: SftpPanelProps) {
   const { t } = useI18n();
-  const [path, setPath] = useState("/");
-  const [entries, setEntries] = useState<SftpEntry[]>([]);
+  const [path, setPath] = useState(() => {
+    if (resourceId) {
+      const store = useSshDetailNavigationStore.getState();
+      if (store.pendingSftp?.resourceId === resourceId) return store.pendingSftp.path;
+      if (store.sftpCaches[resourceId]) return store.sftpCaches[resourceId].path;
+    }
+    return "/";
+  });
+  const [entries, setEntries] = useState<SftpEntry[]>(() => {
+    if (resourceId) {
+      const store = useSshDetailNavigationStore.getState();
+      const pending = store.pendingSftp;
+      const cached = store.sftpCaches[resourceId];
+      if (pending?.resourceId === resourceId) {
+        if (cached && cached.path === pending.path) return cached.entries;
+        return [];
+      }
+      if (cached) return cached.entries;
+    }
+    return [];
+  });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
@@ -47,11 +66,11 @@ export function SftpPanel({ resourceId }: SftpPanelProps) {
 
   const loadDir = async (
     dir: string,
-    opts?: { fromNavigation?: boolean; originalPath?: string; seq?: number },
+    opts?: { fromNavigation?: boolean; originalPath?: string; seq?: number; silent?: boolean },
   ) => {
     if (!resourceIdRef.current) return;
     const seq = opts?.seq ?? ++loadSeqRef.current;
-    setLoading(true);
+    if (!opts?.silent) setLoading(true);
     setError(null);
     if (!opts?.fromNavigation) setInfo(null);
     try {
@@ -67,6 +86,10 @@ export function SftpPanel({ resourceId }: SftpPanelProps) {
       setEntries(list);
       setPath(dir);
       setSelectedName(null);
+      useSshDetailNavigationStore.getState().setSftpCache(resourceIdRef.current, {
+        path: dir,
+        entries: list,
+      });
     } catch (e) {
       if (seq !== loadSeqRef.current) return;
       if (opts?.fromNavigation && dir !== "/") {
@@ -90,7 +113,8 @@ export function SftpPanel({ resourceId }: SftpPanelProps) {
 
   useEffect(() => {
     if (!resourceId) return;
-    const pending = useSshDetailNavigationStore.getState().pendingSftp;
+    const store = useSshDetailNavigationStore.getState();
+    const pending = store.pendingSftp;
     if (pending?.resourceId === resourceId) {
       handledSftpNonceRef.current = pending.nonce;
       void loadDir(pending.path, {
@@ -99,6 +123,15 @@ export function SftpPanel({ resourceId }: SftpPanelProps) {
       });
       return;
     }
+
+    const cached = store.sftpCaches[resourceId];
+    if (cached) {
+      setPath(cached.path);
+      setEntries(cached.entries);
+      void loadDir(cached.path, { silent: true });
+      return;
+    }
+
     void loadDir("/");
   }, [resourceId]);
 

@@ -83,6 +83,9 @@ function decodeOutput(data: unknown): Uint8Array | null {
 /** Prevent concurrent create_terminal calls for the same pane (StrictMode / re-render races). */
 const pendingBackendSessions = new Map<string, Promise<string>>();
 
+/** 记录已经成功注入钩子的后端会话 ID，避免切 Tab 时重复注入 */
+const injectedBackendSessions = new Set<string>();
+
 /** 切换窗格服务器前清除进行中的后端创建任务 */
 export function clearPaneBackendPending(paneId: string) {
   pendingBackendSessions.delete(paneId);
@@ -220,10 +223,11 @@ function safeStringify(value: unknown): string {
 
 function disposeBackendSession(sessionId: string, backendSid: string) {
   const cmd = isRemotePane(sessionId) ? "ssh_disconnect" : "close_terminal";
-  invoke(cmd, { id: backendSid }).catch(() => {});
+  invoke(cmd, { id: backendSid }).catch(() => { });
 }
 
 const REMOTE_CWD_HOOK_TOKEN = "__OMNIPANEL_CWD_HOOK";
+const REMOTE_INIT_DONE_TOKEN = "\x1b]1337;OmniPanelInit___OMNIPANEL_CWD_HOOK\x07";
 
 function createRemoteInitEchoFilter(emit: (bytes: Uint8Array) => void) {
   const encoder = new TextEncoder();
@@ -253,12 +257,15 @@ function createRemoteInitEchoFilter(emit: (bytes: Uint8Array) => void) {
       while (newlineIndex !== -1) {
         const line = buffered.slice(0, newlineIndex + 1);
         buffered = buffered.slice(newlineIndex + 1);
-        if (line.includes(REMOTE_CWD_HOOK_TOKEN)) {
+        if (line.includes(REMOTE_INIT_DONE_TOKEN)) {
           active = false;
           flushTail();
           return false;
+        } else if (line.includes(REMOTE_CWD_HOOK_TOKEN)) {
+          // Drop echo but stay active
+        } else {
+          emitText(line);
         }
-        emitText(line);
         newlineIndex = buffered.indexOf("\n");
       }
       return true;
@@ -284,7 +291,8 @@ function injectRemoteShellCwdReporting(write: (data: string) => void) {
     "autoload -Uz add-zsh-hook 2>/dev/null; add-zsh-hook precmd __omnipanel_cwd_hook;",
     "fi;",
     "__omnipanel_cwd_hook;",
-    "fi",
+    "fi;",
+    "printf \"\\033]1337;%s\\007\\n\" \"OmniPanelInit___OMNIPANEL_CWD_HOOK\"",
   ].join(" ");
   write(`${script}\r`);
 }
@@ -294,6 +302,7 @@ export function disposePaneBackendSession(paneId: string) {
   const pane = findPaneById(paneId);
   if (!pane?.backendSessionId) return;
   disposeBackendSession(paneId, pane.backendSessionId);
+  injectedBackendSessions.delete(pane.backendSessionId);
   useTerminalStore.getState().setBackendSessionId(paneId, null);
 }
 
@@ -303,6 +312,7 @@ export function disposeTabBackendSessions(tabId: string) {
   if (!tab) return;
   if (!tab.backendSessionId) return;
   disposeBackendSession(tabId, tab.backendSessionId);
+  injectedBackendSessions.delete(tab.backendSessionId);
   useTerminalStore.getState().setBackendSessionId(tabId, null);
 }
 
@@ -380,7 +390,6 @@ export function useTerminal(
     const resizeCmd = remote ? "ssh_resize" : "resize_terminal";
     // 重连恢复期间由后端快照统一重建屏幕，期间丢弃增量事件以避免重复。
     let restoring = false;
-    let remoteCwdHookInjected = false;
 
     // Shell integration state
     let pendingBlock: {
@@ -538,12 +547,6 @@ export function useTerminal(
       });
       if (remote) {
         remoteInitEchoFilter = createRemoteInitEchoFilter(queueOutput);
-        remoteInitEchoFilterTimer = window.setTimeout(() => {
-          if (!remoteInitEchoFilter) return;
-          remoteInitEchoFilter.releasePending();
-          remoteInitEchoFilter = null;
-          remoteInitEchoFilterTimer = null;
-        }, 2500);
       }
       unlistenOutput = await listen<{ session_id: string; data: unknown }>(
         "terminal-output",
@@ -620,11 +623,24 @@ export function useTerminal(
         useTerminalStore.getState().setStatus(sessionId, "connected");
         void restoreSnapshot();
         flushPendingInput();
-        if (remote && !remoteCwdHookInjected) {
-          remoteCwdHookInjected = true;
-          window.setTimeout(() => {
-            if (!destroyed) injectRemoteShellCwdReporting(writeToBackend);
-          }, 300);
+        if (remote) {
+          if (!injectedBackendSessions.has(backendSid)) {
+            injectedBackendSessions.add(backendSid);
+            if (remoteInitEchoFilter && !remoteInitEchoFilterTimer) {
+              remoteInitEchoFilterTimer = window.setTimeout(() => {
+                if (remoteInitEchoFilter) {
+                  remoteInitEchoFilter.releasePending();
+                  remoteInitEchoFilter = null;
+                }
+              }, 10000);
+            }
+            window.setTimeout(() => {
+              if (!destroyed) injectRemoteShellCwdReporting(writeToBackend);
+            }, 300);
+          } else if (remoteInitEchoFilter) {
+            remoteInitEchoFilter.releasePending();
+            remoteInitEchoFilter = null;
+          }
         }
         return;
       }
@@ -636,11 +652,24 @@ export function useTerminal(
         backendSid = sid;
         useTerminalStore.getState().setStatus(sessionId, "connected");
         flushPendingInput();
-        if (remote && !remoteCwdHookInjected) {
-          remoteCwdHookInjected = true;
-          window.setTimeout(() => {
-            if (!destroyed) injectRemoteShellCwdReporting(writeToBackend);
-          }, 300);
+        if (remote) {
+          if (!injectedBackendSessions.has(backendSid)) {
+            injectedBackendSessions.add(backendSid);
+            if (remoteInitEchoFilter && !remoteInitEchoFilterTimer) {
+              remoteInitEchoFilterTimer = window.setTimeout(() => {
+                if (remoteInitEchoFilter) {
+                  remoteInitEchoFilter.releasePending();
+                  remoteInitEchoFilter = null;
+                }
+              }, 10000);
+            }
+            window.setTimeout(() => {
+              if (!destroyed) injectRemoteShellCwdReporting(writeToBackend);
+            }, 300);
+          } else if (remoteInitEchoFilter) {
+            remoteInitEchoFilter.releasePending();
+            remoteInitEchoFilter = null;
+          }
         }
       } catch (err) {
         if (destroyed) return;
@@ -649,6 +678,10 @@ export function useTerminal(
         term?.writeln(`\r\n\x1b[31m${formatted}\x1b[0m`);
         useTerminalStore.getState().setStatus(sessionId, "disconnected");
         pendingInput = [];
+        if (remoteInitEchoFilter) {
+          remoteInitEchoFilter.releasePending();
+          remoteInitEchoFilter = null;
+        }
       }
     }
 
@@ -717,7 +750,7 @@ export function useTerminal(
               id: backendSid,
               cols: term!.cols,
               rows: term!.rows,
-            }).catch(() => {});
+            }).catch(() => { });
           }, 100);
         });
         resizeObserver.observe(container!);

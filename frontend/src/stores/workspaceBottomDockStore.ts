@@ -217,6 +217,14 @@ export const useWorkspaceBottomDockStore = create<WorkspaceBottomDockState>()(
           const nextLayout =
             mergePanelsIntoLayout(prevLayout, tabIds, nextTab.id) ??
             createDefaultLayout(tabIds, nextTab.id);
+
+          const dockedOriginByScope = { ...state.dockedOriginByScope };
+          if (nextTab.originScope && nextTab.originPanelId) {
+            const prev = new Set(dockedOriginByScope[nextTab.originScope] ?? []);
+            prev.add(nextTab.originPanelId);
+            dockedOriginByScope[nextTab.originScope] = [...prev];
+          }
+
           return {
             tabsByWorkspace: { ...state.tabsByWorkspace, [workspaceId]: tabs },
             layoutByWorkspace: {
@@ -227,6 +235,7 @@ export const useWorkspaceBottomDockStore = create<WorkspaceBottomDockState>()(
               ...state.activeTabByWorkspace,
               [workspaceId]: nextTab.id,
             },
+            dockedOriginByScope,
           };
         });
         return nextTab;

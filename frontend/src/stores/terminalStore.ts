@@ -45,6 +45,7 @@ export interface TerminalTab {
   id: string;
   title: string;
   session: TerminalSessionInfo;
+  workspaceId?: string;
   /** 仅由底部工作区 payload 使用，不在终端模块 Dock 中展示 */
   workspaceOnly?: boolean;
   backendSessionId: string | null;
@@ -211,6 +212,7 @@ function normalizePersistedTab(tab: unknown): TerminalTab | null {
     id: raw.id,
     title: raw.title,
     session,
+    workspaceId: raw.workspaceId as string | undefined,
     backendSessionId: null,
     status: "connecting",
     terminal: null,
@@ -333,7 +335,7 @@ export const useTerminalStore = create<TerminalState>()(
       findTabByResourceId: (resourceId, type) =>
         get().tabs.find(
           (tab) =>
-            tab.session.resourceId === resourceId && (type ? tab.session.type === type : true),
+            tab.session.resourceId === resourceId && (type ? tab.session.type === type : true) && !tab.workspaceOnly,
         ),
 
       openOrFocusSshTab: (hostId, title) => {
@@ -354,10 +356,11 @@ export const useTerminalStore = create<TerminalState>()(
         return get().addLocalTerminalTab(title);
       },
 
-      addLocalTerminalTab: (title = "本地终端") =>
-        get().addTab({
+      addLocalTerminalTab: (title = "本地终端", workspaceId?: string) => {
+        return get().addTab({
           id: createTerminalTabId(),
           title,
+          workspaceId,
           session: {
             type: "local",
             resourceId: "local-terminal",
@@ -366,12 +369,14 @@ export const useTerminalStore = create<TerminalState>()(
             purpose: "Local Workspace",
             commandPack: [],
           },
-        }),
+        });
+      },
 
-      addSshTerminalTab: (hostId, title) =>
-        get().addTab({
+      addSshTerminalTab: (hostId, title, workspaceId?: string) => {
+        return get().addTab({
           id: createTerminalTabId(),
           title,
+          workspaceId,
           session: {
             type: "remote",
             resourceId: hostId,
@@ -380,7 +385,8 @@ export const useTerminalStore = create<TerminalState>()(
             purpose: "SSH Workbench",
             commandPack: [],
           },
-        }),
+        });
+      },
     }),
     {
       name: TABS_STORAGE_KEY,

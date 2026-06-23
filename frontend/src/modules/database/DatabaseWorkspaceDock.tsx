@@ -12,7 +12,7 @@ export interface DatabaseWorkspaceDockProps {
   dockLayout: SerializedDockview | null;
   onDockLayoutChange: (layout: SerializedDockview | null) => void;
   renderDockPanel: (tabId: string) => ReactNode;
-  panelContentKeysByTab: Record<string, string>;
+  softRefreshKey?: string;
   onTabContextMenu: (event: React.MouseEvent, tabId: string, index: number) => void;
   onCtrlCopyTab: (tabId: string) => void;
   canAcceptSchemaTreeDrop: (dataTransfer: DataTransfer) => boolean;
@@ -32,7 +32,7 @@ export function DatabaseWorkspaceDock({
   dockLayout,
   onDockLayoutChange,
   renderDockPanel,
-  panelContentKeysByTab,
+  softRefreshKey,
   onTabContextMenu,
   onCtrlCopyTab,
   canAcceptSchemaTreeDrop,
@@ -74,7 +74,7 @@ export function DatabaseWorkspaceDock({
       savedLayout={dockLayout}
       onSavedLayoutChange={onDockLayoutChange}
       renderPanel={renderDockPanel}
-      panelContentKeysByTab={panelContentKeysByTab}
+      softRefreshKey={softRefreshKey}
       onTabContextMenu={onTabContextMenu}
       onCtrlCopyTab={onCtrlCopyTab}
       canAcceptExternalDrop={canAcceptSchemaTreeDrop}

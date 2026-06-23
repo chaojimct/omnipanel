@@ -128,8 +128,8 @@ export function WorkspaceDockCore({
     [tabs, activeTabId],
   );
 
-  // 仅随激活 Tab 刷新 panel 内容，避免新增 Tab 时 bump 全部 panel 导致整模块重挂载卡死
-  const panelContentKey = activeTabId;
+  // 仅随激活 Tab 触发 softRefresh，更新 isActive 状态，避免 remount 导致状态丢失
+  const softRefreshKey = activeTabId;
 
   const handleCloseTab = useCallback(
     (tabId: string) => {
@@ -171,7 +171,7 @@ export function WorkspaceDockCore({
       savedLayout={effectiveSavedLayout}
       onSavedLayoutChange={(layout) => setLayout(workspaceId, layout)}
       renderPanel={renderPanel}
-      panelContentKey={panelContentKey}
+      softRefreshKey={softRefreshKey}
       tabStyle={tabStyle}
       preActions={preActions}
       windowControl={windowControl}

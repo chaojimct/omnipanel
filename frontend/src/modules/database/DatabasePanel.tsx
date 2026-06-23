@@ -440,7 +440,6 @@ export function DatabasePanel() {
       return [...ids].sort();
     }),
   );
-  const currentWorkspaceId = useWorkspaceStore((s) => s.workspace.id);
   const wsTabStore = useWorkspaceTabStore;
 
   // Refs for workspace switch (access current state from event listener)
@@ -455,52 +454,7 @@ export function DatabasePanel() {
   const tableDesignerStatesRef = useRef(tableDesignerStates);
   tableDesignerStatesRef.current = tableDesignerStates;
 
-  // 工作区切换时：保存当前数据库 tab 快照 → 恢复目标工作区的快照
-  useEffect(() => {
-    return onWorkspaceSwitch(({ prevWorkspaceId, nextWorkspaceId }) => {
-      const wsTabStoreState = wsTabStore.getState();
 
-      // 保存当前数据库 tabs 到旧工作区
-      const currentTabs = workspaceTabsRef.current;
-      const currentTabModes = tabModesRef.current;
-      const dbSnapshots = currentTabs.map((tab) => dbTabToSnapshot(tab, currentTabModes[tab.id]));
-      // 合并到已有快照（保留 terminal/docker 快照）
-      const existing = wsTabStoreState.getTabs(prevWorkspaceId).filter(
-        (s) => s.module !== "database",
-      );
-      wsTabStoreState.saveTabs(prevWorkspaceId, [...existing, ...dbSnapshots]);
-
-      // 恢复目标工作区的数据库 tabs
-      const targetDbSnapshots = wsTabStoreState.getTabs(nextWorkspaceId).filter(
-        (s): s is DbTabSnapshot => s.module === "database",
-      );
-      // 通过全局事件通知 DatabasePanel 恢复 tabs
-      window.dispatchEvent(
-        new CustomEvent("omnipanel:db-restore-tabs", {
-          detail: { snapshots: targetDbSnapshots },
-        }),
-      );
-    });
-  }, []);
-
-  // 监听数据库 tab 恢复事件
-  useEffect(() => {
-    const handler = (e: Event) => {
-      const { snapshots } = (e as CustomEvent<{ snapshots: DbTabSnapshot[] }>).detail;
-      // 目标工作区没有保存过数据库快照 → 保留当前 tab（新工作区继承）
-      if (!snapshots || snapshots.length === 0) return;
-      const restoredTabs: DbWorkspaceTab[] = snapshots.map((s) => s.tab);
-      const restoredTabModes: Record<string, "data" | "sql"> = {};
-      for (const s of snapshots) {
-        if (s.tabMode) restoredTabModes[s.id] = s.tabMode;
-      }
-      setWorkspaceTabs(restoredTabs);
-      setTabModes((prev) => ({ ...prev, ...restoredTabModes }));
-      setActiveWorkspaceTabId(restoredTabs[0]?.id ?? "");
-    };
-    window.addEventListener("omnipanel:db-restore-tabs", handler);
-    return () => window.removeEventListener("omnipanel:db-restore-tabs", handler);
-  }, []);
 
   const activeGroupNameFromStore = useMemo(
     () => getGroupName(activeGroupId),
@@ -2485,6 +2439,49 @@ export function DatabasePanel() {
     [workspaceTabs, t, renameWorkspaceTab],
   );
 
+  const activeWorkspaceId = useWorkspaceStore((state) => state.workspace.id);
+
+  const performCopyTabToWorkspace = useCallback(
+    (tabId: string) => {
+      if (!activeWorkspaceId) return;
+      const ctxTab = workspaceTabs.find((tab) => tab.id === tabId);
+      if (!ctxTab) return;
+
+      // Generate a new ID based on kind
+      const newTabId =
+        ctxTab.kind === "designer"
+          ? `designer:${ctxTab.connId}:${ctxTab.dbName}:${ctxTab.tableName}:${Date.now()}`
+          : `sql:${Date.now()}`;
+
+      const newTab = { ...ctxTab, id: newTabId } as DbWorkspaceTab;
+
+      setWorkspaceTabs((prev) => [...prev, newTab]);
+      setTabModes((prev) => ({ ...prev, [newTabId]: tabModes[ctxTab.id] }));
+
+      if (sqlTabStates[ctxTab.id]) {
+        setSqlTabStates((prev) => ({
+          ...prev,
+          [newTabId]: { ...sqlTabStates[ctxTab.id] },
+        }));
+      }
+      if (tablePreviews[ctxTab.id]) {
+        setTablePreviews((prev) => ({
+          ...prev,
+          [newTabId]: { ...tablePreviews[ctxTab.id] },
+        }));
+      }
+      if (tableDesignerStates[ctxTab.id]) {
+        updateTableDesignerState(newTabId, tableDesignerStates[ctxTab.id]);
+      }
+
+      addSnapshotToWorkspace(
+        activeWorkspaceId,
+        dbTabToSnapshot(newTab, tabModes[ctxTab.id]),
+      );
+    },
+    [workspaceTabs, tabModes, sqlTabStates, tablePreviews, tableDesignerStates, updateTableDesignerState, activeWorkspaceId],
+  );
+
   const handleContextAction = useCallback(
     (action: TabContextMenuAction) => {
       if (!ctxMenu) return;
@@ -2495,6 +2492,23 @@ export function DatabasePanel() {
       if (action === "rename") {
         setCtxMenu(null);
         void handleRenameTab(tabId);
+        return;
+      }
+      if (action === "copyToWorkspace") {
+        performCopyTabToWorkspace(ctxMenu.tabId);
+        setCtxMenu(null);
+        return;
+      }
+      if (action === "moveToWorkspace") {
+        if (!activeWorkspaceId) return;
+        const ctxTab = workspaceTabs.find((tab) => tab.id === ctxMenu.tabId);
+        if (ctxTab) {
+          addSnapshotToWorkspace(
+            activeWorkspaceId,
+            dbTabToSnapshot(ctxTab, tabModes[ctxTab.id]),
+          );
+        }
+        setCtxMenu(null);
         return;
       }
 
@@ -2514,7 +2528,7 @@ export function DatabasePanel() {
       }
       setCtxMenu(null);
     },
-    [ctxMenu, workspaceTabs, closeWorkspaceTab, handleRenameTab, setDockLayout],
+    [ctxMenu, workspaceTabs, closeWorkspaceTab, handleRenameTab, setDockLayout, performCopyTabToWorkspace, activeWorkspaceId, tabModes],
   );
 
 
@@ -2965,16 +2979,13 @@ export function DatabasePanel() {
     [],
   );
 
+
+
   const handleCtrlCopyTab = useCallback(
     (tabId: string) => {
-      const ctxTab = workspaceTabs.find((tab) => tab.id === tabId);
-      if (!ctxTab) return;
-      addSnapshotToWorkspace(
-        currentWorkspaceId,
-        dbTabToSnapshot(ctxTab, tabModes[ctxTab.id]),
-      );
+      performCopyTabToWorkspace(tabId);
     },
-    [workspaceTabs, tabModes, currentWorkspaceId],
+    [performCopyTabToWorkspace],
   );
 
   useEffect(() => {
@@ -3126,7 +3137,7 @@ export function DatabasePanel() {
             dockLayout={dockLayout}
             onDockLayoutChange={setDockLayout}
             renderDockPanel={renderDockPanel}
-            panelContentKeysByTab={panelContentKeysByTab}
+            softRefreshKey={activeWorkspaceTabId}
             onTabContextMenu={handleDockTabContextMenu}
             onCtrlCopyTab={handleCtrlCopyTab}
             canAcceptSchemaTreeDrop={canAcceptSchemaTreeDrop}
@@ -3225,13 +3236,13 @@ export function DatabasePanel() {
       onRowCancel={() => setRowEdit(null)}
     />
     {isActiveRoute && ctxMenu && (() => {
-      const closeItems = buildTabCloseMenuItems(
-        t,
-        workspaceTabs.length,
-        ctxMenu.index,
-        handleContextAction,
-        { showRename: true },
-      );
+        const closeItems = buildTabCloseMenuItems(
+          t,
+          workspaceTabs.length,
+          ctxMenu.index,
+          handleContextAction,
+          { showWorkspaceActions: true, showRename: true },
+        );
       return (
         <ContextMenu
           items={closeItems}
