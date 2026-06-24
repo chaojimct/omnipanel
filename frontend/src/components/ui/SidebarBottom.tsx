@@ -343,6 +343,15 @@ export function SidebarBottom({
     processLiveResize(px);
   }, [bottomResizeLocked, processLiveResize, readBottomPanelPx, shouldIgnorePanelResize]);
 
+  /** 用户按下底部分隔条：立刻取消程序化 snap 的忽略窗口，避免首次拖拽被 resize 回写吃掉 */
+  const handleBottomHandlePointerDown = useCallback(() => {
+    if (bottomResizeLocked) return;
+    ignoreResizeUntilRef.current = 0;
+    programmaticSyncRef.current = false;
+    isSnappingRef.current = false;
+    userResizeActiveRef.current = true;
+  }, [bottomResizeLocked]);
+
   /** 松手提交：onLayoutChanged 在指针释放后触发 */
   const handleBottomLayoutChanged = useCallback(() => {
     if (bottomResizeLocked || shouldIgnorePanelResize()) return;
@@ -387,6 +396,7 @@ export function SidebarBottom({
       bottomPanelRef={bottomPanelRef}
       onBottomLayoutChange={handleBottomLayoutChange}
       onBottomResizeEnd={handleBottomLayoutChanged}
+      onBottomHandlePointerDown={handleBottomHandlePointerDown}
       className={className}
     />
   );

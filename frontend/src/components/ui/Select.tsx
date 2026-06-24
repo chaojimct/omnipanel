@@ -17,6 +17,8 @@ export interface SelectOption {
   value: string;
   label: string;
   subtitle?: string;
+  /** 悬停 tooltip；默认由 label + subtitle 拼接 */
+  title?: string;
   disabled?: boolean;
 }
 
@@ -327,6 +329,9 @@ export function Select({
                   );
                   const highlighted =
                     !opt.disabled && selectableIndex === highlightIndex;
+                  const optionTitle =
+                    opt.title ??
+                    [opt.label, opt.subtitle].filter(Boolean).join(" · ");
                   return (
                     <button
                       key={`${opt.value}::${opt.label}`}
@@ -334,6 +339,7 @@ export function Select({
                       role="option"
                       aria-selected={opt.value === value}
                       disabled={opt.disabled}
+                      title={optionTitle || undefined}
                       className={[
                         "omni-select-option",
                         opt.value === value ? "is-selected" : "",

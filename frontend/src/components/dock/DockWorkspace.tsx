@@ -31,6 +31,8 @@ interface DockWorkspaceProps {
   leftPreset?: DockRailPreset;
   /** 左侧面板尺寸变化回调 */
   onLeftResize?: (sizePx: number) => void;
+  /** 左侧面板拖拽结束或布局稳定后触发（用于持久化，避免拖拽过程中频繁写入） */
+  onLeftLayoutChanged?: () => void;
   rightPreset?: DockRailPreset;
   rightSizePx?: number;
   rightMinPx?: number;
@@ -38,6 +40,8 @@ interface DockWorkspaceProps {
   rightMaxPx?: number | string;
   /** 右侧面板尺寸变化回调 */
   onRightResize?: (sizePx: number) => void;
+  /** 右侧面板拖拽结束或布局稳定后触发 */
+  onRightLayoutChanged?: () => void;
   bottomSizePx?: number;
   bottomMinPx?: number;
   bottomMaxPx?: number;
@@ -51,6 +55,8 @@ interface DockWorkspaceProps {
   onBottomResizeEnd?: () => void;
   /** task-bar 等固定高度模式：隐藏拖拽把手并锁定高度 */
   bottomHandleDisabled?: boolean;
+  /** 用户按下底部分隔条时触发（用于取消程序化 snap 的短暂忽略窗口） */
+  onBottomHandlePointerDown?: () => void;
   className?: string;
 }
 
@@ -64,13 +70,13 @@ export function DockWorkspace({
   leftMinPx,
   leftMaxPx,
   onLeftResize,
+  onLeftLayoutChanged,
   rightPreset = "default",
   rightSizePx,
   rightMinPx,
   rightMaxPx,
   onRightResize,
-  horizontalLayout,
-  onHorizontalLayoutChange,
+  onRightLayoutChanged,
   bottomSizePx = 220,
   bottomMinPx = 0,
   bottomMaxPx = 420,
@@ -79,6 +85,7 @@ export function DockWorkspace({
   onBottomLayoutChange,
   onBottomResizeEnd,
   bottomHandleDisabled = false,
+  onBottomHandlePointerDown,
   className,
 }: DockWorkspaceProps) {
   const handleBottomHeight = useCallback(
@@ -109,6 +116,11 @@ export function DockWorkspace({
   const rightMin = rightMinPx ?? rightRail.minSize;
   const rightMax = rightMaxPx ?? rightRail.maxSize;
 
+  const handleHorizontalLayoutChanged = useCallback(() => {
+    onLeftLayoutChanged?.();
+    onRightLayoutChanged?.();
+  }, [onLeftLayoutChanged, onRightLayoutChanged]);
+
   const mainContent = bottom ? (
     <DockLayout
       direction="vertical"
@@ -118,7 +130,12 @@ export function DockWorkspace({
       <DockPanel>
         {main}
       </DockPanel>
-      {!bottomHandleDisabled ? <DockHandle direction="vertical" /> : null}
+      {!bottomHandleDisabled ? (
+        <DockHandle
+          direction="vertical"
+          onPointerDown={onBottomHandlePointerDown}
+        />
+      ) : null}
       <DockPanel
         defaultSize={`${bottomSizePx}px`}
         minSize={`${bottomMinPx}px`}
@@ -141,7 +158,7 @@ export function DockWorkspace({
 
   return (
     <div className={`dock-workspace${className ? ` ${className}` : ""}`}>
-      <DockLayout>
+      <DockLayout onLayoutChanged={handleHorizontalLayoutChanged}>
         {left && (
           <>
             <DockPanel

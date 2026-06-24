@@ -95,6 +95,19 @@ function isCellInRange(row: number, col: number, range: CellRange | null): boole
   return row >= r.minRow && row <= r.maxRow && col >= r.minCol && col <= r.maxCol;
 }
 
+/** 列头高亮：选区覆盖全部行且包含该列 */
+function isHeaderInColumnSelection(
+  headerColIdx: number,
+  range: CellRange | null,
+  rowCount: number,
+): boolean {
+  if (!range || rowCount <= 0) return false;
+  const r = normalizeRange(range);
+  const spansAllRows = r.minRow === 0 && r.maxRow === rowCount - 1;
+  if (!spansAllRows) return false;
+  return headerColIdx >= r.minCol && headerColIdx <= r.maxCol;
+}
+
 function cellToText(value: unknown): string {
   if (value === null || value === undefined) return "NULL";
   if (typeof value === "object") return JSON.stringify(value);
@@ -104,6 +117,14 @@ function cellToText(value: unknown): string {
 function isNearRowBottom(target: HTMLElement, clientY: number): boolean {
   const rect = target.getBoundingClientRect();
   return clientY >= rect.bottom - ROW_RESIZE_ZONE_PX;
+}
+
+/** 清除 WebView 在 DOM 更新后粘住的 :hover 伪类 */
+function resetStuckPointerHover(container: HTMLElement | null) {
+  if (!container) return;
+  container.style.pointerEvents = "none";
+  void container.offsetHeight;
+  container.style.pointerEvents = "";
 }
 
 const TRANSPOSE_FIELD_COL = "__field__";
@@ -480,7 +501,28 @@ export const TableDataGrid = memo(function TableDataGrid({ columns, rows, totalR
   const savedScrollRef = useRef({ left: 0, top: 0 });
   const restoreScrollAfterPageChangeRef = useRef(false);
   const [cellRange, setCellRange] = useState<CellRange | null>(null);
+  const cellRangeRef = useRef(cellRange);
+  cellRangeRef.current = cellRange;
   const cellDragRef = useRef<{ active: boolean; start: CellPos } | null>(null);
+  const hoverResetPendingRef = useRef(false);
+
+  useEffect(() => {
+    if (loading) {
+      hoverResetPendingRef.current = true;
+      return;
+    }
+    if (!hoverResetPendingRef.current) return;
+    let innerRaf = 0;
+    const outerRaf = requestAnimationFrame(() => {
+      innerRaf = requestAnimationFrame(() => {
+        hoverResetPendingRef.current = false;
+      });
+    });
+    return () => {
+      cancelAnimationFrame(outerRaf);
+      if (innerRaf) cancelAnimationFrame(innerRaf);
+    };
+  }, [loading]);
 
   const handlePageChange = useCallback(
     (nextPage: number) => {
@@ -572,6 +614,11 @@ export const TableDataGrid = memo(function TableDataGrid({ columns, rows, totalR
   const effectiveOnCellEdit = transposed ? undefined : onCellEdit;
   const transposeRowHeaders = transposedData?.rowHeaders ?? [];
 
+  useLayoutEffect(() => {
+    if (loading || !hoverResetPendingRef.current) return;
+    resetStuckPointerHover(wrapRef.current);
+  }, [loading, displayRows]);
+
   const columnMetaMap = useMemo(() => {
     if (!columnMeta) return null;
     const map: Record<string, DbColumnMeta> = {};
@@ -609,19 +656,7 @@ export const TableDataGrid = memo(function TableDataGrid({ columns, rows, totalR
           accessorFn: () => undefined,
           header: () => <span className="db-row-num-header">#</span>,
           cell: ({ row: r }) => (
-            <span
-              className="db-row-num-cell"
-              onMouseDown={(e) => {
-                e.stopPropagation();
-                const totalDataCols = displayColumns.length;
-                setCellRange({
-                  start: { row: r.index, col: 0 },
-                  end: { row: r.index, col: totalDataCols },
-                });
-              }}
-            >
-              {page * pageSize + r.index + 1}
-            </span>
+            <span className="db-row-num-cell">{page * pageSize + r.index + 1}</span>
           ),
           minSize: 36,
           size: 44,
@@ -631,7 +666,7 @@ export const TableDataGrid = memo(function TableDataGrid({ columns, rows, totalR
       }
       return defs;
     },
-    [displayColumns, transposed, transposeRowHeaders, columnMetaMap, t, page, pageSize, setCellRange],
+    [displayColumns, transposed, transposeRowHeaders, columnMetaMap, t, page, pageSize],
   );
 
   const table = useReactTable({
@@ -743,7 +778,7 @@ export const TableDataGrid = memo(function TableDataGrid({ columns, rows, totalR
     };
 
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && cellRange) {
+      if (event.key === "Escape" && cellRangeRef.current) {
         setCellRange(null);
         cellDragRef.current = null;
       }
@@ -756,7 +791,7 @@ export const TableDataGrid = memo(function TableDataGrid({ columns, rows, totalR
       window.removeEventListener("mouseup", endResize);
       window.removeEventListener("keydown", onKeyDown);
     };
-  }, [cellRange]);
+  }, []);
 
   const totalTableWidth = table.getTotalSize();
   const leafColumns = table.getAllLeafColumns();
@@ -862,18 +897,43 @@ export const TableDataGrid = memo(function TableDataGrid({ columns, rows, totalR
               data-col-index={cellIdx}
               style={buildColumnCellStyle(cell.column.id, baseSize, lastColumnId, fillDelta)}
               className={`db-data-table-cell${isCustomHeight ? " db-data-table-cell--custom-h" : ""}${columnSizing[cell.column.id] !== undefined ? " db-data-table-cell--sized" : ""}${canEdit ? " db-cell--editable" : ""}${cellDirty ? " db-data-table-cell--dirty" : ""}${isRowNum ? " db-data-table-cell--rownum" : ""}${transposed && cell.column.id === TRANSPOSE_FIELD_COL ? " db-data-table-cell--field" : ""}${selected ? " db-data-table-cell--selected" : ""}`}
-              onMouseDown={!isRowNum ? (event) => {
+              onMouseDown={
+                isRowNum
+                  ? (event) => {
+                      if (event.button !== 0) return;
+                      const tr = event.currentTarget.closest("tr");
+                      if (!tr) return;
+                      if (isNearRowBottom(tr, event.clientY)) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        beginRowResize(row.index, event.clientY);
+                        return;
+                      }
+                      event.preventDefault();
+                      event.stopPropagation();
+                      const totalDataCols = displayColumns.length;
+                      setCellRange({
+                        start: { row: row.index, col: 0 },
+                        end: { row: row.index, col: totalDataCols },
+                      });
+                    }
+                  : (event) => {
                 if (event.button !== 0) return;
                 if (event.shiftKey || event.ctrlKey || event.metaKey) return;
                 if (transposed) return;
                 const tr = event.currentTarget.closest('tr');
                 if (!tr) return;
-                if (isNearRowBottom(tr, event.clientY)) return;
+                if (isNearRowBottom(tr, event.clientY)) {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  beginRowResize(row.index, event.clientY);
+                  return;
+                }
                 event.preventDefault();
                 event.stopPropagation();
                 cellDragRef.current = { active: true, start: { row: row.index, col: cellIdx } };
                 setCellRange({ start: { row: row.index, col: cellIdx }, end: { row: row.index, col: cellIdx } });
-              } : undefined}
+              }}
               onDoubleClick={canEdit ? () => effectiveOnCellEdit!({ rowIndex: cell.row.index, column: cell.column.id, row: cell.row.original }) : undefined}
               onContextMenu={
                 !isRowNum && onRowEdit && !transposed
@@ -909,7 +969,7 @@ export const TableDataGrid = memo(function TableDataGrid({ columns, rows, totalR
     ) : (
     <div
       ref={wrapRef}
-      className={`db-data-table-wrap${transposed ? " db-data-table-wrap--transposed" : ""}`}
+      className={`db-data-table-wrap${transposed ? " db-data-table-wrap--transposed" : ""}${loading ? " db-data-table-wrap--loading" : ""}`}
     >
       <table
         className="db-data-table"
@@ -927,7 +987,7 @@ export const TableDataGrid = memo(function TableDataGrid({ columns, rows, totalR
         <thead>
                 {table.getHeaderGroups().map((headerGroup) => (
             <tr key={headerGroup.id}>
-              {headerGroup.headers.map((header) => {
+              {headerGroup.headers.map((header, headerColIdx) => {
                 const baseSize = header.getSize();
                 const colId = header.column.id;
                 const isFieldCol = transposed && colId === TRANSPOSE_FIELD_COL;
@@ -939,12 +999,14 @@ export const TableDataGrid = memo(function TableDataGrid({ columns, rows, totalR
                     ? " db-data-table-th--sort-asc"
                     : " db-data-table-th--sort-desc"
                   : "";
+                const thSelected =
+                  !transposed && isHeaderInColumnSelection(headerColIdx, cellRange, tableRows.length);
                 return (
                 <th
                   key={header.id}
                   data-col-id={colId}
                   style={buildColumnCellStyle(colId, baseSize, lastColumnId, fillDelta)}
-                  className={`${table.getState().columnSizingInfo?.isResizingColumn === colId ? "db-data-table-th-resizing" : ""}${canSort ? " db-data-table-th--sortable" : ""}${colId !== ROW_NUM_COL_ID && !transposed ? " db-data-table-th--selectable" : ""}${colId === ROW_NUM_COL_ID ? " db-data-table-th--select-all" : ""}${sortClass}`}
+                  className={`${table.getState().columnSizingInfo?.isResizingColumn === colId ? "db-data-table-th-resizing" : ""}${canSort ? " db-data-table-th--sortable" : ""}${colId !== ROW_NUM_COL_ID && !transposed ? " db-data-table-th--selectable" : ""}${colId === ROW_NUM_COL_ID ? " db-data-table-th--select-all" : ""}${thSelected ? " db-data-table-th--selected" : ""}${sortClass}`}
                   onClick={colId === ROW_NUM_COL_ID ? handleSelectAll : (colId !== ROW_NUM_COL_ID && !transposed ? () => handleColumnSelect(colId) : undefined)}
                   title={colId === ROW_NUM_COL_ID ? t("database.results.selectAll") : t("database.results.selectColumn")}
                 >

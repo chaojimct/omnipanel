@@ -25,6 +25,7 @@ export function DockLayout({
       defaultLayout={defaultLayout}
       onLayoutChange={onLayoutChange}
       onLayoutChanged={onLayoutChanged}
+      resizeTargetMinimumSize={{ fine: 10, coarse: 20 }}
     >
       {children}
     </Group>

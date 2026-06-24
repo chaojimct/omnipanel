@@ -3252,14 +3252,10 @@ export function DatabasePanel() {
         sidebar={
           <DbSchemaProvider value={schemaContextValue}>
             <DatabaseSchemaSidebar
-                groups={groups}
-                activeGroupId={activeGroupId}
                 onCreateConnection={() => {
                   setEditingConnection(null);
                   setDialogOpen(true);
                 }}
-                onCreateGroup={() => void handleCreateGroup()}
-                onSelectGroup={handleSelectGroup}
                 onSelectConnection={handleSelectConnection}
                 onOpenSqlFile={openSqlFile}
                 onSelectTable={handleSelectTable}

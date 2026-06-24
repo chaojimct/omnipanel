@@ -92,7 +92,7 @@ impl RedisDriver {
         let mut entries = Vec::new();
 
         loop {
-            let (next, keys): (u64, Vec<String>) = redis::cmd("SCAN")
+            let (next, keys): (u64, Vec<redis::Value>) = redis::cmd("SCAN")
                 .arg(cursor)
                 .arg("MATCH")
                 .arg(pattern)
@@ -102,10 +102,11 @@ impl RedisDriver {
                 .await
                 .map_err(map_redis_err)?;
 
-            for key in keys {
+            for key_val in keys {
                 if entries.len() >= limit {
                     return Ok(entries);
                 }
+                let key = redis_value_to_string(key_val);
                 let key_type: String = redis::cmd("TYPE")
                     .arg(&key)
                     .query_async(&mut conn)
@@ -146,12 +147,12 @@ impl DbDriver for RedisDriver {
 
     async fn list_tables(&self) -> OmniResult<Vec<String>> {
         let mut conn = self.conn.clone();
-        let keys: Vec<String> = redis::cmd("KEYS")
+        let keys: Vec<redis::Value> = redis::cmd("KEYS")
             .arg("*")
             .query_async(&mut conn)
             .await
             .map_err(map_redis_err)?;
-        Ok(keys)
+        Ok(keys.into_iter().map(redis_value_to_string).collect())
     }
 
     async fn execute(&self, sql: &str) -> OmniResult<QueryResult> {
@@ -191,37 +192,43 @@ impl DbDriver for RedisDriver {
 
         match key_type.as_str() {
             "string" => {
-                let value: Option<String> = conn.get(table).await.map_err(map_redis_err)?;
+                let value: Option<Vec<u8>> = conn.get(table).await.map_err(map_redis_err)?;
                 Ok(QueryResult {
                     columns: vec!["key".to_string(), "value".to_string()],
-                    rows: vec![vec![Value::String(table.to_string()), json_opt(value)]],
+                    rows: vec![vec![
+                        Value::String(table.to_string()),
+                        json_opt(value.map(|b| bytes_to_display(&b))),
+                    ]],
                     rows_affected: 0,
                 })
             }
             "list" => {
                 let stop = (limit.max(1) - 1).try_into().unwrap_or(isize::MAX);
-                let values: Vec<String> =
+                let values: Vec<Vec<u8>> =
                     conn.lrange(table, 0, stop).await.map_err(map_redis_err)?;
                 Ok(QueryResult {
                     columns: vec!["index".to_string(), "value".to_string()],
                     rows: values
                         .into_iter()
                         .enumerate()
-                        .map(|(i, v)| vec![Value::Number(i.into()), Value::String(v)])
+                        .map(|(i, v)| vec![Value::Number(i.into()), Value::String(bytes_to_display(&v))])
                         .collect(),
                     rows_affected: 0,
                 })
             }
             "set" => {
-                let values: Vec<String> = conn.smembers(table).await.map_err(map_redis_err)?;
+                let values: Vec<Vec<u8>> = conn.smembers(table).await.map_err(map_redis_err)?;
                 Ok(QueryResult {
                     columns: vec!["member".to_string()],
-                    rows: values.into_iter().map(|v| vec![Value::String(v)]).collect(),
+                    rows: values
+                        .into_iter()
+                        .map(|v| vec![Value::String(bytes_to_display(&v))])
+                        .collect(),
                     rows_affected: 0,
                 })
             }
             "zset" => {
-                let values: Vec<(String, f64)> = conn
+                let values: Vec<(Vec<u8>, f64)> = conn
                     .zrange_withscores(table, 0isize, (limit.max(0) - 1) as isize)
                     .await
                     .map_err(map_redis_err)?;
@@ -229,19 +236,24 @@ impl DbDriver for RedisDriver {
                     columns: vec!["member".to_string(), "score".to_string()],
                     rows: values
                         .into_iter()
-                        .map(|(m, s)| vec![Value::String(m), serde_json::json!(s)])
+                        .map(|(m, s)| vec![Value::String(bytes_to_display(&m)), serde_json::json!(s)])
                         .collect(),
                     rows_affected: 0,
                 })
             }
             "hash" => {
-                let fields: Vec<(String, String)> =
+                let fields: std::collections::HashMap<Vec<u8>, Vec<u8>> =
                     conn.hgetall(table).await.map_err(map_redis_err)?;
                 Ok(QueryResult {
                     columns: vec!["field".to_string(), "value".to_string()],
                     rows: fields
                         .into_iter()
-                        .map(|(k, v)| vec![Value::String(k), Value::String(v)])
+                        .map(|(k, v)| {
+                            vec![
+                                Value::String(bytes_to_display(&k)),
+                                Value::String(bytes_to_display(&v)),
+                            ]
+                        })
                         .collect(),
                     rows_affected: 0,
                 })
@@ -282,13 +294,20 @@ async fn preview_redis_value(
     const MAX: usize = 256;
     match key_type {
         "string" => {
-            let v: Option<String> = conn.get(key).await.map_err(map_redis_err)?;
-            Ok(truncate_display(v.unwrap_or_default(), MAX))
+            let v: Option<Vec<u8>> = conn.get(key).await.map_err(map_redis_err)?;
+            Ok(truncate_display(
+                v.map(|b| bytes_to_display(&b)).unwrap_or_default(),
+                MAX,
+            ))
         }
         "list" => {
             let len: i64 = conn.llen(key).await.map_err(map_redis_err)?;
-            let values: Vec<String> = conn.lrange(key, 0, 2).await.map_err(map_redis_err)?;
-            let preview = values.join(", ");
+            let values: Vec<Vec<u8>> = conn.lrange(key, 0, 2).await.map_err(map_redis_err)?;
+            let preview = values
+                .iter()
+                .map(|b| bytes_to_display(b))
+                .collect::<Vec<_>>()
+                .join(", ");
             let suffix = if len > 3 { ", …" } else { "" };
             Ok(format!("[list len={len}] {preview}{suffix}"))
         }
@@ -302,14 +321,21 @@ async fn preview_redis_value(
         }
         "hash" => {
             let len: i64 = conn.hlen(key).await.map_err(map_redis_err)?;
-            let fields: Vec<(String, String)> = conn.hgetall(key).await.map_err(map_redis_err)?;
+            let fields: std::collections::HashMap<Vec<u8>, Vec<u8>> =
+                conn.hgetall(key).await.map_err(map_redis_err)?;
             if fields.is_empty() {
                 return Ok(format!("[hash len={len}]"));
             }
             let preview: String = fields
                 .into_iter()
                 .take(2)
-                .map(|(k, v)| format!("{k}={}", truncate_display(v, 40)))
+                .map(|(k, v)| {
+                    format!(
+                        "{}={}",
+                        bytes_to_display(&k),
+                        truncate_display(bytes_to_display(&v), 40)
+                    )
+                })
                 .collect::<Vec<_>>()
                 .join(", ");
             let suffix = if len > 2 { ", …" } else { "" };
@@ -334,6 +360,10 @@ fn truncate_display(s: String, max: usize) -> String {
         let truncated: String = s.chars().take(max).collect();
         format!("{truncated}…")
     }
+}
+
+fn bytes_to_display(bytes: &[u8]) -> String {
+    String::from_utf8_lossy(bytes).into_owned()
 }
 
 fn map_redis_err(err: redis::RedisError) -> OmniError {

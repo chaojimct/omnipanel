@@ -1,4 +1,4 @@
-import { useCallback, useMemo, type ReactNode } from "react";
+import { useCallback, useMemo, useRef, type ReactNode } from "react";
 import { useLocation } from "react-router-dom";
 import { DockWorkspace, type DockRailPreset } from "../dock";
 import { usePanelLayoutStore } from "../../stores/panelLayoutStore";
@@ -51,13 +51,18 @@ export function SidebarWorkspace({
   const setLeftSize = usePanelLayoutStore((s) => s.setLeftSize);
 
   const sidebarSizePx = propSidebarSizePx ?? savedSize;
+  const pendingLeftSizeRef = useRef<number | null>(null);
 
-  const handleLeftResize = useCallback(
-    (sizePx: number) => {
-      setLeftSize(persistKey, sizePx);
-    },
-    [persistKey, setLeftSize],
-  );
+  const handleLeftResize = useCallback((sizePx: number) => {
+    pendingLeftSizeRef.current = sizePx;
+  }, []);
+
+  const handleLeftLayoutChanged = useCallback(() => {
+    const size = pendingLeftSizeRef.current;
+    if (size == null) return;
+    setLeftSize(persistKey, size);
+    pendingLeftSizeRef.current = null;
+  }, [persistKey, setLeftSize]);
 
   return (
     <DockWorkspace
@@ -68,6 +73,7 @@ export function SidebarWorkspace({
       leftMinPx={sidebarMinPx}
       leftMaxPx={sidebarMaxPx}
       onLeftResize={handleLeftResize}
+      onLeftLayoutChanged={handleLeftLayoutChanged}
       className={className}
     />
   );

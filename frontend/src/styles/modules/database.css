@@ -676,7 +676,7 @@
         display: flex;
         align-items: center;
         gap: var(--sp-1);
-        padding: 3px var(--sp-2);
+        padding: 3px 0 3px var(--sp-2);
         cursor: pointer;
         border-radius: var(--r-sm);
         transition: background 0.1s;
@@ -729,10 +729,18 @@
     .tree-label {
         flex: 1;
         min-width: 0;
+        display: flex;
+        align-items: center;
+        gap: var(--sp-2);
+        cursor: pointer;
+    }
+
+    .tree-label-name {
+        min-width: 0;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
-        cursor: pointer;
+        flex-shrink: 1;
     }
 
     .tree-node--connection .tree-label {
@@ -819,7 +827,9 @@
     }
 
     .tree-label-comment {
-        margin-left: 6px;
+        margin-left: auto;
+        flex-shrink: 1;
+        min-width: 0;
         font-size: 11px;
         font-weight: 400;
         color: var(--muted);
@@ -827,7 +837,7 @@
         text-overflow: ellipsis;
         white-space: nowrap;
         max-width: min(240px, 40vw);
-        vertical-align: baseline;
+        text-align: right;
     }
 
     .tree-node--table .tree-icon {
@@ -914,7 +924,6 @@
         flex-shrink: 0;
         width: 22px;
         height: 22px;
-        margin-left: var(--sp-1);
         padding: 0;
         border: none;
         border-radius: var(--r-sm);
@@ -2504,9 +2513,13 @@
         user-select: text;
     }
 
-    .db-data-table td,
-    .db-data-table th {
+    .db-data-table td {
         overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .db-data-table th {
+        overflow: visible;
         text-overflow: ellipsis;
     }
 
@@ -2540,12 +2553,17 @@
     }
 
     .db-data-table-th--select-all:hover {
-        background: color-mix(in srgb, var(--accent) 8%, transparent);
+        background: color-mix(in srgb, var(--accent) 12%, transparent);
     }
 
     .db-data-table-th--selectable:hover {
-        background: var(--hover, rgba(0, 0, 0, 0.04));
+        background: color-mix(in srgb, var(--accent) 10%, transparent);
         color: var(--text);
+    }
+
+    .db-data-table-th--selectable.db-data-table-th--selected:hover,
+    .db-data-table-th--select-all.db-data-table-th--selected:hover {
+        background: color-mix(in srgb, var(--accent) 22%, transparent) !important;
     }
 
     .db-data-table-th--sort-asc,
@@ -2591,16 +2609,17 @@
     .db-col-resize-handle {
         position: absolute;
         top: 0;
-        right: -3px;
-        width: 6px;
+        right: 0;
+        width: 10px;
         height: 100%;
         cursor: col-resize;
-        z-index: 2;
+        z-index: 3;
+        transform: translateX(50%);
     }
 
     .db-col-resize-handle:hover,
     .db-col-resize-handle:active {
-        background: var(--accent);
+        background: color-mix(in srgb, var(--accent) 20%, transparent);
     }
 
     .db-data-table tbody tr.db-data-table-row {
@@ -2615,10 +2634,11 @@
         bottom: 0;
         height: 8px;
         cursor: row-resize;
+        z-index: 1;
     }
 
-    .db-data-table tbody tr.db-data-table-row:hover::after {
-        box-shadow: inset 0 -2px 0 var(--accent);
+    .db-data-table-row.db-data-table-row--resizing::after {
+        background: color-mix(in srgb, var(--accent) 22%, transparent);
     }
 
     .db-data-table tbody tr.db-data-table-row {
@@ -2629,12 +2649,25 @@
         background: var(--surface);
     }
 
-    .db-data-table tbody tr.db-data-table-row:hover {
+    .db-data-table tbody tr.db-data-table-row > td {
+        transition: background 0.1s;
+    }
+
+    /* 加载中禁用 tbody 交互，避免 DOM 更新后 :hover 粘在新单元格上 */
+    .db-data-table-wrap--loading tbody {
+        pointer-events: none;
+    }
+
+    .db-data-table tbody tr.db-data-table-row:hover > td:not(.db-data-table-cell--selected):not(.db-data-table-cell--dirty) {
         background: var(--surface-hover);
     }
 
-    .db-data-table-row.db-data-table-row--resizing td {
-        box-shadow: inset 0 -2px 0 var(--accent);
+    .db-data-table tbody tr.db-data-table-row:hover > td.db-data-table-cell--selected {
+        background: color-mix(in srgb, var(--accent) 24%, transparent);
+    }
+
+    .db-data-table tbody tr.db-data-table-row:hover > td.db-data-table-cell--dirty:not(.db-data-table-cell--selected) {
+        background: color-mix(in srgb, var(--warn) 18%, transparent);
     }
 
     .db-data-table-row--dirty>td {
@@ -2642,18 +2675,27 @@
     }
 
     .db-data-table-cell--dirty {
-        box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--warn) 55%, transparent);
+        background: color-mix(in srgb, var(--warn) 12%, transparent);
         color: var(--warn);
         font-weight: 600;
     }
 
     .db-data-table-cell--selected {
-        box-shadow: inset 0 0 0 1px var(--accent);
-        background: color-mix(in srgb, var(--accent) 10%, transparent);
+        background: color-mix(in srgb, var(--accent) 18%, transparent);
     }
 
     .db-data-table-cell--selected.db-data-table-cell--dirty {
-        box-shadow: inset 0 0 0 1px var(--accent), inset 0 0 0 2px color-mix(in srgb, var(--warn) 55%, transparent);
+        background: color-mix(in srgb, var(--accent) 14%, color-mix(in srgb, var(--warn) 20%, transparent));
+    }
+
+    .db-data-table-th--selected {
+        background: color-mix(in srgb, var(--accent) 18%, transparent) !important;
+        color: var(--accent);
+    }
+
+    .db-data-table-th--sort-asc.db-data-table-th--selected,
+    .db-data-table-th--sort-desc.db-data-table-th--selected {
+        background: color-mix(in srgb, var(--accent) 22%, var(--accent-soft, rgba(0, 122, 255, 0.06))) !important;
     }
 
     .db-row-num-header,
@@ -2678,26 +2720,27 @@
         width: 100%;
         height: 100%;
         min-height: 28px;
-        cursor: pointer;
         color: var(--text-secondary);
         font-size: 0.75rem;
         font-variant-numeric: tabular-nums;
-        border-radius: var(--radius-sm, 3px);
-        transition: background 0.1s, color 0.1s;
-    }
-
-    .db-row-num-cell:hover {
-        background: color-mix(in srgb, var(--accent) 14%, transparent);
-        color: var(--accent);
     }
 
     .db-data-table-cell--rownum {
         padding: 0 !important;
         vertical-align: middle;
+        cursor: pointer;
+    }
+
+    .db-data-table-cell--rownum:hover:not(.db-data-table-cell--selected) {
+        background: var(--surface-hover);
     }
 
     .db-data-table-cell--selected.db-data-table-cell--rownum {
-        background: color-mix(in srgb, var(--accent) 8%, transparent);
+        background: color-mix(in srgb, var(--accent) 16%, transparent);
+    }
+
+    .db-data-table-cell--selected.db-data-table-cell--rownum .db-row-num-cell {
+        color: var(--accent);
     }
 
     .db-data-table-cell--custom-h {
@@ -2710,6 +2753,12 @@
 
     .db-data-table-wrap--resizing {
         cursor: row-resize;
+        user-select: none;
+    }
+
+    .db-data-table-wrap--col-resizing {
+        cursor: col-resize;
+        user-select: none;
     }
 
     .db-pagination {
@@ -3306,12 +3355,11 @@
     /* ─── Cell Editor ────────────────────────────────────────────── */
     .db-cell--editable {
         cursor: pointer;
-        border-bottom: 1px dashed var(--border);
-        transition: border-color 0.12s;
+        transition: background 0.12s;
     }
 
-    .db-cell--editable:hover {
-        border-color: var(--accent);
+    .db-data-table tbody tr.db-data-table-row > td.db-cell--editable:hover:not(.db-data-table-cell--selected):not(.db-data-table-cell--dirty) {
+        background: color-mix(in srgb, var(--accent) 12%, transparent);
     }
 
     /* cell-edit-dialog styles — moved to global.css */

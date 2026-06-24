@@ -1,5 +1,3 @@
-import type { DbConnectionGroup } from "../../stores/dbGroupStore";
-import { connectionMatchesGroup } from "./api";
 import { getVisibleItems, makeTableFilterKey, type SchemaFilterState } from "./DatabaseFilterDialog";
 import type { CachedConnection } from "./schemaCacheMerge";
 import { connectionNodeId } from "./schemaTreeExpanded";
@@ -9,6 +7,7 @@ import {
   parseDatabaseNodeId,
   parseTableNodeId,
   parseViewNodeId,
+  SCHEMA_ROOT_CONNECTIONS_ID,
 } from "./schemaTreeIds";
 import { getSchemaChildVisibleLimit } from "./schemaTreePagination";
 
@@ -29,34 +28,6 @@ export function resolveSchemaTreeScrollTarget(params: {
   return null;
 }
 
-function resolveGroupForConnection(
-  groups: DbConnectionGroup[],
-  connections: CachedConnection[],
-  connId: string,
-  preferredGroupId?: string,
-): DbConnectionGroup | null {
-  if (preferredGroupId) {
-    const preferred = groups.find((group) => group.id === preferredGroupId);
-    if (
-      preferred &&
-      connections.some(
-        (conn) =>
-          conn.config.id === connId && connectionMatchesGroup(conn.config, preferred.name),
-      )
-    ) {
-      return preferred;
-    }
-  }
-  return (
-    groups.find((group) =>
-      connections.some(
-        (conn) =>
-          conn.config.id === connId && connectionMatchesGroup(conn.config, group.name),
-      ),
-    ) ?? null
-  );
-}
-
 function ensureMinChildLimit(
   limits: Record<string, number>,
   parentNodeId: string,
@@ -73,47 +44,13 @@ function ensureMinChildLimit(
   patch[parentNodeId] = minVisibleCount;
 }
 
-export function resolveScrollTargetGroupId(
-  targetId: string,
-  params: {
-    groups: DbConnectionGroup[];
-    connections: CachedConnection[];
-    activeGroupId?: string;
-    activeConnId?: string | null;
-  },
-): string | undefined {
-  const tableParsed = parseTableNodeId(targetId) ?? parseViewNodeId(targetId);
-  const databaseParsed = parseDatabaseNodeId(targetId);
-  const connId =
-    tableParsed?.connId ??
-    databaseParsed?.connId ??
-    params.activeConnId ??
-    (targetId.startsWith("conn:") ? targetId.slice(5) : null);
-  if (!connId) {
-    return params.activeGroupId;
-  }
-  return resolveGroupForConnection(
-    params.groups,
-    params.connections,
-    connId,
-    params.activeGroupId,
-  )?.id;
-}
-
-export function collectExpandedIdsForScrollTarget(
-  targetId: string,
-  groupId?: string,
-): string[] {
+export function collectExpandedIdsForScrollTarget(targetId: string): string[] {
   const ids: string[] = [];
-  if (groupId) {
-    ids.push(`grp:${groupId}`);
-  }
 
   const tableParsed = parseTableNodeId(targetId) ?? parseViewNodeId(targetId);
   if (tableParsed) {
     const { connId, dbName } = tableParsed;
     ids.push(connectionNodeId(connId));
-    ids.push(connectionDatabasesFolderId(connId));
     ids.push(`db:${connId}:${dbName}`);
     ids.push(databaseTablesFolderId(connId, dbName));
     return ids;
@@ -122,7 +59,6 @@ export function collectExpandedIdsForScrollTarget(
   const databaseParsed = parseDatabaseNodeId(targetId);
   if (databaseParsed) {
     ids.push(connectionNodeId(databaseParsed.connId));
-    ids.push(connectionDatabasesFolderId(databaseParsed.connId));
     return ids;
   }
 
@@ -136,9 +72,7 @@ export function collectExpandedIdsForScrollTarget(
 export function buildPaginationPatchesForScrollTarget(
   targetId: string,
   params: {
-    groups: DbConnectionGroup[];
     connections: CachedConnection[];
-    activeGroupId?: string;
     databaseFilters: Record<string, SchemaFilterState | undefined>;
     tableFilters: Record<string, SchemaFilterState | undefined>;
   },
@@ -156,20 +90,8 @@ export function buildPaginationPatchesForScrollTarget(
     return patch;
   }
 
-  const group = resolveGroupForConnection(
-    params.groups,
-    params.connections,
-    connId,
-    params.activeGroupId,
-  );
-  if (group) {
-    const groupNodeId = `grp:${group.id}`;
-    const groupConns = params.connections.filter((conn) =>
-      connectionMatchesGroup(conn.config, group.name),
-    );
-    const connIndex = groupConns.findIndex((conn) => conn.config.id === connId);
-    ensureMinChildLimit(limits, groupNodeId, connIndex + 1, patch);
-  }
+  const connIndex = params.connections.findIndex((item) => item.config.id === connId);
+  ensureMinChildLimit(limits, SCHEMA_ROOT_CONNECTIONS_ID, connIndex + 1, patch);
 
   const conn = params.connections.find((item) => item.config.id === connId);
   if (!conn) {

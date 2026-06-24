@@ -14,13 +14,11 @@ import { Button } from "../../components/ui/Button";
 import { ScopedSearch, type ScopedSearchHandle } from "../../components/ui/ScopedSearch";
 import {
   type DbConnectionConfig,
-  connectionMatchesGroup,
   listConnections,
   isConnectionEnabled,
   connectionHasTableSchemaChildren,
   isRedisConnection,
 } from "./api";
-import type { DbConnectionGroup } from "../../stores/dbGroupStore";
 import { useDbSchemaFilterStore } from "../../stores/dbSchemaFilterStore";
 import { useDbSchemaTreeExpandedStore } from "../../stores/dbSchemaTreeExpandedStore";
 import { useDbSchemaCacheStore } from "../../stores/dbSchemaCacheStore";
@@ -40,7 +38,6 @@ import {
   buildConnectionTreeItem,
   buildDatabaseTreeItem,
   buildFolderTreeItem,
-  buildGroupTreeItem,
   type SchemaTreeItem,
 } from "./schemaTreeItem";
 import {
@@ -63,6 +60,7 @@ import {
   parseViewNodeId,
   routineNodeId,
   userNodeId,
+  SCHEMA_ROOT_CONNECTIONS_ID,
 } from "./schemaTreeIds";
 import { SchemaTreeObjectDetails } from "./schemaTreeObjectDetails";
 import type { SchemaSidebarSectionConfig } from "./SchemaSidebarSection";
@@ -71,14 +69,12 @@ import {
   buildPaginationPatchesForScrollTarget,
   collectExpandedIdsForScrollTarget,
   resolveSchemaTreeScrollTarget,
-  resolveScrollTargetGroupId,
   scrollSchemaTreeToNode,
 } from "./schemaTreeSidebarLinkage";
 import { ContextMenu, type ContextMenuItem } from "../../components/ui/ContextMenu";
 import type { SchemaCacheConnectionEntry } from "./schemaCache";
 import {
   refreshAndApplySchemaTreeNode,
-  refreshSchemaGroupNode,
   type SchemaTreeRefreshHooks,
 } from "./schemaTreeRefresh";
 
@@ -290,7 +286,7 @@ function TreeNode({
         className="tree-label"
         onClick={handleLabelClick}
       >
-        {label}
+        <span className="tree-label-name">{label}</span>
         {labelComment ? (
           <span className="tree-label-comment" title={labelComment}>
             {labelComment}
@@ -405,16 +401,11 @@ function syncFiltersFromSnapshot(
 export type SchemaContextMenuContext = {
   connection?: DbConnectionConfig;
   tableSelection?: SchemaTableSelection;
-  group?: DbConnectionGroup;
 };
 
 export interface SchemaBrowserProps {
-  groups: DbConnectionGroup[];
-  activeGroupId?: string;
   activeConnId?: string | null;
   onCreateConnection?: () => void;
-  onCreateGroup?: () => void;
-  onSelectGroup?: (groupId: string) => void;
   onSelectConnection?: (connId: string) => void;
   onSelectTable?: (selection: SchemaTableSelection) => void;
   onSelectDatabase?: (selection: SchemaDatabaseSelection) => void;
@@ -433,12 +424,8 @@ export interface SchemaBrowserProps {
 }
 
 export function SchemaBrowser({
-  groups,
-  activeGroupId,
   activeConnId = null,
   onCreateConnection,
-  onCreateGroup,
-  onSelectGroup,
   onSelectConnection,
   onSelectTable,
   onSelectDatabase,
@@ -482,7 +469,6 @@ export function SchemaBrowser({
         item: SchemaTreeItem;
         connection?: DbConnectionConfig;
         tableSelection?: SchemaTableSelection;
-        group?: DbConnectionGroup;
       }
     | null
   >(null);
@@ -541,11 +527,8 @@ export function SchemaBrowser({
 
       let connection: DbConnectionConfig | undefined;
       let tableSelection: SchemaTableSelection | undefined;
-      let group: DbConnectionGroup | undefined;
 
-      if (item.type === "group" && item.groupId) {
-        group = groups.find((entry) => entry.id === item.groupId);
-      } else if (item.connId) {
+      if (item.connId) {
         const conn = connectionsRef.current.find((entry) => entry.config.id === item.connId);
         connection = conn?.config;
         if (
@@ -569,22 +552,20 @@ export function SchemaBrowser({
         item,
         connection,
         tableSelection,
-        group,
       });
     },
-    [groups],
+    [],
   );
 
   const buildSchemaTreeContextMenuItems = useCallback((): ContextMenuItem[] => {
     if (!schemaCtxMenu) {
       return [];
     }
-    const { item, connection, group } = schemaCtxMenu;
+    const { item, connection } = schemaCtxMenu;
     const extra =
       buildSchemaContextMenuItems?.(item, {
         connection,
         tableSelection: schemaCtxMenu.tableSelection,
-        group,
       }) ?? [];
     const refreshIcon = (
       <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden>
@@ -595,24 +576,13 @@ export function SchemaBrowser({
       </svg>
     );
     const connRefreshing = connection ? Boolean(refreshingNodeIds[item.id]) : false;
-    const canRefresh =
-      item.type === "group"
-        ? Boolean(group)
-        : Boolean(connection && isConnectionEnabled(connection));
+    const canRefresh = Boolean(connection && isConnectionEnabled(connection));
     const refreshItem: ContextMenuItem = {
       id: "refresh-schema-node",
       label: t("common.refresh"),
       icon: refreshIcon,
       disabled: !canRefresh || connRefreshing,
       onClick: () => {
-        if (item.type === "group" && group) {
-          void refreshSchemaGroupNode(
-            group,
-            connectionsRef.current.map((entry) => entry.config),
-            schemaRefreshHooks,
-          );
-          return;
-        }
         if (connection) {
           void refreshAndApplySchemaTreeNode(connection, item, schemaRefreshHooks);
         }
@@ -709,17 +679,6 @@ export function SchemaBrowser({
       syncSeqRef.current += 1;
     };
   }, [useExternalConnections, loadConnections, refreshToken]);
-
-  useEffect(() => {
-    if (!activeGroupId) return;
-    const groupNodeId = `grp:${activeGroupId}`;
-    updateExpanded((prev) => {
-      if (prev.has(groupNodeId)) return prev;
-      const next = new Set(prev);
-      next.add(groupNodeId);
-      return next;
-    });
-  }, [activeGroupId, updateExpanded]);
 
   useEffect(() => {
     if (!filtersHydrated) {
@@ -877,16 +836,10 @@ export function SchemaBrowser({
       .filter((conn): conn is LoadedConnection => conn !== null);
   }, [connections, search, databaseFilters, tableFilters]);
 
-  const groupSections = useMemo(() => {
-    const sections = groups.map((group) => ({
-      group,
-      connections: filtered.filter((conn) => connectionMatchesGroup(conn.config, group.name)),
-    }));
-    if (!search.trim()) {
-      return sections;
-    }
-    return sections.filter((section) => section.connections.length > 0);
-  }, [groups, filtered, search]);
+  const pagedRootConns = useMemo(
+    () => paginateSchemaChildren(filtered, SCHEMA_ROOT_CONNECTIONS_ID, childVisibleLimits),
+    [filtered, childVisibleLimits],
+  );
 
   const hasAnyConnection = filtered.length > 0;
 
@@ -914,13 +867,7 @@ export function SchemaBrowser({
     sidebarLinkageRafRef.current = requestAnimationFrame(() => {
       sidebarLinkageRafRef.current = null;
 
-      const groupId = resolveScrollTargetGroupId(sidebarScrollTargetId, {
-        groups,
-        connections,
-        activeGroupId,
-        activeConnId,
-      });
-      const expandIds = collectExpandedIdsForScrollTarget(sidebarScrollTargetId, groupId);
+      const expandIds = collectExpandedIdsForScrollTarget(sidebarScrollTargetId);
 
       updateExpanded((prev) => {
         let changed = false;
@@ -942,9 +889,7 @@ export function SchemaBrowser({
         const patch = buildPaginationPatchesForScrollTarget(
           sidebarScrollTargetId,
           {
-            groups,
             connections,
-            activeGroupId,
             databaseFilters,
             tableFilters,
           },
@@ -966,9 +911,7 @@ export function SchemaBrowser({
     sidebarScrollTargetId,
     loading,
     search,
-    activeGroupId,
     activeConnId,
-    groups,
     connections,
     databaseFilters,
     tableFilters,
@@ -998,14 +941,6 @@ export function SchemaBrowser({
 
   const toolbar = (
     <div className="schema-toolbar schema-toolbar--inline">
-      {onCreateGroup && (
-        <Button variant="icon" title={t("database.groups.new")} onClick={onCreateGroup}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
-            <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2v-5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" />
-            <path d="M12 11v6M9 14h6" />
-          </svg>
-        </Button>
-      )}
       <Button
         variant="icon"
         title={t("database.sidebar.createConnection")}
@@ -1061,39 +996,10 @@ export function SchemaBrowser({
             {t("database.sidebar.empty")}
           </div>
         )}
-        {!loading && !loadError && groupSections.map(({ group, connections: groupConns }) => {
-          const groupNodeId = `grp:${group.id}`;
-          const groupExpanded = expandedNodeIds.has(groupNodeId);
-          const totalInGroup = connections.filter((conn) =>
-            connectionMatchesGroup(conn.config, group.name),
-          ).length;
-          const groupItem = buildGroupTreeItem(group.id, group.name);
-          const groupNodeRefreshing = Boolean(refreshingNodeIds[groupNodeId]);
-          const pagedGroupConns = paginateSchemaChildren(groupConns, groupNodeId, childVisibleLimits);
-
-          return (
-            <div key={group.id}>
-              <TreeNode
-                item={groupItem}
-                depth={0}
-                expanded={groupExpanded}
-                onToggle={() => toggle(groupNodeId)}
-                meta={
-                  groupNodeRefreshing
-                    ? t("common.loading")
-                    : String(totalInGroup)
-                }
-                hasChildren
-                active={activeGroupId === group.id}
-                onLabelClick={() => onSelectGroup?.(group.id)}
-                onContextMenu={(e) => handleContextSchemaNode(groupItem, e)}
-              />
-              {groupExpanded &&
-                pagedGroupConns.visible.map((conn) => {
+        {!loading && !loadError && pagedRootConns.visible.map((conn) => {
           const connId = `conn:${conn.config.id}`;
           const connExpanded = expandedNodeIds.has(connId);
           const databasesFolderId = connectionDatabasesFolderId(conn.config.id);
-          const databasesExpanded = expandedNodeIds.has(databasesFolderId);
           const allDatabases = conn.databases ?? [];
           const filter = databaseFilters[conn.config.id];
           const visibleDatabases = getVisibleItems(allDatabases, filter);
@@ -1108,14 +1014,12 @@ export function SchemaBrowser({
           const fullConnRefreshing =
             connEnabled && Boolean(refreshingConnectionIds[conn.config.id]);
           const connNodeRefreshing = Boolean(refreshingNodeIds[connId]);
-          const databasesFolderRefreshing =
-            Boolean(refreshingNodeIds[databasesFolderId]) || connNodeRefreshing;
 
           return (
             <div key={conn.config.id}>
               <TreeNode
                 item={connItem}
-                depth={1}
+                depth={0}
                 expanded={connExpanded}
                 onToggle={() => toggle(connId)}
                 active={activeConnId === conn.config.id}
@@ -1159,78 +1063,18 @@ export function SchemaBrowser({
                   {conn.databasesError}
                 </div>
               )}
-              {connEnabled &&
-                connExpanded &&
-                (() => {
-                  const databasesMeta = fullConnRefreshing
-                    ? t("common.loading")
-                    : databasesFolderRefreshing
-                      ? t("common.loading")
-                      : conn.databases
-                        ? visibleCount > 0
-                          ? isFiltered
-                            ? `${visibleCount}/${totalCount}`
-                            : String(visibleCount)
-                          : undefined
-                        : t("database.sidebar.cacheEmpty");
-                  return (
-                    <>
-                      <TreeNode
-                        item={buildFolderTreeItem(
-                          databasesFolderId,
-                          t("database.sidebar.databases"),
-                          conn.config.id,
-                        )}
-                        depth={2}
-                        expanded={databasesExpanded}
-                        onToggle={() => toggle(databasesFolderId)}
-                        meta={databasesMeta}
-                        onMetaClick={
-                          !fullConnRefreshing &&
-                          !databasesFolderRefreshing &&
-                          conn.databases &&
-                          totalCount > 0
-                            ? () => setFilterDialogConnId(conn.config.id)
-                            : undefined
-                        }
-                        metaTitle={
-                          !fullConnRefreshing &&
-                          !databasesFolderRefreshing &&
-                          conn.databases &&
-                          totalCount > 0
-                            ? t("database.sidebar.filterDisplay")
-                            : undefined
-                        }
-                        hasChildren
-                        onContextMenu={(e) =>
-                          handleContextSchemaNode(
-                            buildFolderTreeItem(
-                              databasesFolderId,
-                              t("database.sidebar.databases"),
-                              conn.config.id,
-                            ),
-                            e,
-                          )
-                        }
-                      />
-                      {databasesExpanded &&
-                        !fullConnRefreshing &&
-                        conn.databases &&
-                        visibleCount === 0 &&
-                        totalCount > 0 && (
-                          <div
-                            style={{
-                              padding: "4px 40px",
-                              fontSize: "11px",
-                              color: "var(--text-secondary, #8e8e93)",
-                            }}
-                          >
-                            {t("database.sidebar.filterHidden")}
-                          </div>
-                        )}
-                      {databasesExpanded &&
-                        conn.databases &&
-                        pagedDatabases.visible.map((db) => {
+              {connEnabled && connExpanded && conn.databases && !fullConnRefreshing && visibleCount === 0 && totalCount > 0 && (
+                <div
+                  style={{
+                    padding: "4px 24px",
+                    fontSize: "11px",
+                    color: "var(--text-secondary, #8e8e93)",
+                  }}
+                >
+                  {t("database.sidebar.filterHidden")}
+                </div>
+              )}
+              {connEnabled && connExpanded && conn.databases && pagedDatabases.visible.map((db) => {
                   const isRedis = isRedisConnection(conn.config);
                   const dbId = makeDatabaseNodeId(conn.config.id, db.name);
                   const dbExpanded = expandedNodeIds.has(dbId);
@@ -1258,6 +1102,10 @@ export function SchemaBrowser({
                   const tblsFolderRefreshing = Boolean(refreshingNodeIds[tblsFolderId]);
                   const viewsFolderRefreshing = Boolean(refreshingNodeIds[viewsFolderId]);
                   const otherFolderRefreshing = Boolean(refreshingNodeIds[otherFolderId]);
+                  const showTablesFolder = tableTotalCount > 0 || tblsFolderRefreshing;
+                  const showViewsFolder = viewTotalCount > 0 || viewsFolderRefreshing;
+                  const showOtherFolder = routineTotalCount > 0 || otherFolderRefreshing;
+                  const hasDbObjectFolders = showTablesFolder || showViewsFolder || showOtherFolder;
                   const objectSummary = isRedis
                     ? undefined
                     : [
@@ -1272,7 +1120,7 @@ export function SchemaBrowser({
                     <div key={db.name}>
                       <TreeNode
                         item={dbItem}
-                        depth={3}
+                        depth={1}
                         expanded={dbExpanded}
                         onToggle={() => toggle(dbId)}
                         active={activeDatabaseKey === dbId}
@@ -1293,13 +1141,13 @@ export function SchemaBrowser({
                               ? t("database.sidebar.tablesFailed")
                               : objectSummary || undefined
                         }
-                        hasChildren={!isRedis}
+                        hasChildren={!isRedis && (hasDbObjectFolders || Boolean(db.loadError))}
                         onContextMenu={(e) => handleContextSchemaNode(dbItem, e)}
                       />
                       {dbExpanded && db.loadError && (
                         <div
                           style={{
-                            padding: "4px 56px",
+                            padding: "4px 40px",
                             fontSize: "11px",
                             color: "var(--color-danger, #ff3b30)",
                           }}
@@ -1307,8 +1155,10 @@ export function SchemaBrowser({
                           {db.loadError}
                         </div>
                       )}
-                      {dbExpanded && !isRedis && (
+                      {dbExpanded && !isRedis && hasDbObjectFolders && (
                         <>
+                          {showTablesFolder ? (
+                          <>
                           <TreeNode
                             item={buildFolderTreeItem(
                               tblsFolderId,
@@ -1316,7 +1166,7 @@ export function SchemaBrowser({
                               conn.config.id,
                               db.name,
                             )}
-                            depth={4}
+                            depth={2}
                             expanded={tblsExpanded}
                             onToggle={() => toggle(tblsFolderId)}
                             meta={
@@ -1362,7 +1212,7 @@ export function SchemaBrowser({
                           {tblsExpanded && tableVisibleCount === 0 && tableTotalCount > 0 && (
                             <div
                               style={{
-                                padding: "4px 72px",
+                                padding: "4px 56px",
                                 fontSize: "11px",
                                 color: "var(--text-secondary, #8e8e93)",
                               }}
@@ -1380,7 +1230,7 @@ export function SchemaBrowser({
                                 dbName={db.name}
                                 tbl={tbl}
                                 objectKind="table"
-                                depth={5}
+                                depth={3}
                                 expandedNodeIds={expandedNodeIds}
                                 childVisibleLimits={childVisibleLimits}
                                 activeTableKey={activeTableKey}
@@ -1407,13 +1257,17 @@ export function SchemaBrowser({
                             ))}
                           {tblsExpanded && pagedTables.hasMore && (
                             <SchemaLoadMoreButton
-                              depth={5}
+                              depth={3}
                               remaining={pagedTables.remaining}
                               label={t("database.sidebar.loadMore")}
                               onClick={() => loadMoreChildren(tblsFolderId)}
                             />
                           )}
+                          </>
+                          ) : null}
 
+                          {showViewsFolder ? (
+                          <>
                           <TreeNode
                             item={buildFolderTreeItem(
                               viewsFolderId,
@@ -1421,7 +1275,7 @@ export function SchemaBrowser({
                               conn.config.id,
                               db.name,
                             )}
-                            depth={4}
+                            depth={2}
                             expanded={viewsExpanded}
                             onToggle={() => toggle(viewsFolderId)}
                             meta={
@@ -1454,7 +1308,7 @@ export function SchemaBrowser({
                                 dbName={db.name}
                                 tbl={view}
                                 objectKind="view"
-                                depth={5}
+                                depth={3}
                                 expandedNodeIds={expandedNodeIds}
                                 childVisibleLimits={childVisibleLimits}
                                 activeTableKey={activeTableKey}
@@ -1469,13 +1323,17 @@ export function SchemaBrowser({
                             ))}
                           {viewsExpanded && pagedViews.hasMore && (
                             <SchemaLoadMoreButton
-                              depth={5}
+                              depth={3}
                               remaining={pagedViews.remaining}
                               label={t("database.sidebar.loadMore")}
                               onClick={() => loadMoreChildren(viewsFolderId)}
                             />
                           )}
+                          </>
+                          ) : null}
 
+                          {showOtherFolder ? (
+                          <>
                           <TreeNode
                             item={buildFolderTreeItem(
                               otherFolderId,
@@ -1483,7 +1341,7 @@ export function SchemaBrowser({
                               conn.config.id,
                               db.name,
                             )}
-                            depth={4}
+                            depth={2}
                             expanded={otherExpanded}
                             onToggle={() => toggle(otherFolderId)}
                             meta={
@@ -1520,7 +1378,7 @@ export function SchemaBrowser({
                                 <TreeNode
                                   key={routineId}
                                   item={routineItem}
-                                  depth={5}
+                                  depth={3}
                                   expanded={false}
                                   onToggle={() => {}}
                                   hasChildren={false}
@@ -1538,37 +1396,39 @@ export function SchemaBrowser({
                             })}
                           {otherExpanded && pagedRoutines.hasMore && (
                             <SchemaLoadMoreButton
-                              depth={5}
+                              depth={3}
                               remaining={pagedRoutines.remaining}
                               label={t("database.sidebar.loadMore")}
                               onClick={() => loadMoreChildren(otherFolderId)}
                             />
                           )}
+                          </>
+                          ) : null}
                         </>
                       )}
                     </div>
                   );
                 })}
-                      {databasesExpanded && conn.databases && pagedDatabases.hasMore && (
-                        <SchemaLoadMoreButton
-                          depth={3}
-                          remaining={pagedDatabases.remaining}
-                          label={t("database.sidebar.loadMore")}
-                          onClick={() => loadMoreChildren(databasesFolderId)}
-                        />
-                      )}
-                    </>
-                  );
-                })()}
+              {connEnabled && connExpanded && conn.databases && pagedDatabases.hasMore && (
+                <SchemaLoadMoreButton
+                  depth={1}
+                  remaining={pagedDatabases.remaining}
+                  label={t("database.sidebar.loadMore")}
+                  onClick={() => loadMoreChildren(databasesFolderId)}
+                />
+              )}
               {connEnabled &&
                 connExpanded &&
                 !isRedisConnection(conn.config) &&
-                (conn.databases || fullConnRefreshing) &&
                 (() => {
                   const usersFolderId = connectionUsersFolderId(conn.config.id);
                   const usersExpanded = expandedNodeIds.has(usersFolderId);
                   const usersFolderRefreshing = Boolean(refreshingNodeIds[usersFolderId]);
                   const allUsers = conn.users ?? [];
+                  const showUsersFolder = allUsers.length > 0 || usersFolderRefreshing;
+                  if (!showUsersFolder) {
+                    return null;
+                  }
                   const pagedUsers = paginateSchemaChildren(allUsers, usersFolderId, childVisibleLimits);
                   return (
                     <>
@@ -1578,7 +1438,7 @@ export function SchemaBrowser({
                           t("database.sidebar.users"),
                           conn.config.id,
                         )}
-                        depth={2}
+                        depth={1}
                         expanded={usersExpanded}
                         onToggle={() => toggle(usersFolderId)}
                         meta={
@@ -1614,7 +1474,7 @@ export function SchemaBrowser({
                             <TreeNode
                               key={uid}
                               item={userItem}
-                              depth={3}
+                              depth={2}
                               expanded={false}
                               onToggle={() => {}}
                               hasChildren={false}
@@ -1625,7 +1485,7 @@ export function SchemaBrowser({
                         })}
                       {usersExpanded && pagedUsers.hasMore && (
                         <SchemaLoadMoreButton
-                          depth={3}
+                          depth={2}
                           remaining={pagedUsers.remaining}
                           label={t("database.sidebar.loadMore")}
                           onClick={() => loadMoreChildren(usersFolderId)}
@@ -1636,18 +1496,15 @@ export function SchemaBrowser({
                 })()}
             </div>
           );
-                })}
-              {groupExpanded && pagedGroupConns.hasMore && (
-                <SchemaLoadMoreButton
-                  depth={1}
-                  remaining={pagedGroupConns.remaining}
-                  label={t("database.sidebar.loadMore")}
-                  onClick={() => loadMoreChildren(groupNodeId)}
-                />
-              )}
-            </div>
-          );
         })}
+        {pagedRootConns.hasMore && (
+          <SchemaLoadMoreButton
+            depth={0}
+            remaining={pagedRootConns.remaining}
+            label={t("database.sidebar.loadMore")}
+            onClick={() => loadMoreChildren(SCHEMA_ROOT_CONNECTIONS_ID)}
+          />
+        )}
       </div>
       </ScopedSearch>
 
