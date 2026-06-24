@@ -34,6 +34,7 @@ import {
   SelectValue,
 } from "@/components/assistant-ui/select";
 import { useI18n } from "../../i18n";
+import { useAssistantScenarioModelSelectionId } from "../../lib/aiScenarioModels";
 import { useAiStore } from "../../stores/aiStore";
 import {
   listModelSelections,
@@ -339,6 +340,7 @@ const ComposerAction: FC = () => {
   const { t } = useI18n();
   const providers = useAiModelsStore((s) => s.providers);
   const currentModelSelectionId = useAiStore((s) => s.currentModelSelectionId);
+  const scenarioDefaultModelId = useAssistantScenarioModelSelectionId();
   const setCurrentModelSelectionId = useAiStore(
     (s) => s.setCurrentModelSelectionId,
   );
@@ -366,7 +368,10 @@ const ComposerAction: FC = () => {
     currentModelSelectionId &&
     modelSelectorItems.some((m) => m.id === currentModelSelectionId)
       ? currentModelSelectionId
-      : modelSelectorItems[0]?.id;
+      : scenarioDefaultModelId &&
+          modelSelectorItems.some((m) => m.id === scenarioDefaultModelId)
+        ? scenarioDefaultModelId
+        : modelSelectorItems[0]?.id;
 
   return (
     <div className="aui-composer-action-wrapper relative flex items-center justify-between">

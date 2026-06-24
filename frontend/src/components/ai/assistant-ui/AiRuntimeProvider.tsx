@@ -9,10 +9,11 @@ import { useExternalStoreRuntime } from "@assistant-ui/react";
 
 import { commands } from "../../../ipc/bindings";
 import {
-  firstModelSelectionId,
   resolveModelSelection,
   useAiModelsStore,
 } from "../../../stores/aiModelsStore";
+import { useSettingsStore } from "../../../stores/settingsStore";
+import { resolveScenarioModelSelectionId } from "../../../lib/aiScenarioModels";
 import { useAiStore } from "../../../stores/aiStore";
 import { getModuleAiContextText, getModuleMcpTools, executeModuleMcpTool } from "../../../lib/ai/context";
 import type { ModuleKey } from "../../../lib/paths";
@@ -139,9 +140,12 @@ export function AiRuntimeProvider({ children }: { children: ReactNode }) {
   threadMessagesRef.current = threadMessages;
 
   useEffect(() => {
-    if (currentModelSelectionId) return;
-    const first = firstModelSelectionId(providers);
-    if (first) setCurrentModelSelectionId(first);
+    if (currentModelSelectionId && resolveModelSelection(providers, currentModelSelectionId)) {
+      return;
+    }
+    const configured = useSettingsStore.getState().aiScenarioAssistantModelSelectionId;
+    const resolved = resolveScenarioModelSelectionId(providers, configured);
+    if (resolved) setCurrentModelSelectionId(resolved);
   }, [currentModelSelectionId, providers, setCurrentModelSelectionId]);
 
   useEffect(() => {
@@ -154,11 +158,12 @@ export function AiRuntimeProvider({ children }: { children: ReactNode }) {
 
   const getModelConfig = useCallback((): ModelConfig | null => {
     const selectionId = currentModelSelectionId;
-    if (!selectionId) {
-      const first = firstModelSelectionId(providers);
-      if (!first) return null;
-      setCurrentModelSelectionId(first);
-      const resolved = resolveModelSelection(providers, first);
+    if (!selectionId || !resolveModelSelection(providers, selectionId)) {
+      const configured = useSettingsStore.getState().aiScenarioAssistantModelSelectionId;
+      const fallback = resolveScenarioModelSelectionId(providers, configured);
+      if (!fallback) return null;
+      setCurrentModelSelectionId(fallback);
+      const resolved = resolveModelSelection(providers, fallback);
       if (!resolved) return null;
       return resolved;
     }

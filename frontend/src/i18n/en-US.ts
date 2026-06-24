@@ -1965,6 +1965,19 @@ export const enUS: TranslationDict = {
       title: "Other",
       desc: "AI-related preferences that don't belong to models or ACP services.",
     },
+    aiScenarios: {
+      title: "Application Scenarios",
+      description: "Choose a default model for each AI scenario. Falls back to the first available model when unset.",
+      noModel: "Add and enable AI models above first.",
+      formFill: {
+        label: "Form Fill",
+        desc: "Model used when AI recognizes clipboard content to fill form fields in dialogs.",
+      },
+      assistant: {
+        label: "AI Assistant",
+        desc: "Default model for AI assistant chats; can be changed temporarily in the assistant UI.",
+      },
+    },
     acpServices: {
       title: "ACP Services",
       description: "Maintain a list of ACP (Agent Communication Protocol) server applications. Only one can be marked as the active service at a time.",

@@ -165,6 +165,10 @@ interface SettingsState {
   knowledgeChunkOverlap: number;
   knowledgeTopN: number;
   knowledgeEmbeddingModelSelectionId: string | null;
+  /** 表单填充场景默认模型（aiModelsStore selection id） */
+  aiScenarioFormFillModelSelectionId: string | null;
+  /** AI 助手场景默认模型（aiModelsStore selection id） */
+  aiScenarioAssistantModelSelectionId: string | null;
   databaseQueryPageSize: DatabaseQueryPageSize;
   sqlEditorFontFamily: string;
   sqlEditorFontSize: SqlEditorFontSize;
@@ -186,6 +190,9 @@ interface SettingsState {
   >>) => void;
   setKnowledgeSettings: (patch: Partial<Pick<SettingsState,
     "knowledgeChunkSize" | "knowledgeChunkOverlap" | "knowledgeTopN" | "knowledgeEmbeddingModelSelectionId"
+  >>) => void;
+  setAiScenarioSettings: (patch: Partial<Pick<SettingsState,
+    "aiScenarioFormFillModelSelectionId" | "aiScenarioAssistantModelSelectionId"
   >>) => void;
   setDatabaseSettings: (patch: Partial<Pick<SettingsState,
     "databaseQueryPageSize" | "sqlEditorFontFamily" | "sqlEditorFontSize" | "sqlEditorLineHeight"
@@ -261,6 +268,8 @@ export const useSettingsStore = create<SettingsState>()(
       knowledgeChunkOverlap: KNOWLEDGE_CHUNK_OVERLAP.default,
       knowledgeTopN: KNOWLEDGE_TOP_N.default,
       knowledgeEmbeddingModelSelectionId: null,
+      aiScenarioFormFillModelSelectionId: null,
+      aiScenarioAssistantModelSelectionId: null,
       databaseQueryPageSize: DEFAULT_DATABASE_QUERY_PAGE_SIZE,
       sqlEditorFontFamily: DEFAULT_SQL_EDITOR_FONT_FAMILY,
       sqlEditorFontSize: DEFAULT_SQL_EDITOR_FONT_SIZE,
@@ -307,6 +316,7 @@ export const useSettingsStore = create<SettingsState>()(
                 : state.knowledgeTopN,
           };
         }),
+      setAiScenarioSettings: (patch) => set(patch),
       setDatabaseSettings: (patch) =>
         set((state) => ({
           databaseQueryPageSize:
@@ -352,6 +362,8 @@ export const useSettingsStore = create<SettingsState>()(
         knowledgeChunkOverlap: state.knowledgeChunkOverlap,
         knowledgeTopN: state.knowledgeTopN,
         knowledgeEmbeddingModelSelectionId: state.knowledgeEmbeddingModelSelectionId,
+        aiScenarioFormFillModelSelectionId: state.aiScenarioFormFillModelSelectionId,
+        aiScenarioAssistantModelSelectionId: state.aiScenarioAssistantModelSelectionId,
         databaseQueryPageSize: state.databaseQueryPageSize,
         sqlEditorFontFamily: state.sqlEditorFontFamily,
         sqlEditorFontSize: state.sqlEditorFontSize,

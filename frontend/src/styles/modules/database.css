@@ -2020,6 +2020,11 @@
         gap: var(--sp-2);
     }
 
+    .db-toolbox-side__filters--source-row {
+        flex-wrap: nowrap;
+        align-items: center;
+    }
+
     .db-toolbox-side__filters .db-select {
         flex: 1;
         min-width: 120px;
@@ -2028,6 +2033,17 @@
         border-radius: var(--r-sm);
         color: var(--fg);
         font-size: 11px;
+    }
+
+    .db-toolbox-side__filters--source-row .db-select {
+        flex: 0 1 140px;
+        min-width: 96px;
+    }
+
+    .db-toolbox-side__filters--source-row .db-toolbox-search {
+        flex: 1 1 120px;
+        min-width: 72px;
+        width: auto;
     }
 
     .db-toolbox-select-all {

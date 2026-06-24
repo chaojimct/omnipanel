@@ -11,6 +11,7 @@ import {
   type FormFillFieldDef,
   type FormFillValue,
 } from "../ai/simple/formFill";
+import { useFormFillModelSelectionId } from "../../lib/aiScenarioModels";
 import { useAiModelsStore } from "../../stores/aiModelsStore";
 
 export { FormField, type FormFieldProps } from "./FormField";
@@ -118,6 +119,7 @@ export function FormDialog({
 }: FormDialogProps) {
   const { t } = useI18n();
   const providers = useAiModelsStore((s) => s.providers);
+  const formFillScenarioModelId = useFormFillModelSelectionId();
   const [aiRecognizing, setAiRecognizing] = useState(false);
   const [clipboardStatus, setClipboardStatus] = useState<{
     kind: FormDialogStatusKind;
@@ -145,7 +147,10 @@ export function FormDialog({
         return;
       }
 
-      const modelConfig = resolveFormFillModelConfig(providers, aiModelSelectionId);
+      const modelConfig = resolveFormFillModelConfig(
+        providers,
+        aiModelSelectionId ?? formFillScenarioModelId,
+      );
       if (!modelConfig) {
         setClipboardStatus({ kind: "error", message: t("formDialog.clipboard.noModel") });
         return;
@@ -170,6 +175,7 @@ export function FormDialog({
       aiFillContext,
       aiFillFields,
       aiModelSelectionId,
+      formFillScenarioModelId,
       onAiFill,
       onClipboardRecognize,
       providers,

@@ -3268,12 +3268,13 @@ export function DatabasePanel() {
   const moduleSoftRefreshKey = useMemo(
     () =>
       [
+        moduleTab,
         connections.map((c) => c.id).join(","),
         connectionsLoading ? "1" : "0",
         workspaceTabs.map((t) => `${t.id}:${t.workspaceOnly ? "1" : "0"}`).join(","),
         activeWorkspaceTabId,
       ].join("|"),
-    [connections, connectionsLoading, workspaceTabs, activeWorkspaceTabId],
+    [moduleTab, connections, connectionsLoading, workspaceTabs, activeWorkspaceTabId],
   );
 
   const sidebarLinkageConnId = useMemo(() => {
@@ -3368,10 +3369,9 @@ export function DatabasePanel() {
       onActiveTabChange={(id) => setModuleTab(id as DbModuleTab)}
       renderPanel={(panelId) =>
         panelId === "transfer" ? (
-    moduleTab === "transfer" ? (
     <div className="db-module-transfer">
       <DatabaseToolbox
-        active
+        active={moduleTab === "transfer"}
         connections={toolboxConnections}
         initialSourceConnectionId={
           toolboxSeed.connId ??
@@ -3380,7 +3380,6 @@ export function DatabasePanel() {
         initialSourceDatabase={toolboxSeed.database}
       />
     </div>
-    ) : null
   ) : (
     <>
       <SidebarWorkspace

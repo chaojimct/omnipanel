@@ -1924,6 +1924,19 @@ export const zhCN = {
       title: "其他",
       desc: "不归属于模型或 ACP 服务的 AI 相关偏好设置。",
     },
+    aiScenarios: {
+      title: "应用场景",
+      description: "为不同 AI 使用场景指定默认模型；未配置时使用第一个可用模型。",
+      noModel: "请先在上方添加并启用 AI 模型。",
+      formFill: {
+        label: "表单填充",
+        desc: "对话框中「AI 识别」从剪贴板填充表单字段时使用的模型。",
+      },
+      assistant: {
+        label: "AI 助手",
+        desc: "AI 助手对话的默认模型；可在助手界面临时切换。",
+      },
+    },
     acpServices: {
       title: "ACP 服务",
       description: "维护 ACP（Agent Communication Protocol）服务器应用列表。同一时刻只能有一个被标记为「当前使用」。",

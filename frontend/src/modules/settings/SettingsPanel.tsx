@@ -56,6 +56,7 @@ import { AddMcpServiceDialog } from "../../components/settings/AddMcpServiceDial
 import { McpServiceToolList } from "../../components/settings/McpServiceToolList";
 import { ProviderModelList } from "../../components/settings/ProviderModelList";
 import { DataBackupSection } from "../../components/settings/DataBackupSection";
+import { AiScenarioSection } from "../../components/settings/AiScenarioSection";
 import { Button } from "../../components/ui/Button";
 import { ModuleEmptyState } from "../../components/ui/ModuleEmptyState";
 import { Select } from "../../components/ui/Select";
@@ -1265,6 +1266,8 @@ function AiSection() {
   return (
     <div className="settings-panel active">
       <ModelsSection />
+      <div className="settings-section-divider" />
+      <AiScenarioSection />
       <div className="settings-section-divider" />
       <AcpServicesSection />
       <div className="settings-section-divider" />
