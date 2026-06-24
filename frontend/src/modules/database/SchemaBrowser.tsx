@@ -1013,6 +1013,8 @@ export function SchemaBrowser({
     estimateSize: (index) => estimateSchemaFlatRowSize(flatRows[index]),
     overscan: 24,
   });
+  const rowVirtualizerRef = useRef(rowVirtualizer);
+  rowVirtualizerRef.current = rowVirtualizer;
 
   const hasAnyConnection = connections.length > 0;
 
@@ -1105,7 +1107,8 @@ export function SchemaBrowser({
         container,
         flatRows,
         rowIndex,
-        (index) => rowVirtualizer.scrollToIndex(index, { align: "center", behavior: "auto" }),
+        (index) =>
+          rowVirtualizerRef.current.scrollToIndex(index, { align: "center", behavior: "auto" }),
       );
     };
 
@@ -1131,7 +1134,7 @@ export function SchemaBrowser({
         cancelAnimationFrame(sidebarLinkageRafRef.current);
       }
     };
-  }, [sidebarScrollTargetId, loading, search, flatRows, rowVirtualizer]);
+  }, [sidebarScrollTargetId, loading, search, flatRows]);
 
   const filterDialogConn = filterDialogConnId
     ? connections.find((conn) => conn.config.id === filterDialogConnId)

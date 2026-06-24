@@ -7,8 +7,6 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { useCtrlKeyHeld } from "../../hooks/useCtrlKeyHeld";
-import { isPointerCopyModifier } from "../../lib/platform";
 import {
   DockviewReact,
   type DockviewApi,
@@ -58,26 +56,6 @@ import {
 } from "./dockHeaderPosition";
 import type { DockableTab } from "./dockableTab";
 
-const COPY_OVERLAY_CLASS = "dock-panel-copy-overlay";
-const COPY_TARGET_CONTAINER_CLASS = "dock-panel--copy-target";
-
-/** 只取当前 DockableWorkspace 实例拥有的 panel tabId，避免嵌套 dock 误命中 */
-function resolveOwnedDockTabId(
-  container: HTMLElement,
-  dockRoot: HTMLElement,
-): string | undefined {
-  const surfaces = container.querySelectorAll<HTMLElement>(
-    ".dock-pane-surface[data-dock-tab-id]",
-  );
-  for (let i = 0; i < surfaces.length; i++) {
-    const surface = surfaces[i]!;
-    if (surface.closest(".dockable-workspace") === dockRoot) {
-      return surface.dataset.dockTabId;
-    }
-  }
-  return undefined;
-}
-
 export type { DockableTab } from "./dockableTab";
 
 export interface DockAddTabConfig {
@@ -107,8 +85,6 @@ export interface DockableWorkspaceProps extends DockPanelRefreshProps {
     tabId: string,
     index: number,
   ) => void;
-  /** Ctrl+点击 tab 或高亮面板时复制到工程工作区 */
-  onCtrlCopyTab?: (tabId: string) => void;
   /**
    * 通过 dockview `containerApi.addPanel` 创建新面板。
    * 返回新面板的 id / title；由调用方同步业务 store。
@@ -195,7 +171,6 @@ export function DockableWorkspace({
   className,
   emptyContent,
   onTabContextMenu,
-  onCtrlCopyTab,
   createPanelRequest,
   dockScope,
   acceptExternalDrops = false,
@@ -258,15 +233,9 @@ export function DockableWorkspace({
   onExternalDropRef.current = onExternalDrop;
   const onTabContextMenuRef = useRef(onTabContextMenu);
   onTabContextMenuRef.current = onTabContextMenu;
-  const onCtrlCopyTabRef = useRef(onCtrlCopyTab);
-  onCtrlCopyTabRef.current = onCtrlCopyTab;
-  const ctrlHeld = useCtrlKeyHeld();
-  const copyModeActive = ctrlHeld && Boolean(onCtrlCopyTab);
-
-  const highlightedGroupRef = useRef<HTMLElement | null>(null);
-  const lastPointerRef = useRef<{ x: number; y: number } | null>(null);
   const onPanelTransferredOutRef = useRef(onPanelTransferredOut);
   onPanelTransferredOutRef.current = onPanelTransferredOut;
+
   const tabsRef = useRef(tabs);
   tabsRef.current = tabs;
   const activeTabIdRef = useRef(activeTabId);
@@ -336,7 +305,6 @@ export function DockableWorkspace({
       tabsRef,
       tabStyleRef,
       onTabContextMenuRef,
-      onCtrlCopyTabRef,
     }),
     [],
   );
@@ -429,14 +397,6 @@ export function DockableWorkspace({
             key={`${tabId}:${contentRev}`}
             className="dock-pane-surface"
             data-dock-tab-id={tabId}
-            onClick={(e) => {
-              const onCopy = onCtrlCopyTabRef.current;
-              const mod = isPointerCopyModifier(e);
-              if (!onCopy || !mod) return;
-              e.preventDefault();
-              e.stopPropagation();
-              onCopy(tabId);
-            }}
           >
             {renderPanelRef.current(tabId)}
           </div>
@@ -587,116 +547,8 @@ export function DockableWorkspace({
     [],
   );
 
-  const clearCopyHighlight = useCallback(() => {
-    const container = highlightedGroupRef.current;
-    if (!container) return;
-    container.querySelector(`.${COPY_OVERLAY_CLASS}`)?.remove();
-    container.classList.remove(COPY_TARGET_CONTAINER_CLASS);
-    highlightedGroupRef.current = null;
-  }, []);
-
-  // 持续记录指针位置，Ctrl 按下时可立即命中当前悬停的 panel
-  useEffect(() => {
-    if (!onCtrlCopyTab) return;
-    const onMove = (e: MouseEvent) => {
-      lastPointerRef.current = { x: e.clientX, y: e.clientY };
-    };
-    document.addEventListener("mousemove", onMove, { passive: true });
-    return () => document.removeEventListener("mousemove", onMove);
-  }, [onCtrlCopyTab]);
-
-  // Ctrl 按下时：悬停 dock panel 内容区显示复制目标高亮
-  const wrapperRef = useRef<HTMLDivElement | null>(null);
-  useEffect(() => {
-    const root = wrapperRef.current;
-    if (!root || !copyModeActive) {
-      clearCopyHighlight();
-      return;
-    }
-
-    const findContentContainer = (target: EventTarget | null): HTMLElement | null => {
-      const el = target as HTMLElement | null;
-      if (!el) return null;
-      const nestedDock = el.closest(".dockable-workspace");
-      if (nestedDock && nestedDock !== root) {
-        return null;
-      }
-      const direct = el.closest(".dv-content-container") as HTMLElement | null;
-      if (direct && root.contains(direct)) return direct;
-      const group = el.closest(".dv-groupview") as HTMLElement | null;
-      if (!group || !root.contains(group)) return null;
-      return group.querySelector(".dv-content-container") as HTMLElement | null;
-    };
-
-    const applyHighlight = (target: EventTarget | null) => {
-      const container = findContentContainer(target);
-      if (!container) {
-        clearCopyHighlight();
-        return;
-      }
-      if (highlightedGroupRef.current === container) return;
-      clearCopyHighlight();
-      container.classList.add(COPY_TARGET_CONTAINER_CLASS);
-      const overlay = document.createElement("div");
-      overlay.className = COPY_OVERLAY_CLASS;
-      overlay.setAttribute("aria-hidden", "true");
-      overlay.addEventListener("click", (e) => {
-        const onCopy = onCtrlCopyTabRef.current;
-        const mod = isPointerCopyModifier(e);
-        const tabId = resolveOwnedDockTabId(container, root);
-        if (!onCopy || !mod) return;
-        e.preventDefault();
-        e.stopPropagation();
-        if (tabId) {
-          onCopy(tabId);
-        }
-      });
-      container.appendChild(overlay);
-      highlightedGroupRef.current = container;
-    };
-
-    const applyHighlightAtPoint = (x: number, y: number) => {
-      applyHighlight(document.elementFromPoint(x, y));
-    };
-
-    const onOver = (e: MouseEvent) => {
-      lastPointerRef.current = { x: e.clientX, y: e.clientY };
-      applyHighlight(e.target);
-    };
-    const onMove = (e: MouseEvent) => {
-      lastPointerRef.current = { x: e.clientX, y: e.clientY };
-      applyHighlight(e.target);
-    };
-    const onOut = (e: MouseEvent) => {
-      const container = highlightedGroupRef.current;
-      if (!container) return;
-      const related = e.relatedTarget as Node | null;
-      if (related && container.contains(related)) return;
-      const group = container.closest(".dv-groupview");
-      if (related && group?.contains(related)) return;
-      if (!related || !root.contains(related)) {
-        clearCopyHighlight();
-      }
-    };
-
-    root.addEventListener("mouseover", onOver);
-    root.addEventListener("mousemove", onMove);
-    root.addEventListener("mouseout", onOut);
-
-    const pos = lastPointerRef.current;
-    if (pos) {
-      applyHighlightAtPoint(pos.x, pos.y);
-    }
-
-    return () => {
-      root.removeEventListener("mouseover", onOver);
-      root.removeEventListener("mousemove", onMove);
-      root.removeEventListener("mouseout", onOut);
-      clearCopyHighlight();
-    };
-  }, [copyModeActive, clearCopyHighlight, tabs.length]);
-
   // 自定义 tab 关闭按钮 drag-ignore
+  const wrapperRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     const root = wrapperRef.current;
     if (!root) return;
@@ -1192,7 +1044,7 @@ export function DockableWorkspace({
   return (
     <div
       ref={wrapperRef}
-      className={`dockable-workspace dock-header-${defaultHeaderPosition}${windowControl ? " dock-window-control" : ""}${copyModeActive ? " dock-copy-mode" : ""}${className ? ` ${className}` : ""}`}
+      className={`dockable-workspace dock-header-${defaultHeaderPosition}${windowControl ? " dock-window-control" : ""}${className ? ` ${className}` : ""}`}
     >
       <DockErrorBoundary>
         {tabs.length === 0 && emptyContent ? (

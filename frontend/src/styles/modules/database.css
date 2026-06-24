@@ -1135,6 +1135,21 @@
         gap: var(--sp-2);
     }
 
+    .db-filter-toggle-all {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
+        color: var(--fg);
+        cursor: pointer;
+        user-select: none;
+    }
+
+    .db-filter-toggle-all input[type="checkbox"] {
+        margin: 0;
+        cursor: pointer;
+    }
+
     .db-filter-search {
         position: relative;
         display: flex;

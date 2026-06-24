@@ -9,7 +9,6 @@ export interface DockTabHeaderRuntime {
       | ((event: MouseEvent, tabId: string, index: number) => void)
       | undefined;
   };
-  onCtrlCopyTabRef: { current: ((tabId: string) => void) | undefined };
 }
 
 export const DockTabHeaderRuntimeContext = createContext<DockTabHeaderRuntime | null>(

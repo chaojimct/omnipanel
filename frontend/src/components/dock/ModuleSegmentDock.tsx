@@ -40,8 +40,6 @@ export interface ModuleSegmentDockProps extends DockPanelRefreshProps {
     tabId: string,
     index: number,
   ) => void;
-  /** Ctrl+点击 tab 或高亮面板时复制到工程工作区 */
-  onCtrlCopyTab?: (tabId: string) => void;
   emptyContent?: ReactNode;
   dockScope?: string;
   /** 是否接受其他 dockview 拖入的 panel */
@@ -69,7 +67,6 @@ export function ModuleSegmentDock({
   onSavedLayoutChange,
   addTabConfig,
   onTabContextMenu,
-  onCtrlCopyTab,
   emptyContent,
   dockScope,
   acceptExternalDrops,
@@ -119,7 +116,6 @@ export function ModuleSegmentDock({
       renderPanel={renderPanel}
       addTabConfig={addTabConfig}
       onTabContextMenu={onTabContextMenu}
-      onCtrlCopyTab={onCtrlCopyTab}
       emptyContent={emptyContent}
       preActions={preActions}
       acceptExternalDrops={acceptExternalDrops}

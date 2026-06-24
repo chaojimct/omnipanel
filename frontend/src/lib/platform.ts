@@ -11,12 +11,6 @@ export function isModKeyPressed(e: KeyboardEvent): boolean {
   return isMacOS() ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
 }
 
-export {
-  isPointerCopyModifier,
-  isWorkspaceAddPanelModifierHeld,
-  workspaceAddPanelModifierLabel,
-} from "./workspaceAddPanelModifier";
-
 /** 修饰键展示标签：macOS 为 ⌘，其它为 Ctrl */
 export function modKeyLabel(): string {
   return isMacOS() ? "⌘" : "Ctrl";

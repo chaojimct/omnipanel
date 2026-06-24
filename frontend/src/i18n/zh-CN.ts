@@ -422,7 +422,6 @@ export const zhCN = {
       moveTo: "移动到工作区",
       noOther: "没有其他工作区",
       addToCurrent: "添加到当前工作区",
-      addPanelHint: "{modifier}+点击添加到当前工作区",
     },
     detailPanel: {
       modeDrawer: "切换为右侧抽屉",
@@ -450,7 +449,7 @@ export const zhCN = {
       },
     },
     workspacePreview: {
-      noPanels: "暂无面板，{modifier}+点击侧边栏或模块内面板添加",
+      noPanels: "暂无面板",
       removePanel: "从工作区移除",
       confirmRemoveTitle: "移除面板",
       confirmRemovePanel: "确定从工作区移除面板「{name}」吗？",
@@ -1017,7 +1016,7 @@ export const zhCN = {
     },
     workspace: {
       sqlTab: "SQL",
-      emptyTabs: "当前没有打开的标签。在 Schema 栏中选择表，或新建一个查询。",
+      emptyTabs: "当前没有打开的标签。在 Schema 栏中选择表，或新建查询。",
       newQuery: "新建查询",
       recentClosed: "最近关闭",
       recentClosedEmpty: "暂无最近关闭的面板",
@@ -1849,9 +1848,9 @@ export const zhCN = {
       clearCacheConfirm: "将清除所有布局与界面习惯缓存（Dock 分屏、模块 Tab、快捷键覆盖等）。应用设置与连接数据不会删除。是否继续？",
       clearCacheDone: "应用缓存已清除。部分界面将在切换模块后生效。",
       clearUserDataLabel: "清除用户数据",
-      clearUserDataDesc: "删除各模块中您创建的数据：连接、终端会话、任务、工作流、知识库、AI 模型与对话等。此操作不可恢复。",
+      clearUserDataDesc: "删除各模块中您创建的数据：连接、终端会话、任务、工作流、知识库、AI 模型与对话、数据库连接与 SQL 文件等。此操作不可恢复。",
       clearUserDataBtn: "清除用户数据",
-      clearUserDataConfirm: "将永久删除所有用户创建的数据（连接、任务、工作流、终端标签、AI 配置等）。内置本地连接会保留。是否继续？",
+      clearUserDataConfirm: "将永久删除所有用户创建的数据（连接、任务、工作流、终端标签、AI 配置、数据库连接、Schema 缓存、SQL 文件与工作区标签等）。内置本地连接会保留。是否继续？",
       clearUserDataDone: "用户数据已清除。",
       clearing: "处理中…",
     },
@@ -1907,13 +1906,6 @@ export const zhCN = {
         openSettings: "打开设置",
         switchNthTab: "切换到第 N 个标签",
         formatSql: "格式化 SQL 语句",
-        addPanelToWorkspace: "加入工作区点击修饰键",
-        addPanelToWorkspaceDesc: "按住所选修饰键并点击侧边栏模块或模块内面板，将其加入工程工作区。",
-      },
-      modifiers: {
-        alt: "Alt",
-        mod: "{mod}（主修饰键）",
-        shift: "Shift",
       },
     },
     aiDisplay: {

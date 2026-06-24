@@ -1,7 +1,7 @@
 /**
  * 工作区面板添加 API（三种情况）：
  *
- * 1. 顶级模块路由 — addModuleRouteToWorkspace / useWorkspaceCtrlCopyTab
+ * 1. 顶级模块路由 — addModuleRouteToWorkspace
  * 2. 子面板/组件（参数快照）— addComponentToWorkspace + registerWorkspaceComponent
  * 3. 单个组件 — 用 WorkspaceComponent 包裹，等同情况 2
  */

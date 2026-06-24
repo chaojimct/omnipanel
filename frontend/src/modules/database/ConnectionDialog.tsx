@@ -27,6 +27,33 @@ const ENGINE_DEFAULTS: Record<DbEngine, { port: string; icon: string }> = {
   mongodb: { port: "27017", icon: "MG" },
 };
 
+const ENGINE_ALIASES: Record<string, DbEngine> = {
+  mysql: "mysql",
+  mariadb: "mysql",
+  postgresql: "postgresql",
+  postgres: "postgresql",
+  pg: "postgresql",
+  sqlite: "sqlite",
+  sqlserver: "sqlserver",
+  mssql: "sqlserver",
+  "sql server": "sqlserver",
+  redis: "redis",
+  mongodb: "mongodb",
+  mongo: "mongodb",
+};
+
+function resolveEngineFromAi(raw: FormFillValue): DbEngine | null {
+  const normalized = String(raw).trim().toLowerCase();
+  const alias = ENGINE_ALIASES[normalized];
+  if (alias) {
+    return alias;
+  }
+  if (normalized in ENGINE_DEFAULTS) {
+    return normalized as DbEngine;
+  }
+  return null;
+}
+
 const EMPTY_FORM: ConnectionFormData = {
   engine: "mysql",
   name: "",
@@ -193,11 +220,12 @@ export function ConnectionDialog({
           continue;
         }
         if (key === "engine") {
-          const engine = String(raw).trim().toLowerCase();
-          if (engine in ENGINE_DEFAULTS) {
-            const typed = engine as DbEngine;
+          const typed = resolveEngineFromAi(raw);
+          if (typed) {
             next.engine = typed;
-            next.port = ENGINE_DEFAULTS[typed].port;
+            if (!values.port) {
+              next.port = ENGINE_DEFAULTS[typed].port;
+            }
           }
           continue;
         }
@@ -212,6 +240,9 @@ export function ConnectionDialog({
         if (key in next) {
           (next as Record<string, unknown>)[key] = String(raw);
         }
+      }
+      if (!next.name.trim() && next.host.trim()) {
+        next.name = next.host.trim();
       }
       return next;
     });

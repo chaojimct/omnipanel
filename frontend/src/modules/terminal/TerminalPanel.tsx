@@ -313,21 +313,6 @@ export function TerminalPanel() {
     ],
   );
 
-  const handleCtrlCopyTab = useCallback(
-    (tabId: string) => {
-      if (!activeWorkspaceId) return;
-      const ctxTab = visibleTabs.find((tab) => tab.id === tabId);
-      if (!ctxTab) {
-        return;
-      }
-      addSnapshotToWorkspace(
-        activeWorkspaceId,
-        copyTerminalTabToWorkspaceSnapshot(ctxTab),
-      );
-    },
-    [visibleTabs, activeWorkspaceId],
-  );
-
   return (
     <>
       <ModuleSegmentDock
@@ -342,7 +327,6 @@ export function TerminalPanel() {
         onSavedLayoutChange={setDockLayout}
         renderPanel={renderDockPanel}
         onTabContextMenu={handleDockTabContextMenu}
-        onCtrlCopyTab={handleCtrlCopyTab}
         addTabConfig={addTabConfig}
         enabled={isActiveRoute}
         emptyContent={

@@ -426,7 +426,6 @@ export const enUS: TranslationDict = {
       moveTo: "Move to Workspace",
       noOther: "No other workspaces",
       addToCurrent: "Add to Current Workspace",
-      addPanelHint: "{modifier}+click to add to current workspace",
     },
     detailPanel: {
       modeDrawer: "Switch to right drawer",
@@ -454,7 +453,7 @@ export const enUS: TranslationDict = {
       },
     },
     workspacePreview: {
-      noPanels: "No panels yet — {modifier}+click sidebar modules or in-module panels to add",
+      noPanels: "No panels yet",
       removePanel: "Remove from workspace",
       confirmRemoveTitle: "Remove panel",
       confirmRemovePanel: "Remove panel \"{name}\" from this workspace?",
@@ -1890,9 +1889,9 @@ export const enUS: TranslationDict = {
       clearCacheConfirm: "This clears layout and UI habit cache (dock splits, module tabs, shortcut overrides, etc.). Settings and connections are not removed. Continue?",
       clearCacheDone: "App cache cleared. Some UI changes apply after switching modules.",
       clearUserDataLabel: "Clear User Data",
-      clearUserDataDesc: "Delete user-created data across modules: connections, terminal sessions, tasks, workflows, knowledge, AI models and chats. This cannot be undone.",
+      clearUserDataDesc: "Delete user-created data across modules: connections, terminal sessions, tasks, workflows, knowledge, AI models and chats, database connections and SQL files, etc. This cannot be undone.",
       clearUserDataBtn: "Clear User Data",
-      clearUserDataConfirm: "This permanently deletes all user-created data (connections, tasks, workflows, terminal tabs, AI config, etc.). Built-in local connections are kept. Continue?",
+      clearUserDataConfirm: "This permanently deletes all user-created data (connections, tasks, workflows, terminal tabs, AI config, database connections, schema cache, SQL files, workspace tabs, etc.). Built-in local connections are kept. Continue?",
       clearUserDataDone: "User data cleared.",
       clearing: "Working…",
     },
@@ -1948,13 +1947,6 @@ export const enUS: TranslationDict = {
         openSettings: "Open Settings",
         switchNthTab: "Switch to Nth Tab",
         formatSql: "Format SQL",
-        addPanelToWorkspace: "Add-to-workspace click modifier",
-        addPanelToWorkspaceDesc: "Hold the selected modifier and click a sidebar module or in-module panel to add it to the engineering workspace.",
-      },
-      modifiers: {
-        alt: "Alt",
-        mod: "{mod} (primary modifier)",
-        shift: "Shift",
       },
     },
     aiDisplay: {

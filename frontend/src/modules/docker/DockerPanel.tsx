@@ -61,8 +61,6 @@ import { commands } from "../../ipc/bindings";
 import { DOCKER_LOCAL_CONNECTION_ID, isBuiltinLocalDockerConnection } from "./constants";
 import { useDockerWorkspaceTabs, type DockerWorkspaceTab, DOCKER_WORKSPACE_TABS } from "./dockerWorkspaceTabs";
 import { usePersistedModuleTab } from "../../hooks/usePersistedModuleTab";
-import { useWorkspaceCtrlCopyTab } from "../../hooks/useWorkspaceCtrlCopyTab";
-
 interface ConfirmState {
   title: string;
   message: string;
@@ -476,9 +474,6 @@ export function DockerPanel() {
     [workspaceTopbarTabs],
   );
 
-  const handleCtrlCopyTab = useWorkspaceCtrlCopyTab("docker", (tabId) =>
-    dockerSegmentTabs.find((tab) => tab.id === tabId)?.label ?? tabId,
-  );
 
   /** dockview 面板内容不随父级 state 自动重绘；数据/筛选/选中变化时 bump */
   const dockerPanelContentKey = useMemo(
@@ -644,7 +639,6 @@ export function DockerPanel() {
         onActiveTabChange={(id) => setTab(id as DockerWorkspaceTab)}
         enabled={isActiveRoute}
         panelContentKey={dockerPanelContentKey}
-        onCtrlCopyTab={handleCtrlCopyTab}
         renderPanel={(tabId) => (
         <SidebarWorkspace
           preset="server"

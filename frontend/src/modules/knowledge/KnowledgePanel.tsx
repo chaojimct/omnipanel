@@ -4,7 +4,6 @@ import { useI18n } from "../../i18n";
 import { SidebarWorkspace } from "../../components/ui/SidebarWorkspace";
 import { ModuleSegmentDock } from "../../components/dock";
 import { usePersistedModuleTab } from "../../hooks/usePersistedModuleTab";
-import { useWorkspaceCtrlCopyTab } from "../../hooks/useWorkspaceCtrlCopyTab";
 import { useKnowledgeStore } from "../../stores/knowledgeStore";
 import { KnowledgeSidebar } from "./KnowledgeSidebar";
 import { KnowledgeMarkdownWorkspace } from "./KnowledgeMarkdownWorkspace";
@@ -66,9 +65,6 @@ export function KnowledgePanel() {
     return null;
   }, []);
 
-  const handleCtrlCopyTab = useWorkspaceCtrlCopyTab("knowledge", (tabId) =>
-    segmentTabs.find((tab) => tab.id === tabId)?.label ?? tabId,
-  );
 
   return (
     <ModuleSegmentDock
@@ -78,7 +74,6 @@ export function KnowledgePanel() {
       onActiveTabChange={(id) => setTab(id as KnowledgeModuleTab)}
       enabled={isActiveRoute}
       renderPanel={renderPanel}
-      onCtrlCopyTab={handleCtrlCopyTab}
     />
   );
 }

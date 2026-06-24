@@ -1,10 +1,9 @@
 import { useNavigate, useLocation } from "react-router-dom";
 import { startTransition } from "react";
-import type { MouseEvent, ReactNode } from "react";
+import type { ReactNode } from "react";
 import { useAiStore } from "../../stores/aiStore";
 import { useSettingsUiStore } from "../../stores/settingsUiStore";
 import { useBottomPanelStore } from "../../stores/bottomPanelStore";
-import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { useI18n } from "../../i18n";
 import { AppLogo } from "../ui/AppLogo";
 import {
@@ -12,9 +11,6 @@ import {
   toggleWorkspaceFromChromeIcon,
 } from "../../lib/workspaceNavigation";
 import { isDashboardPath, MODULE_PATHS } from "../../lib/paths";
-import { moduleKeyFromPath, moduleNavI18nKey } from "../../lib/workspaceModuleRoutes";
-import { addModulePanelToWorkspace } from "../../lib/workspaceTabActions";
-import { isPointerCopyModifier, workspaceAddPanelModifierLabel } from "../../lib/platform";
 
 const navPaths = [
   {
@@ -120,7 +116,6 @@ export function Sidebar() {
   const { t } = useI18n();
   const navigate = useNavigate();
   const location = useLocation();
-  const workspaceId = useWorkspaceStore((s) => s.workspace.id);
   const isBottomFullscreen = useBottomPanelStore((s) => s.isFullscreen);
   /** 看板或工作区全屏时高亮左上角入口 */
   const isWorkspaceHome =
@@ -143,16 +138,7 @@ export function Sidebar() {
     });
   };
 
-  const handleModuleNav = (path: string, event: MouseEvent) => {
-    if (isPointerCopyModifier(event)) {
-      event.preventDefault();
-      const moduleKey = moduleKeyFromPath(path);
-      if (!moduleKey) {
-        return;
-      }
-      addModulePanelToWorkspace(workspaceId, moduleKey, t(moduleNavI18nKey(moduleKey)));
-      return;
-    }
+  const handleModuleNav = (path: string) => {
     go(path);
   };
 
@@ -161,8 +147,8 @@ export function Sidebar() {
       key={item.path}
       type="button"
       className={`sidebar-item${isActive(item.path) ? " active" : ""}`}
-      title={`${t(item.key)} (${t("shell.workspace.addPanelHint", { modifier: workspaceAddPanelModifierLabel() })})`}
-      onClick={(event) => handleModuleNav(item.path, event)}
+      title={t(item.key)}
+      onClick={() => handleModuleNav(item.path)}
     >
       {item.icon}
     </button>

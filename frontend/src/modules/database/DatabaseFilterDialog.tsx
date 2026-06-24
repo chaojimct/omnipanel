@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useI18n } from "../../i18n";
-import { Button } from "../../components/ui/Button";
 import { FormDialog } from "../../components/ui/FormDialog";
 import { rankByFuzzy } from "../../lib/fuzzyMatch";
 
@@ -37,6 +36,7 @@ export function SchemaFilterDialog({
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [query, setQuery] = useState("");
   const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const selectAllRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     if (!open) {
@@ -57,6 +57,17 @@ export function SchemaFilterDialog({
     [ordered, query],
   );
 
+  const allSelected = ordered.length > 0 && visible.size === ordered.length;
+  const someSelected = visible.size > 0;
+
+  useEffect(() => {
+    const el = selectAllRef.current;
+    if (!el) {
+      return;
+    }
+    el.indeterminate = someSelected && !allSelected;
+  }, [someSelected, allSelected]);
+
   const toggleOne = (name: string) => {
     setVisible((prev) => {
       const next = new Set(prev);
@@ -69,8 +80,9 @@ export function SchemaFilterDialog({
     });
   };
 
-  const selectAll = () => setVisible(new Set(ordered));
-  const deselectAll = () => setVisible(new Set());
+  const toggleAll = () => {
+    setVisible(allSelected ? new Set() : new Set(ordered));
+  };
 
   const moveItem = (from: number, to: number) => {
     if (from === to || from < 0 || to < 0 || from >= ordered.length || to >= ordered.length) {
@@ -102,15 +114,18 @@ export function SchemaFilterDialog({
       }}
     >
           <div className="db-filter-toolbar">
+            <label className="db-filter-toggle-all">
+              <input
+                ref={selectAllRef}
+                type="checkbox"
+                checked={allSelected}
+                onChange={toggleAll}
+              />
+              <span>{t("database.filter.selectAll")}</span>
+            </label>
             <span className="db-filter-count">
               {t("database.filter.selectedCount", { count: visible.size, total: ordered.length })}
             </span>
-            <Button variant="ghost" size="sm" type="button" onClick={selectAll}>
-              {t("database.filter.selectAll")}
-            </Button>
-            <Button variant="ghost" size="sm" type="button" onClick={deselectAll}>
-              {t("database.filter.deselectAll")}
-            </Button>
           </div>
 
           <div className="db-filter-search">

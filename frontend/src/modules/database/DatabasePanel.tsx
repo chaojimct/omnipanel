@@ -3255,13 +3255,6 @@ export function DatabasePanel() {
 
 
 
-  const handleCtrlCopyTab = useCallback(
-    (tabId: string) => {
-      performCopyTabToWorkspace(tabId);
-    },
-    [performCopyTabToWorkspace],
-  );
-
   useEffect(() => {
     if (isActiveRoute) return;
     setCtxMenu(null);
@@ -3426,7 +3419,6 @@ export function DatabasePanel() {
             softRefreshKey={activeWorkspaceTabId}
             panelContentKeysByTab={panelContentKeysByTab}
             onTabContextMenu={handleDockTabContextMenu}
-            onCtrlCopyTab={handleCtrlCopyTab}
             recentClosedActionItems={recentClosedActionItems}
             emptyPrompt={t("database.workspace.emptyTabs")}
             recentClosedTitle={t("database.workspace.recentClosed")}

@@ -1,6 +1,5 @@
-import type { MouseEvent, PointerEvent } from "react";
+import type { MouseEvent } from "react";
 import type { IDockviewPanelHeaderProps } from "dockview-react";
-import { isPointerCopyModifier } from "../../lib/platform";
 import { DockTabHeader } from "./DockTabHeader";
 import { TopbarStyleDockTabHeader } from "./TopbarStyleDockTabHeader";
 import type { DockTabIconKind } from "./DockTabIcon";
@@ -66,17 +65,6 @@ export function DockWorkspaceTabHeader(
       }
     : undefined;
 
-  const handleCtrlCopyPointerUp = runtime?.onCtrlCopyTabRef.current
-    ? (e: PointerEvent) => {
-        const mod = isPointerCopyModifier(e);
-        if (e.button !== 0 || !mod) return;
-        if ((e.target as HTMLElement).closest(".dv-default-tab-action")) return;
-        e.preventDefault();
-        e.stopPropagation();
-        runtime.onCtrlCopyTabRef.current?.(tabId);
-      }
-    : undefined;
-
   const headerProps = { ...props, params: mergedParams };
   const tabStyle = runtime?.tabStyleRef.current ?? "default";
 
@@ -86,7 +74,6 @@ export function DockWorkspaceTabHeader(
         {...headerProps}
         closable={closable}
         onContextMenu={handleContextMenu}
-        onPointerUp={handleCtrlCopyPointerUp}
       />
     );
   }
@@ -96,7 +83,6 @@ export function DockWorkspaceTabHeader(
       {...headerProps}
       closable={closable}
       onContextMenu={handleContextMenu}
-      onPointerUp={handleCtrlCopyPointerUp}
     />
   );
 }

@@ -11,8 +11,6 @@ import { GrpcPanel } from "./GrpcPanel";
 import { SnifferPanel } from "./SnifferPanel";
 import { ModbusPanel } from "./ModbusPanel";
 import { ProtocolContextSidebar, type ProtocolKind } from "./ProtocolContextSidebar";
-import { useWorkspaceCtrlCopyTab } from "../../hooks/useWorkspaceCtrlCopyTab";
-
 const PROTOCOLS: ProtocolKind[] = ["http", "ws", "mqtt", "serial", "grpc", "sniffer", "modbus"];
 
 export function ProtocolPanel() {
@@ -45,9 +43,6 @@ export function ProtocolPanel() {
     );
   }, []);
 
-  const handleCtrlCopyTab = useWorkspaceCtrlCopyTab("protocol", (tabId) =>
-    segmentTabs.find((tab) => tab.id === tabId)?.label ?? tabId,
-  );
 
   return (
     <ModuleSegmentDock
@@ -57,7 +52,6 @@ export function ProtocolPanel() {
       onActiveTabChange={(id) => setActive(id as ProtocolKind)}
       enabled={isActiveRoute}
       renderPanel={renderPanel}
-      onCtrlCopyTab={handleCtrlCopyTab}
     />
   );
 }

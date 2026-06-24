@@ -7,7 +7,6 @@ import { ModuleEmptyState } from "../../components/ui/ModuleEmptyState";
 import { SidebarWorkspace } from "../../components/ui/SidebarWorkspace";
 import { ModuleSegmentDock } from "../../components/dock";
 import { usePersistedModuleTab } from "../../hooks/usePersistedModuleTab";
-import { useWorkspaceCtrlCopyTab } from "../../hooks/useWorkspaceCtrlCopyTab";
 import { useI18n } from "../../i18n";
 import { appConfirm } from "../../lib/appConfirm";
 import type { Connection, FileEntry, FileManagerConnectionInfo } from "../../ipc/bindings";
@@ -714,9 +713,6 @@ export function FilesPanel() {
     return null;
   }, []);
 
-  const handleCtrlCopyTab = useWorkspaceCtrlCopyTab("files", (tabId) =>
-    segmentTabs.find((tab) => tab.id === tabId)?.label ?? tabId,
-  );
 
   return (
     <ModuleSegmentDock
@@ -726,7 +722,6 @@ export function FilesPanel() {
       onActiveTabChange={(id) => setTab(id as FilesModuleTab)}
       enabled={isActiveRoute}
       renderPanel={renderPanel}
-      onCtrlCopyTab={handleCtrlCopyTab}
     />
   );
 }
