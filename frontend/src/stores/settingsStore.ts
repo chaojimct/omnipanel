@@ -111,6 +111,19 @@ export function clampKnowledgeTopN(value: number): number {
   return Math.min(KNOWLEDGE_TOP_N.max, Math.max(KNOWLEDGE_TOP_N.min, Math.round(value)));
 }
 
+/** SQL 查询结果每页行数（设置页可选值）。 */
+export const DATABASE_QUERY_PAGE_SIZE_OPTIONS = [10, 100, 1000, 5000] as const;
+export type DatabaseQueryPageSize = (typeof DATABASE_QUERY_PAGE_SIZE_OPTIONS)[number];
+export const DEFAULT_DATABASE_QUERY_PAGE_SIZE: DatabaseQueryPageSize = 100;
+
+export function clampDatabaseQueryPageSize(value: number): DatabaseQueryPageSize {
+  const n = Math.round(value);
+  if ((DATABASE_QUERY_PAGE_SIZE_OPTIONS as readonly number[]).includes(n)) {
+    return n as DatabaseQueryPageSize;
+  }
+  return DEFAULT_DATABASE_QUERY_PAGE_SIZE;
+}
+
 interface SettingsState {
   locale: Locale;
   uiDensity: UiDensity;
@@ -134,6 +147,7 @@ interface SettingsState {
   knowledgeTopN: number;
   knowledgeEmbeddingModelSelectionId: string | null;
   workspaceAddPanelModifier: WorkspaceAddPanelModifier;
+  databaseQueryPageSize: DatabaseQueryPageSize;
   resolved: "light" | "dark";
   setLocale: (locale: Locale) => void;
   setUiDensity: (density: UiDensity) => void;
@@ -153,6 +167,7 @@ interface SettingsState {
     "knowledgeChunkSize" | "knowledgeChunkOverlap" | "knowledgeTopN" | "knowledgeEmbeddingModelSelectionId"
   >>) => void;
   setWorkspaceAddPanelModifier: (modifier: WorkspaceAddPanelModifier) => void;
+  setDatabaseSettings: (patch: Partial<Pick<SettingsState, "databaseQueryPageSize">>) => void;
 }
 
 export function clampUiScale(percent: number): number {
@@ -225,6 +240,7 @@ export const useSettingsStore = create<SettingsState>()(
       knowledgeTopN: KNOWLEDGE_TOP_N.default,
       knowledgeEmbeddingModelSelectionId: null,
       workspaceAddPanelModifier: "Alt",
+      databaseQueryPageSize: DEFAULT_DATABASE_QUERY_PAGE_SIZE,
       resolved: resolveTheme("system"),
       setLocale: (locale) => {
         applyDocumentLocale(locale);
@@ -268,6 +284,13 @@ export const useSettingsStore = create<SettingsState>()(
           };
         }),
       setWorkspaceAddPanelModifier: (workspaceAddPanelModifier) => set({ workspaceAddPanelModifier }),
+      setDatabaseSettings: (patch) =>
+        set((state) => ({
+          databaseQueryPageSize:
+            patch.databaseQueryPageSize !== undefined
+              ? clampDatabaseQueryPageSize(patch.databaseQueryPageSize)
+              : state.databaseQueryPageSize,
+        })),
     }),
     {
       name: "omnipanel-settings",
@@ -295,6 +318,7 @@ export const useSettingsStore = create<SettingsState>()(
         knowledgeTopN: state.knowledgeTopN,
         knowledgeEmbeddingModelSelectionId: state.knowledgeEmbeddingModelSelectionId,
         workspaceAddPanelModifier: state.workspaceAddPanelModifier,
+        databaseQueryPageSize: state.databaseQueryPageSize,
       }),
       onRehydrateStorage: () => (state) => {
         applyDocumentLocale(state?.locale ?? "zh-CN");
@@ -304,6 +328,8 @@ export const useSettingsStore = create<SettingsState>()(
         useSettingsStore.setState({
           resolved,
           workspaceAddPanelModifier: state?.workspaceAddPanelModifier ?? "Alt",
+          databaseQueryPageSize:
+            state?.databaseQueryPageSize ?? DEFAULT_DATABASE_QUERY_PAGE_SIZE,
         });
       },
     }
