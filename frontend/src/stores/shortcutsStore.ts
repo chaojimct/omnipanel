@@ -10,7 +10,14 @@ import { isMacOS, modKeyLabel } from "../lib/platform";
 export type KeyToken = "Mod" | "Shift" | "Alt" | string;
 
 /** 快捷键在设置页中的模块分类 */
-export type ShortcutCategory = "general" | "tabs" | "terminal" | "ssh" | "ai" | "workspace";
+export type ShortcutCategory =
+  | "general"
+  | "tabs"
+  | "terminal"
+  | "ssh"
+  | "ai"
+  | "workspace"
+  | "sqlEditor";
 
 /** 设置页快捷键折叠面板的显示顺序 */
 export const SHORTCUT_CATEGORY_ORDER: ShortcutCategory[] = [
@@ -20,6 +27,7 @@ export const SHORTCUT_CATEGORY_ORDER: ShortcutCategory[] = [
   "ssh",
   "ai",
   "workspace",
+  "sqlEditor",
 ];
 
 /** 单个可配置的快捷键定义 */
@@ -53,6 +61,7 @@ export const SHORTCUT_DEFS: ShortcutDef[] = [
   { id: "new-ssh", category: "ssh", labelKey: "settings.keybindings.items.newSsh", defaultKeys: ["Mod", "N"] },
   { id: "toggle-ai", category: "ai", labelKey: "settings.keybindings.items.toggleAi", defaultKeys: ["Alt", "`"] },
   { id: "toggle-bottom-workspace", category: "workspace", labelKey: "settings.keybindings.items.toggleBottomWorkspace", defaultKeys: ["Alt", "KeyW"] },
+  { id: "format-sql", category: "sqlEditor", labelKey: "settings.keybindings.items.formatSql", defaultKeys: ["Alt", "KeyF"] },
 ];
 
 const SHORTCUT_DEFS_BY_ID: Record<string, ShortcutDef> = Object.fromEntries(

@@ -1,6 +1,41 @@
 import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
 import { tags as t } from "@lezer/highlight";
 import { EditorView } from "@codemirror/view";
+import {
+  DEFAULT_SQL_EDITOR_FONT_FAMILY,
+  DEFAULT_SQL_EDITOR_FONT_SIZE,
+  DEFAULT_SQL_EDITOR_LINE_HEIGHT,
+  useSettingsStore,
+} from "../../stores/settingsStore";
+
+export interface SqlEditorTypography {
+  fontFamily: string;
+  fontSize: number;
+  lineHeight: number;
+}
+
+export function getSqlEditorTypographyFromStore(): SqlEditorTypography {
+  const state = useSettingsStore.getState();
+  return {
+    fontFamily: state.sqlEditorFontFamily,
+    fontSize: state.sqlEditorFontSize,
+    lineHeight: state.sqlEditorLineHeight,
+  };
+}
+
+function sqlEditorFontStack(fontFamily: string): string {
+  const primary = fontFamily.trim() || DEFAULT_SQL_EDITOR_FONT_FAMILY;
+  return `"${primary}", "Cascadia Code", "Fira Code", Menlo, Consolas, monospace`;
+}
+
+function typographyContentStyles(typography: SqlEditorTypography) {
+  const fontStack = sqlEditorFontStack(typography.fontFamily);
+  return {
+    fontFamily: fontStack,
+    fontSize: `${typography.fontSize}px`,
+    lineHeight: String(typography.lineHeight),
+  };
+}
 
 const darkHighlight = HighlightStyle.define([
   { tag: t.keyword, color: "#007aff", fontWeight: "bold" },
@@ -142,93 +177,109 @@ const sharedAutocompleteTheme = {
   },
 };
 
-const darkTheme = EditorView.theme(
-  {
-    "&": {
-      backgroundColor: "#1a1717",
-      color: "#fdfcfc",
+function createDarkTheme(typography: SqlEditorTypography) {
+  const contentTypography = typographyContentStyles(typography);
+  return EditorView.theme(
+    {
+      "&": {
+        backgroundColor: "#1a1717",
+        color: "#fdfcfc",
+      },
+      ".cm-content": {
+        caretColor: "#fdfcfc",
+        padding: "12px 0",
+        ...contentTypography,
+      },
+      ".cm-gutters": {
+        backgroundColor: "#1a1717",
+        color: "#6e6e73",
+        border: "none",
+        ...contentTypography,
+      },
+      ".cm-cursor, .cm-dropCursor": { borderLeftColor: "#fdfcfc" },
+      ".cm-selectionBackground, &.cm-focused .cm-selectionBackground": {
+        backgroundColor: "#007aff30 !important",
+      },
+      ".cm-activeLine": { backgroundColor: "#302c2c40" },
+      ".cm-activeLineGutter": { color: "#c8c6c4" },
+      ".cm-lineNumbers .cm-gutterElement": { padding: "0 8px 0 12px", minWidth: "2.5em" },
+      ".cm-foldGutter .cm-gutterElement": { padding: "0 4px" },
+      ".cm-scroller": { overflow: "auto" },
+      ".cm-matchingBracket, .cm-nonmatchingBracket": {
+        backgroundColor: "#007aff20",
+        outline: "1px solid #007aff50",
+      },
+      ".cm-search-highlight": {
+        backgroundColor: "color-mix(in srgb, var(--warn) 35%, transparent)",
+        borderRadius: "2px",
+      },
+      ...sharedAutocompleteTheme,
     },
-    ".cm-content": {
-      caretColor: "#fdfcfc",
-      padding: "12px 0",
-      fontFamily: "var(--font-mono)",
-      fontSize: "13px",
-      lineHeight: "22px",
-    },
-    ".cm-cursor, .cm-dropCursor": { borderLeftColor: "#fdfcfc" },
-    ".cm-selectionBackground, &.cm-focused .cm-selectionBackground": {
-      backgroundColor: "#007aff30 !important",
-    },
-    ".cm-activeLine": { backgroundColor: "#302c2c40" },
-    ".cm-gutters": {
-      backgroundColor: "#1a1717",
-      color: "#6e6e73",
-      border: "none",
-    },
-    ".cm-activeLineGutter": { color: "#c8c6c4" },
-    ".cm-lineNumbers .cm-gutterElement": { padding: "0 8px 0 12px", minWidth: "2.5em" },
-    ".cm-foldGutter .cm-gutterElement": { padding: "0 4px" },
-    ".cm-scroller": { overflow: "auto" },
-    ".cm-matchingBracket, .cm-nonmatchingBracket": {
-      backgroundColor: "#007aff20",
-      outline: "1px solid #007aff50",
-    },
-    ".cm-search-highlight": {
-      backgroundColor: "color-mix(in srgb, var(--warn) 35%, transparent)",
-      borderRadius: "2px",
-    },
-    ...sharedAutocompleteTheme,
-  },
-  { dark: true },
-);
+    { dark: true },
+  );
+}
 
-const lightTheme = EditorView.theme(
-  {
-    "&": {
-      backgroundColor: "#e8e8ed",
-      color: "#1d1d1f",
+function createLightTheme(typography: SqlEditorTypography) {
+  const contentTypography = typographyContentStyles(typography);
+  return EditorView.theme(
+    {
+      "&": {
+        backgroundColor: "#e8e8ed",
+        color: "#1d1d1f",
+      },
+      ".cm-content": {
+        caretColor: "#1d1d1f",
+        padding: "12px 0",
+        ...contentTypography,
+      },
+      ".cm-gutters": {
+        backgroundColor: "#e8e8ed",
+        color: "#aeaeb2",
+        border: "none",
+        ...contentTypography,
+      },
+      ".cm-cursor, .cm-dropCursor": { borderLeftColor: "#1d1d1f" },
+      ".cm-selectionBackground, &.cm-focused .cm-selectionBackground": {
+        backgroundColor: "#007aff20 !important",
+      },
+      ".cm-activeLine": { backgroundColor: "#ffffff60" },
+      ".cm-activeLineGutter": { color: "#424245" },
+      ".cm-lineNumbers .cm-gutterElement": { padding: "0 8px 0 12px", minWidth: "2.5em" },
+      ".cm-foldGutter .cm-gutterElement": { padding: "0 4px" },
+      ".cm-scroller": { overflow: "auto" },
+      ".cm-matchingBracket, .cm-nonmatchingBracket": {
+        backgroundColor: "#007aff15",
+        outline: "1px solid #007aff40",
+      },
+      ".cm-search-highlight": {
+        backgroundColor: "color-mix(in srgb, var(--warn) 35%, transparent)",
+        borderRadius: "2px",
+      },
+      ...sharedAutocompleteTheme,
     },
-    ".cm-content": {
-      caretColor: "#1d1d1f",
-      padding: "12px 0",
-      fontFamily: "var(--font-mono)",
-      fontSize: "13px",
-      lineHeight: "22px",
-    },
-    ".cm-cursor, .cm-dropCursor": { borderLeftColor: "#1d1d1f" },
-    ".cm-selectionBackground, &.cm-focused .cm-selectionBackground": {
-      backgroundColor: "#007aff20 !important",
-    },
-    ".cm-activeLine": { backgroundColor: "#ffffff60" },
-    ".cm-gutters": {
-      backgroundColor: "#e8e8ed",
-      color: "#aeaeb2",
-      border: "none",
-    },
-    ".cm-activeLineGutter": { color: "#424245" },
-    ".cm-lineNumbers .cm-gutterElement": { padding: "0 8px 0 12px", minWidth: "2.5em" },
-    ".cm-foldGutter .cm-gutterElement": { padding: "0 4px" },
-    ".cm-scroller": { overflow: "auto" },
-    ".cm-matchingBracket, .cm-nonmatchingBracket": {
-      backgroundColor: "#007aff15",
-      outline: "1px solid #007aff40",
-    },
-    ".cm-search-highlight": {
-      backgroundColor: "color-mix(in srgb, var(--warn) 35%, transparent)",
-      borderRadius: "2px",
-    },
-    ...sharedAutocompleteTheme,
-  },
-  { dark: false },
-);
+    { dark: false },
+  );
+}
 
-export function getSqlEditorThemeExtensions(isLight: boolean) {
+export function getSqlEditorThemeExtensions(
+  isLight: boolean,
+  typography: SqlEditorTypography = getSqlEditorTypographyFromStore(),
+) {
   return [
-    isLight ? lightTheme : darkTheme,
+    isLight ? createLightTheme(typography) : createDarkTheme(typography),
     syntaxHighlighting(isLight ? lightHighlight : darkHighlight),
   ];
 }
 
 export function isLightTheme(): boolean {
   return document.documentElement.getAttribute("data-theme") === "light";
+}
+
+/** 设置页 SQL 编辑器预览用默认排版。 */
+export function defaultSqlEditorTypography(): SqlEditorTypography {
+  return {
+    fontFamily: DEFAULT_SQL_EDITOR_FONT_FAMILY,
+    fontSize: DEFAULT_SQL_EDITOR_FONT_SIZE,
+    lineHeight: DEFAULT_SQL_EDITOR_LINE_HEIGHT,
+  };
 }

@@ -378,6 +378,10 @@ export const enUS: TranslationDict = {
       searchPlaceholder: "Search…",
       noResults: "No matches",
     },
+    fontSelect: {
+      loadFailed: "Could not read system fonts; showing common candidates",
+      retry: "Retry detection",
+    },
     scopedSearch: {
       close: "Close search",
     },
@@ -725,6 +729,15 @@ export const enUS: TranslationDict = {
       connectionDisabled: "Disabled",
       cacheEmpty: "Not cached",
       cacheEmptyHint: "Click refresh above to load schema from the database",
+    },
+    schemaTree: {
+      deleteColumn: "Delete column",
+      deleteIndex: "Delete index",
+      confirmDeleteTitle: "Confirm delete",
+      confirmDeleteColumn: "Delete column \"{name}\" from table {table}? This cannot be undone.",
+      confirmDeleteIndex: "Delete index \"{name}\" from table {table}? This cannot be undone.",
+      dropUnsupported: "This operation is not supported for the current database type",
+      dropFailed: "Delete failed: {message}",
     },
     queryFiles: {
       search: "Search SQL files…",
@@ -1846,6 +1859,12 @@ export const enUS: TranslationDict = {
       desc: "SQL query execution and result display options",
       queryPageSize: "Query result page size",
       queryPageSizeDesc: "Rows loaded per SELECT execution; paginate in the results panel for more data",
+      editorSection: "SQL Editor",
+      editorFontFamily: "Font family",
+      editorFontFamilyDesc: "Monospace font used in the SQL editor",
+      editorFontSize: "Font size",
+      editorLineHeight: "Line height",
+      editorLineHeightDesc: "Line height multiplier for code spacing",
     },
     knowledge: {
       label: "Knowledge Base",
@@ -1910,6 +1929,7 @@ export const enUS: TranslationDict = {
         ssh: "SSH",
         ai: "AI Assistant",
         workspace: "Workspace",
+        sqlEditor: "SQL Editor",
       },
       items: {
         newTerminal: "New Terminal Tab",
@@ -1924,6 +1944,7 @@ export const enUS: TranslationDict = {
         newSsh: "New SSH Connection",
         openSettings: "Open Settings",
         switchNthTab: "Switch to Nth Tab",
+        formatSql: "Format SQL",
       },
     },
     aiDisplay: {

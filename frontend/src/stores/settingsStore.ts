@@ -115,6 +115,34 @@ export function clampDatabaseQueryPageSize(value: number): DatabaseQueryPageSize
   return DEFAULT_DATABASE_QUERY_PAGE_SIZE;
 }
 
+/** SQL 编辑器字号可选值。 */
+export const SQL_EDITOR_FONT_SIZE_OPTIONS = [11, 12, 13, 14, 15, 16, 18] as const;
+export type SqlEditorFontSize = (typeof SQL_EDITOR_FONT_SIZE_OPTIONS)[number];
+export const DEFAULT_SQL_EDITOR_FONT_SIZE: SqlEditorFontSize = 13;
+
+/** SQL 编辑器行高可选值（倍数）。 */
+export const SQL_EDITOR_LINE_HEIGHT_OPTIONS = [1.2, 1.4, 1.6, 1.8] as const;
+export type SqlEditorLineHeight = (typeof SQL_EDITOR_LINE_HEIGHT_OPTIONS)[number];
+export const DEFAULT_SQL_EDITOR_LINE_HEIGHT: SqlEditorLineHeight = 1.6;
+
+export const DEFAULT_SQL_EDITOR_FONT_FAMILY = "Cascadia Code";
+
+export function clampSqlEditorFontSize(value: number): SqlEditorFontSize {
+  const n = Math.round(value);
+  if ((SQL_EDITOR_FONT_SIZE_OPTIONS as readonly number[]).includes(n)) {
+    return n as SqlEditorFontSize;
+  }
+  return DEFAULT_SQL_EDITOR_FONT_SIZE;
+}
+
+export function clampSqlEditorLineHeight(value: number): SqlEditorLineHeight {
+  const stepped = Math.round(value * 10) / 10;
+  if ((SQL_EDITOR_LINE_HEIGHT_OPTIONS as readonly number[]).includes(stepped)) {
+    return stepped as SqlEditorLineHeight;
+  }
+  return DEFAULT_SQL_EDITOR_LINE_HEIGHT;
+}
+
 interface SettingsState {
   locale: Locale;
   uiDensity: UiDensity;
@@ -138,6 +166,9 @@ interface SettingsState {
   knowledgeTopN: number;
   knowledgeEmbeddingModelSelectionId: string | null;
   databaseQueryPageSize: DatabaseQueryPageSize;
+  sqlEditorFontFamily: string;
+  sqlEditorFontSize: SqlEditorFontSize;
+  sqlEditorLineHeight: SqlEditorLineHeight;
   resolved: "light" | "dark";
   setLocale: (locale: Locale) => void;
   setUiDensity: (density: UiDensity) => void;
@@ -156,7 +187,9 @@ interface SettingsState {
   setKnowledgeSettings: (patch: Partial<Pick<SettingsState,
     "knowledgeChunkSize" | "knowledgeChunkOverlap" | "knowledgeTopN" | "knowledgeEmbeddingModelSelectionId"
   >>) => void;
-  setDatabaseSettings: (patch: Partial<Pick<SettingsState, "databaseQueryPageSize">>) => void;
+  setDatabaseSettings: (patch: Partial<Pick<SettingsState,
+    "databaseQueryPageSize" | "sqlEditorFontFamily" | "sqlEditorFontSize" | "sqlEditorLineHeight"
+  >>) => void;
 }
 
 export function clampUiScale(percent: number): number {
@@ -229,6 +262,9 @@ export const useSettingsStore = create<SettingsState>()(
       knowledgeTopN: KNOWLEDGE_TOP_N.default,
       knowledgeEmbeddingModelSelectionId: null,
       databaseQueryPageSize: DEFAULT_DATABASE_QUERY_PAGE_SIZE,
+      sqlEditorFontFamily: DEFAULT_SQL_EDITOR_FONT_FAMILY,
+      sqlEditorFontSize: DEFAULT_SQL_EDITOR_FONT_SIZE,
+      sqlEditorLineHeight: DEFAULT_SQL_EDITOR_LINE_HEIGHT,
       resolved: resolveTheme("system"),
       setLocale: (locale) => {
         applyDocumentLocale(locale);
@@ -277,6 +313,18 @@ export const useSettingsStore = create<SettingsState>()(
             patch.databaseQueryPageSize !== undefined
               ? clampDatabaseQueryPageSize(patch.databaseQueryPageSize)
               : state.databaseQueryPageSize,
+          sqlEditorFontFamily:
+            patch.sqlEditorFontFamily !== undefined
+              ? patch.sqlEditorFontFamily.trim() || DEFAULT_SQL_EDITOR_FONT_FAMILY
+              : state.sqlEditorFontFamily,
+          sqlEditorFontSize:
+            patch.sqlEditorFontSize !== undefined
+              ? clampSqlEditorFontSize(patch.sqlEditorFontSize)
+              : state.sqlEditorFontSize,
+          sqlEditorLineHeight:
+            patch.sqlEditorLineHeight !== undefined
+              ? clampSqlEditorLineHeight(patch.sqlEditorLineHeight)
+              : state.sqlEditorLineHeight,
         })),
     }),
     {
@@ -305,6 +353,9 @@ export const useSettingsStore = create<SettingsState>()(
         knowledgeTopN: state.knowledgeTopN,
         knowledgeEmbeddingModelSelectionId: state.knowledgeEmbeddingModelSelectionId,
         databaseQueryPageSize: state.databaseQueryPageSize,
+        sqlEditorFontFamily: state.sqlEditorFontFamily,
+        sqlEditorFontSize: state.sqlEditorFontSize,
+        sqlEditorLineHeight: state.sqlEditorLineHeight,
       }),
       onRehydrateStorage: () => (state) => {
         applyDocumentLocale(state?.locale ?? "zh-CN");

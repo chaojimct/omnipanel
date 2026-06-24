@@ -11,6 +11,7 @@ import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { json } from "@codemirror/lang-json";
 import { sql } from "@codemirror/lang-sql";
 import { getSqlEditorThemeExtensions, isLightTheme } from "../../modules/database/sqlEditorTheme";
+import { useSettingsStore } from "../../stores/settingsStore";
 
 export type CodeEditorLanguage = "text" | "sql" | "json" | "yaml" | "shell" | "dockerfile";
 
@@ -56,6 +57,10 @@ export function CodeEditor({
   height = "100%",
   className,
 }: CodeEditorProps) {
+  const sqlEditorFontFamily = useSettingsStore((s) => s.sqlEditorFontFamily);
+  const sqlEditorFontSize = useSettingsStore((s) => s.sqlEditorFontSize);
+  const sqlEditorLineHeight = useSettingsStore((s) => s.sqlEditorLineHeight);
+
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
   const onChangeRef = useRef(onChange);
@@ -130,7 +135,11 @@ export function CodeEditor({
       if (!view) return;
       view.dispatch({
         effects: themeCompartment.current.reconfigure(
-          getSqlEditorThemeExtensions(isLightTheme()),
+          getSqlEditorThemeExtensions(isLightTheme(), {
+            fontFamily: sqlEditorFontFamily,
+            fontSize: sqlEditorFontSize,
+            lineHeight: sqlEditorLineHeight,
+          }),
         ),
       });
     });
@@ -139,7 +148,21 @@ export function CodeEditor({
       attributeFilter: ["data-theme"],
     });
     return () => observer.disconnect();
-  }, []);
+  }, [sqlEditorFontFamily, sqlEditorFontSize, sqlEditorLineHeight]);
+
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view) return;
+    view.dispatch({
+      effects: themeCompartment.current.reconfigure(
+        getSqlEditorThemeExtensions(isLightTheme(), {
+          fontFamily: sqlEditorFontFamily,
+          fontSize: sqlEditorFontSize,
+          lineHeight: sqlEditorLineHeight,
+        }),
+      ),
+    });
+  }, [sqlEditorFontFamily, sqlEditorFontSize, sqlEditorLineHeight]);
 
   return (
     <div

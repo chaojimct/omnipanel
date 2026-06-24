@@ -248,6 +248,8 @@ export const commands = {
 	localProcessDetail: (pid: number) => typedError<SshProcessDetail_Serialize, OmniError_Serialize>(__TAURI_INVOKE("local_process_detail", { pid })),
 	/**  强制终止本机进程。 */
 	localKillProcess: (pid: number) => typedError<null, OmniError_Serialize>(__TAURI_INVOKE("local_kill_process", { pid })),
+	/**  枚举本机已安装字体族名（可选仅等宽字体）。 */
+	listSystemFonts: (monospaceOnly: boolean | null) => typedError<string[], OmniError_Serialize>(__TAURI_INVOKE("list_system_fonts", { monospaceOnly })),
 	/**
 	 *  创建 SSH 隧道（端口转发）。
 	 *  通过 SSH exec 运行 `ssh -L/-R/-D` 命令实现，隧道进程在后台运行。

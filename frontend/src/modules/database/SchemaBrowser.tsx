@@ -9,7 +9,10 @@ import {
   type MouseEvent as ReactMouseEvent,
   type CSSProperties,
 } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { useI18n } from "../../i18n";
+import { appConfirm } from "../../lib/appConfirm";
+import { useActionStore } from "../../stores/actionStore";
 import { Button } from "../../components/ui/Button";
 import { ScopedSearch, type ScopedSearchHandle } from "../../components/ui/ScopedSearch";
 import {
@@ -38,13 +41,20 @@ import {
   buildConnectionTreeItem,
   buildDatabaseTreeItem,
   buildFolderTreeItem,
+  buildTableTreeItem,
   type SchemaTreeItem,
 } from "./schemaTreeItem";
+import {
+  buildDropColumnSql,
+  buildDropIndexSql,
+  isSchemaDropSqlSupported,
+} from "./schemaTreeDropSql";
+import { isSchemaNodeDeletable, isSchemaNodeRefreshable } from "./schemaTreeNodeActions";
 import {
   nextSchemaChildLimit,
   paginateSchemaChildren,
 } from "./schemaTreePagination";
-import { mergeConnectionsWithCache, type CachedConnection, type CachedDatabase } from "./schemaCacheMerge";
+import { mergeConnectionsWithCache, type CachedConnection } from "./schemaCacheMerge";
 import { refreshAllSchemaCache } from "./schemaCacheRefresh";
 import {
   createSchemaCacheRefreshReporter,
@@ -53,7 +63,6 @@ import {
   publishSchemaNodeRefreshStart,
 } from "./schemaCacheStatusLog";
 import type { SchemaCacheSnapshot } from "./schemaCache";
-import { textSearchMatches } from "../../lib/textSearchMatch";
 import {
   connectionDatabasesFolderId,
   connectionUsersFolderId,
@@ -84,8 +93,6 @@ import {
   type SchemaTreeRefreshHooks,
 } from "./schemaTreeRefresh";
 
-type LoadedDatabase = CachedDatabase;
-
 type LoadedConnection = CachedConnection;
 
 interface TreeNodeProps {
@@ -110,6 +117,11 @@ interface TreeNodeProps {
   labelComment?: string;
   /** 连接节点：是否启用（禁用与树折叠无关） */
   connectionEnabled?: boolean;
+  onRefresh?: () => void;
+  refreshing?: boolean;
+  refreshDisabled?: boolean;
+  onDelete?: () => void;
+  deleteDisabled?: boolean;
 }
 
 function SchemaLoadMoreButton({
@@ -157,6 +169,11 @@ function TreeNode({
   onPinToggle,
   labelComment,
   connectionEnabled = true,
+  onRefresh,
+  refreshing = false,
+  refreshDisabled = false,
+  onDelete,
+  deleteDisabled = false,
 }: TreeNodeProps) {
   const { t } = useI18n();
   const { type, label } = item;
@@ -301,42 +318,102 @@ function TreeNode({
       </span>
       {isPk && <span className="tree-badge tree-badge--pk">PK</span>}
       {isFk && <span className="tree-badge tree-badge--fk">FK</span>}
-      {onPinToggle ? (
-        <button
-          type="button"
-          className={`tree-pin-btn${pinActive ? " tree-pin-btn--active" : ""}`}
-          title={
-            pinActive ? t("database.sidebar.unpinTable") : t("database.sidebar.pinTable")
-          }
-          aria-label={
-            pinActive ? t("database.sidebar.unpinTable") : t("database.sidebar.pinTable")
-          }
-          aria-pressed={pinActive}
-          onClick={(event) => {
-            event.stopPropagation();
-            onPinToggle();
-          }}
-        >
-          <svg viewBox="0 0 16 16" fill="currentColor" width="12" height="12" aria-hidden>
-            <path d="M9.5 1.5 8 3 6.5 1.5 5 3v4.6L2.8 9.8l-.3.3v1.4l.3.3L5 12.9V14l1.5-1.5L8 14l1.5-1.5L11 14v-1.1l2.2-2.2.3-.3v-1.4l-.3-.3L11 7.6V3L9.5 1.5Z" />
-          </svg>
-        </button>
-      ) : null}
-      {!onPinToggle && meta ? (
-        <span
-          className={`tree-meta${onMetaClick ? " tree-meta--clickable" : ""}`}
-          title={metaTitle}
-          onClick={
-            onMetaClick
-              ? (event) => {
-                  event.stopPropagation();
-                  onMetaClick();
-                }
-              : undefined
-          }
-        >
-          {meta}
-        </span>
+      {(meta || onRefresh || onDelete || onPinToggle) ? (
+        <div className="tree-node-trailing">
+          {meta ? (
+            <span
+              className={`tree-meta${onMetaClick ? " tree-meta--clickable" : ""}`}
+              title={metaTitle}
+              onClick={
+                onMetaClick
+                  ? (event) => {
+                      event.stopPropagation();
+                      onMetaClick();
+                    }
+                  : undefined
+              }
+            >
+              {meta}
+            </span>
+          ) : null}
+          {(onRefresh || onDelete || onPinToggle) ? (
+            <div className="tree-node-actions">
+              {onRefresh ? (
+                <button
+                  type="button"
+                  className={`tree-action-btn${refreshing ? " tree-action-btn--busy" : ""}`}
+                  title={t("common.refresh")}
+                  aria-label={t("common.refresh")}
+                  disabled={refreshDisabled}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onRefresh();
+                  }}
+                >
+                  <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden>
+                    <path d="M2 8a6 6 0 0 1 10.5-3.9" />
+                    <path d="M14 2v3h-3" />
+                    <path d="M14 8a6 6 0 0 1-10.5 3.9" />
+                    <path d="M2 14v-3h3" />
+                  </svg>
+                </button>
+              ) : null}
+              {onDelete ? (
+                <button
+                  type="button"
+                  className={`tree-action-btn tree-action-btn--danger${deleteDisabled ? " tree-action-btn--busy" : ""}`}
+                  title={
+                    item.type === "column"
+                      ? t("database.schemaTree.deleteColumn")
+                      : item.type === "index"
+                        ? t("database.schemaTree.deleteIndex")
+                        : t("database.queryFiles.delete")
+                  }
+                  aria-label={
+                    item.type === "column"
+                      ? t("database.schemaTree.deleteColumn")
+                      : item.type === "index"
+                        ? t("database.schemaTree.deleteIndex")
+                        : t("database.queryFiles.delete")
+                  }
+                  disabled={deleteDisabled}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onDelete();
+                  }}
+                >
+                  <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden>
+                    <path d="M2 4h12" />
+                    <path d="M5 4V3a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v1" />
+                    <path d="M6 7v5M10 7v5" />
+                    <path d="M3 4l.7 9.1a1 1 0 0 0 1 .9h6.6a1 1 0 0 0 1-.9L13 4" />
+                  </svg>
+                </button>
+              ) : null}
+              {onPinToggle ? (
+                <button
+                  type="button"
+                  className={`tree-action-btn tree-action-btn--pin${pinActive ? " tree-action-btn--active" : ""}`}
+                  title={
+                    pinActive ? t("database.sidebar.unpinTable") : t("database.sidebar.pinTable")
+                  }
+                  aria-label={
+                    pinActive ? t("database.sidebar.unpinTable") : t("database.sidebar.pinTable")
+                  }
+                  aria-pressed={pinActive}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onPinToggle();
+                  }}
+                >
+                  <svg viewBox="0 0 16 16" fill="currentColor" width="12" height="12" aria-hidden>
+                    <path d="M9.5 1.5 8 3 6.5 1.5 5 3v4.6L2.8 9.8l-.3.3v1.4l.3.3L5 12.9V14l1.5-1.5L8 14l1.5-1.5L11 14v-1.1l2.2-2.2.3-.3v-1.4l-.3-.3L11 7.6V3L9.5 1.5Z" />
+                  </svg>
+                </button>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
       ) : null}
     </div>
   );
@@ -449,9 +526,7 @@ export function SchemaBrowser({
   const useExternalConnections =
     connectionConfigs !== undefined && connectionsReady !== undefined;
   const [search, setSearch] = useState("");
-  const searchActive = search.trim().length > 0;
-  const paginateOpts = searchActive ? { unpaginated: true as const } : undefined;
-  const stickyAncestors = useMemo(() => !searchActive, [searchActive]);
+  const stickyAncestors = useMemo(() => !search.trim(), [search]);
   const expandedNodeIds = useDbSchemaTreeExpandedStore((s) => s.expandedNodeIds);
   const expandedHydrated = useDbSchemaTreeExpandedStore((s) => s.hydrated);
   const hydrateSchemaExpanded = useDbSchemaTreeExpandedStore((s) => s.hydrate);
@@ -528,6 +603,127 @@ export function SchemaBrowser({
     [syncDatabaseFilter, syncTableFilter, onSchemaCacheConnectionPatched],
   );
 
+  const enqueueAction = useActionStore((s) => s.enqueueAction);
+  const [deletingNodeIds, setDeletingNodeIds] = useState<Record<string, true>>({});
+
+  const handleRefreshSchemaNode = useCallback(
+    (connection: DbConnectionConfig, item: SchemaTreeItem) => {
+      if (!isSchemaNodeRefreshable(item.type)) {
+        return;
+      }
+      publishSchemaNodeRefreshStart(t, item.label);
+      void refreshAndApplySchemaTreeNode(connection, item, schemaRefreshHooks)
+        .then(() => publishSchemaNodeRefreshDone(t, item.label))
+        .catch((err) => publishSchemaNodeRefreshFailed(t, item.label, String(err)));
+    },
+    [schemaRefreshHooks, t],
+  );
+
+  const handleDeleteSchemaNode = useCallback(
+    async (connection: DbConnectionConfig, item: SchemaTreeItem) => {
+      if (!isSchemaNodeDeletable(item.type)) {
+        return;
+      }
+      const dbName = item.dbName?.trim();
+      const tableName = item.tableName?.trim();
+      if (!dbName || !tableName) {
+        return;
+      }
+      const objectName =
+        item.type === "column"
+          ? (item.columnName ?? item.label).trim()
+          : (item.indexName ?? item.label).trim();
+      const confirmed = await appConfirm(
+        item.type === "column"
+          ? t("database.schemaTree.confirmDeleteColumn", {
+              name: objectName,
+              table: tableName,
+            })
+          : t("database.schemaTree.confirmDeleteIndex", {
+              name: objectName,
+              table: tableName,
+            }),
+        t("database.schemaTree.confirmDeleteTitle"),
+      );
+      if (!confirmed) {
+        return;
+      }
+      if (!isSchemaDropSqlSupported(connection.db_type)) {
+        window.alert(t("database.schemaTree.dropUnsupported"));
+        return;
+      }
+      const sql =
+        item.type === "column"
+          ? buildDropColumnSql(connection.db_type, dbName, tableName, objectName)
+          : buildDropIndexSql(connection.db_type, dbName, tableName, objectName);
+      if (!sql) {
+        window.alert(t("database.schemaTree.dropUnsupported"));
+        return;
+      }
+      setDeletingNodeIds((prev) => ({ ...prev, [item.id]: true }));
+      try {
+        enqueueAction({
+          type: "sql",
+          title:
+            item.type === "column"
+              ? t("database.schemaTree.deleteColumn")
+              : t("database.schemaTree.deleteIndex"),
+          description: `${connection.name} · ${tableName}.${objectName}`,
+          command: sql,
+          resourceId: connection.id,
+          source: "用户",
+        });
+        await invoke("db_execute_query", {
+          connection,
+          sql,
+          limit: 1,
+          offset: 0,
+        });
+        await refreshAndApplySchemaTreeNode(
+          connection,
+          buildTableTreeItem(connection.id, dbName, tableName),
+          schemaRefreshHooks,
+        );
+      } catch (err) {
+        window.alert(t("database.schemaTree.dropFailed", { message: String(err) }));
+      } finally {
+        setDeletingNodeIds((prev) => {
+          const next = { ...prev };
+          delete next[item.id];
+          return next;
+        });
+      }
+    },
+    [enqueueAction, schemaRefreshHooks, t],
+  );
+
+  const resolveSchemaNodeActions = useCallback(
+    (
+      connection: DbConnectionConfig,
+      item: SchemaTreeItem,
+    ): Pick<TreeNodeProps, "onRefresh" | "refreshing" | "refreshDisabled" | "onDelete" | "deleteDisabled"> => {
+      const props: Pick<
+        TreeNodeProps,
+        "onRefresh" | "refreshing" | "refreshDisabled" | "onDelete" | "deleteDisabled"
+      > = {};
+      if (isSchemaNodeRefreshable(item.type)) {
+        props.onRefresh = () => handleRefreshSchemaNode(connection, item);
+        props.refreshing = Boolean(refreshingNodeIds[item.id]);
+        props.refreshDisabled =
+          !isConnectionEnabled(connection) || Boolean(refreshingNodeIds[item.id]);
+      }
+      if (isSchemaNodeDeletable(item.type)) {
+        props.onDelete = () => {
+          void handleDeleteSchemaNode(connection, item);
+        };
+        props.deleteDisabled =
+          !isConnectionEnabled(connection) || Boolean(deletingNodeIds[item.id]);
+      }
+      return props;
+    },
+    [deletingNodeIds, handleDeleteSchemaNode, handleRefreshSchemaNode, refreshingNodeIds],
+  );
+
   const schemaCacheReporter = useMemo(
     () => createSchemaCacheRefreshReporter(t),
     [t],
@@ -597,22 +793,48 @@ export function SchemaBrowser({
       disabled: !canRefresh || connRefreshing,
       onClick: () => {
         if (connection) {
-          publishSchemaNodeRefreshStart(t, item.label);
-          void refreshAndApplySchemaTreeNode(connection, item, schemaRefreshHooks)
-            .then(() => publishSchemaNodeRefreshDone(t, item.label))
-            .catch((err) => publishSchemaNodeRefreshFailed(t, item.label, String(err)));
+          handleRefreshSchemaNode(connection, item);
         }
       },
     };
+    const deleteIcon = (
+      <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden>
+        <path d="M2 4h12" />
+        <path d="M5 4V3a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v1" />
+        <path d="M6 7v5M10 7v5" />
+        <path d="M3 4l.7 9.1a1 1 0 0 0 1 .9h6.6a1 1 0 0 0 1-.9L13 4" />
+      </svg>
+    );
+    const deleteItem: ContextMenuItem | null =
+      connection && isSchemaNodeDeletable(item.type)
+        ? {
+            id: "delete-schema-node",
+            label:
+              item.type === "column"
+                ? t("database.schemaTree.deleteColumn")
+                : t("database.schemaTree.deleteIndex"),
+            icon: deleteIcon,
+            danger: true,
+            disabled: Boolean(deletingNodeIds[item.id]),
+            onClick: () => {
+              void handleDeleteSchemaNode(connection, item);
+            },
+          }
+        : null;
+    const trailingItems: ContextMenuItem[] = deleteItem
+      ? [deleteItem, { id: "sep-delete", label: "", separator: true }, refreshItem]
+      : [refreshItem];
     if (extra.length === 0) {
-      return [refreshItem];
+      return trailingItems;
     }
-    return [...extra, { id: "sep-refresh", label: "", separator: true }, refreshItem];
+    return [...extra, { id: "sep-refresh", label: "", separator: true }, ...trailingItems];
   }, [
     buildSchemaContextMenuItems,
+    deletingNodeIds,
+    handleDeleteSchemaNode,
+    handleRefreshSchemaNode,
     refreshingNodeIds,
     schemaCtxMenu,
-    schemaRefreshHooks,
     t,
   ]);
 
@@ -773,92 +995,12 @@ export function SchemaBrowser({
     scopedSearchRef.current?.open(e.key);
   }, []);
 
-  const filtered = useMemo(() => {
-    if (!search.trim()) {
-      return connections;
-    }
-
-    const q = search.trim();
-    const objectMatchesQuery = (name: string, comment?: string) =>
-      textSearchMatches(q, name) || (comment ? textSearchMatches(q, comment) : false);
-
-    return connections
-      .map((conn) => {
-        const nameMatch = textSearchMatches(q, conn.config.name);
-        const allUsers = conn.users ?? [];
-        const users = nameMatch
-          ? allUsers
-          : allUsers.filter(
-              (user) =>
-                textSearchMatches(q, user.name) ||
-                (user.host ? textSearchMatches(q, user.host) : false) ||
-                textSearchMatches(q, formatUserLabel(user.name, user.host)),
-            );
-
-        const allDatabases = conn.databases ?? [];
-        const visibleDatabases = getVisibleItems(allDatabases, databaseFilters[conn.config.id]);
-        const databases = visibleDatabases
-          .map((db) => {
-            const dbMatch = nameMatch || textSearchMatches(q, db.name);
-            if (isRedisConnection(conn.config)) {
-              return dbMatch ? db : null;
-            }
-            const allTables = db.tables ?? [];
-            const visibleTables = getVisibleItems(
-              allTables,
-              tableFilters[makeTableFilterKey(conn.config.id, db.name)],
-            );
-            const tables = dbMatch
-              ? visibleTables
-              : visibleTables.filter((table) => objectMatchesQuery(table.name, table.comment));
-
-            const allViews = db.views ?? [];
-            const views = dbMatch
-              ? allViews
-              : allViews.filter((view) => objectMatchesQuery(view.name, view.comment));
-
-            const allRoutines = db.routines ?? [];
-            const routines = dbMatch
-              ? allRoutines
-              : allRoutines.filter((routine) => objectMatchesQuery(routine.name));
-
-            if (dbMatch) {
-              return db;
-            }
-            if (tables.length > 0 || views.length > 0 || routines.length > 0) {
-              return { ...db, tables, views, routines };
-            }
-            return null;
-          })
-          .filter((db): db is LoadedDatabase => db !== null);
-
-        if (nameMatch) {
-          return conn;
-        }
-        if (isRedisConnection(conn.config)) {
-          if (databases.length > 0) {
-            return { ...conn, databases, users: [] };
-          }
-          return null;
-        }
-        if (databases.length > 0 || users.length > 0) {
-          return {
-            ...conn,
-            databases: databases.length > 0 ? databases : [],
-            users: users.length > 0 ? users : [],
-          };
-        }
-        return null;
-      })
-      .filter((conn): conn is LoadedConnection => conn !== null);
-  }, [connections, search, databaseFilters, tableFilters]);
-
   const pagedRootConns = useMemo(
-    () => paginateSchemaChildren(filtered, SCHEMA_ROOT_CONNECTIONS_ID, childVisibleLimits, paginateOpts),
-    [filtered, childVisibleLimits, paginateOpts],
+    () => paginateSchemaChildren(connections, SCHEMA_ROOT_CONNECTIONS_ID, childVisibleLimits),
+    [connections, childVisibleLimits],
   );
 
-  const hasAnyConnection = filtered.length > 0;
+  const hasAnyConnection = connections.length > 0;
 
   const sidebarScrollTargetId = useMemo(
     () =>
@@ -1015,7 +1157,7 @@ export function SchemaBrowser({
         )}
         {!loading && !loadError && pagedRootConns.visible.map((conn) => {
           const connId = `conn:${conn.config.id}`;
-          const connExpanded = searchActive || expandedNodeIds.has(connId);
+          const connExpanded = expandedNodeIds.has(connId);
           const databasesFolderId = connectionDatabasesFolderId(conn.config.id);
           const allDatabases = conn.databases ?? [];
           const filter = databaseFilters[conn.config.id];
@@ -1027,7 +1169,6 @@ export function SchemaBrowser({
             visibleDatabases,
             databasesFolderId,
             childVisibleLimits,
-            paginateOpts,
           );
 
           const engineIconUrl = getEngineIconByType(conn.config.db_type, resolvedTheme);
@@ -1079,6 +1220,7 @@ export function SchemaBrowser({
                     : undefined
                 }
                 hasChildren={connEnabled}
+                {...resolveSchemaNodeActions(conn.config, connItem)}
               />
               {connEnabled && connExpanded && conn.databasesError && (
                 <div style={{ padding: "4px 24px", fontSize: "11px", color: "var(--color-danger, #ff3b30)" }}>
@@ -1099,7 +1241,7 @@ export function SchemaBrowser({
               {connEnabled && connExpanded && conn.databases && pagedDatabases.visible.map((db) => {
                   const isRedis = isRedisConnection(conn.config);
                   const dbId = makeDatabaseNodeId(conn.config.id, db.name);
-                  const dbExpanded = searchActive || expandedNodeIds.has(dbId);
+                  const dbExpanded = expandedNodeIds.has(dbId);
                   const allTables = db.tables ?? [];
                   const allViews = db.views ?? [];
                   const allRoutines = db.routines ?? [];
@@ -1113,26 +1255,23 @@ export function SchemaBrowser({
                   const tblsFolderId = databaseTablesFolderId(conn.config.id, db.name);
                   const viewsFolderId = databaseViewsFolderId(conn.config.id, db.name);
                   const otherFolderId = databaseOtherFolderId(conn.config.id, db.name);
-                  const tblsExpanded = searchActive || expandedNodeIds.has(tblsFolderId);
-                  const viewsExpanded = searchActive || expandedNodeIds.has(viewsFolderId);
-                  const otherExpanded = searchActive || expandedNodeIds.has(otherFolderId);
+                  const tblsExpanded = expandedNodeIds.has(tblsFolderId);
+                  const viewsExpanded = expandedNodeIds.has(viewsFolderId);
+                  const otherExpanded = expandedNodeIds.has(otherFolderId);
                   const pagedTables = paginateSchemaChildren(
                     visibleTables,
                     tblsFolderId,
                     childVisibleLimits,
-                    paginateOpts,
                   );
                   const pagedViews = paginateSchemaChildren(
                     allViews,
                     viewsFolderId,
                     childVisibleLimits,
-                    paginateOpts,
                   );
                   const pagedRoutines = paginateSchemaChildren(
                     allRoutines,
                     otherFolderId,
                     childVisibleLimits,
-                    paginateOpts,
                   );
                   const dbItem = buildDatabaseTreeItem(conn.config.id, db.name);
                   const dbNodeRefreshing = Boolean(refreshingNodeIds[dbId]);
@@ -1180,6 +1319,7 @@ export function SchemaBrowser({
                         }
                         hasChildren={!isRedis && (hasDbObjectFolders || Boolean(db.loadError))}
                         onContextMenu={(e) => handleContextSchemaNode(dbItem, e)}
+                        {...resolveSchemaNodeActions(conn.config, dbItem)}
                       />
                       {dbExpanded && db.loadError && (
                         <div
@@ -1245,6 +1385,15 @@ export function SchemaBrowser({
                                 e,
                               )
                             }
+                            {...resolveSchemaNodeActions(
+                              conn.config,
+                              buildFolderTreeItem(
+                                tblsFolderId,
+                                t("database.sidebar.tables"),
+                                conn.config.id,
+                                db.name,
+                              ),
+                            )}
                           />
                           {tblsExpanded && tableVisibleCount === 0 && tableTotalCount > 0 && (
                             <div
@@ -1270,7 +1419,6 @@ export function SchemaBrowser({
                                 depth={3}
                                 expandedNodeIds={expandedNodeIds}
                                 childVisibleLimits={childVisibleLimits}
-                                searchActive={searchActive}
                                 activeTableKey={activeTableKey}
                                 tablePinned={isTablePinned(tableFilter, tbl.name)}
                                 onToggleTablePin={() => {
@@ -1291,6 +1439,7 @@ export function SchemaBrowser({
                                 resolveNodeMeta={(nodeId, meta) =>
                                   schemaNodeMeta(refreshingNodeIds, nodeId, meta, t("common.loading"))
                                 }
+                                resolveNodeActions={(item) => resolveSchemaNodeActions(conn.config, item)}
                               />
                             ))}
                           {tblsExpanded && pagedTables.hasMore && (
@@ -1335,6 +1484,15 @@ export function SchemaBrowser({
                                 e,
                               )
                             }
+                            {...resolveSchemaNodeActions(
+                              conn.config,
+                              buildFolderTreeItem(
+                                viewsFolderId,
+                                t("database.sidebar.views"),
+                                conn.config.id,
+                                db.name,
+                              ),
+                            )}
                           />
                           {viewsExpanded &&
                             pagedViews.visible.map((view) => (
@@ -1349,7 +1507,6 @@ export function SchemaBrowser({
                                 depth={3}
                                 expandedNodeIds={expandedNodeIds}
                                 childVisibleLimits={childVisibleLimits}
-                                searchActive={searchActive}
                                 activeTableKey={activeTableKey}
                                 onToggle={toggle}
                                 onLoadMore={loadMoreChildren}
@@ -1358,6 +1515,7 @@ export function SchemaBrowser({
                                 resolveNodeMeta={(nodeId, meta) =>
                                   schemaNodeMeta(refreshingNodeIds, nodeId, meta, t("common.loading"))
                                 }
+                                resolveNodeActions={(item) => resolveSchemaNodeActions(conn.config, item)}
                               />
                             ))}
                           {viewsExpanded && pagedViews.hasMore && (
@@ -1402,6 +1560,15 @@ export function SchemaBrowser({
                                 e,
                               )
                             }
+                            {...resolveSchemaNodeActions(
+                              conn.config,
+                              buildFolderTreeItem(
+                                otherFolderId,
+                                t("database.sidebar.other"),
+                                conn.config.id,
+                                db.name,
+                              ),
+                            )}
                           />
                           {otherExpanded &&
                             pagedRoutines.visible.map((routine) => {
@@ -1461,7 +1628,7 @@ export function SchemaBrowser({
                 !isRedisConnection(conn.config) &&
                 (() => {
                   const usersFolderId = connectionUsersFolderId(conn.config.id);
-                  const usersExpanded = searchActive || expandedNodeIds.has(usersFolderId);
+                  const usersExpanded = expandedNodeIds.has(usersFolderId);
                   const usersFolderRefreshing = Boolean(refreshingNodeIds[usersFolderId]);
                   const allUsers = conn.users ?? [];
                   const showUsersFolder = allUsers.length > 0 || usersFolderRefreshing;
@@ -1472,7 +1639,6 @@ export function SchemaBrowser({
                     allUsers,
                     usersFolderId,
                     childVisibleLimits,
-                    paginateOpts,
                   );
                   return (
                     <>
@@ -1503,6 +1669,14 @@ export function SchemaBrowser({
                             e,
                           )
                         }
+                        {...resolveSchemaNodeActions(
+                          conn.config,
+                          buildFolderTreeItem(
+                            usersFolderId,
+                            t("database.sidebar.users"),
+                            conn.config.id,
+                          ),
+                        )}
                       />
                       {usersExpanded &&
                         pagedUsers.visible.map((user) => {

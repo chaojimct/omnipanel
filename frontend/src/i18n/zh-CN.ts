@@ -374,6 +374,10 @@ export const zhCN = {
       searchPlaceholder: "搜索…",
       noResults: "无匹配项",
     },
+    fontSelect: {
+      loadFailed: "未能读取系统字体，显示候选列表",
+      retry: "重新检测",
+    },
     scopedSearch: {
       close: "关闭搜索",
     },
@@ -721,6 +725,15 @@ export const zhCN = {
       connectionDisabled: "已关闭",
       cacheEmpty: "未缓存",
       cacheEmptyHint: "点击上方刷新按钮从数据库加载 Schema",
+    },
+    schemaTree: {
+      deleteColumn: "删除字段",
+      deleteIndex: "删除索引",
+      confirmDeleteTitle: "确认删除",
+      confirmDeleteColumn: "确定删除字段「{name}」（表 {table}）？此操作不可撤销。",
+      confirmDeleteIndex: "确定删除索引「{name}」（表 {table}）？此操作不可撤销。",
+      dropUnsupported: "当前数据库类型不支持此操作",
+      dropFailed: "删除失败：{message}",
     },
     queryFiles: {
       search: "搜索 SQL 文件…",
@@ -1805,6 +1818,12 @@ export const zhCN = {
       desc: "SQL 查询与结果展示相关参数",
       queryPageSize: "查询结果分页大小",
       queryPageSizeDesc: "执行 SELECT 时每次加载的行数，可在结果区翻页浏览更多数据",
+      editorSection: "SQL 编辑器",
+      editorFontFamily: "字体",
+      editorFontFamilyDesc: "SQL 编辑器使用的等宽字体",
+      editorFontSize: "字号",
+      editorLineHeight: "行高",
+      editorLineHeightDesc: "行高倍数，影响代码行间距",
     },
     knowledge: {
       label: "知识库",
@@ -1869,6 +1888,7 @@ export const zhCN = {
         ssh: "SSH",
         ai: "AI 助手",
         workspace: "工作区",
+        sqlEditor: "SQL 编辑器",
       },
       items: {
         newTerminal: "新建终端标签",
@@ -1883,6 +1903,7 @@ export const zhCN = {
         newSsh: "新建 SSH 连接",
         openSettings: "打开设置",
         switchNthTab: "切换到第 N 个标签",
+        formatSql: "格式化 SQL 语句",
       },
     },
     aiDisplay: {

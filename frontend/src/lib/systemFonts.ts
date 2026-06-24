@@ -1,11 +1,11 @@
 /**
- * Detect which monospace fonts are installed on the system
- * using canvas width measurement.
+ * 检测系统已安装字体：Tauri 后端枚举优先，Web 环境回退 Local Font Access / FontFace / canvas / DOM 探测。
  */
 
-/** Popular monospace fonts to check across platforms */
-const MONOSPACE_CANDIDATES = [
-  // Coding fonts
+import { invoke } from "@tauri-apps/api/core";
+
+/** 常见等宽字体候选（Web 回退探测用） */
+export const MONOSPACE_FONT_CANDIDATES = [
   "Cascadia Code",
   "Cascadia Mono",
   "JetBrains Mono",
@@ -40,62 +40,315 @@ const MONOSPACE_CANDIDATES = [
   "Lucida Console",
   "Courier",
   "monospace",
-];
+] as const;
+
+/** 常见 UI 字体候选（Web 回退探测用） */
+const COMMON_UI_FONT_CANDIDATES = [
+  "Segoe UI",
+  "Arial",
+  "Arial Black",
+  "Calibri",
+  "Cambria",
+  "Candara",
+  "Comic Sans MS",
+  "Constantia",
+  "Corbel",
+  "Georgia",
+  "Impact",
+  "Lucida Sans Unicode",
+  "Microsoft Sans Serif",
+  "Palatino Linotype",
+  "Tahoma",
+  "Times New Roman",
+  "Trebuchet MS",
+  "Verdana",
+  "Yu Gothic UI",
+  "Microsoft YaHei",
+  "Microsoft YaHei UI",
+  "SimSun",
+  "SimHei",
+  "PingFang SC",
+  "PingFang TC",
+  "Hiragino Sans GB",
+  "Helvetica Neue",
+  "Helvetica",
+  "Arial Unicode MS",
+  "sans-serif",
+  "serif",
+] as const;
 
 const BASE_FONT = "monospace";
+const PROPORTIONAL_BASE = "sans-serif";
 const TEST_STRING = "mmmmmmmmmmlli";
 const TEST_SIZE = "72px";
+const QUERY_LOCAL_FONTS_TIMEOUT_MS = 2500;
 
-let cached: string[] | null = null;
+let cachedMonospace: string[] | null = null;
+let cachedAll: string[] | null = null;
+
+type LocalFontFace = { family: string };
+
+type QueryLocalFontsWindow = Window & {
+  queryLocalFonts?: () => Promise<LocalFontFace[]>;
+};
+
+function isTauriApp(): boolean {
+  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+}
+
+function sortFontNames(names: Iterable<string>): string[] {
+  return [...new Set([...names].map((name) => name.trim()).filter(Boolean))].sort((a, b) =>
+    a.localeCompare(b, undefined, { sensitivity: "base" }),
+  );
+}
+
+function ensureIncludesValue(fonts: string[], value?: string): string[] {
+  const trimmed = value?.trim();
+  if (!trimmed || fonts.includes(trimmed)) {
+    return fonts;
+  }
+  return sortFontNames([trimmed, ...fonts]);
+}
+
+async function queryTauriSystemFonts(monospaceOnly: boolean): Promise<string[]> {
+  if (!isTauriApp()) {
+    return [];
+  }
+  try {
+    const fonts = await invoke<string[]>("list_system_fonts", { monospaceOnly });
+    return sortFontNames(fonts);
+  } catch {
+    return [];
+  }
+}
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T | null> {
+  return new Promise((resolve) => {
+    let settled = false;
+    const timer = window.setTimeout(() => {
+      if (!settled) {
+        settled = true;
+        resolve(null);
+      }
+    }, timeoutMs);
+    promise
+      .then((value) => {
+        if (!settled) {
+          settled = true;
+          window.clearTimeout(timer);
+          resolve(value);
+        }
+      })
+      .catch(() => {
+        if (!settled) {
+          settled = true;
+          window.clearTimeout(timer);
+          resolve(null);
+        }
+      });
+  });
+}
+
+async function queryLocalFontFamilies(): Promise<string[]> {
+  const queryLocalFonts = (window as QueryLocalFontsWindow).queryLocalFonts;
+  if (!queryLocalFonts) {
+    return [];
+  }
+  try {
+    const faces = await withTimeout(queryLocalFonts(), QUERY_LOCAL_FONTS_TIMEOUT_MS);
+    if (!faces) {
+      return [];
+    }
+    return sortFontNames(faces.map((face) => face.family));
+  } catch {
+    return [];
+  }
+}
+
+async function ensureDocumentFontsReady(): Promise<void> {
+  if (!document.fonts?.ready) {
+    return;
+  }
+  try {
+    await document.fonts.ready;
+  } catch {
+    // ignore
+  }
+}
+
+function isGenericFamily(font: string): boolean {
+  return font === "monospace" || font === "sans-serif" || font === "serif";
+}
+
+function isFontAvailableByCheck(font: string): boolean {
+  if (isGenericFamily(font) || !document.fonts?.check) {
+    return isGenericFamily(font);
+  }
+  return (
+    document.fonts.check(`16px "${font}"`) ||
+    document.fonts.check(`16px '${font}'`) ||
+    document.fonts.check(`72px "${font}"`)
+  );
+}
+
+function probeInstalledFontsByDom(
+  candidates: readonly string[],
+  genericFamily: string,
+): string[] {
+  if (typeof document === "undefined" || !document.body) {
+    return [];
+  }
+
+  const span = document.createElement("span");
+  span.textContent = TEST_STRING;
+  span.style.position = "absolute";
+  span.style.left = "-9999px";
+  span.style.top = "-9999px";
+  span.style.visibility = "hidden";
+  span.style.whiteSpace = "nowrap";
+  span.style.fontSize = TEST_SIZE;
+  span.style.fontFamily = genericFamily;
+  document.body.appendChild(span);
+
+  const genericWidth = span.offsetWidth;
+  const detected: string[] = [];
+
+  for (const font of candidates) {
+    if (isGenericFamily(font)) {
+      detected.push(font);
+      continue;
+    }
+    span.style.fontFamily = `"${font}", ${genericFamily}`;
+    if (span.offsetWidth !== genericWidth) {
+      detected.push(font);
+    }
+  }
+
+  document.body.removeChild(span);
+  return detected;
+}
+
+function probeInstalledFontsByCanvas(
+  candidates: readonly string[],
+  baseFont: string,
+): string[] {
+  const canvas = document.createElement("canvas");
+  const ctx = canvas.getContext("2d");
+  if (!ctx) {
+    return [];
+  }
+
+  ctx.font = `${TEST_SIZE} ${baseFont}`;
+  const baselineWidth = ctx.measureText(TEST_STRING).width;
+  const detected: string[] = [];
+
+  for (const font of candidates) {
+    if (isGenericFamily(font)) {
+      detected.push(font);
+      continue;
+    }
+    ctx.font = `${TEST_SIZE} "${font}", ${baseFont}`;
+    const quotedWidth = ctx.measureText(TEST_STRING).width;
+    if (quotedWidth !== baselineWidth) {
+      detected.push(font);
+      continue;
+    }
+    ctx.font = `${TEST_SIZE} '${font}', ${baseFont}`;
+    if (ctx.measureText(TEST_STRING).width !== baselineWidth) {
+      detected.push(font);
+    }
+  }
+
+  return detected;
+}
+
+async function probeInstalledFonts(
+  candidates: readonly string[],
+  genericFamily: string,
+): Promise<string[]> {
+  await ensureDocumentFontsReady();
+
+  const detected = new Set<string>();
+  for (const font of candidates) {
+    if (isFontAvailableByCheck(font)) {
+      detected.add(font);
+    }
+  }
+  for (const font of probeInstalledFontsByDom(candidates, genericFamily)) {
+    detected.add(font);
+  }
+  for (const font of probeInstalledFontsByCanvas(candidates, genericFamily)) {
+    detected.add(font);
+  }
+  return sortFontNames(detected);
+}
+
+async function detectFromWebFallback(
+  candidates: readonly string[],
+  genericFamily: string,
+): Promise<string[]> {
+  const fromApi = await queryLocalFontFamilies();
+  if (fromApi.length > 0) {
+    return fromApi;
+  }
+  const probed = await probeInstalledFonts(candidates, genericFamily);
+  return probed.length > 0 ? probed : sortFontNames(candidates);
+}
 
 /**
- * Probe the system for installed monospace fonts.
- * Returns a promise that resolves to an alphabetically sorted list
- * of detected font names. Results are cached after the first call.
+ * 探测系统已安装的等宽字体。
  */
-export function detectMonospaceFonts(): Promise<string[]> {
-  if (cached) return Promise.resolve(cached);
+export async function detectMonospaceFonts(currentValue?: string): Promise<string[]> {
+  if (cachedMonospace) {
+    return ensureIncludesValue(cachedMonospace, currentValue);
+  }
 
-  return new Promise((resolve) => {
-    // Use requestIdleCallback if available, otherwise setTimeout
-    const run = () => {
-      const canvas = document.createElement("canvas");
-      const ctx = canvas.getContext("2d");
-      if (!ctx) {
-        cached = MONOSPACE_CANDIDATES;
-        resolve(cached);
-        return;
-      }
+  const fromTauri = await queryTauriSystemFonts(true);
+  if (fromTauri.length > 0) {
+    cachedMonospace = fromTauri;
+    return ensureIncludesValue(cachedMonospace, currentValue);
+  }
 
-      // Measure baseline width with the generic monospace font
-      ctx.font = `${TEST_SIZE} ${BASE_FONT}`;
-      const baselineWidth = ctx.measureText(TEST_STRING).width;
+  let detected = await detectFromWebFallback(MONOSPACE_FONT_CANDIDATES, BASE_FONT);
+  if (!detected.includes("monospace")) {
+    detected = sortFontNames([...detected, "monospace"]);
+  }
+  cachedMonospace = sortFontNames(detected);
+  return ensureIncludesValue(cachedMonospace, currentValue);
+}
 
-      const detected: string[] = [];
+/**
+ * 探测系统已安装的全部字体（尽力而为）。
+ */
+export async function detectAllSystemFonts(currentValue?: string): Promise<string[]> {
+  if (cachedAll) {
+    return ensureIncludesValue(cachedAll, currentValue);
+  }
 
-      for (const font of MONOSPACE_CANDIDATES) {
-        ctx.font = `${TEST_SIZE} '${font}', ${BASE_FONT}`;
-        const width = ctx.measureText(TEST_STRING).width;
-        // If the width differs from the baseline, the font is installed
-        if (width !== baselineWidth) {
-          detected.push(font);
-        }
-      }
+  const fromTauri = await queryTauriSystemFonts(false);
+  if (fromTauri.length > 0) {
+    cachedAll = fromTauri;
+    return ensureIncludesValue(cachedAll, currentValue);
+  }
 
-      // Always include the generic "monospace" fallback
-      if (!detected.includes("monospace")) {
-        detected.push("monospace");
-      }
+  const fromApi = await queryLocalFontFamilies();
+  if (fromApi.length > 0) {
+    cachedAll = fromApi;
+    return ensureIncludesValue(cachedAll, currentValue);
+  }
 
-      detected.sort((a, b) => a.localeCompare(b));
-      cached = detected;
-      resolve(detected);
-    };
+  const monospace = await probeInstalledFonts(MONOSPACE_FONT_CANDIDATES, BASE_FONT);
+  const proportional = await probeInstalledFonts(COMMON_UI_FONT_CANDIDATES, PROPORTIONAL_BASE);
+  const merged = sortFontNames([...monospace, ...proportional]);
+  cachedAll =
+    merged.length > 0
+      ? merged
+      : sortFontNames([...MONOSPACE_FONT_CANDIDATES, ...COMMON_UI_FONT_CANDIDATES]);
+  return ensureIncludesValue(cachedAll, currentValue);
+}
 
-    if (typeof requestIdleCallback === "function") {
-      requestIdleCallback(run, { timeout: 500 });
-    } else {
-      setTimeout(run, 0);
-    }
-  });
+/** 清除字体探测缓存（主要用于测试）。 */
+export function clearSystemFontCache(): void {
+  cachedMonospace = null;
+  cachedAll = null;
 }

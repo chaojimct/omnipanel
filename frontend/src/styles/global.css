@@ -6671,6 +6671,57 @@
         white-space: pre;
     }
 
+    .settings-subsection-title {
+        margin: var(--sp-5) 0 var(--sp-3);
+        font-size: 12px;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: var(--meta);
+    }
+
+    .sql-editor-preview {
+        border: 1px solid var(--border);
+        border-radius: var(--r-md);
+        overflow: hidden;
+        margin-bottom: var(--sp-4);
+        background: color-mix(in srgb, var(--surface) 88%, var(--bg-deeper));
+    }
+
+    .sql-editor-preview__body {
+        padding: 14px 16px;
+        min-height: 96px;
+        white-space: pre-wrap;
+        color: var(--fg);
+    }
+
+    .sql-editor-preview__kw {
+        color: var(--accent);
+        font-weight: 600;
+    }
+
+    .sql-editor-preview__str {
+        color: var(--success);
+    }
+
+    .font-family-select .omni-select-value {
+        font-family: var(--font-family-select-value), var(--font-ui);
+    }
+
+    .font-family-select__retry {
+        margin-top: 6px;
+        padding: 0;
+        border: none;
+        background: none;
+        color: var(--accent);
+        font-size: 11px;
+        cursor: pointer;
+    }
+
+    .font-family-select__retry:hover {
+        text-decoration: underline;
+    }
+
     @keyframes term-blink {
         50% {
             opacity: 0;
