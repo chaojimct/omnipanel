@@ -85,6 +85,7 @@ const MIN_ROW_HEIGHT = 28;
 const DEFAULT_ROW_HEIGHT = 36;
 const ROW_RESIZE_ZONE_PX = 8;
 const COLUMN_MIN_WIDTH = 60;
+const CELL_DRAG_THRESHOLD_PX = 4;
 const ROW_NUM_COL_ID = '__row_num__';
 
 type CellPos = { row: number; col: number };
@@ -128,6 +129,19 @@ function isNearRowBottom(target: HTMLElement, clientY: number): boolean {
   const rect = target.getBoundingClientRect();
   return clientY >= rect.bottom - ROW_RESIZE_ZONE_PX;
 }
+
+function hasActiveTextSelection(): boolean {
+  const sel = window.getSelection();
+  return Boolean(sel && sel.type === "Range" && sel.toString().length > 0);
+}
+
+type CellDragState = {
+  pending: boolean;
+  active: boolean;
+  start: CellPos;
+  startX: number;
+  startY: number;
+};
 
 /** 清除 WebView 在 DOM 更新后粘住的 :hover 伪类 */
 function resetStuckPointerHover(container: HTMLElement | null) {
@@ -525,7 +539,7 @@ export const TableDataGrid = memo(function TableDataGrid({ columns, rows, totalR
   const [cellRange, setCellRange] = useState<CellRange | null>(null);
   const cellRangeRef = useRef(cellRange);
   cellRangeRef.current = cellRange;
-  const cellDragRef = useRef<{ active: boolean; start: CellPos } | null>(null);
+  const cellDragRef = useRef<CellDragState | null>(null);
   const hoverResetPendingRef = useRef(false);
 
   useEffect(() => {
@@ -674,7 +688,7 @@ export const TableDataGrid = memo(function TableDataGrid({ columns, rows, totalR
           header: headerLabel,
           cell: ({ getValue }) => {
             const value = getValue();
-            return <span>{cellToText(value)}</span>;
+            return <span className="db-data-table-cell-text">{cellToText(value)}</span>;
           },
           minSize: isFieldCol ? 100 : COLUMN_MIN_WIDTH,
           size: isFieldCol ? 140 : 150,
@@ -738,17 +752,34 @@ export const TableDataGrid = memo(function TableDataGrid({ columns, rows, totalR
       if (!wrap) return;
 
       const cellDrag = cellDragRef.current;
-      if (cellDrag?.active) {
-        const el = document.elementFromPoint(event.clientX, event.clientY);
-        const td = el?.closest('td');
-        if (!td) return;
-        const tr = td.closest('tr');
-        if (!tr) return;
-        const rowIndex = Number((tr as HTMLElement).dataset.rowIndex);
-        const colIndex = Number((td as HTMLElement).dataset.colIndex);
-        if (isNaN(rowIndex) || isNaN(colIndex)) return;
-        setCellRange({ start: cellDrag.start, end: { row: rowIndex, col: colIndex } });
-        return;
+      if (cellDrag) {
+        if (cellDrag.pending && !cellDrag.active) {
+          const dx = event.clientX - cellDrag.startX;
+          const dy = event.clientY - cellDrag.startY;
+          if (Math.hypot(dx, dy) < CELL_DRAG_THRESHOLD_PX) {
+            return;
+          }
+          if (hasActiveTextSelection()) {
+            cellDragRef.current = null;
+            return;
+          }
+          cellDrag.pending = false;
+          cellDrag.active = true;
+          wrap?.classList.add("db-data-table-wrap--cell-selecting");
+          setCellRange({ start: cellDrag.start, end: cellDrag.start });
+        }
+        if (cellDrag.active) {
+          const el = document.elementFromPoint(event.clientX, event.clientY);
+          const td = el?.closest("td");
+          if (!td) return;
+          const tr = td.closest("tr");
+          if (!tr) return;
+          const rowIndex = Number((tr as HTMLElement).dataset.rowIndex);
+          const colIndex = Number((td as HTMLElement).dataset.colIndex);
+          if (isNaN(rowIndex) || isNaN(colIndex)) return;
+          setCellRange({ start: cellDrag.start, end: { row: rowIndex, col: colIndex } });
+          return;
+        }
       }
 
       const drag = dragRef.current;
@@ -781,6 +812,10 @@ export const TableDataGrid = memo(function TableDataGrid({ columns, rows, totalR
       const wrap = wrapRef.current;
 
       if (cellDragRef.current) {
+        const cellDrag = cellDragRef.current;
+        if (cellDrag.pending && !cellDrag.active && !hasActiveTextSelection()) {
+          setCellRange({ start: cellDrag.start, end: cellDrag.start });
+        }
         cellDragRef.current = null;
       }
 
@@ -804,13 +839,18 @@ export const TableDataGrid = memo(function TableDataGrid({ columns, rows, totalR
 
       dragRef.current = null;
       colResizeRef.current = null;
-      wrap?.classList.remove("db-data-table-wrap--resizing", "db-data-table-wrap--col-resizing");
+      wrap?.classList.remove(
+        "db-data-table-wrap--resizing",
+        "db-data-table-wrap--col-resizing",
+        "db-data-table-wrap--cell-selecting",
+      );
     };
 
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape" && cellRangeRef.current) {
         setCellRange(null);
         cellDragRef.current = null;
+        wrapRef.current?.classList.remove("db-data-table-wrap--cell-selecting");
       }
     };
     window.addEventListener("mousemove", onMouseMove);
@@ -976,11 +1016,21 @@ export const TableDataGrid = memo(function TableDataGrid({ columns, rows, totalR
                         end: { row: row.index, col: totalDataCols },
                       });
                     }
-                  : (event) => {
+                  : transposed
+                    ? (event) => {
+                        if (event.button !== 0) return;
+                        const tr = event.currentTarget.closest("tr");
+                        if (!tr) return;
+                        if (isNearRowBottom(tr, event.clientY)) {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          beginRowResize(row.index, event.clientY);
+                        }
+                      }
+                    : (event) => {
                 if (event.button !== 0) return;
                 if (event.shiftKey || event.ctrlKey || event.metaKey) return;
-                if (transposed) return;
-                const tr = event.currentTarget.closest('tr');
+                const tr = event.currentTarget.closest("tr");
                 if (!tr) return;
                 if (isNearRowBottom(tr, event.clientY)) {
                   event.preventDefault();
@@ -988,10 +1038,13 @@ export const TableDataGrid = memo(function TableDataGrid({ columns, rows, totalR
                   beginRowResize(row.index, event.clientY);
                   return;
                 }
-                event.preventDefault();
-                event.stopPropagation();
-                cellDragRef.current = { active: true, start: { row: row.index, col: cellIdx } };
-                setCellRange({ start: { row: row.index, col: cellIdx }, end: { row: row.index, col: cellIdx } });
+                cellDragRef.current = {
+                  pending: true,
+                  active: false,
+                  start: { row: row.index, col: cellIdx },
+                  startX: event.clientX,
+                  startY: event.clientY,
+                };
               }}
               onDoubleClick={canEdit ? () => effectiveOnCellEdit!({ rowIndex: cell.row.index, column: cell.column.id, row: cell.row.original }) : undefined}
               onContextMenu={
