@@ -30,7 +30,6 @@ import {
 import { getWorkspaceComponentDefinition } from "./workspaceComponentTypes";
 import { workspaceComponentRegistry } from "./workspaceComponentRegistry";
 import { syncWorkspaceDockActiveTabSideEffects } from "./syncWorkspaceDockActiveTab";
-import { useDbWorkspaceTabStore } from "../stores/dbWorkspaceTabStore";
 
 // --- Snapshot factories ---
 

@@ -85,10 +85,6 @@ export function WorkspacePanel({ workspace }: WorkspacePanelProps) {
     [workspace, rawTabs],
   );
 
-  const enterFullscreenFromChrome = useCallback(() => {
-    toggleEngineeringWorkspaceFullscreen(navigate);
-  }, [navigate]);
-
   const handleTopbarDoubleClick = useCallback(
     (event: React.MouseEvent) => {
       const target = event.target as HTMLElement;

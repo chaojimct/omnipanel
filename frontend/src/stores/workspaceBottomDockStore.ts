@@ -13,7 +13,6 @@ import type { WorkspaceInfo } from "./workspaceStore";
 import {
   defaultWorkspaceActiveTabId,
   isWorkspaceBuiltinTab,
-  isWorkspaceBuiltinTabId,
   normalizeWorkspaceTabs,
 } from "../lib/workspaceBuiltinPanels";
 
@@ -33,6 +32,8 @@ export interface WorkspaceDockTab {
   /** @deprecated 旧版内置面板类型，迁移后不再创建 */
   builtin?: "board" | "ai";
   closable?: boolean;
+  originScope?: string;
+  originPanelId?: string;
 }
 
 /** 解析工作区 dock tab 的面板类型 */
@@ -61,7 +62,7 @@ function normalizedTabsChanged(
 
 /** 组件侧派生 tabs 时使用；勿放入 zustand selector。 */
 export function resolveWorkspaceTabs(
-  workspace: WorkspaceInfo,
+  _workspace: WorkspaceInfo,
   tabs: WorkspaceDockTab[] | undefined,
 ): WorkspaceDockTab[] {
   return tabsNeedNormalize(tabs);
@@ -111,7 +112,7 @@ export const useWorkspaceBottomDockStore = create<WorkspaceBottomDockState>()(
       layoutByWorkspace: {},
       activeTabByWorkspace: {},
 
-      ensureWorkspaceData: (workspaceId, workspace) => {
+      ensureWorkspaceData: (workspaceId, _workspace) => {
         const existing = get().tabsByWorkspace[workspaceId];
         const merged = tabsNeedNormalize(existing);
         if (existing !== undefined && !normalizedTabsChanged(existing, merged)) {

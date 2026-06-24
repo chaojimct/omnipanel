@@ -1212,6 +1212,7 @@ export function DockerPanel() {
             key={`${selectedConnectionId ?? "unknown"}:${drawerId}`}
             connectionId={selectedConnectionId}
             containerId={drawerId}
+            activeWorkspaceId={activeWorkspaceId}
             canExec={probe?.capabilities?.canContainerExec ?? false}
             canStreamLogs={probe?.capabilities?.canStreamLogs ?? false}
             hostLabel={selectedConnection?.hostLabel ?? null}
@@ -1385,6 +1386,7 @@ function portLabel(p: { ip: string | null; publicPort: number | null; privatePor
 interface ContainerDrawerBodyProps {
   connectionId: string | null;
   containerId: string | null;
+  activeWorkspaceId: string;
   canExec: boolean;
   canStreamLogs: boolean;
   hostLabel: string | null;
@@ -1405,6 +1407,7 @@ type DrawerTab = "info" | "logs" | "terminal";
 function ContainerDrawerBody({
   connectionId,
   containerId,
+  activeWorkspaceId,
   canExec,
   canStreamLogs,
   hostLabel,

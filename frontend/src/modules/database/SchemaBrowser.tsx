@@ -645,7 +645,7 @@ export function SchemaBrowser({
   const refreshSchemaCache = useCallback(async () => {
     setLoadError(null);
     let enabledConnIds: string[] = [];
-    const { setConnectionRefreshing, replaceSnapshot } = useDbSchemaCacheStore.getState();
+    const { setConnectionRefreshing } = useDbSchemaCacheStore.getState();
     try {
       const list = await listConnections();
       enabledConnIds = list.filter(isConnectionEnabled).map((conn) => conn.id);
@@ -1554,7 +1554,7 @@ export function SchemaBrowser({
           onClose={() => setFilterDialogTable(null)}
           onApply={(state) => {
             const key = makeTableFilterKey(filterDialogTable.connId, filterDialogTable.dbName);
-            const items = filterDialogTableDb.tables.map((tbl) => tbl.name);
+            const items = (filterDialogTableDb.tables ?? []).map((tbl) => tbl.name);
             setTableFilters((prev) => {
               const pinnedNames = (prev[key]?.pinnedNames ?? []).filter((name) =>
                 state.visibleNames.has(name),

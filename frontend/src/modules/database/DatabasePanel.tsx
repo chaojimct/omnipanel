@@ -148,9 +148,8 @@ import {
   useDbWorkspaceTabStore,
 } from "../../stores/dbWorkspaceTabStore";
 import { usePersistedModuleTab } from "../../hooks/usePersistedModuleTab";
-import { useWorkspaceStore, onWorkspaceSwitch } from "../../stores/workspaceStore";
+import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { dbTabToSnapshot, addSnapshotToWorkspace } from "../../lib/workspaceTabActions";
-import { useWorkspaceTabStore, type DbTabSnapshot } from "../../stores/workspaceTabStore";
 import { connectionNodeId } from "./schemaTreeExpanded";
 
 type DbModuleTab = "query" | "transfer";
@@ -358,7 +357,6 @@ export function DatabasePanel() {
   const groups = useDbGroupStore((s) => s.groups);
   const activeGroupId = useDbGroupStore((s) => s.activeGroupId);
   const setActiveGroupId = useDbGroupStore((s) => s.setActiveGroupId);
-  const addGroup = useDbGroupStore((s) => s.addGroup);
   const getGroupName = useDbGroupStore((s) => s.getGroupName);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingConnection, setEditingConnection] = useState<DbConnectionConfig | null>(null);
@@ -406,10 +404,11 @@ export function DatabasePanel() {
   /** 每个 tab 的「未提交修改」：行键 -> {列名: 新值}。提交或回滚后清空对??tab??*/
   const [pendingTabAction, setPendingTabAction] = useState<
     | {
-        kind: "refresh" | "page" | "close" | "sort";
+        kind: "refresh" | "page" | "close" | "sort" | "filter";
         tabId: string;
         page?: number;
         sort?: SortState | null;
+        filter?: RuleGroupType | null;
       }
     | null
   >(null);
@@ -438,8 +437,6 @@ export function DatabasePanel() {
       return [...ids].sort();
     }),
   );
-  const wsTabStore = useWorkspaceTabStore;
-
   // Refs for workspace switch (access current state from event listener)
   const workspaceTabsRef = useRef(workspaceTabs);
   workspaceTabsRef.current = workspaceTabs;
@@ -2661,33 +2658,6 @@ export function DatabasePanel() {
       window.removeEventListener("omnipanel:close-db-workspace-tab", handleCloseEvent);
     };
   }, [closeWorkspaceTab]);
-
-  const handleCreateGroup = useCallback(async () => {
-    const name = await quickInput({
-      title: t("database.groups.createTitle"),
-      subtitle: t("database.groups.nameLabel"),
-      placeholder: t("database.groups.namePlaceholder"),
-      validate: (value) => {
-        if (!value.trim()) {
-          return t("database.groups.nameRequired");
-        }
-        if (groups.some((group) => group.name === value.trim())) {
-          return t("database.groups.duplicate");
-        }
-        return null;
-      },
-    });
-    if (name) {
-      addGroup(name);
-    }
-  }, [addGroup, groups, t]);
-
-  const handleSelectGroup = useCallback(
-    (groupId: string) => {
-      setActiveGroupId(groupId);
-    },
-    [setActiveGroupId],
-  );
 
   const openRedisQueryTab = useCallback(
     (connId: string, dbName: string | undefined, label: string) => {

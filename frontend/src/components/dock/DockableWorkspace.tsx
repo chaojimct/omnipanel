@@ -131,7 +131,7 @@ export interface DockableWorkspaceProps extends DockPanelRefreshProps {
   /** 为 false 时不按 panelType 折叠为 tab group（数据库等同类型多 Tab 需直接展示） */
   enableTabGroups?: boolean;
   /** topbar 风格 tab 栏（终端 session tab） */
-  tabStyle?: "default" | "topbar";
+  tabStyle?: "default" | "topbar" | "segment";
   /** 右侧「+」新建 tab / 菜单（与顶栏 TopbarTabs 行为一致） */
   addTabConfig?: DockAddTabConfig;
   /** Tab 栏前缀区域（dockview dv-pre-actions-container / prefixHeaderActions） */

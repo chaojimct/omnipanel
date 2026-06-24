@@ -6,7 +6,6 @@ import {
   halfHeightPx,
   isEmbeddedWorkspaceMode,
   resolveEmbeddedHeight,
-  splitWindowMinHeightPx,
   splitWindowHeightFromRatio,
   splitWindowHeightRatio,
   WS_HALF_HEIGHT_RATIO,
@@ -115,8 +114,7 @@ export const useBottomPanelStore = create<BottomPanelState>()(
       embeddedMode: "off",
 
       requestExpand: () => {
-        const { workspaceMode, workspaceDisplayPreference, lastExpandedHeightPx } =
-          get();
+        const { workspaceMode, workspaceDisplayPreference } = get();
         const normalized = normalizeWorkspaceMode(workspaceMode);
         if (
           isEmbeddedWorkspaceMode(normalized) &&
@@ -136,10 +134,9 @@ export const useBottomPanelStore = create<BottomPanelState>()(
         if (normalized === "hidden") {
           return;
         }
-        const remembered =
-          isEmbeddedWorkspaceMode(normalized) && normalized !== "hidden"
-            ? normalized
-            : lastNonFullscreenMode;
+        const remembered = isEmbeddedWorkspaceMode(normalized)
+          ? normalized
+          : lastNonFullscreenMode;
         const lastExpandedHeightPx =
           workspaceHeightPx > WS_HEIGHT_HIDDEN_MAX
             ? workspaceHeightPx
@@ -254,7 +251,7 @@ export const useBottomPanelStore = create<BottomPanelState>()(
       },
 
       enterWorkspaceFullscreen: () => {
-        set((state) => ({
+        set(() => ({
           workspaceMode: "fullscreen",
           ...syncDerivedFlags("fullscreen"),
         }));
@@ -473,7 +470,8 @@ export const useBottomPanelStore = create<BottomPanelState>()(
           merged.workspaceHeightPx = 0;
           Object.assign(merged, syncDerivedFlags("hidden"));
         }
-        if (merged.workspaceMode === "home") {
+        const legacyMode = p.workspaceMode as WorkspaceMode | undefined;
+        if (legacyMode === "home") {
           merged.workspaceMode = "hidden";
           Object.assign(merged, syncDerivedFlags("hidden"));
         }

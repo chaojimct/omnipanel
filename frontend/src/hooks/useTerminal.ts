@@ -531,7 +531,7 @@ export function useTerminal(
 
     let outputBatcher: ReturnType<typeof createTerminalOutputBatcher> | null = null;
     let remoteInitEchoFilter: ReturnType<typeof createRemoteInitEchoFilter> | null = null;
-    let remoteInitEchoFilterTimer: ReturnType<typeof setTimeout> | null = null;
+    let remoteInitEchoFilterTimer: number | null = null;
 
     function queueOutput(bytes: Uint8Array) {
       outputBatcher?.push(bytes);

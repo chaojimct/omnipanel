@@ -44,6 +44,7 @@ export type RedisQueryWorkspaceTab = {
   connId: string;
   /** 从侧栏点选具体库时锁定；点连接时为空 */
   dbName?: string;
+  workspaceOnly?: boolean;
 };
 
 export type DbWorkspaceTab =

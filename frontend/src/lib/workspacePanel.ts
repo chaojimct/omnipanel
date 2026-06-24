@@ -14,12 +14,6 @@ export {
 } from "./workspaceTabActions";
 export {
   registerWorkspaceComponent,
-  workspaceComponentRegistry,
-  renderWorkspaceComponent,
-  resolveWorkspaceComponentPreviewKind,
-  moduleSegmentComponentType,
-} from "./workspaceComponentRegistry";
-export {
   buildComponentSnapshot,
   buildComponentSnapshotId,
   getWorkspaceComponentDefinition,
@@ -28,3 +22,9 @@ export {
   type WorkspaceComponentDefinition,
   type WorkspaceComponentProps,
 } from "./workspaceComponentTypes";
+export {
+  workspaceComponentRegistry,
+  renderWorkspaceComponent,
+  resolveWorkspaceComponentPreviewKind,
+  moduleSegmentComponentType,
+} from "./workspaceComponentRegistry";

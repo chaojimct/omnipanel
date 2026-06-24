@@ -166,7 +166,7 @@ function QueryBuilderValueEditor({
   return (
     <input
       data-testid={testID}
-      type={inputTypeCoerced === "bigint" ? "text" : inputTypeCoerced}
+      type={inputTypeCoerced === "bigint" || inputTypeCoerced == null ? "text" : inputTypeCoerced}
       className={className}
       title={title}
       placeholder={placeholder}

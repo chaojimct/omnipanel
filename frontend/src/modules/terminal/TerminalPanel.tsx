@@ -17,7 +17,6 @@ import { navigateToPath } from "../../lib/terminalSession";
 import { LOCAL_TERMINAL_RESOURCE_ID } from "./paneResource";
 import { TerminalTabDockPane } from "./TerminalTabDockPane";
 import { clearTerminalPaneSender } from "./terminalPaneSenders";
-import { useWorkspaceBottomDockStore } from "../../stores/workspaceBottomDockStore";
 import {
   copyTerminalTabToWorkspaceSnapshot,
   moveTerminalTabToWorkspaceSnapshot,

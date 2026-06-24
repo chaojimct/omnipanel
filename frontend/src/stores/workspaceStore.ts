@@ -6,7 +6,7 @@ import {
   type WorkspaceResource,
 } from "../lib/resourceRegistry";
 import { resolveResourceById } from "./connectionStore";
-import { DASHBOARD_PATH, WORKSPACE_PATHS } from "../lib/paths";
+import { DASHBOARD_PATH } from "../lib/paths";
 
 export interface WorkspaceInfo {
   id: string;

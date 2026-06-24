@@ -6,7 +6,6 @@ import { useBottomPanelStore, useEmbeddedWorkspaceMode } from "../../stores/bott
 import { relayoutDockviewInstances } from "../../lib/dockviewRegistry";
 import {
   WS_HEIGHT_HIDDEN_MAX,
-  WS_HEIGHT_TASKBAR_MAX,
   type WorkspaceDisplayPreference,
 } from "../../lib/workspaceMode";
 

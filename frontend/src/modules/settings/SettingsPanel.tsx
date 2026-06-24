@@ -26,7 +26,6 @@ import {
   clampUiScale,
   KNOWLEDGE_CHUNK_SIZE,
   KNOWLEDGE_CHUNK_OVERLAP,
-  KNOWLEDGE_TOP_N,
   clampKnowledgeChunkSize,
   clampKnowledgeChunkOverlap,
   clampKnowledgeTopN,

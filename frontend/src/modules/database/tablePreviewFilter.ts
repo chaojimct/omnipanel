@@ -1,5 +1,4 @@
 import {
-  add,
   formatQuery,
   prepareRuleGroup,
   type Field,
@@ -107,7 +106,10 @@ export function appendFilterRuleForColumn(
   column: string,
 ): RuleGroupType {
   const base = ensureTableFilterQuery(filter);
-  return add(base, { field: column, operator: "=", value: "" });
+  return ensureTableFilterQuery({
+    ...base,
+    rules: [...base.rules, { field: column, operator: "=", value: "" }],
+  });
 }
 
 /** 从全局过滤中提取指定列的条件，供单列过滤弹层编辑 */
@@ -133,15 +135,24 @@ export function extractColumnFilter(
 /** 从过滤树中移除指定列的所有条件 */
 export function removeColumnRules(filter: RuleGroupType, column: string): RuleGroupType {
   const strip = (group: RuleGroupType): RuleGroupType => {
-    const rules = group.rules.flatMap((rule) => {
-      if (typeof rule === "string") return [rule];
+    const rules: (RuleType | RuleGroupType | string)[] = [];
+    for (const rule of group.rules) {
+      if (typeof rule === "string") {
+        rules.push(rule);
+        continue;
+      }
       if (isRuleGroup(rule)) {
         const nested = strip(rule);
-        return nested.rules.length > 0 ? [nested] : [];
+        if (nested.rules.length > 0) {
+          rules.push(nested);
+        }
+        continue;
       }
-      return String(rule.field) === column ? [] : [rule];
-    });
-    return { ...group, rules };
+      if (String(rule.field) !== column) {
+        rules.push(rule);
+      }
+    }
+    return { ...group, rules: rules as RuleGroupType["rules"] };
   };
   return ensureTableFilterQuery(strip(filter));
 }

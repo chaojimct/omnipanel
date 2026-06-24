@@ -3,7 +3,7 @@ import { LocalFilePanel } from "@/components/files";
 import { SftpPanel } from "@/components/sftp";
 import { TunnelPanel } from "@/components/tunnel";
 import { AdvanceTerminalMonitorStack } from "@/modules/terminal/AdvanceTerminalMonitorStack";
-import { useConnectionStore } from "@/stores/connectionStore";
+import { useConnectionStore, connectionToResource } from "@/stores/connectionStore";
 import {
   createWorkspaceComponentRegistry,
   getWorkspaceComponentDefinition,
@@ -51,7 +51,7 @@ function registerBuiltinWorkspaceComponents(registry: WorkspaceComponentRegistry
       const resourceId = typeof props.resourceId === "string" ? props.resourceId : "";
       const resource = useConnectionStore.getState().connections.find((c) => c.id === resourceId);
       if (!resource) return null;
-      return <TunnelPanel activeResource={resource} />;
+      return <TunnelPanel activeResource={connectionToResource(resource)} />;
     },
   });
 
