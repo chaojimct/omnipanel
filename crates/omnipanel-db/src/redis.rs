@@ -182,6 +182,7 @@ impl DbDriver for RedisDriver {
         limit: i64,
         _offset: i64,
         _order_by: Option<&str>,
+        _where_clause: Option<&str>,
     ) -> OmniResult<QueryResult> {
         let mut conn = self.conn.clone();
         let key_type: String = redis::cmd("TYPE")
@@ -266,7 +267,7 @@ impl DbDriver for RedisDriver {
         }
     }
 
-    async fn count(&self, table: &str) -> OmniResult<i64> {
+    async fn count(&self, table: &str, _where_clause: Option<&str>) -> OmniResult<i64> {
         let mut conn = self.conn.clone();
         let key_type: String = redis::cmd("TYPE")
             .arg(table)

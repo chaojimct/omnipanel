@@ -1113,12 +1113,19 @@ pub async fn db_preview_table(
     limit: u32,
     offset: u32,
     order_by: Option<String>,
+    where_clause: Option<String>,
 ) -> Result<TableInfo, String> {
     let driver = omnipanel_db::connect(&to_params(&connection))
         .await
         .map_err(err_msg)?;
     let result = driver
-        .preview(&table, limit as i64, offset as i64, order_by.as_deref())
+        .preview(
+            &table,
+            limit as i64,
+            offset as i64,
+            order_by.as_deref(),
+            where_clause.as_deref(),
+        )
         .await
         .map_err(err_msg)?;
     Ok(to_table_info(table, result))
@@ -1130,13 +1137,17 @@ pub async fn db_count_table(
     connection: DbConnectionConfig,
     schema: Option<String>,
     table: String,
+    where_clause: Option<String>,
 ) -> Result<i64, String> {
     let params = with_schema(&connection, schema);
     if params.database.trim().is_empty() {
         return Err("未指定数据库".to_string());
     }
     let driver = omnipanel_db::connect(&params).await.map_err(err_msg)?;
-    driver.count(table.trim()).await.map_err(err_msg)
+    driver
+        .count(table.trim(), where_clause.as_deref())
+        .await
+        .map_err(err_msg)
 }
 
 /// 在同一连接上顺序统计多表行数，避免前端并发 `db_count_table` 打满连接池。
@@ -1158,7 +1169,7 @@ pub async fn db_count_tables(
         if trimmed.is_empty() {
             continue;
         }
-        let count = driver.count(&trimmed).await.ok();
+        let count = driver.count(&trimmed, None).await.ok();
         out.push(TableRowCount {
             name: trimmed,
             count,

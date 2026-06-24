@@ -117,6 +117,8 @@ import {
 import { DbPanelSurface } from "./DbPanelSurface";
 import { DbTablePreviewSurface } from "./DbTablePreviewSurface";
 import { DbSidebarLinkageProvider } from "./DbSidebarLinkageContext";
+import { formatFilterWhere } from "./tablePreviewFilter";
+import type { RuleGroupType } from "react-querybuilder";
 import { ModuleSegmentDock } from "../../components/dock";
 import { patchDockTabFileMeta } from "../../components/dock/dockTabLiveMeta";
 import { DbWorkspaceProviders } from "../../contexts/DbWorkspaceContext";
@@ -788,10 +790,12 @@ export function DatabasePanel() {
         .catch(() => {});
 
       const sort = meta.sort ?? null;
+      const filter = meta.filter ?? null;
       const orderBy = sort ? buildOrderByClause(sort, connection.db_type) : undefined;
+      const where = formatFilterWhere(filter, connection.db_type);
       void Promise.all([
-        countTable(connForSchema, meta.tableName, meta.dbName),
-        previewTable(connForSchema, meta.tableName, meta.pageSize, meta.page * meta.pageSize, orderBy),
+        countTable(connForSchema, meta.tableName, meta.dbName, where),
+        previewTable(connForSchema, meta.tableName, meta.pageSize, meta.page * meta.pageSize, orderBy, where),
       ])
         .then(([totalRows, data]) => {
           if (connection.db_type === "redis") {
@@ -814,6 +818,7 @@ export function DatabasePanel() {
               dbName: meta.dbName,
               tableName: meta.tableName,
               sort,
+              filter,
             },
           }));
         })
@@ -830,6 +835,7 @@ export function DatabasePanel() {
               page: meta.page,
               pageSize: meta.pageSize,
               sort,
+              filter,
             },
           }));
         });
@@ -1154,10 +1160,11 @@ export function DatabasePanel() {
         const orderBy = existing.sort
           ? buildOrderByClause(existing.sort, connection.db_type)
           : undefined;
+        const where = formatFilterWhere(existing.filter, connection.db_type);
 
         Promise.all([
-          countTable(connForSchema, tableName, dbName),
-          previewTable(connForSchema, tableName, pageSize, page * pageSize, orderBy),
+          countTable(connForSchema, tableName, dbName, where),
+          previewTable(connForSchema, tableName, pageSize, page * pageSize, orderBy, where),
         ])
           .then(([totalRows, data]) => {
             setTablePreviews((p) => {
@@ -1191,8 +1198,9 @@ export function DatabasePanel() {
         const orderBy = existing.sort
           ? buildOrderByClause(existing.sort, connection.db_type)
           : undefined;
+        const where = formatFilterWhere(existing.filter, connection.db_type);
 
-        previewTable(connForSchema, tableName, pageSize, page * pageSize, orderBy)
+        previewTable(connForSchema, tableName, pageSize, page * pageSize, orderBy, where)
           .then((data) => {
             setTablePreviews((p) => {
               const cur = p[tabId];
@@ -1209,6 +1217,66 @@ export function DatabasePanel() {
           });
 
         return { ...prev, [tabId]: { ...existing, loading: true } };
+      });
+    },
+    [connections],
+  );
+
+  const setTableFilter = useCallback(
+    (tabId: string, filter: RuleGroupType | null) => {
+      const preview = useDbWorkspaceTabStore.getState().tablePreviews[tabId];
+      if (!preview?.connId || !preview?.dbName || !preview?.tableName) return;
+      const connection = connections.find((c) => c.id === preview.connId);
+      if (!connection) return;
+      const connForSchema = { ...connection, database: preview.dbName };
+
+      setTablePreviews((prev) => {
+        const existing = prev[tabId] ?? createDefaultTablePreviewState();
+        const pageSize = existing.pageSize;
+        const orderBy = existing.sort
+          ? buildOrderByClause(existing.sort, connection.db_type)
+          : undefined;
+        const where = formatFilterWhere(filter, connection.db_type);
+
+        Promise.all([
+          countTable(connForSchema, preview.tableName!, preview.dbName!, where),
+          previewTable(connForSchema, preview.tableName!, pageSize, 0, orderBy, where),
+        ])
+          .then(([totalRows, data]) => {
+            setTablePreviews((p) => {
+              const cur = p[tabId];
+              if (!cur) return p;
+              return {
+                ...p,
+                [tabId]: {
+                  ...cur,
+                  loading: false,
+                  error: null,
+                  data,
+                  totalRows,
+                  page: 0,
+                  filter,
+                },
+              };
+            });
+          })
+          .catch((e) => {
+            setTablePreviews((p) => {
+              const cur = p[tabId];
+              if (!cur) return p;
+              return {
+                ...p,
+                [tabId]: {
+                  ...cur,
+                  loading: false,
+                  error: typeof e === "string" ? e : String(e),
+                  filter,
+                },
+              };
+            });
+          });
+
+        return { ...prev, [tabId]: { ...existing, loading: true, filter } };
       });
     },
     [connections],
@@ -1253,10 +1321,11 @@ export function DatabasePanel() {
         const existing = prev[tabId] ?? createDefaultTablePreviewState();
         const pageSize = existing.pageSize;
         const orderBy = sort ? buildOrderByClause(sort, connection.db_type) : undefined;
+        const where = formatFilterWhere(existing.filter, connection.db_type);
 
         Promise.all([
-          countTable(connForSchema, preview.tableName!, preview.dbName!),
-          previewTable(connForSchema, preview.tableName!, pageSize, 0, orderBy),
+          countTable(connForSchema, preview.tableName!, preview.dbName!, where),
+          previewTable(connForSchema, preview.tableName!, pageSize, 0, orderBy, where),
         ])
           .then(([totalRows, data]) => {
             setTablePreviews((p) => {
@@ -1554,6 +1623,7 @@ export function DatabasePanel() {
             page: meta.page,
             pageSize: meta.pageSize,
             sort: meta.sort ?? null,
+            filter: meta.filter ?? null,
           },
         }));
         const connection = connections.find((item) => item.id === meta.connId);
@@ -1586,22 +1656,36 @@ export function DatabasePanel() {
   );
 
   const executeTabAction = useCallback(
-    (action: { kind: "refresh" | "page" | "close" | "sort"; tabId: string; page?: number; sort?: SortState | null }) => {
+    (action: {
+      kind: "refresh" | "page" | "close" | "sort" | "filter";
+      tabId: string;
+      page?: number;
+      sort?: SortState | null;
+      filter?: RuleGroupType | null;
+    }) => {
       if (action.kind === "refresh") {
         refreshTabPreviewNow(action.tabId);
       } else if (action.kind === "page") {
         goToPageNow(action.tabId, action.page ?? 0);
       } else if (action.kind === "sort") {
         setTableSort(action.tabId, action.sort ?? null);
+      } else if (action.kind === "filter") {
+        setTableFilter(action.tabId, action.filter ?? null);
       } else {
         closeWorkspaceTab(action.tabId);
       }
     },
-    [refreshTabPreviewNow, goToPageNow, setTableSort, closeWorkspaceTab],
+    [refreshTabPreviewNow, goToPageNow, setTableSort, setTableFilter, closeWorkspaceTab],
   );
 
   const requestTabAction = useCallback(
-    (action: { kind: "refresh" | "page" | "close" | "sort"; tabId: string; page?: number; sort?: SortState | null }) => {
+    (action: {
+      kind: "refresh" | "page" | "close" | "sort" | "filter";
+      tabId: string;
+      page?: number;
+      sort?: SortState | null;
+      filter?: RuleGroupType | null;
+    }) => {
       if (hasDirty(action.tabId)) {
         setPendingTabAction(action);
         return;
@@ -2842,6 +2926,7 @@ export function DatabasePanel() {
         goToPage,
         requestTabAction,
         setTableSort,
+        setTableFilter,
         handleCellEdit,
         handleRowEdit,
         handleCellSetNull,
@@ -2875,6 +2960,7 @@ export function DatabasePanel() {
     updateSqlTabState,
     refreshTablePreview,
     goToPage,
+    setTableFilter,
     handleCellEdit,
     handleRowEdit,
     handleCellSetNull,

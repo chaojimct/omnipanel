@@ -40,6 +40,8 @@ export interface SelectProps {
   style?: CSSProperties;
   emptyText?: string;
   searchPlaceholder?: string;
+  /** 下拉面板 z-index，默认 10000；嵌套在更高层级弹层内需传入更大值 */
+  panelZIndex?: number;
   "aria-label"?: string;
   title?: string;
 }
@@ -84,6 +86,7 @@ export function Select({
   style,
   emptyText,
   searchPlaceholder,
+  panelZIndex = 10000,
   "aria-label": ariaLabel,
   title,
 }: SelectProps) {
@@ -153,13 +156,13 @@ export function Select({
       position: "fixed",
       left: rect.left,
       width: rect.width,
-      zIndex: 10000,
+      zIndex: panelZIndex,
       visibility: "visible",
       ...(shouldDropUp
         ? { bottom: window.innerHeight - rect.top + 2, top: "auto" }
         : { top: rect.bottom + 2, bottom: "auto" }),
     });
-  }, []);
+  }, [panelZIndex]);
 
   useLayoutEffect(() => {
     if (!open) return;

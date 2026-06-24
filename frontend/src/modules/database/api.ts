@@ -320,6 +320,7 @@ export async function previewTable(
   limit = 200,
   offset = 0,
   orderBy?: string,
+  whereClause?: string,
 ): Promise<TablePreviewResult> {
   return invoke<TablePreviewResult>("db_preview_table", {
     connection,
@@ -327,6 +328,7 @@ export async function previewTable(
     limit,
     offset,
     orderBy,
+    whereClause: whereClause?.trim() ? whereClause.trim() : null,
   });
 }
 
@@ -339,11 +341,13 @@ export async function countTable(
   connection: DbConnectionConfig,
   table: string,
   database?: string,
+  whereClause?: string,
 ): Promise<number> {
   return invoke<number>("db_count_table", {
     connection,
     table,
     schema: database?.trim() ? database.trim() : null,
+    whereClause: whereClause?.trim() ? whereClause.trim() : null,
   });
 }
 

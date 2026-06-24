@@ -77,8 +77,10 @@ impl DbDriver for SqliteDriver {
         limit: i64,
         offset: i64,
         order_by: Option<&str>,
+        where_clause: Option<&str>,
     ) -> OmniResult<QueryResult> {
         let safe = table.replace('"', "");
+        let where_sql = crate::build_where_sql(where_clause)?;
         let order_clause = match order_by {
             Some(clause) if !clause.trim().is_empty() => {
                 format!(" ORDER BY {}", clause.trim())
@@ -86,8 +88,9 @@ impl DbDriver for SqliteDriver {
             _ => String::new(),
         };
         let sql = format!(
-            "SELECT * FROM \"{}\"{} LIMIT {} OFFSET {}",
+            "SELECT * FROM \"{}\"{}{} LIMIT {} OFFSET {}",
             safe,
+            where_sql,
             order_clause,
             limit.max(0),
             offset.max(0)
@@ -95,9 +98,10 @@ impl DbDriver for SqliteDriver {
         self.with_conn(move |conn| run(conn, &sql)).await
     }
 
-    async fn count(&self, table: &str) -> OmniResult<i64> {
+    async fn count(&self, table: &str, where_clause: Option<&str>) -> OmniResult<i64> {
         let safe = table.replace('"', "");
-        let sql = format!("SELECT COUNT(*) AS count FROM \"{}\"", safe);
+        let where_sql = crate::build_where_sql(where_clause)?;
+        let sql = format!("SELECT COUNT(*) AS count FROM \"{}\"{}", safe, where_sql);
         self.with_conn(move |conn| {
             let count: i64 = conn
                 .query_row(&sql, [], |row| row.get(0))

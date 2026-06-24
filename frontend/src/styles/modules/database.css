@@ -2622,6 +2622,234 @@
         opacity: 1;
     }
 
+    .db-data-table-th--filtered {
+        color: var(--accent);
+    }
+
+    .db-data-table-filter-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        margin-left: 4px;
+        padding: 0;
+        border: none;
+        background: transparent;
+        color: inherit;
+        opacity: 0.45;
+        cursor: pointer;
+        flex-shrink: 0;
+    }
+
+    .db-data-table-filter-btn:hover,
+    .db-data-table-filter-btn--active {
+        opacity: 1;
+        color: var(--accent);
+    }
+
+    .db-query-filter-popover {
+        position: fixed;
+        z-index: 10050;
+        display: flex;
+        flex-direction: column;
+        min-width: 320px;
+        max-height: min(360px, calc(100vh - 32px));
+        background: var(--bg-elevated, var(--bg-deeper));
+        border: 1px solid var(--border);
+        border-radius: var(--radius, 6px);
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+        font-size: 11px;
+        color: var(--text);
+    }
+
+    .db-query-filter-popover-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--sp-1);
+        padding: 6px var(--sp-2);
+        border-bottom: 1px solid var(--border);
+    }
+
+    .db-query-filter-popover-title {
+        font-size: 11px;
+        font-weight: 600;
+        color: var(--text);
+    }
+
+    .db-query-filter-popover-count {
+        font-size: 10px;
+        color: var(--meta);
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+    }
+
+    .db-query-filter-popover-body {
+        padding: var(--sp-2);
+        overflow: auto;
+        min-height: 0;
+    }
+
+    .db-query-filter-popover-footer {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--sp-1);
+        padding: 6px var(--sp-2);
+        border-top: 1px solid var(--border);
+    }
+
+    .db-query-filter-popover-footer-actions {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--sp-1);
+    }
+
+    .db-query-filter {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        font-size: 11px;
+        color: var(--text);
+    }
+
+    .db-query-filter-group {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+    }
+
+    .db-query-filter-group .db-query-filter-group {
+        padding: 6px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius, 4px);
+        background: color-mix(in srgb, var(--bg-input, var(--bg)) 88%, transparent);
+    }
+
+    .db-query-filter-group-header {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 4px;
+    }
+
+    .db-query-filter-group-header .db-query-filter-action {
+        flex-shrink: 0;
+    }
+
+    .db-query-filter-group-header > .db-query-filter-combinators {
+        display: none;
+    }
+
+    .db-query-filter-group-body {
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 6px;
+    }
+
+    .db-query-filter-rule {
+        display: grid;
+        grid-template-columns: minmax(72px, 0.75fr) minmax(72px, 0.8fr) minmax(96px, 1.45fr) auto;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 6px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius, 4px);
+        background: var(--bg-input, var(--bg));
+    }
+
+    .db-query-filter-field-label {
+        display: inline-flex;
+        align-items: center;
+        min-height: 24px;
+        padding: 0 6px;
+        font-size: 11px;
+        font-weight: 600;
+        color: var(--accent);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .db-query-filter-combinators {
+        align-self: flex-start;
+        margin-left: 2px;
+    }
+
+    .db-query-filter-combinators .omni-select {
+        min-width: 72px;
+    }
+
+    .db-query-filter-field,
+    .db-query-filter-operator,
+    .db-query-filter-combinators,
+    .db-query-filter-value {
+        min-width: 0;
+    }
+
+    .db-query-filter .omni-select--sm .omni-select-trigger {
+        height: 24px;
+        padding: 0 6px;
+        font-size: 11px;
+    }
+
+    .db-query-filter .omni-select-chevron {
+        width: 12px;
+        height: 12px;
+    }
+
+    .db-query-filter-field .omni-select,
+    .db-query-filter-operator .omni-select,
+    .db-query-filter-value .omni-select {
+        width: 100%;
+    }
+
+    .db-query-filter-value input[type="text"],
+    .db-query-filter-value input[type="number"],
+    .db-query-filter-value input[type="date"],
+    .db-query-filter-value input[type="datetime-local"],
+    .db-query-filter-value input[type="time"],
+    .db-query-filter-value select {
+        width: 100%;
+        height: 24px;
+        padding: 0 6px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius, 4px);
+        background: var(--bg-input, var(--bg));
+        color: var(--text);
+        font-size: 11px;
+        outline: none;
+        transition: border-color 0.12s, box-shadow 0.12s;
+    }
+
+    .db-query-filter-value input:focus {
+        border-color: var(--accent);
+        box-shadow: 0 0 0 2px var(--accent-soft);
+    }
+
+    .db-query-filter-value input[type="checkbox"] {
+        width: 13px;
+        height: 13px;
+        margin: 0;
+        accent-color: var(--accent);
+    }
+
+    .db-query-filter-remove {
+        justify-self: end;
+        flex-shrink: 0;
+    }
+
+    @media (max-width: 560px) {
+        .db-query-filter-rule {
+            grid-template-columns: 1fr 1fr auto;
+        }
+
+        .db-query-filter-value {
+            grid-column: 1 / -2;
+        }
+    }
+
     .db-data-table td {
         box-sizing: border-box;
     }
@@ -2961,10 +3189,24 @@
     }
 
     .db-data-table-wrap--transposed .db-data-table-cell--field,
-    .db-data-table-wrap--transposed .db-data-table th:first-child {
+    .db-data-table-wrap--transposed .db-data-table th[data-col-id="__field__"] {
         font-weight: 600;
         color: var(--accent);
         background: var(--accent-soft);
+    }
+
+    /* 行转列：横向滚动时固定左侧字段列（表头 + 数据列） */
+    .db-data-table-wrap--transposed .db-data-table th[data-col-id="__field__"] {
+        left: 0;
+        z-index: 3;
+        box-shadow: 1px 0 0 var(--border);
+    }
+
+    .db-data-table-wrap--transposed .db-data-table-cell--field {
+        position: sticky;
+        left: 0;
+        z-index: 2;
+        box-shadow: 1px 0 0 var(--border);
     }
 
     .db-pagination-controls {

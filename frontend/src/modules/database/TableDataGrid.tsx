@@ -19,6 +19,7 @@ import {
   type ColumnSizingState,
 } from "@tanstack/react-table";
 import { useVirtualizer } from "@tanstack/react-virtual";
+import type { RuleGroupType } from "react-querybuilder";
 
 import { Button } from "../../components/ui/Button";
 import { ContextMenu } from "../../components/ui/ContextMenu";
@@ -26,6 +27,8 @@ import { useI18n } from "../../i18n";
 import { textSearchMatches } from "../../lib/textSearchMatch";
 import { type DbColumnMeta } from "./api";
 import { PENDING_INSERT_ROW_KEY, type SortState } from "./dbWorkspaceState";
+import { getFilterColumnNames } from "./tablePreviewFilter";
+import { TableDataGridFilterPopover } from "./TableDataGridFilterPopover";
 
 export type TableDataGridProps = {
   columns: string[];
@@ -53,6 +56,12 @@ export type TableDataGridProps = {
   onSortChange?: (sort: SortState | null) => void;
   /** 是否启用列头排序（表预览模式） */
   enableSort?: boolean;
+  /** 当前过滤规则（表预览模式） */
+  filter?: RuleGroupType | null;
+  /** 过滤变更回调 */
+  onFilterChange?: (filter: RuleGroupType | null) => void;
+  /** 是否启用列过滤（表预览模式） */
+  enableFilter?: boolean;
 };
 
 function buildRowKey(row: Record<string, unknown>, pkCols: { name: string }[]): string {
@@ -476,7 +485,7 @@ function ColumnVisibilityPopover({
   );
 }
 
-export const TableDataGrid = memo(function TableDataGrid({ columns, rows, totalRows, page, pageSize, loading, onPageChange, columnMeta, onCellEdit, onRowEdit, onCellSetNull, dirtyRowKeys, cellOverrides, enableTranspose = false, toolbar, sort = null, onSortChange, enableSort = false }: TableDataGridProps) {
+export const TableDataGrid = memo(function TableDataGrid({ columns, rows, totalRows, page, pageSize, loading, onPageChange, columnMeta, onCellEdit, onRowEdit, onCellSetNull, dirtyRowKeys, cellOverrides, enableTranspose = false, toolbar, sort = null, onSortChange, enableSort = false, filter = null, onFilterChange, enableFilter = false }: TableDataGridProps) {
   const { t } = useI18n();
   const effectiveColumns = useMemo(() => {
     if (columns.length > 0) {
@@ -491,6 +500,9 @@ export const TableDataGrid = memo(function TableDataGrid({ columns, rows, totalR
   const [hiddenColumns, setHiddenColumns] = useState<Set<string>>(() => new Set());
   const [colVisOpen, setColVisOpen] = useState(false);
   const colVisAnchorRef = useRef<HTMLButtonElement>(null);
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [filterLockedField, setFilterLockedField] = useState<string | null>(null);
+  const [filterAnchorRect, setFilterAnchorRect] = useState<DOMRect | null>(null);
   const cellMenuOpenRef = useRef<(state: CellMenuState) => void>(() => {});
   const [rowHeights, setRowHeights] = useState<Record<number, number>>({});
   const [columnSizing, setColumnSizing] = useState<ColumnSizingState>({});
@@ -585,6 +597,14 @@ export const TableDataGrid = memo(function TableDataGrid({ columns, rows, totalR
   }, [effectiveColumns]);
 
   const pkCols = useMemo(() => (columnMeta ?? []).filter((c) => c.isPk), [columnMeta]);
+  const filterColumnNames = useMemo(() => getFilterColumnNames(filter), [filter]);
+  const canFilter = enableFilter && Boolean(onFilterChange && columnMeta?.length);
+
+  const openFilterPopover = useCallback((anchor: HTMLElement, lockedField: string) => {
+    setFilterAnchorRect(anchor.getBoundingClientRect());
+    setFilterLockedField(lockedField);
+    setFilterOpen(true);
+  }, []);
 
   const handleHeaderClick = useCallback(
     (columnId: string) => {
@@ -1038,6 +1058,8 @@ export const TableDataGrid = memo(function TableDataGrid({ columns, rows, totalR
                     ? " db-data-table-th--sort-asc"
                     : " db-data-table-th--sort-desc"
                   : "";
+                const filterClass =
+                  canFilter && filterColumnNames.has(colId) ? " db-data-table-th--filtered" : "";
                 const thSelected =
                   !transposed && isHeaderInColumnSelection(headerColIdx, cellRange, tableRows.length);
                 return (
@@ -1045,7 +1067,7 @@ export const TableDataGrid = memo(function TableDataGrid({ columns, rows, totalR
                   key={header.id}
                   data-col-id={colId}
                   style={buildColumnCellStyle(colId, baseSize, lastColumnId, fillDelta)}
-                  className={`${table.getState().columnSizingInfo?.isResizingColumn === colId ? "db-data-table-th-resizing" : ""}${canSort ? " db-data-table-th--sortable" : ""}${colId !== ROW_NUM_COL_ID && !transposed ? " db-data-table-th--selectable" : ""}${colId === ROW_NUM_COL_ID ? " db-data-table-th--select-all" : ""}${thSelected ? " db-data-table-th--selected" : ""}${sortClass}`}
+                  className={`${table.getState().columnSizingInfo?.isResizingColumn === colId ? "db-data-table-th-resizing" : ""}${canSort ? " db-data-table-th--sortable" : ""}${colId !== ROW_NUM_COL_ID && !transposed ? " db-data-table-th--selectable" : ""}${colId === ROW_NUM_COL_ID ? " db-data-table-th--select-all" : ""}${thSelected ? " db-data-table-th--selected" : ""}${sortClass}${filterClass}`}
                   onClick={colId === ROW_NUM_COL_ID ? handleSelectAll : (colId !== ROW_NUM_COL_ID && !transposed ? () => handleColumnSelect(colId) : undefined)}
                   title={colId === ROW_NUM_COL_ID ? t("database.results.selectAll") : t("database.results.selectColumn")}
                 >
@@ -1078,6 +1100,22 @@ export const TableDataGrid = memo(function TableDataGrid({ columns, rows, totalR
                             </svg>
                           )}
                         </span>
+                      )}
+                      {canFilter && colId !== ROW_NUM_COL_ID && !isFieldCol && (
+                        <button
+                          type="button"
+                          className={`db-data-table-filter-btn${filterColumnNames.has(colId) ? " db-data-table-filter-btn--active" : ""}`}
+                          title={t("database.results.filterColumnHint")}
+                          aria-label={t("database.results.filterColumnHint")}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            openFilterPopover(event.currentTarget, colId);
+                          }}
+                        >
+                          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" width="10" height="10" aria-hidden>
+                            <path d="M2 3h12M4.5 8h7M7 13h2" strokeLinecap="round" />
+                          </svg>
+                        </button>
                       )}
                     </span>
                   )}
@@ -1257,6 +1295,16 @@ export const TableDataGrid = memo(function TableDataGrid({ columns, rows, totalR
         hiddenColumns={hiddenColumns}
         onChange={setHiddenColumns}
         onClose={() => setColVisOpen(false)}
+      />
+    )}
+    {filterOpen && filterAnchorRect && filterLockedField && columnMeta && onFilterChange && (
+      <TableDataGridFilterPopover
+        anchorRect={filterAnchorRect}
+        columnMeta={columnMeta}
+        initialQuery={filter}
+        lockedField={filterLockedField}
+        onApply={onFilterChange}
+        onClose={() => setFilterOpen(false)}
       />
     )}
     </div>

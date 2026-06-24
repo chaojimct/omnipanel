@@ -4,6 +4,7 @@ import type {
   DbColumnMeta,
   SortState,
 } from "../modules/database/dbWorkspaceState";
+import type { RuleGroupType } from "react-querybuilder";
 import type { DbWorkspaceTab } from "../modules/database/workspaceTabs";
 import type { DbConnectionConfig } from "../modules/database/api";
 import type { DatabaseSchema } from "../modules/database/types";
@@ -11,10 +12,11 @@ import type { SqlEditorOpenMode } from "../modules/database/SqlEditor";
 import type { SchemaTableSelection } from "../modules/database/SchemaBrowser";
 
 export type DbTabAction = {
-  kind: "refresh" | "page" | "close" | "sort";
+  kind: "refresh" | "page" | "close" | "sort" | "filter";
   tabId: string;
   page?: number;
   sort?: SortState | null;
+  filter?: RuleGroupType | null;
 };
 
 /** 工作区共享操作与连接级状态（不含 activeTabId / Tab 级快照）。 */
@@ -38,6 +40,7 @@ export interface DbWorkspaceSharedContextValue {
   ) => void;
   requestTabAction: (action: DbTabAction) => void;
   setTableSort: (tabId: string, sort: SortState | null) => void;
+  setTableFilter: (tabId: string, filter: RuleGroupType | null) => void;
   handleCellEdit: (
     tabId: string,
     cellInfo: { rowIndex: number; column: string; row: Record<string, unknown> },
