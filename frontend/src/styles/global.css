@@ -5076,6 +5076,7 @@
         margin-inline-start: auto;
     }
 
+    .ai-panel-header-left .is-active,
     .ai-panel-header-right .is-active {
         color: var(--accent);
         background: var(--accent-soft);
