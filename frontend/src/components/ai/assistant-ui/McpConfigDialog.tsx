@@ -12,7 +12,6 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import { useI18n } from "../../../i18n";
 import { commands } from "../../../ipc/bindings";
 import type { McpServiceView } from "../../../ipc/bindings";
 
@@ -20,22 +19,7 @@ export interface McpConfigDialogProps {
   children?: ReactNode;
 }
 
-const STATUS_MAP: Record<string, "connected" | "connecting" | "error" | "disconnected"> = {
-  running: "connected",
-  starting: "connecting",
-  error: "error",
-  stopped: "disconnected",
-};
-
-const STATUS_VARIANT: Record<string, "default" | "secondary" | "destructive"> = {
-  running: "default",
-  starting: "secondary",
-  error: "destructive",
-  stopped: "secondary",
-};
-
 export const McpConfigDialog: FC<McpConfigDialogProps> = ({ children }) => {
-  const { t } = useI18n();
   const [services, setServices] = useState<McpServiceView[]>([]);
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);

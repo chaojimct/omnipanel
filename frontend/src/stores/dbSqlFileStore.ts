@@ -208,7 +208,7 @@ function markDirtyIds(
 
 function commitNodesInMemory(
   set: (fn: (state: DbSqlFileState) => Partial<DbSqlFileState>) => void,
-  get: () => DbSqlFileState,
+  _get: () => DbSqlFileState,
   nodes: DbSqlFileNode[],
   dirtyIds: string[] = [],
 ) {

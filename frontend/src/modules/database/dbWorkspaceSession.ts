@@ -1,4 +1,5 @@
 import type { SqlTabState, SortState, TableDesignerTabState, TablePreviewState } from "./dbWorkspaceState";
+import type { RuleGroupType } from "react-querybuilder";
 import type { DbWorkspaceTab } from "./workspaceTabs";
 import type { TableDesignerModel } from "./tableDesigner/types";
 
@@ -16,6 +17,7 @@ export interface DbTablePreviewMetaSnapshot {
   page: number;
   pageSize: number;
   sort?: SortState | null;
+  filter?: RuleGroupType | null;
 }
 
 export interface DbTableDesignerStateSnapshot {
@@ -162,6 +164,7 @@ export function buildWorkspaceSessionSnapshot(params: {
       page: preview.page,
       pageSize: preview.pageSize,
       sort: preview.sort ?? null,
+      filter: preview.filter ?? null,
     };
   }
 
@@ -240,6 +243,7 @@ export function buildClosedPanelEntry(params: {
       page: preview.page,
       pageSize: preview.pageSize,
       sort: preview.sort ?? null,
+      filter: preview.filter ?? null,
     };
   }
 

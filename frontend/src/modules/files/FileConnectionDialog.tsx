@@ -172,7 +172,7 @@ export function FileConnectionDialog({ open, onClose, onSaved, editConnection }:
       const res = await commands.connTest(conn);
       if (res.status === "ok" && res.data !== undefined) {
         setSuccessMsg(res.data);
-      } else if (res.error) {
+      } else if (res.status === "error") {
         const e = res.error;
         setError(e.cause ? `${e.message}（${e.cause}）` : e.message);
       } else {

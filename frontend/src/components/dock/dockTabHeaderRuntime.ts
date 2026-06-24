@@ -1,9 +1,9 @@
-import { createContext, useContext, type MouseEvent, type PointerEvent } from "react";
+import { createContext, useContext, type MouseEvent } from "react";
 import type { DockableTab } from "./dockableTab";
 
 export interface DockTabHeaderRuntime {
   tabsRef: { current: DockableTab[] };
-  tabStyleRef: { current: "default" | "topbar" };
+  tabStyleRef: { current: "default" | "topbar" | "segment" };
   onTabContextMenuRef: {
     current:
       | ((event: MouseEvent, tabId: string, index: number) => void)

@@ -10,13 +10,19 @@ const buttonVariants = cva(
     variants: {
       variant: {
         default: "bg-primary text-primary-foreground hover:bg-primary/90",
+        primary: "bg-primary text-primary-foreground hover:bg-primary/90",
         destructive:
           "bg-destructive hover:bg-destructive/90 focus-visible:ring-destructive/20 dark:bg-destructive/60 dark:focus-visible:ring-destructive/40 text-white",
+        danger:
+          "bg-danger-soft text-danger hover:bg-danger hover:text-white",
+        warn: "bg-warn text-white hover:brightness-90",
         outline:
           "bg-background hover:bg-accent hover:text-accent-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50 border shadow-xs",
         secondary:
           "bg-secondary text-secondary-foreground hover:bg-secondary/80",
         ghost:
+          "hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50",
+        icon:
           "hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50",
         link: "text-primary underline-offset-4 hover:underline",
       },
@@ -49,13 +55,15 @@ function Button({
     asChild?: boolean;
   }) {
   const Comp = asChild ? Slot.Root : "button";
+  const resolvedSize =
+    variant === "icon" && size === "default" ? "icon-sm" : size;
 
   return (
     <Comp
       data-slot="button"
       data-variant={variant}
-      data-size={size}
-      className={cn(buttonVariants({ variant, size, className }))}
+      data-size={resolvedSize}
+      className={cn(buttonVariants({ variant, size: resolvedSize, className }))}
       {...props}
     />
   );

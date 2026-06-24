@@ -10,8 +10,6 @@ export function WorkspaceBottomHost() {
   const hostRef = useRef<HTMLDivElement>(null);
   const workspaces = useWorkspaceStore((state) => state.workspaces);
   const currentId = useWorkspaceStore((state) => state.workspace.id);
-  const current =
-    workspaces.find((ws) => ws.id === currentId) ?? workspaces[0] ?? null;
 
   useEffect(() => {
     const el = hostRef.current;

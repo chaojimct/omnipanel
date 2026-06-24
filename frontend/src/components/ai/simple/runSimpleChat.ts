@@ -39,7 +39,7 @@ export async function runSimpleChat(
   const messages = buildApiMessages(systemPrompt, userContent);
 
   let result = "";
-  for await (const chunk of streamOpenAI(messages, modelConfig, {
+  for await (const chunk of streamOpenAI(messages, modelConfig, [], {
     signal: options?.signal,
   })) {
     if (chunk.type === "text") {

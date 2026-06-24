@@ -1,4 +1,4 @@
-import { useCallback, useMemo, type ReactNode } from "react";
+import { useCallback, useMemo, useRef, type ReactNode } from "react";
 import { useLocation } from "react-router-dom";
 import { DockWorkspace, type DockRailPreset } from "../dock";
 import { usePanelLayoutStore } from "../../stores/panelLayoutStore";
@@ -50,13 +50,18 @@ export function RightSidebarWorkspace({
   const setRightSize = usePanelLayoutStore((s) => s.setRightSize);
 
   const sidebarSizePx = propSidebarSizePx ?? savedSize;
+  const pendingRightSizeRef = useRef<number | null>(null);
 
-  const handleRightResize = useCallback(
-    (sizePx: number) => {
-      setRightSize(persistKey, sizePx);
-    },
-    [persistKey, setRightSize],
-  );
+  const handleRightResize = useCallback((sizePx: number) => {
+    pendingRightSizeRef.current = sizePx;
+  }, []);
+
+  const handleRightLayoutChanged = useCallback(() => {
+    const size = pendingRightSizeRef.current;
+    if (size == null) return;
+    setRightSize(persistKey, size);
+    pendingRightSizeRef.current = null;
+  }, [persistKey, setRightSize]);
 
   return (
     <DockWorkspace
@@ -69,6 +74,7 @@ export function RightSidebarWorkspace({
       // 调用方仍可通过 sidebarMaxPx 或 preset 显式覆盖。
       rightMaxPx={sidebarMaxPx ?? "60%"}
       onRightResize={handleRightResize}
+      onRightLayoutChanged={handleRightLayoutChanged}
       className={className}
     />
   );

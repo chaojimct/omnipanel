@@ -34,8 +34,8 @@ function isTauriRuntime(): boolean {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 }
 
-function extractUserContent(threadMessage: ThreadMessage): string {
-  for (const part of threadMessage.content) {
+function extractUserContent(message: ThreadMessage | AppendMessage): string {
+  for (const part of message.content) {
     if (part.type === "text") return part.text;
   }
   return "";
@@ -204,7 +204,7 @@ export function AiRuntimeProvider({ children }: { children: ReactNode }) {
         priorMessages: ReturnType<typeof getPriorMessages>,
         modelConfig: ModelConfig,
       ) => Promise<void>
-    >();
+    >(undefined);
 
   runGenerationRef.current = async (
     convId,
@@ -342,12 +342,12 @@ export function AiRuntimeProvider({ children }: { children: ReactNode }) {
           priorMessages.push({
             role: "assistant",
             content: "",
-            toolCalls: [{ id: tc.id, name: tc.name, arguments: tc.args }],
+            toolCalls: [{ id: tc.id, name: tc.name, arguments: tc.args, result: undefined }],
           });
           priorMessages.push({
             role: "tool",
             content: result,
-            toolCalls: [{ id: tc.id, name: tc.name, arguments: tc.args }],
+            toolCalls: [{ id: tc.id, name: tc.name, arguments: tc.args, result: undefined }],
           });
         }
       }
@@ -379,8 +379,8 @@ export function AiRuntimeProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const onNewRef = useRef<(message: AppendMessage) => Promise<void>>();
-  const onReloadRef = useRef<(parentId: string | null) => Promise<void>>();
+  const onNewRef = useRef<(message: AppendMessage) => Promise<void>>(undefined);
+  const onReloadRef = useRef<(parentId: string | null) => Promise<void>>(undefined);
 
   onNewRef.current = async (msg: AppendMessage) => {
     const userText = extractUserContent(msg);

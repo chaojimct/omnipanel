@@ -997,8 +997,8 @@
     }
 
     .knowledge-embedding-model-select {
-        min-width: 140px;
-        max-width: 200px;
+        min-width: 320px;
+        max-width: 480px;
     }
 
     .knowledge-embedding-model-empty {

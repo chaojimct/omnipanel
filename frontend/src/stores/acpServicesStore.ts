@@ -115,7 +115,10 @@ export const useAcpServicesStore = create<AcpServicesState>()(
       merge: (persisted, current) => {
         const raw = persisted as { services?: unknown[] } | undefined;
         if (!raw?.services) return current;
-        return { services: raw.services.map(normalizeLoaded) };
+        return {
+          ...current,
+          services: raw.services.map((service) => normalizeLoaded(service as AcpService)),
+        };
       },
     },
   ),

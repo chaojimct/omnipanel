@@ -2952,31 +2952,36 @@
 .dock-handle {
     position: relative;
     flex-shrink: 0;
-    z-index: 1;
+    /* 高于相邻 dock-panel，避免后绘制的面板盖住分隔条热区（首次拖拽失效） */
+    z-index: 10;
     display: flex;
     align-items: center;
     justify-content: center;
+    overflow: visible;
+    touch-action: none;
     transition: background 0.15s;
 }
 
 .dock-handle--horizontal {
     width: 5px;
     cursor: col-resize;
-    margin-left: -1px;
+    margin: 0 -2px;
 }
 
 .dock-handle--vertical {
     height: 5px;
     cursor: row-resize;
-    margin-top: -1px;
+    margin: -2px 0;
 }
 
-.dock-handle:hover,
-.dock-handle[data-resize-handle-active] {
+.dock-handle[data-separator="hover"],
+.dock-handle[data-separator="active"],
+.dock-handle[data-separator="focus"] {
     background: var(--accent-soft);
 }
 
 .dock-handle-inner {
+    pointer-events: none;
     background: var(--border);
     border-radius: 2px;
     transition: background 0.15s;
@@ -2993,8 +2998,9 @@
     height: 1px;
 }
 
-.dock-handle:hover .dock-handle-inner,
-.dock-handle[data-resize-handle-active] .dock-handle-inner {
+.dock-handle[data-separator="hover"] .dock-handle-inner,
+.dock-handle[data-separator="active"] .dock-handle-inner,
+.dock-handle[data-separator="focus"] .dock-handle-inner {
     background: var(--accent);
 }
 
@@ -5159,6 +5165,7 @@
         margin-inline-start: auto;
     }
 
+    .ai-panel-header-left .is-active,
     .ai-panel-header-right .is-active {
         color: var(--accent);
         background: var(--accent-soft);
@@ -6132,6 +6139,30 @@
 
     .statusbar-spacer {
         flex: 1;
+    }
+
+    .statusbar-log {
+        display: flex;
+        align-items: center;
+        gap: var(--sp-1);
+        min-width: 0;
+        max-width: min(480px, 45vw);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        color: var(--fg-2);
+    }
+
+    .statusbar-log--progress {
+        color: var(--fg-2);
+    }
+
+    .statusbar-log--success {
+        color: var(--success);
+    }
+
+    .statusbar-log--error {
+        color: var(--danger);
     }
 
     .connection-pool-indicator {
@@ -11393,6 +11424,16 @@
 .context-menu-item__label {
     flex: 1;
     min-width: 0;
+}
+
+.context-menu-item__shortcut {
+    flex-shrink: 0;
+    margin-left: auto;
+    padding-left: var(--sp-4);
+    font-size: 11px;
+    color: var(--meta);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
 }
 
 .context-menu-item:hover:not(:disabled) {

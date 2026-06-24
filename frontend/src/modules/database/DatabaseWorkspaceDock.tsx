@@ -1,12 +1,11 @@
 import type { ReactNode } from "react";
 import type { SerializedDockview } from "dockview-core";
+import { useDbWorkspaceActiveTab } from "../../contexts/DbWorkspaceContext";
 import { DockableWorkspace, type DockableTab } from "../../components/dock";
 
 export interface DatabaseWorkspaceDockProps {
   workspaceInitialized: boolean;
   dockTabs: DockableTab[];
-  activeWorkspaceTabId: string;
-  onActiveTabChange: (tabId: string) => void;
   onCloseTab: (tabId: string) => void;
   dockLayout: SerializedDockview | null;
   onDockLayoutChange: (layout: SerializedDockview | null) => void;
@@ -69,8 +68,6 @@ function DatabaseWorkspaceEmpty({
 export function DatabaseWorkspaceDock({
   workspaceInitialized,
   dockTabs,
-  activeWorkspaceTabId,
-  onActiveTabChange,
   onCloseTab,
   dockLayout,
   onDockLayoutChange,
@@ -83,6 +80,8 @@ export function DatabaseWorkspaceDock({
   emptyPrompt,
   recentClosedTitle,
 }: DatabaseWorkspaceDockProps) {
+  const { activeTabId, setActiveTabId } = useDbWorkspaceActiveTab();
+
   if (!workspaceInitialized) {
     return null;
   }
@@ -94,8 +93,8 @@ export function DatabaseWorkspaceDock({
       defaultHeaderPosition="top"
       enableTabGroups={false}
       tabs={dockTabs}
-      activeTabId={activeWorkspaceTabId}
-      onActiveTabChange={onActiveTabChange}
+      activeTabId={activeTabId}
+      onActiveTabChange={setActiveTabId}
       onCloseTab={onCloseTab}
       savedLayout={dockLayout}
       onSavedLayoutChange={onDockLayoutChange}

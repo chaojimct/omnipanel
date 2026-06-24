@@ -51,6 +51,9 @@ export function connectionDatabasesFolderId(connId: string) {
   return `databases:${connId}`;
 }
 
+/** Schema 侧栏顶级连接列表分页键（非 UI 节点） */
+export const SCHEMA_ROOT_CONNECTIONS_ID = "schema:root-connections";
+
 export function connectionUsersFolderId(connId: string) {
   return `users:${connId}`;
 }

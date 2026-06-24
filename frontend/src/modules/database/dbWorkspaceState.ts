@@ -1,3 +1,4 @@
+import type { RuleGroupType } from "react-querybuilder";
 import type { SqlEditorOpenMode } from "./SqlEditor";
 import type { TablePreviewResult, DbColumnMeta } from "./api";
 import type { TableDesignerModel } from "./tableDesigner/types";
@@ -32,6 +33,7 @@ export type TablePreviewState = {
   dbName?: string;
   tableName?: string;
   sort: SortState | null;
+  filter: RuleGroupType | null;
 };
 
 export type TableDesignerTabState = {
@@ -63,7 +65,16 @@ export const NEW_ROW_KEY_PREFIX = "__new__:";
 export const PENDING_INSERT_ROW_KEY = "__pendingRowKey";
 
 export function createDefaultTablePreviewState(): TablePreviewState {
-  return { loading: false, error: null, data: null, totalRows: 0, page: 0, pageSize: DEFAULT_PAGE_SIZE, sort: null };
+  return {
+    loading: false,
+    error: null,
+    data: null,
+    totalRows: 0,
+    page: 0,
+    pageSize: DEFAULT_PAGE_SIZE,
+    sort: null,
+    filter: null,
+  };
 }
 
 /**

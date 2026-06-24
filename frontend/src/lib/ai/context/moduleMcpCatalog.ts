@@ -1,5 +1,5 @@
 import type { ModuleKey } from "../../paths";
-import type { McpToolInfo } from "../../ipc/bindings";
+import type { McpToolInfo } from "../../../ipc/bindings";
 import { DATABASE_MODULE_MCP_TOOLS } from "../../../modules/database/ai/mcpTools";
 import type { McpToolRegistration } from "./types";
 

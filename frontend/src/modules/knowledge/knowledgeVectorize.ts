@@ -7,17 +7,18 @@ import {
 import {
   clampKnowledgeChunkOverlap,
   clampKnowledgeChunkSize,
-  type SettingsState,
 } from "../../stores/settingsStore";
+
+type KnowledgeVectorizeSettings = {
+  knowledgeChunkSize: number;
+  knowledgeChunkOverlap: number;
+};
 
 export async function vectorizeKnowledgeEntry(
   entryId: string,
   modelSelectionId: string,
   providers: AiModelProvider[],
-  knowledgeSettings: Pick<
-    SettingsState,
-    "knowledgeChunkSize" | "knowledgeChunkOverlap"
-  >,
+  knowledgeSettings: KnowledgeVectorizeSettings,
 ): Promise<{ ok: true; chunkCount: number } | { ok: false; error: string }> {
   const resolved = resolveModelSelection(providers, modelSelectionId);
   if (!resolved) {
@@ -51,9 +52,17 @@ export async function vectorizeKnowledgeEntry(
   });
 
   if (res.status === "ok") {
-    return { ok: true, chunkCount: res.data.chunkCount };
+    return { ok: true, chunkCount: res.data.chunkCount ?? 0 };
   }
   return { ok: false, error: res.error.message };
+}
+
+export const KNOWLEDGE_VECTORIZED_EVENT = "omnipanel:knowledge-vectorized";
+
+export function dispatchKnowledgeVectorized(entryId: string) {
+  window.dispatchEvent(
+    new CustomEvent(KNOWLEDGE_VECTORIZED_EVENT, { detail: { entryId } }),
+  );
 }
 
 export async function loadKnowledgeVectorStatus(entryId: string) {

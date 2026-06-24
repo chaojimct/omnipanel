@@ -50,15 +50,70 @@ pub trait DbDriver: Send + Sync {
     /// 执行任意 SQL：SELECT 类返回行集，DML 返回影响行数。
     async fn execute(&self, sql: &str) -> OmniResult<QueryResult>;
     /// 预览某张表前 N 行（支持偏移量）。`order_by` 为已转义的 `ORDER BY` 子句（不含关键字），传 None 时不排序。
+    /// `where_clause` 为不含 `WHERE` 关键字的条件表达式，由前端 query builder 生成并经校验。
     async fn preview(
         &self,
         table: &str,
         limit: i64,
         offset: i64,
         order_by: Option<&str>,
+        where_clause: Option<&str>,
     ) -> OmniResult<QueryResult>;
-    /// 查询某张表的总行数。
-    async fn count(&self, table: &str) -> OmniResult<i64>;
+    /// 查询某张表的总行数；可选 `where_clause` 与 preview 一致。
+    async fn count(&self, table: &str, where_clause: Option<&str>) -> OmniResult<i64>;
+}
+
+/// 校验前端传入的 WHERE 表达式，防止 SQL 注入。
+pub fn validate_where_clause(clause: &str) -> OmniResult<()> {
+    let trimmed = clause.trim();
+    if trimmed.is_empty() {
+        return Ok(());
+    }
+    let lower = trimmed.to_lowercase();
+    const BLOCKED: &[&str] = &[
+        ";",
+        "--",
+        "/*",
+        "*/",
+        " select ",
+        " insert ",
+        " update ",
+        " delete ",
+        " drop ",
+        " alter ",
+        " create ",
+        " truncate ",
+        " grant ",
+        " revoke ",
+        " exec ",
+        " execute ",
+        " union ",
+        " into ",
+        " outfile ",
+        " dumpfile ",
+        " load_file",
+        " sleep(",
+        " benchmark(",
+        " pg_sleep(",
+    ];
+    for token in BLOCKED {
+        if lower.contains(token) {
+            return Err(OmniError::invalid_input(format!(
+                "非法的过滤条件：包含不允许的关键字或字符"
+            )));
+        }
+    }
+    Ok(())
+}
+
+pub(crate) fn build_where_sql(where_clause: Option<&str>) -> OmniResult<String> {
+    match where_clause {
+        Some(clause) if !clause.trim().is_empty() => {
+            validate_where_clause(clause)?;
+            Ok(format!(" WHERE {}", clause.trim()))
+        }
+        _ => Ok(String::new()),
+    }
 }
 
 /// 按 `db_type` 建立连接并返回对应驱动实例。

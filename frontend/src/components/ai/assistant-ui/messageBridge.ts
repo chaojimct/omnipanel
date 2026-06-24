@@ -68,7 +68,7 @@ export function aiMessageToThreadMessage(msg: AiMessage): ThreadMessage {
     } satisfies ThreadUserMessage;
   }
 
-  const parts: ThreadAssistantMessage["content"] = [];
+  const parts: ThreadAssistantMessage["content"][number][] = [];
   if (msg.reasoningContent) {
     parts.push({
       type: "reasoning",

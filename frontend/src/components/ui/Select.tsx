@@ -17,6 +17,8 @@ export interface SelectOption {
   value: string;
   label: string;
   subtitle?: string;
+  /** 悬停 tooltip；默认由 label + subtitle 拼接 */
+  title?: string;
   disabled?: boolean;
 }
 
@@ -38,6 +40,8 @@ export interface SelectProps {
   style?: CSSProperties;
   emptyText?: string;
   searchPlaceholder?: string;
+  /** 下拉面板 z-index，默认 10000；嵌套在更高层级弹层内需传入更大值 */
+  panelZIndex?: number;
   "aria-label"?: string;
   title?: string;
 }
@@ -82,6 +86,7 @@ export function Select({
   style,
   emptyText,
   searchPlaceholder,
+  panelZIndex = 10000,
   "aria-label": ariaLabel,
   title,
 }: SelectProps) {
@@ -151,13 +156,13 @@ export function Select({
       position: "fixed",
       left: rect.left,
       width: rect.width,
-      zIndex: 10000,
+      zIndex: panelZIndex,
       visibility: "visible",
       ...(shouldDropUp
         ? { bottom: window.innerHeight - rect.top + 2, top: "auto" }
         : { top: rect.bottom + 2, bottom: "auto" }),
     });
-  }, []);
+  }, [panelZIndex]);
 
   useLayoutEffect(() => {
     if (!open) return;
@@ -327,6 +332,9 @@ export function Select({
                   );
                   const highlighted =
                     !opt.disabled && selectableIndex === highlightIndex;
+                  const optionTitle =
+                    opt.title ??
+                    [opt.label, opt.subtitle].filter(Boolean).join(" · ");
                   return (
                     <button
                       key={`${opt.value}::${opt.label}`}
@@ -334,6 +342,7 @@ export function Select({
                       role="option"
                       aria-selected={opt.value === value}
                       disabled={opt.disabled}
+                      title={optionTitle || undefined}
                       className={[
                         "omni-select-option",
                         opt.value === value ? "is-selected" : "",

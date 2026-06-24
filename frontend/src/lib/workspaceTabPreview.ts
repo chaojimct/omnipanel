@@ -76,8 +76,11 @@ function dbPreviewLines(tabId: string): WorkspaceTabPreviewData | null {
     };
   }
   const tablePreview = ctx.tablePreviews[tabId];
+  const connName = tablePreview?.connId
+    ? ctx.resolveConnection(tablePreview.connId)?.name
+    : null;
   const lines = [
-    ctx.activeConn?.name ?? "未连接",
+    connName ?? "未连接",
     tablePreview?.dbName ? `库: ${tablePreview.dbName}` : "",
     tablePreview?.tableName ? `表: ${tablePreview.tableName}` : "",
   ].filter(Boolean);

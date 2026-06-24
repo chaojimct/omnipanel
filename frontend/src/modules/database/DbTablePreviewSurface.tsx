@@ -9,6 +9,7 @@ import { IconPlus } from "../../components/ui/Icons";
 import { TableDataGrid } from "./TableDataGrid";
 import { useI18n } from "../../i18n";
 import { NEW_ROW_KEY_PREFIX, PENDING_INSERT_ROW_KEY, type SortState } from "./dbWorkspaceState";
+import type { RuleGroupType } from "react-querybuilder";
 import { connectionHasTableSchemaChildren } from "./api";
 
 interface DbTablePreviewSurfaceProps {
@@ -55,6 +56,14 @@ export const DbTablePreviewSurface = memo(function DbTablePreviewSurface({
     return [...preview.data.rows, ...pendingRows];
   }, [preview?.data, colMeta, tabDirtyRowsForTab]);
 
+  const previewColumns = useMemo(() => {
+    const fromData = preview?.data?.columns ?? [];
+    if (fromData.length > 0) {
+      return fromData;
+    }
+    return colMeta?.map((col) => col.name) ?? [];
+  }, [preview?.data?.columns, colMeta]);
+
   const previewDirtyRowKeys = useMemo(
     () => new Set(Object.keys(tabDirtyRowsForTab)),
     [tabDirtyRowsForTab],
@@ -88,6 +97,12 @@ export const DbTablePreviewSurface = memo(function DbTablePreviewSurface({
   const handlePreviewSortChange = useCallback(
     (sort: SortState | null) => {
       ws.requestTabAction({ kind: "sort", tabId: tab.id, sort });
+    },
+    [ws.requestTabAction, tab.id],
+  );
+  const handlePreviewFilterChange = useCallback(
+    (nextFilter: RuleGroupType | null) => {
+      ws.requestTabAction({ kind: "filter", tabId: tab.id, filter: nextFilter });
     },
     [ws.requestTabAction, tab.id],
   );
@@ -205,7 +220,7 @@ export const DbTablePreviewSurface = memo(function DbTablePreviewSurface({
           </div>
         ) : preview?.data && canRefresh ? (
           <TableDataGrid
-            columns={preview.data.columns}
+            columns={previewColumns}
             rows={previewDisplayRows}
             totalRows={preview.totalRows + (previewDisplayRows.length - preview.data.rows.length)}
             page={preview.page}
@@ -216,6 +231,9 @@ export const DbTablePreviewSurface = memo(function DbTablePreviewSurface({
             enableSort
             sort={preview.sort ?? null}
             onSortChange={handlePreviewSortChange}
+            enableFilter={Boolean(previewConnection && previewConnection.db_type !== "redis")}
+            filter={preview.filter ?? null}
+            onFilterChange={handlePreviewFilterChange}
             toolbar={previewToolbar}
             onCellEdit={handlePreviewCellEdit}
             onRowEdit={handlePreviewRowEdit}
@@ -223,6 +241,8 @@ export const DbTablePreviewSurface = memo(function DbTablePreviewSurface({
             dirtyRowKeys={previewDirtyRowKeys}
             cellOverrides={previewCellOverrides}
             onPageChange={handlePreviewPageChange}
+            dbType={previewConnection?.db_type}
+            tableName={preview.tableName ?? undefined}
           />
         ) : null}
       </div>
