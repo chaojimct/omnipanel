@@ -30,10 +30,12 @@ import {
   clampKnowledgeChunkSize,
   clampKnowledgeChunkOverlap,
   clampKnowledgeTopN,
+  WORKSPACE_ADD_PANEL_MODIFIER_OPTIONS,
   type Locale,
   type ProxyProtocol,
   type AiDisplayMode,
   type DetailPanelMode,
+  type WorkspaceAddPanelModifier,
 } from "../../stores/settingsStore";
 import { KnowledgeEmbeddingModelSelect } from "../../components/knowledge/KnowledgeEmbeddingModelSelect";
 import {
@@ -55,6 +57,7 @@ import { Button } from "../../components/ui/Button";
 import { ModuleEmptyState } from "../../components/ui/ModuleEmptyState";
 import { Select } from "../../components/ui/Select";
 import { useI18n } from "../../i18n";
+import { workspaceAddPanelModifierLabel } from "../../lib/platform";
 import { commands } from "../../ipc/bindings";
 import { invoke } from "@tauri-apps/api/core";
 import type { UpdateInfo } from "../../ipc/bindings";
@@ -264,6 +267,8 @@ function KeybindingsSection() {
   const { t } = useI18n();
   const overrides = useShortcutsStore((s) => s.overrides);
   const resetAll = useShortcutsStore((s) => s.resetAll);
+  const workspaceAddPanelModifier = useSettingsStore((s) => s.workspaceAddPanelModifier);
+  const setWorkspaceAddPanelModifier = useSettingsStore((s) => s.setWorkspaceAddPanelModifier);
   const hasOverrides = Object.keys(overrides).length > 0;
   const [expandedCategories, setExpandedCategories] = useState<Set<ShortcutCategory>>(
     () => new Set(SHORTCUT_CATEGORY_ORDER),
@@ -330,6 +335,31 @@ function KeybindingsSection() {
                 </button>
                 {isExpanded && (
                   <div className="keybindings-category__body">
+                    {category === "workspace" ? (
+                      <div className="setting-row">
+                        <div className="setting-label">
+                          <h4>{t("settings.keybindings.items.addPanelToWorkspace")}</h4>
+                          <p>{t("settings.keybindings.items.addPanelToWorkspaceDesc")}</p>
+                        </div>
+                        <Select
+                          className="setting-select"
+                          size="sm"
+                          value={workspaceAddPanelModifier ?? "Alt"}
+                          options={WORKSPACE_ADD_PANEL_MODIFIER_OPTIONS.map((value) => ({
+                            value,
+                            label:
+                              value === "Mod"
+                                ? t("settings.keybindings.modifiers.mod", {
+                                    mod: workspaceAddPanelModifierLabel("Mod"),
+                                  })
+                                : t(`settings.keybindings.modifiers.${value.toLowerCase()}`),
+                          }))}
+                          onChange={(value) =>
+                            setWorkspaceAddPanelModifier(value as WorkspaceAddPanelModifier)
+                          }
+                        />
+                      </div>
+                    ) : null}
                     {defs.map((def) => {
                       const current = getShortcutKeys(def.id);
                       const label = t(def.labelKey);

@@ -2450,6 +2450,95 @@
     white-space: nowrap;
 }
 
+.workspace-dock-empty {
+    flex: 1;
+    min-height: 0;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--sp-4);
+    overflow-y: auto;
+    user-select: none;
+}
+
+.workspace-dock-empty--compact {
+    color: var(--text-secondary);
+}
+
+.workspace-dock-empty__card {
+    width: min(420px, 100%);
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--sp-3);
+}
+
+.workspace-dock-empty__prompt {
+    margin: 0;
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--meta);
+    text-align: center;
+}
+
+.workspace-dock-empty__recent {
+    width: 100%;
+}
+
+.workspace-dock-empty__recent-title {
+    margin-bottom: var(--sp-2);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--meta);
+}
+
+.workspace-dock-empty__recent-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.workspace-dock-empty__recent-item {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sp-3);
+    padding: 8px 10px;
+    color: var(--fg);
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+    cursor: pointer;
+    font: inherit;
+    text-align: left;
+    transition: border-color 0.12s, background 0.12s;
+}
+
+.workspace-dock-empty__recent-item:hover {
+    border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+    background: color-mix(in srgb, var(--accent) 6%, var(--bg-elevated));
+}
+
+.workspace-dock-empty__recent-item span {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 12px;
+}
+
+.workspace-dock-empty__recent-item small {
+    flex-shrink: 0;
+    font-size: 11px;
+    color: var(--meta);
+    white-space: nowrap;
+}
+
 .empty-state.compact {
     flex: 1;
     align-self: stretch;
@@ -3001,7 +3090,7 @@
     min-width: 0;
 }
 
-/* Ctrl+复制到工作区：悬停目标 panel 显示半透明遮罩 */
+/* 加入工作区修饰键悬停：目标 panel 显示半透明遮罩 */
 .dockable-workspace.dock-copy-mode {
     cursor: copy;
 }
@@ -6191,12 +6280,36 @@
     .workspace-popover-row {
         display: flex;
         align-items: stretch;
-        gap: 2px;
-        margin-bottom: 2px;
+        gap: 0;
+        margin: 0 -4px 2px;
+        padding: 0 4px;
+        border-radius: var(--r-sm);
+        transition: background 0.1s, color 0.1s;
     }
 
     .workspace-popover-row:last-child {
         margin-bottom: 0;
+    }
+
+    .workspace-popover-row:hover:not(.workspace-popover-row--active) {
+        background: var(--surface-hover);
+    }
+
+    .workspace-popover-row:hover:not(.workspace-popover-row--active) .workspace-popover-item {
+        color: var(--fg);
+    }
+
+    .workspace-popover-row--active {
+        background: var(--accent-soft);
+    }
+
+    .workspace-popover-row--active:hover {
+        background: var(--accent-soft);
+    }
+
+    .workspace-popover-row--active .workspace-popover-item,
+    .workspace-popover-row--active .workspace-popover-item--active {
+        color: var(--accent);
     }
 
     .workspace-popover-item {
@@ -6207,27 +6320,17 @@
         min-width: 0;
         padding: 7px 10px;
         border: none;
-        border-radius: var(--r-sm);
+        border-radius: 0;
         background: transparent;
         color: var(--fg-2);
         font: inherit;
         text-align: left;
         cursor: pointer;
-        transition: background 0.1s, color 0.1s;
-    }
-
-    .workspace-popover-item:hover {
-        background: var(--surface-hover);
-        color: var(--fg);
+        transition: color 0.1s;
     }
 
     .workspace-popover-item--active {
-        background: var(--accent-soft);
         color: var(--accent);
-    }
-
-    .workspace-popover-item--active:hover {
-        background: var(--accent-soft);
     }
 
     .workspace-popover-item-name {
@@ -6261,12 +6364,17 @@
         width: 28px;
         flex-shrink: 0;
         border: none;
-        border-radius: var(--r-sm);
+        border-radius: 0;
         background: transparent;
         color: var(--meta);
         cursor: pointer;
         opacity: 0;
-        transition: opacity 0.1s, background 0.1s, color 0.1s;
+        transition: opacity 0.1s, color 0.1s;
+    }
+
+    .workspace-popover-row--active .workspace-popover-rename,
+    .workspace-popover-row--active .workspace-popover-delete {
+        color: color-mix(in oklch, var(--accent) 72%, var(--meta));
     }
 
     .workspace-popover-row:hover .workspace-popover-rename,

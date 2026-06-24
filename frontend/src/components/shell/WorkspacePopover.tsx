@@ -513,7 +513,9 @@ export function WorkspacePopover({
 
           {showHomeOption ? (
 
-            <li className="workspace-popover-row">
+            <li
+              className={`workspace-popover-row${isHomeActive ? " workspace-popover-row--active" : ""}`}
+            >
 
               <button
 
@@ -587,7 +589,7 @@ export function WorkspacePopover({
 
                 key={ws.id}
 
-                className={`workspace-popover-row${isRenaming ? " workspace-popover-row--editing" : ""}`}
+                className={`workspace-popover-row${isRenaming ? " workspace-popover-row--editing" : ""}${active ? " workspace-popover-row--active" : ""}`}
 
               >
 

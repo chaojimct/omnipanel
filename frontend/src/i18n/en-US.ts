@@ -422,7 +422,7 @@ export const enUS: TranslationDict = {
       moveTo: "Move to Workspace",
       noOther: "No other workspaces",
       addToCurrent: "Add to Current Workspace",
-      addPanelHint: "Ctrl+click to add to current workspace",
+      addPanelHint: "{modifier}+click to add to current workspace",
     },
     detailPanel: {
       modeDrawer: "Switch to right drawer",
@@ -450,7 +450,7 @@ export const enUS: TranslationDict = {
       },
     },
     workspacePreview: {
-      noPanels: "No panels yet — Ctrl+click sidebar modules or in-module panels to add",
+      noPanels: "No panels yet — {modifier}+click sidebar modules or in-module panels to add",
       removePanel: "Remove from workspace",
       confirmRemoveTitle: "Remove panel",
       confirmRemovePanel: "Remove panel \"{name}\" from this workspace?",
@@ -483,6 +483,8 @@ export const enUS: TranslationDict = {
       mirroredMissing: "Source panel no longer exists",
       payloadUnavailable: "This {module} panel must be opened in its source module first",
       openSourceModule: "Open source module",
+      recentClosed: "Recently Closed",
+      recentClosedEmpty: "No recently closed tabs",
     },
     risk: {
       low: "Low risk",
@@ -549,7 +551,7 @@ export const enUS: TranslationDict = {
       },
       notFoundTitle: "Workspace not found",
       notFoundPrompt: "Choose a valid workspace from the list.",
-      emptyPanelsHint: "Ctrl+click sidebar modules or in-module panels to add them here.",
+      emptyPanelsHint: "Hold {modifier} and click sidebar modules or in-module panels to add them here.",
     },
   },
   env: {
@@ -1887,6 +1889,13 @@ export const enUS: TranslationDict = {
         newSsh: "New SSH Connection",
         openSettings: "Open Settings",
         switchNthTab: "Switch to Nth Tab",
+        addPanelToWorkspace: "Add-to-workspace click modifier",
+        addPanelToWorkspaceDesc: "Hold the selected modifier and click a sidebar module or in-module panel to add it to the engineering workspace.",
+      },
+      modifiers: {
+        alt: "Alt",
+        mod: "{mod} (primary modifier)",
+        shift: "Shift",
       },
     },
     aiDisplay: {

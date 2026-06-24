@@ -7,7 +7,4 @@ export function syncWorkspaceDockActiveTabSideEffects(tab: WorkspaceDockTab | un
   if (tab.kind === "mirrored" && tab.originScope === "database" && tab.originPanelId) {
     getDbWorkspaceMirrorContext()?.setActiveTabId(tab.originPanelId);
   }
-  if (tab.kind === "payload" && tab.payload?.module === "database") {
-    getDbWorkspaceMirrorContext()?.setActiveTabId(tab.payload.id);
-  }
 }

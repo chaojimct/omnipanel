@@ -42,6 +42,7 @@ export function DatabaseTabDockPane({ tabId, isActive: _isActive }: DatabaseTabD
   }
 
   const { tab } = snapshot;
+  const ctx = overriddenCtx;
 
   return (
     <DbWorkspaceProvider value={overriddenCtx}>

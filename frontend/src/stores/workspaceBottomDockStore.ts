@@ -13,7 +13,6 @@ import type { WorkspaceInfo } from "./workspaceStore";
 import {
   defaultWorkspaceActiveTabId,
   isWorkspaceBuiltinTab,
-  isWorkspaceBuiltinTabId,
   normalizeWorkspaceTabs,
 } from "../lib/workspaceBuiltinPanels";
 
@@ -21,6 +20,14 @@ export type WorkspaceDockTabKind = "mirrored" | "payload" | "builtin";
 
 /** 每个工作区底部 dock 最多容纳的面板数 */
 export const MAX_WORKSPACE_PANELS = 15;
+
+/** 空白工作区展示的最近关闭 Tab 上限 */
+export const WORKSPACE_RECENT_CLOSED_LIMIT = 10;
+
+export interface WorkspaceDockClosedEntry {
+  closedAt: number;
+  tab: WorkspaceDockTab;
+}
 
 export interface WorkspaceDockTab {
   id: string;
@@ -30,6 +37,10 @@ export interface WorkspaceDockTab {
   panelType?: string;
   /** 序列化快照（复制/移动到工作区） */
   payload?: WorkspaceTabSnapshot;
+  /** 镜像面板来源 dock scope（拖拽移动时使用） */
+  originScope?: string;
+  /** 镜像面板来源 panel id（拖拽移动时使用） */
+  originPanelId?: string;
   /** @deprecated 旧版内置面板类型，迁移后不再创建 */
   builtin?: "board" | "ai";
   closable?: boolean;
@@ -61,7 +72,7 @@ function normalizedTabsChanged(
 
 /** 组件侧派生 tabs 时使用；勿放入 zustand selector。 */
 export function resolveWorkspaceTabs(
-  workspace: WorkspaceInfo,
+  _workspace: WorkspaceInfo,
   tabs: WorkspaceDockTab[] | undefined,
 ): WorkspaceDockTab[] {
   return tabsNeedNormalize(tabs);
@@ -83,6 +94,7 @@ interface WorkspaceBottomDockState {
   tabsByWorkspace: Record<string, WorkspaceDockTab[]>;
   layoutByWorkspace: Record<string, SerializedDockview | null>;
   activeTabByWorkspace: Record<string, string>;
+  recentClosedByWorkspace: Record<string, WorkspaceDockClosedEntry[]>;
 
   ensureWorkspaceData: (workspaceId: string, workspace: WorkspaceInfo) => void;
   setLayout: (workspaceId: string, layout: SerializedDockview | null) => void;
@@ -98,6 +110,7 @@ interface WorkspaceBottomDockState {
     tab: Omit<WorkspaceDockTab, "kind"> & { payload: WorkspaceTabSnapshot },
   ) => WorkspaceDockTab;
   removeTab: (workspaceId: string, workspace: WorkspaceInfo, tabId: string) => void;
+  removeRecentClosedTab: (workspaceId: string, closedAt: number) => void;
   /** 删除工作区时清理底部 dock 持久化数据 */
   removeWorkspaceData: (workspaceId: string) => void;
   /** 重置全部底部工作区布局与 Tab（清除应用缓存时使用） */
@@ -110,8 +123,9 @@ export const useWorkspaceBottomDockStore = create<WorkspaceBottomDockState>()(
       tabsByWorkspace: {},
       layoutByWorkspace: {},
       activeTabByWorkspace: {},
+      recentClosedByWorkspace: {},
 
-      ensureWorkspaceData: (workspaceId, workspace) => {
+      ensureWorkspaceData: (workspaceId, _workspace) => {
         const existing = get().tabsByWorkspace[workspaceId];
         const merged = tabsNeedNormalize(existing);
         if (existing !== undefined && !normalizedTabsChanged(existing, merged)) {
@@ -227,6 +241,15 @@ export const useWorkspaceBottomDockStore = create<WorkspaceBottomDockState>()(
           const active = state.activeTabByWorkspace[workspaceId];
           const nextActive =
             active === tabId ? (tabs[0]?.id ?? "") : (active ?? tabs[0]?.id ?? "");
+          const prevRecent = state.recentClosedByWorkspace[workspaceId] ?? [];
+          const recentEntry: WorkspaceDockClosedEntry = {
+            closedAt: Date.now(),
+            tab: structuredClone(removed),
+          };
+          const nextRecent = [
+            recentEntry,
+            ...prevRecent.filter((entry) => entry.tab.id !== removed.id),
+          ].slice(0, WORKSPACE_RECENT_CLOSED_LIMIT);
           return {
             tabsByWorkspace: { ...state.tabsByWorkspace, [workspaceId]: tabs },
             layoutByWorkspace: {
@@ -237,22 +260,42 @@ export const useWorkspaceBottomDockStore = create<WorkspaceBottomDockState>()(
               ...state.activeTabByWorkspace,
               [workspaceId]: nextActive,
             },
+            recentClosedByWorkspace: {
+              ...state.recentClosedByWorkspace,
+              [workspaceId]: nextRecent,
+            },
           };
         });
       },
+
+      removeRecentClosedTab: (workspaceId, closedAt) =>
+        set((state) => {
+          const current = state.recentClosedByWorkspace[workspaceId] ?? [];
+          const next = current.filter((entry) => entry.closedAt !== closedAt);
+          if (next.length === current.length) return state;
+          return {
+            recentClosedByWorkspace: {
+              ...state.recentClosedByWorkspace,
+              [workspaceId]: next,
+            },
+          };
+        }),
 
       removeWorkspaceData: (workspaceId) => {
         set((state) => {
           const tabsByWorkspace = { ...state.tabsByWorkspace };
           const layoutByWorkspace = { ...state.layoutByWorkspace };
           const activeTabByWorkspace = { ...state.activeTabByWorkspace };
+          const recentClosedByWorkspace = { ...state.recentClosedByWorkspace };
           delete tabsByWorkspace[workspaceId];
           delete layoutByWorkspace[workspaceId];
           delete activeTabByWorkspace[workspaceId];
+          delete recentClosedByWorkspace[workspaceId];
           return {
             tabsByWorkspace,
             layoutByWorkspace,
             activeTabByWorkspace,
+            recentClosedByWorkspace,
           };
         });
       },
@@ -262,24 +305,33 @@ export const useWorkspaceBottomDockStore = create<WorkspaceBottomDockState>()(
           tabsByWorkspace: {},
           layoutByWorkspace: {},
           activeTabByWorkspace: {},
+          recentClosedByWorkspace: {},
         }),
     }),
     {
       name: "omnipanel.workspace-bottom-dock.v3",
-      version: 5,
+      version: 6,
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
         tabsByWorkspace: state.tabsByWorkspace,
         layoutByWorkspace: state.layoutByWorkspace,
         activeTabByWorkspace: state.activeTabByWorkspace,
+        recentClosedByWorkspace: state.recentClosedByWorkspace,
       }),
       migrate: (persistedState, fromVersion) => {
         const p = persistedState as
           | {
               layoutByWorkspace?: Record<string, SerializedDockview | null>;
               tabsByWorkspace?: Record<string, WorkspaceDockTab[]>;
+              recentClosedByWorkspace?: Record<string, WorkspaceDockClosedEntry[]>;
             }
           | undefined;
+        if (!p) {
+          return persistedState;
+        }
+        if (!p.recentClosedByWorkspace) {
+          p.recentClosedByWorkspace = {};
+        }
         if (p?.tabsByWorkspace) {
           for (const [wsId, tabs] of Object.entries(p.tabsByWorkspace)) {
             p.tabsByWorkspace[wsId] = tabsNeedNormalize(tabs);

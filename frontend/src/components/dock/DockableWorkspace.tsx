@@ -877,11 +877,7 @@ export function DockableWorkspace({
             ) {
               continue;
             }
-            if (typeof panel.api?.close === "function") {
-              panel.api.close();
-            } else {
-              api.removePanel(panel);
-            }
+            api.removePanel(panel);
           }
         }
         const existing = new Set(api.panels.map((p) => p.id));

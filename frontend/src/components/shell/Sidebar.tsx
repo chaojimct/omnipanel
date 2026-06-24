@@ -14,6 +14,7 @@ import {
 import { isDashboardPath, MODULE_PATHS } from "../../lib/paths";
 import { moduleKeyFromPath, moduleNavI18nKey } from "../../lib/workspaceModuleRoutes";
 import { addModulePanelToWorkspace } from "../../lib/workspaceTabActions";
+import { isPointerCopyModifier, workspaceAddPanelModifierLabel } from "../../lib/platform";
 
 const navPaths = [
   {
@@ -143,7 +144,7 @@ export function Sidebar() {
   };
 
   const handleModuleNav = (path: string, event: MouseEvent) => {
-    if (event.ctrlKey || event.metaKey) {
+    if (isPointerCopyModifier(event)) {
       event.preventDefault();
       const moduleKey = moduleKeyFromPath(path);
       if (!moduleKey) {
@@ -160,7 +161,7 @@ export function Sidebar() {
       key={item.path}
       type="button"
       className={`sidebar-item${isActive(item.path) ? " active" : ""}`}
-      title={`${t(item.key)} (${t("shell.workspace.addPanelHint")})`}
+      title={`${t(item.key)} (${t("shell.workspace.addPanelHint", { modifier: workspaceAddPanelModifierLabel() })})`}
       onClick={(event) => handleModuleNav(item.path, event)}
     >
       {item.icon}

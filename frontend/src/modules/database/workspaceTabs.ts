@@ -44,6 +44,7 @@ export type RedisQueryWorkspaceTab = {
   connId: string;
   /** 从侧栏点选具体库时锁定；点连接时为空 */
   dbName?: string;
+  workspaceOnly?: boolean;
 };
 
 export type DbWorkspaceTab =
@@ -71,6 +72,11 @@ export function isConnectionInfoTab(tab: DbWorkspaceTab): tab is ConnectionInfoW
 
 export function isRedisQueryTab(tab: DbWorkspaceTab): tab is RedisQueryWorkspaceTab {
   return tab.kind === "redis-query";
+}
+
+/** 模块功能区 Dock 中可见的 Tab（排除已移入工程工作区的 Tab） */
+export function isModuleDockTab(tab: DbWorkspaceTab): boolean {
+  return !tab.workspaceOnly;
 }
 
 export function makeSqlTabId(): string {
@@ -134,6 +140,7 @@ export function findTabIdForDesigner(
 ): string | undefined {
   return tabs.find(
     (tab) =>
+      isModuleDockTab(tab) &&
       tab.kind === "designer" &&
       tab.connId === connId &&
       tab.dbName === dbName &&
@@ -146,7 +153,9 @@ export function findTabIdForSqlFile(
   tabs: DbWorkspaceTab[],
   fileId: string,
 ): string | undefined {
-  return tabs.find((tab) => tab.kind === "sql" && tab.sqlFileId === fileId)?.id;
+  return tabs.find(
+    (tab) => isModuleDockTab(tab) && tab.kind === "sql" && tab.sqlFileId === fileId,
+  )?.id;
 }
 
 /** 查找已打开指定数据库的列表 Tab */
@@ -156,7 +165,11 @@ export function findTabIdForDatabase(
   dbName: string,
 ): string | undefined {
   return tabs.find(
-    (tab) => tab.kind === "database" && tab.connId === connId && tab.dbName === dbName,
+    (tab) =>
+      isModuleDockTab(tab) &&
+      tab.kind === "database" &&
+      tab.connId === connId &&
+      tab.dbName === dbName,
   )?.id;
 }
 
@@ -165,7 +178,9 @@ export function findTabIdForConnection(
   tabs: DbWorkspaceTab[],
   connId: string,
 ): string | undefined {
-  return tabs.find((tab) => tab.kind === "connection" && tab.connId === connId)?.id;
+  return tabs.find(
+    (tab) => isModuleDockTab(tab) && tab.kind === "connection" && tab.connId === connId,
+  )?.id;
 }
 
 /** 查找已打开的 Redis 查询 Tab */
@@ -176,6 +191,7 @@ export function findTabIdForRedisQuery(
 ): string | undefined {
   return tabs.find(
     (tab) =>
+      isModuleDockTab(tab) &&
       tab.kind === "redis-query" &&
       tab.connId === connId &&
       (tab.dbName ?? "") === (dbName ?? ""),

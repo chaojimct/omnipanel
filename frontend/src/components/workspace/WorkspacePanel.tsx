@@ -4,12 +4,13 @@ import { WorkspaceSwitcher } from "../shell/WorkspaceSwitcher";
 import { useI18n } from "../../i18n";
 import type { WorkspaceInfo } from "../../stores/workspaceStore";
 import { useBottomPanelStore, useEmbeddedWorkspaceMode } from "../../stores/bottomPanelStore";
-import { goWorkspaceHome, toggleEngineeringWorkspaceFullscreen } from "../../lib/workspaceNavigation";
+import { toggleEngineeringWorkspaceFullscreen } from "../../lib/workspaceNavigation";
 import {
   resolveWorkspaceTabs,
   useWorkspaceBottomDockStore,
 } from "../../stores/workspaceBottomDockStore";
 import { WorkspaceDockCore } from "./WorkspaceDockCore";
+import { WorkspaceDockEmpty } from "./WorkspaceDockEmpty";
 import { WorkspaceFullscreenDragHandle } from "./WorkspaceFullscreenDragHandle";
 
 interface WorkspacePanelProps {
@@ -85,10 +86,6 @@ export function WorkspacePanel({ workspace }: WorkspacePanelProps) {
     [workspace, rawTabs],
   );
 
-  const enterFullscreenFromChrome = useCallback(() => {
-    toggleEngineeringWorkspaceFullscreen(navigate);
-  }, [navigate]);
-
   const handleTopbarDoubleClick = useCallback(
     (event: React.MouseEvent) => {
       const target = event.target as HTMLElement;
@@ -110,24 +107,13 @@ export function WorkspacePanel({ workspace }: WorkspacePanelProps) {
 
   const preActions = useMemo(
     () => (
-      <>
-        {isEngineeringFullscreen ? (
-          <button
-            type="button"
-            className="workspace-home-btn drag-ignore"
-            title={t("shell.workspacePopover.home")}
-            aria-label={t("shell.workspacePopover.home")}
-            onClick={() => goWorkspaceHome(navigate)}
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" width="14" height="14" aria-hidden>
-              <path d="M3 9.5L12 3l9 6.5V21a1 1 0 01-1 1h-5v-7h-6v7H4a1 1 0 01-1-1V9.5z" />
-            </svg>
-          </button>
-        ) : null}
-        <WorkspaceSwitcher placement="below" context="embedded" />
-      </>
+      <WorkspaceSwitcher
+        placement="below"
+        context="embedded"
+        showHomeOption={isEngineeringFullscreen}
+      />
     ),
-    [isEngineeringFullscreen, navigate, t],
+    [isEngineeringFullscreen],
   );
 
   const windowChromeLeftActions = useMemo(
@@ -166,6 +152,11 @@ export function WorkspacePanel({ workspace }: WorkspacePanelProps) {
     ],
   );
 
+  const emptyContent = useMemo(
+    () => <WorkspaceDockEmpty workspace={workspace} compact={!isEngineeringFullscreen} />,
+    [workspace, isEngineeringFullscreen],
+  );
+
   if (embeddedMode === "taskbar") {
     return null;
   }
@@ -195,6 +186,7 @@ export function WorkspacePanel({ workspace }: WorkspacePanelProps) {
         preActions={preActions}
         windowControl={isEngineeringFullscreen}
         windowChromeLeftActions={isEngineeringFullscreen ? windowChromeLeftActions : undefined}
+        emptyContent={emptyContent}
       />
     </div>
   );
