@@ -79,6 +79,7 @@ import {
   makeDesignerTabId,
   makeConnectionInfoTabId,
   makeRedisQueryTabId,
+  isModuleDockTab,
   makeTableDesignerTabLabel,
   type ConnectionInfoWorkspaceTab,
   type DatabaseListWorkspaceTab,
@@ -126,7 +127,7 @@ import type {
   DbWorkspaceMirrorContextValue,
   DbWorkspaceSharedContextValue,
 } from "../../contexts/DbWorkspaceContext.types";
-import { useDbDockLayoutStore } from "../../stores/dbDockLayoutStore";
+import { useDbDockLayoutStore, removeTabFromLayout } from "../../stores/dbDockLayoutStore";
 import {
   schedulePersistWorkspaceSession,
   useDbWorkspaceSessionStore,
@@ -150,6 +151,7 @@ import {
 import { usePersistedModuleTab } from "../../hooks/usePersistedModuleTab";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { dbTabToSnapshot, addSnapshotToWorkspace } from "../../lib/workspaceTabActions";
+import type { DbTabSnapshot } from "../../stores/workspaceTabStore";
 import { connectionNodeId } from "./schemaTreeExpanded";
 
 type DbModuleTab = "query" | "transfer";
@@ -1561,7 +1563,7 @@ export function DatabasePanel() {
         const meta = entry.tablePreviewMeta;
         const existing = findTabIdForTable(
           useDbWorkspaceTabStore.getState().tablePreviews,
-          workspaceTabsRef.current.map((item) => item.id),
+          workspaceTabsRef.current.filter(isModuleDockTab).map((item) => item.id),
           meta.connId,
           meta.dbName,
           meta.tableName,
@@ -2278,7 +2280,7 @@ export function DatabasePanel() {
 
       const existingTabId = findTabIdForTable(
         useDbWorkspaceTabStore.getState().tablePreviews,
-        workspaceTabsRef.current.map((tab) => tab.id),
+        workspaceTabsRef.current.filter(isModuleDockTab).map((tab) => tab.id),
         selection.connId,
         selection.dbName,
         selection.tableName,
@@ -2612,6 +2614,9 @@ export function DatabasePanel() {
             prev.map((t) => (t.id === ctxTab.id ? { ...t, workspaceOnly: true } : t)),
           );
 
+          const currentLayout = useDbDockLayoutStore.getState().savedLayout;
+          setDockLayout(removeTabFromLayout(currentLayout, ctxTab.id));
+
           if (closingActive) {
             const nextTabs = prevTabs.filter((item) => item.id !== ctxTab.id && !item.workspaceOnly);
             const fallback = nextTabs[Math.min(idx, Math.max(0, nextTabs.length - 1))];
@@ -2658,6 +2663,38 @@ export function DatabasePanel() {
       window.removeEventListener("omnipanel:close-db-workspace-tab", handleCloseEvent);
     };
   }, [closeWorkspaceTab]);
+
+  useEffect(() => {
+    const handleRestoreEvent = (e: Event) => {
+      const detail = (e as CustomEvent<{ snapshot: DbTabSnapshot }>).detail;
+      const snapshot = detail?.snapshot;
+      if (!snapshot || snapshot.module !== "database") return;
+
+      const recentEntry = useDbWorkspaceSessionStore
+        .getState()
+        .recentClosedPanels.find((item) => item.tab.id === snapshot.id);
+      if (recentEntry) {
+        reopenRecentClosedPanel(recentEntry);
+        return;
+      }
+
+      const tab = { ...snapshot.tab, workspaceOnly: true } as DbWorkspaceTab;
+      if (workspaceTabsRef.current.some((item) => item.id === tab.id)) {
+        activateWorkspaceTab(tab.id);
+        return;
+      }
+
+      setWorkspaceTabs((prev) => [...prev, tab]);
+      activateWorkspaceTab(tab.id);
+      if (snapshot.tabMode) {
+        setTabModes((prev) => ({ ...prev, [tab.id]: snapshot.tabMode! }));
+      }
+    };
+    window.addEventListener("omnipanel:restore-db-workspace-tab", handleRestoreEvent);
+    return () => {
+      window.removeEventListener("omnipanel:restore-db-workspace-tab", handleRestoreEvent);
+    };
+  }, [reopenRecentClosedPanel, activateWorkspaceTab, setTabModes]);
 
   const openRedisQueryTab = useCallback(
     (connId: string, dbName: string | undefined, label: string) => {
@@ -3239,9 +3276,10 @@ export function DatabasePanel() {
       [
         connections.map((c) => c.id).join(","),
         connectionsLoading ? "1" : "0",
-        workspaceTabs.map((t) => t.id).join(","),
+        workspaceTabs.map((t) => `${t.id}:${t.workspaceOnly ? "1" : "0"}`).join(","),
+        activeWorkspaceTabId,
       ].join("|"),
-    [connections, connectionsLoading, workspaceTabs],
+    [connections, connectionsLoading, workspaceTabs, activeWorkspaceTabId],
   );
 
   const sidebarLinkageValue = useMemo(
@@ -3364,6 +3402,7 @@ export function DatabasePanel() {
             dockLayout={dockLayout}
             onDockLayoutChange={setDockLayout}
             renderDockPanel={renderDockPanel}
+            softRefreshKey={activeWorkspaceTabId}
             panelContentKeysByTab={panelContentKeysByTab}
             onTabContextMenu={handleDockTabContextMenu}
             onCtrlCopyTab={handleCtrlCopyTab}

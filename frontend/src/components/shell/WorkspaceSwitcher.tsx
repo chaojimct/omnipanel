@@ -23,6 +23,8 @@ interface WorkspaceSwitcherProps {
   className?: string;
   /** 自定义选择工作区行为；未提供时按 context 默认处理 */
   onSelectWorkspace?: (ws: WorkspaceInfo) => void;
+  /** 覆盖是否在下拉中展示首页；默认 main 展示、embedded 不展示 */
+  showHomeOption?: boolean;
 }
 
 function WorkspaceSwitcherIcon() {
@@ -52,6 +54,7 @@ export function WorkspaceSwitcher({
   compact = false,
   className,
   onSelectWorkspace,
+  showHomeOption: showHomeOptionProp,
 }: WorkspaceSwitcherProps) {
   const { t } = useI18n();
   const location = useLocation();
@@ -63,7 +66,7 @@ export function WorkspaceSwitcher({
   const isEmbeddedContext = context === "embedded";
   const isBottomEmbedded =
     isEmbeddedWorkspaceMode(workspaceMode) && workspaceMode !== "hidden";
-  const showHomeOption = !isEmbeddedContext;
+  const showHomeOption = showHomeOptionProp ?? !isEmbeddedContext;
   const isHomeRoute = isDashboardPath(location.pathname);
   const isHomeDisplay = isHomeRoute && !isEmbeddedContext;
   const displayLabel = isHomeDisplay

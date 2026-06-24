@@ -1,26 +1,28 @@
 import { useEffect, useState } from "react";
 
-import { isModKeyPressed } from "../lib/platform";
+import { isWorkspaceAddPanelModifierHeld } from "../lib/workspaceAddPanelModifier";
+import { useSettingsStore } from "../stores/settingsStore";
 
-/** 跟踪「加入工作区」组合键是否按下（macOS ⌘+⌥，其它 Ctrl+Alt；窗口失焦时重置） */
+/** 跟踪「加入工作区」修饰键是否按下（随设置变化；窗口失焦时重置） */
 export function useCtrlKeyHeld(): boolean {
-  const [ctrlHeld, setCtrlHeld] = useState(false);
+  const modifier = useSettingsStore((state) => state.workspaceAddPanelModifier);
+  const [held, setHeld] = useState(false);
 
   useEffect(() => {
-    const syncModHeld = (e: KeyboardEvent) => {
-      setCtrlHeld(isModKeyPressed(e) && e.altKey);
+    const syncHeld = (e: KeyboardEvent) => {
+      setHeld(isWorkspaceAddPanelModifierHeld(e));
     };
-    const onBlur = () => setCtrlHeld(false);
+    const onBlur = () => setHeld(false);
 
-    window.addEventListener("keydown", syncModHeld);
-    window.addEventListener("keyup", syncModHeld);
+    window.addEventListener("keydown", syncHeld);
+    window.addEventListener("keyup", syncHeld);
     window.addEventListener("blur", onBlur);
     return () => {
-      window.removeEventListener("keydown", syncModHeld);
-      window.removeEventListener("keyup", syncModHeld);
+      window.removeEventListener("keydown", syncHeld);
+      window.removeEventListener("keyup", syncHeld);
       window.removeEventListener("blur", onBlur);
     };
-  }, []);
+  }, [modifier]);
 
-  return ctrlHeld;
+  return held;
 }

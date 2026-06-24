@@ -1743,6 +1743,94 @@
         overflow: hidden;
     }
 
+    .db-workspace-empty {
+        flex: 1;
+        min-height: 0;
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 32px;
+        color: var(--text-secondary);
+    }
+
+    .db-workspace-empty__card {
+        width: min(420px, 100%);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 14px;
+        text-align: center;
+    }
+
+    .db-workspace-empty__icon {
+        width: 44px;
+        height: 44px;
+        display: grid;
+        place-items: center;
+        color: var(--meta);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        background: color-mix(in srgb, var(--bg-elevated) 72%, transparent);
+    }
+
+    .db-workspace-empty__icon svg {
+        width: 24px;
+        height: 24px;
+    }
+
+    .db-workspace-empty__prompt {
+        margin: 0;
+        max-width: 360px;
+        font-size: 13px;
+        line-height: 1.7;
+        color: var(--text-secondary);
+    }
+
+    .db-workspace-empty__recent {
+        width: 100%;
+        margin-top: 8px;
+        padding-top: 14px;
+        border-top: 1px solid var(--border);
+    }
+
+    .db-workspace-empty__recent-title {
+        margin-bottom: 8px;
+        font-size: 12px;
+        color: var(--meta);
+    }
+
+    .db-workspace-empty__recent-list {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+    }
+
+    .db-workspace-empty__recent-item {
+        width: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 8px 10px;
+        color: var(--text);
+        background: var(--bg-elevated);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        cursor: pointer;
+    }
+
+    .db-workspace-empty__recent-item:hover {
+        border-color: var(--primary);
+        background: var(--bg-hover);
+    }
+
+    .db-workspace-empty__recent-item small {
+        flex-shrink: 0;
+        color: var(--meta);
+        font-size: 11px;
+    }
+
 /* 数据库模块 — 数据传输页 */
     .db-module-transfer {
         flex: 1;

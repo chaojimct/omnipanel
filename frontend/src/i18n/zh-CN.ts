@@ -422,7 +422,7 @@ export const zhCN = {
       moveTo: "移动到工作区",
       noOther: "没有其他工作区",
       addToCurrent: "添加到当前工作区",
-      addPanelHint: "Ctrl+Alt+点击添加到当前工作区",
+      addPanelHint: "{modifier}+点击添加到当前工作区",
     },
     detailPanel: {
       modeDrawer: "切换为右侧抽屉",
@@ -450,7 +450,7 @@ export const zhCN = {
       },
     },
     workspacePreview: {
-      noPanels: "暂无面板，Ctrl+Alt+点击侧边栏或模块内面板添加",
+      noPanels: "暂无面板，{modifier}+点击侧边栏或模块内面板添加",
       removePanel: "从工作区移除",
       confirmRemoveTitle: "移除面板",
       confirmRemovePanel: "确定从工作区移除面板「{name}」吗？",
@@ -483,6 +483,8 @@ export const zhCN = {
       mirroredMissing: "源面板已不存在",
       payloadUnavailable: "该 {module} 面板需先在对应模块中打开",
       openSourceModule: "打开来源模块",
+      recentClosed: "最近关闭",
+      recentClosedEmpty: "暂无最近关闭的标签",
     },
     risk: {
       low: "低风险",
@@ -549,7 +551,7 @@ export const zhCN = {
       },
       notFoundTitle: "工作区不存在",
       notFoundPrompt: "请从工作区列表选择有效的工作区。",
-      emptyPanelsHint: "按住 Ctrl+Alt 点击侧边栏模块或模块内面板，将其添加到此工作区。",
+      emptyPanelsHint: "按住 {modifier} 点击侧边栏模块或模块内面板，将其添加到此工作区。",
     },
   },
   env: {
@@ -1904,6 +1906,13 @@ export const zhCN = {
         openSettings: "打开设置",
         switchNthTab: "切换到第 N 个标签",
         formatSql: "格式化 SQL 语句",
+        addPanelToWorkspace: "加入工作区点击修饰键",
+        addPanelToWorkspaceDesc: "按住所选修饰键并点击侧边栏模块或模块内面板，将其加入工程工作区。",
+      },
+      modifiers: {
+        alt: "Alt",
+        mod: "{mod}（主修饰键）",
+        shift: "Shift",
       },
     },
     aiDisplay: {

@@ -250,7 +250,16 @@ export function TerminalPanel() {
         if (!activeWorkspaceId) return;
         const ctxTab = visibleTabs.find((tab) => tab.id === ctxMenu.tabId);
         if (ctxTab) {
+          const currentLayout = useTerminalDockLayoutStore.getState().savedLayout;
+          setDockLayout(removeTabFromTerminalLayout(currentLayout, ctxTab.id));
           useTerminalStore.getState().setTabWorkspaceOnly(ctxTab.id, true);
+          const visibleAfter = useTerminalStore
+            .getState()
+            .tabs.filter((tab) => !tab.workspaceOnly);
+          const activeId = useTerminalStore.getState().activeTabId;
+          if (!activeId || !visibleAfter.some((tab) => tab.id === activeId)) {
+            setActiveTab(visibleAfter[0]?.id ?? "");
+          }
           addSnapshotToWorkspace(activeWorkspaceId, moveTerminalTabToWorkspaceSnapshot(ctxTab));
         }
         setCtxMenu(null);
@@ -273,7 +282,7 @@ export function TerminalPanel() {
       }
       setCtxMenu(null);
     },
-    [ctxMenu, handleCloseTab, visibleTabs, activeWorkspaceId],
+    [ctxMenu, handleCloseTab, visibleTabs, activeWorkspaceId, setActiveTab, setDockLayout],
   );
 
   const renderDockPanel = useCallback(

@@ -63,6 +63,15 @@ export type DetailPanelMode = "drawer" | "floating";
 
 export type TerminalCursorStyle = "block" | "bar" | "underline";
 
+/** 鼠标点击加入工程工作区时按住的主修饰键 */
+export type WorkspaceAddPanelModifier = "Alt" | "Mod" | "Shift";
+
+export const WORKSPACE_ADD_PANEL_MODIFIER_OPTIONS: WorkspaceAddPanelModifier[] = [
+  "Alt",
+  "Mod",
+  "Shift",
+];
+
 export const AI_DOCK_WIDTH_MIN = 300;
 export const AI_DOCK_WIDTH_DEFAULT = 480;
 
@@ -165,6 +174,7 @@ interface SettingsState {
   knowledgeChunkOverlap: number;
   knowledgeTopN: number;
   knowledgeEmbeddingModelSelectionId: string | null;
+  workspaceAddPanelModifier: WorkspaceAddPanelModifier;
   databaseQueryPageSize: DatabaseQueryPageSize;
   sqlEditorFontFamily: string;
   sqlEditorFontSize: SqlEditorFontSize;
@@ -187,6 +197,7 @@ interface SettingsState {
   setKnowledgeSettings: (patch: Partial<Pick<SettingsState,
     "knowledgeChunkSize" | "knowledgeChunkOverlap" | "knowledgeTopN" | "knowledgeEmbeddingModelSelectionId"
   >>) => void;
+  setWorkspaceAddPanelModifier: (modifier: WorkspaceAddPanelModifier) => void;
   setDatabaseSettings: (patch: Partial<Pick<SettingsState,
     "databaseQueryPageSize" | "sqlEditorFontFamily" | "sqlEditorFontSize" | "sqlEditorLineHeight"
   >>) => void;
@@ -261,6 +272,7 @@ export const useSettingsStore = create<SettingsState>()(
       knowledgeChunkOverlap: KNOWLEDGE_CHUNK_OVERLAP.default,
       knowledgeTopN: KNOWLEDGE_TOP_N.default,
       knowledgeEmbeddingModelSelectionId: null,
+      workspaceAddPanelModifier: "Alt",
       databaseQueryPageSize: DEFAULT_DATABASE_QUERY_PAGE_SIZE,
       sqlEditorFontFamily: DEFAULT_SQL_EDITOR_FONT_FAMILY,
       sqlEditorFontSize: DEFAULT_SQL_EDITOR_FONT_SIZE,
@@ -307,6 +319,7 @@ export const useSettingsStore = create<SettingsState>()(
                 : state.knowledgeTopN,
           };
         }),
+      setWorkspaceAddPanelModifier: (workspaceAddPanelModifier) => set({ workspaceAddPanelModifier }),
       setDatabaseSettings: (patch) =>
         set((state) => ({
           databaseQueryPageSize:
@@ -352,6 +365,7 @@ export const useSettingsStore = create<SettingsState>()(
         knowledgeChunkOverlap: state.knowledgeChunkOverlap,
         knowledgeTopN: state.knowledgeTopN,
         knowledgeEmbeddingModelSelectionId: state.knowledgeEmbeddingModelSelectionId,
+        workspaceAddPanelModifier: state.workspaceAddPanelModifier,
         databaseQueryPageSize: state.databaseQueryPageSize,
         sqlEditorFontFamily: state.sqlEditorFontFamily,
         sqlEditorFontSize: state.sqlEditorFontSize,
@@ -362,7 +376,12 @@ export const useSettingsStore = create<SettingsState>()(
         applyDocumentUiScale(state?.uiScale ?? UI_SCALE.default);
         applyDocumentAccentColor(state?.accentColor ?? "blue");
         const resolved = applyDocumentTheme(state?.theme ?? "system");
-        useSettingsStore.setState({ resolved });
+        useSettingsStore.setState({
+          resolved,
+          workspaceAddPanelModifier: state?.workspaceAddPanelModifier ?? "Alt",
+          databaseQueryPageSize:
+            state?.databaseQueryPageSize ?? DEFAULT_DATABASE_QUERY_PAGE_SIZE,
+        });
       },
     }
   )

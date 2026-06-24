@@ -10,6 +10,7 @@ import type {
 } from "../stores/workspaceTabStore";
 import {
   useWorkspaceBottomDockStore,
+  type WorkspaceDockClosedEntry,
   type WorkspaceDockTab,
 } from "../stores/workspaceBottomDockStore";
 import { useBottomPanelStore } from "../stores/bottomPanelStore";
@@ -47,7 +48,7 @@ export function terminalTabToSnapshot(tab: TerminalTab): TerminalTabSnapshot {
   };
 }
 
-/** Ctrl+点击 / 添加入工作区：复制终端会话为独立 Tab（新 id、新后端连接） */
+/** Ctrl+?? / ???????????????? Tab?? id??????? */
 export function copyTerminalTabToWorkspaceSnapshot(
   source: TerminalTab,
 ): TerminalTabSnapshot {
@@ -64,7 +65,7 @@ export function copyTerminalTabToWorkspaceSnapshot(
   };
 }
 
-/** 移动终端会话到工作区（保持原 id 和连接，但会从原面板隐藏） */
+/** ?????????????? id ????????????? */
 export function moveTerminalTabToWorkspaceSnapshot(
   source: TerminalTab,
 ): TerminalTabSnapshot {
@@ -103,7 +104,7 @@ export function dockerTabToSnapshot(
   return {
     module: "docker",
     id: `docker:${subTab}:${containerId}:${Date.now()}`,
-    label: `${containerName} · ${subTab === "logs" ? "日志" : "终端"}`,
+    label: `${containerName} � ${subTab === "logs" ? "??" : "??"}`,
     subTab,
     connectionId,
     containerId,
@@ -111,7 +112,7 @@ export function dockerTabToSnapshot(
   };
 }
 
-/** 工作区 Dock 中 payload 面板的稳定 id */
+/** ??? Dock ? payload ????? id */
 export function payloadDockTabId(snapshot: WorkspaceTabSnapshot): string {
   if (snapshot.module === "route") {
     return `ws-payload:${snapshot.id}`;
@@ -122,7 +123,7 @@ export function payloadDockTabId(snapshot: WorkspaceTabSnapshot): string {
   return `ws-payload:${snapshot.module}:${snapshot.id}`;
 }
 
-/** 展开底部工作区并激活指定 Dock Tab（不跳转路由） */
+/** ???????????? Dock Tab??????? */
 function activateWorkspaceDockTab(workspaceId: string, tab: WorkspaceDockTab): void {
   const bottom = useBottomPanelStore.getState();
   if (!bottom.isFullscreen && bottom.workspaceMode === "hidden") {
@@ -141,7 +142,7 @@ function activateWorkspaceDockTab(workspaceId: string, tab: WorkspaceDockTab): v
   };
 
   const needsExpand = !bottom.isFullscreen && bottom.workspaceMode === "hidden";
-  // 展开动画 / 挂载完成后再激活，避免 Dock 未挂载时丢失 focus
+  // ???? / ??????????? Dock ?????? focus
   if (needsExpand) {
     requestAnimationFrame(() => requestAnimationFrame(applyActivation));
   } else {
@@ -159,7 +160,7 @@ function resolveActiveTerminalTab(): TerminalTab | undefined {
   return moduleTabs[0];
 }
 
-/** 确保终端 store 中存在快照对应的 Tab，供工作区 payload 渲染 */
+/** ???? store ???????? Tab????? payload ?? */
 export function ensureTerminalTabFromSnapshot(snapshot: TerminalTabSnapshot): string {
   const store = useTerminalStore.getState();
   const existing = store.tabs.find((tab) => tab.id === snapshot.id);
@@ -180,7 +181,7 @@ export function ensureTerminalTabFromSnapshot(snapshot: TerminalTabSnapshot): st
   return snapshot.id;
 }
 
-/** 关闭工作区 Dock 中的终端 payload 时释放独立会话 */
+/** ????? Dock ???? payload ??????? */
 export function cleanupWorkspaceDockTab(tab: WorkspaceDockTab | undefined): void {
   if (!tab || tab.kind !== "payload" || !tab.payload) return;
   if (tab.payload.module === "database") {
@@ -210,10 +211,10 @@ function resolveWorkspaceInfo(workspaceId: string): WorkspaceInfo | null {
 }
 
 /**
- * 统一入口：将来源快照物化为工程工作区 Dock Tab。
+ * ?????????????????? Dock Tab?
  *
- * 注意：这里不再写 workspaceTabStore。workspaceTabStore 只保留给终端/数据库
- * 模块自身在「切换工作区」时恢复模块内 Tab，避免 Dock Tab 和模块 Tab 状态串台。
+ * ???????? workspaceTabStore?workspaceTabStore ??????/???
+ * ?????????????????? Tab??? Dock Tab ??? Tab ?????
  */
 export function addSnapshotToWorkspace(
   workspaceId: string,
@@ -256,7 +257,7 @@ export function addSnapshotToWorkspace(
   activateWorkspaceDockTab(workspaceId, addedTab);
 }
 
-/** 侧边栏 Ctrl+点击：优先加入当前模块上下文（如终端会话），否则加入模块路由面板 */
+/** ??? Ctrl+???????????????????????????????? */
 export function addModulePanelToWorkspace(
   workspaceId: string,
   moduleKey: ModuleKey,
@@ -278,7 +279,7 @@ export function addModulePanelToWorkspace(
   addModuleRouteToWorkspace(workspaceId, moduleKey, label, options);
 }
 
-/** 将模块路由面板加入工作区（侧边栏 Ctrl+点击、模块内 Ctrl+复制）— 情况 1：顶级路由面板 */
+/** ???????????????? Ctrl+?????? Ctrl+???? ?? 1??????? */
 export function addModuleRouteToWorkspace(
   workspaceId: string,
   moduleKey: ModuleKey,
@@ -294,7 +295,7 @@ export function addModuleRouteToWorkspace(
   );
 }
 
-/** 将可序列化组件/子面板加入工作区 — 情况 2 & 3：componentType + props */
+/** ???????/???????? ? ?? 2 & 3?componentType + props */
 export function addComponentToWorkspace(
   workspaceId: string,
   input: {
@@ -318,7 +319,7 @@ export function addComponentToWorkspace(
   addSnapshotToWorkspace(workspaceId, snapshot, options);
 }
 
-/** 工程工作区已有数据库面板时，将表数据 Tab 同步到底部 Dock 并激活 */
+/** ?????????????????? Tab ????? Dock ??? */
 export function syncDatabaseTableTabToWorkspace(
   tab: DbWorkspaceTab,
   tabMode: "data" | "sql" = "data",
@@ -334,4 +335,49 @@ export function syncDatabaseTableTabToWorkspace(
     return;
   }
   addSnapshotToWorkspace(workspaceId, dbTabToSnapshot(tab, tabMode), { activate: true });
+}
+
+/** ?????????????? Dock Tab */
+export function reopenWorkspaceDockTab(
+  workspaceId: string,
+  workspace: WorkspaceInfo,
+  entry: WorkspaceDockClosedEntry,
+): void {
+  const dockStore = useWorkspaceBottomDockStore.getState();
+  const currentTabs = dockStore.tabsByWorkspace[workspaceId] ?? [];
+  const existing = currentTabs.find((item) => item.id === entry.tab.id);
+  if (existing) {
+    activateWorkspaceDockTab(workspaceId, existing);
+    dockStore.removeRecentClosedTab(workspaceId, entry.closedAt);
+    return;
+  }
+
+  dockStore.ensureWorkspaceData(workspaceId, workspace);
+  const { tab } = entry;
+
+  if (tab.kind === "payload" && tab.payload) {
+    if (tab.payload.module === "database") {
+      window.dispatchEvent(
+        new CustomEvent("omnipanel:restore-db-workspace-tab", {
+          detail: { snapshot: tab.payload },
+        }),
+      );
+    } else if (tab.payload.module === "terminal") {
+      ensureTerminalTabFromSnapshot(tab.payload);
+    }
+    addSnapshotToWorkspace(workspaceId, tab.payload);
+  } else if (tab.kind === "mirrored") {
+    const addedTab = dockStore.addMirroredTab(workspaceId, workspace, {
+      id: tab.id,
+      label: tab.label,
+      originScope: tab.originScope,
+      originPanelId: tab.originPanelId,
+      panelType: tab.panelType,
+      payload: tab.payload,
+      closable: tab.closable,
+    });
+    activateWorkspaceDockTab(workspaceId, addedTab);
+  }
+
+  dockStore.removeRecentClosedTab(workspaceId, entry.closedAt);
 }
