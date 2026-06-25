@@ -69,6 +69,17 @@ export const DEFAULT_PAGE_SIZE = 100;
 export const DEFAULT_QUERY_LIMIT = 1000;
 export const DEFAULT_SQL = `SELECT version();`;
 
+/** 表预览 COUNT 未完成时，根据当前页行数估算 totalRows。 */
+export function estimateTablePreviewTotalRows(
+  page: number,
+  pageSize: number,
+  rowCount: number,
+): number {
+  const hasMore = rowCount >= pageSize;
+  const base = page * pageSize + rowCount;
+  return hasMore ? base + pageSize : base;
+}
+
 /** 无总行数时估算分页 totalRows，以支持「下一页 / 末页」按钮。 */
 export function estimateSqlResultTotalRows(
   page: number,

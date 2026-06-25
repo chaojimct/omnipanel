@@ -4,10 +4,12 @@ import type { IDockviewPanelHeaderProps } from "dockview-react";
 interface DockTabChromeProps extends IDockviewPanelHeaderProps {
   closable?: boolean;
   tooltip?: string;
+  isPreview?: boolean;
   onContextMenu?: (event: ReactMouseEvent) => void;
   onPointerDown?: (event: React.PointerEvent) => void;
   onPointerUp?: (event: React.PointerEvent) => void;
   onPointerLeave?: (event: React.PointerEvent) => void;
+  onDoubleClick?: (event: ReactMouseEvent) => void;
   children: React.ReactNode;
 }
 
@@ -21,10 +23,12 @@ export function DockTabChrome({
   params: _params,
   closable = true,
   tooltip,
+  isPreview = false,
   onContextMenu,
   onPointerDown,
   onPointerUp,
   onPointerLeave,
+  onDoubleClick,
   tabLocation: _tabLocation,
   children,
 }: DockTabChromeProps) {
@@ -71,12 +75,13 @@ export function DockTabChrome({
 
   return (
     <div
-      className="dv-default-tab"
+      className={`dv-default-tab${isPreview ? " dv-default-tab--preview" : ""}`}
       title={tooltip}
       onContextMenu={onContextMenu}
       onPointerDown={handlePointerDown}
       onPointerUp={handlePointerUp}
       onPointerLeave={handlePointerLeave}
+      onDoubleClick={onDoubleClick}
     >
       <span className="dv-default-tab-content dock-tab-header-inner">{children}</span>
       {closable ? (

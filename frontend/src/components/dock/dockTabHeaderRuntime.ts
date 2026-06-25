@@ -9,6 +9,9 @@ export interface DockTabHeaderRuntime {
       | ((event: MouseEvent, tabId: string, index: number) => void)
       | undefined;
   };
+  onTabDoubleClickRef: {
+    current: ((tabId: string) => void) | undefined;
+  };
 }
 
 export const DockTabHeaderRuntimeContext = createContext<DockTabHeaderRuntime | null>(

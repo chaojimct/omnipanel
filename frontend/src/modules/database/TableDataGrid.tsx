@@ -10,7 +10,6 @@ import {
   type CSSProperties,
   type ReactNode,
 } from "react";
-import { createPortal } from "react-dom";
 import {
   flexRender,
   getCoreRowModel,
@@ -390,47 +389,34 @@ function TableCellContextMenu({
   );
 }
 
-function ColumnVisibilityPopover({
-  anchorRect,
+function scrollElementToCenter(container: HTMLElement, element: HTMLElement) {
+  const containerRect = container.getBoundingClientRect();
+  const elementRect = element.getBoundingClientRect();
+  const deltaX =
+    elementRect.left + elementRect.width / 2 - (containerRect.left + containerRect.width / 2);
+  const deltaY =
+    elementRect.top + elementRect.height / 2 - (containerRect.top + containerRect.height / 2);
+  container.scrollBy({ left: deltaX, top: deltaY, behavior: "smooth" });
+}
+
+function ColumnVisibilitySidebar({
   columns,
+  columnMetaMap,
   hiddenColumns,
   onChange,
-  onClose,
+  activeColumn,
+  onColumnNavigate,
 }: {
-  anchorRect: DOMRect;
   columns: string[];
   hiddenColumns: Set<string>;
   onChange: (next: Set<string>) => void;
-  onClose: () => void;
+  columnMetaMap: Record<string, DbColumnMeta> | null;
+  activeColumn: string | null;
+  onColumnNavigate: (columnName: string) => void;
 }) {
   const { t } = useI18n();
-  const ref = useRef<HTMLDivElement>(null);
   const selectAllRef = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState("");
-  const searchInputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    requestAnimationFrame(() => {
-      searchInputRef.current?.focus();
-      searchInputRef.current?.select();
-    });
-  }, []);
-
-  useEffect(() => {
-    const onDoc = (e: MouseEvent) => {
-      if (ref.current?.contains(e.target as Node)) return;
-      onClose();
-    };
-    const onEsc = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    document.addEventListener("mousedown", onDoc);
-    document.addEventListener("keydown", onEsc);
-    return () => {
-      document.removeEventListener("mousedown", onDoc);
-      document.removeEventListener("keydown", onEsc);
-    };
-  }, [onClose]);
 
   const q = query.trim();
   const filteredColumns = useMemo(
@@ -464,96 +450,92 @@ function ColumnVisibilityPopover({
     onChange(allVisible ? new Set(columns) : new Set());
   }, [allVisible, columns, onChange]);
 
-  const margin = 8;
-  const maxLeft = Math.max(margin, Math.min(window.innerWidth - 320 - margin, anchorRect.left));
-  const top = Math.min(
-    Math.max(margin, anchorRect.bottom + 4),
-    window.innerHeight - 360 - margin,
-  );
-
-  return createPortal(
-    <div
-      ref={ref}
-      className="db-col-visibility-popover"
-      style={{ left: maxLeft, top }}
-      role="dialog"
+  return (
+    <aside
+      className="db-data-table-col-sidebar"
       aria-label={t("database.results.columnVisibilityTitle")}
     >
-      <div className="db-col-visibility-popover-header">
-        <span className="db-col-visibility-popover-title">
-          {t("database.results.columnVisibilityTitle")}
-        </span>
-      </div>
-      <label className="db-col-visibility-popover-select-all">
-        <input
-          ref={selectAllRef}
-          type="checkbox"
-          checked={allVisible}
-          onChange={toggleAll}
-        />
-        <span>{t("database.results.columnVisibilityToggleAll")}</span>
-        <span className="db-col-visibility-popover-select-all-count">
-          {t("database.results.columnVisibilitySelected", {
-            count: visibleCount,
-            total: columns.length,
-          })}
-        </span>
-      </label>
-      <div className="db-col-visibility-popover-search">
-        <svg
-          viewBox="0 0 16 16"
-          className="db-col-visibility-popover-search-icon"
-          width="14"
-          height="14"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.6"
-          aria-hidden
-        >
-          <circle cx="7" cy="7" r="4.5" />
-          <path d="M10.5 10.5L14 14" strokeLinecap="round" />
-        </svg>
-        <input
-          ref={searchInputRef}
-          type="text"
-          className="db-col-visibility-popover-search-input"
-          placeholder={t("database.results.columnVisibilitySearch")}
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          autoComplete="off"
-          spellCheck={false}
-        />
-      </div>
-      <ul className="db-col-visibility-popover-list">
-        {filteredColumns.length === 0 ? (
-          <li className="db-col-visibility-popover-empty">
-            {t("database.results.columnVisibilityNoResults")}
-          </li>
-        ) : (
-          filteredColumns.map((name) => {
-            const checked = !hiddenColumns.has(name);
-            return (
-              <li
-                key={name}
-                className="db-col-visibility-popover-item"
-                onClick={() => toggleOne(name)}
-              >
-                <input
-                  type="checkbox"
-                  checked={checked}
-                  onChange={() => toggleOne(name)}
-                  onClick={(e) => e.stopPropagation()}
-                />
-                <span className="db-col-visibility-popover-item-name" title={name}>
-                  {name}
-                </span>
+      <div className="db-col-visibility-sidebar-inner">
+          <div className="db-col-visibility-popover-header">
+            <span className="db-col-visibility-popover-title">
+              {t("database.results.columnVisibilityTitle")}
+            </span>
+          </div>
+          <label className="db-col-visibility-popover-select-all">
+            <input
+              ref={selectAllRef}
+              type="checkbox"
+              checked={allVisible}
+              onChange={toggleAll}
+            />
+            <span>{t("database.results.columnVisibilityToggleAll")}</span>
+            <span className="db-col-visibility-popover-select-all-count">
+              {t("database.results.columnVisibilitySelected", {
+                count: visibleCount,
+                total: columns.length,
+              })}
+            </span>
+          </label>
+          <div className="db-col-visibility-popover-search">
+            <svg
+              viewBox="0 0 16 16"
+              className="db-col-visibility-popover-search-icon"
+              width="14"
+              height="14"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.6"
+              aria-hidden
+            >
+              <circle cx="7" cy="7" r="4.5" />
+              <path d="M10.5 10.5L14 14" strokeLinecap="round" />
+            </svg>
+            <input
+              type="text"
+              className="db-col-visibility-popover-search-input"
+              placeholder={t("database.results.columnVisibilitySearch")}
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              autoComplete="off"
+              spellCheck={false}
+            />
+          </div>
+          <ul className="db-col-visibility-popover-list">
+            {filteredColumns.length === 0 ? (
+              <li className="db-col-visibility-popover-empty">
+                {t("database.results.columnVisibilityNoResults")}
               </li>
-            );
-          })
-        )}
-      </ul>
-    </div>,
-    document.body,
+            ) : (
+              filteredColumns.map((name) => {
+                const checked = !hiddenColumns.has(name);
+                const meta = columnMetaMap?.[name];
+                return (
+                  <li
+                    key={name}
+                    className={`db-col-visibility-popover-item${activeColumn === name ? " db-col-visibility-popover-item--active" : ""}`}
+                    onClick={() => onColumnNavigate(name)}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggleOne(name)}
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                    <span className="db-col-visibility-popover-item-name" title={name}>
+                      {name}
+                    </span>
+                    {meta?.type ? (
+                      <span className="db-col-visibility-sidebar-item-type" title={meta.type}>
+                        {meta.type}
+                      </span>
+                    ) : null}
+                  </li>
+                );
+              })
+            )}
+          </ul>
+      </div>
+    </aside>
   );
 }
 
@@ -602,8 +584,9 @@ export const TableDataGrid = memo(function TableDataGrid({ columns, rows, totalR
     [transposed, isTransposedControlled, onTransposedChange],
   );
   const [cellPreview, setCellPreview] = useState<TableDataGridCellPreview | null>(null);
-  const [colVisOpen, setColVisOpen] = useState(false);
-  const colVisAnchorRef = useRef<HTMLButtonElement>(null);
+  const [colSidebarCollapsed, setColSidebarCollapsed] = useState(false);
+  const [navigatedColumnId, setNavigatedColumnId] = useState<string | null>(null);
+  const pendingColumnFocusRef = useRef<string | null>(null);
   const [filterOpen, setFilterOpen] = useState(false);
   const [filterLockedField, setFilterLockedField] = useState<string | null>(null);
   const [filterAnchorRect, setFilterAnchorRect] = useState<DOMRect | null>(null);
@@ -1103,6 +1086,84 @@ export const TableDataGrid = memo(function TableDataGrid({ columns, rows, totalR
     rowVirtualizer.measure();
   }, [rowHeights, tableRows.length]);
 
+  const scrollAndHighlightColumn = useCallback(
+    (columnName: string) => {
+      const wrap = wrapRef.current;
+      if (!wrap) {
+        return;
+      }
+
+      setNavigatedColumnId(columnName);
+
+      if (transposed) {
+        const rowIdx = displayRows.findIndex((row) => row[TRANSPOSE_FIELD_COL] === columnName);
+        if (rowIdx < 0) {
+          return;
+        }
+        rowVirtualizer.scrollToIndex(rowIdx, { align: "center", behavior: "smooth" });
+        const maxCol = leafColumnCount - 1;
+        if (maxCol >= 0) {
+          setCellRange({
+            start: { row: rowIdx, col: 0 },
+            end: { row: rowIdx, col: maxCol },
+          });
+        }
+        return;
+      }
+
+      const colIdx = leafColumns.findIndex((column) => column.id === columnName);
+      if (colIdx < 0) {
+        return;
+      }
+
+      const th = wrap.querySelector<HTMLElement>(`th[data-col-id="${CSS.escape(columnName)}"]`);
+      if (th) {
+        scrollElementToCenter(wrap, th);
+      }
+
+      const maxRow = tableRows.length - 1;
+      if (maxRow >= 0) {
+        setCellRange({
+          start: { row: 0, col: colIdx },
+          end: { row: maxRow, col: colIdx },
+        });
+      }
+    },
+    [
+      transposed,
+      displayRows,
+      leafColumns,
+      leafColumnCount,
+      tableRows.length,
+      rowVirtualizer,
+    ],
+  );
+
+  const handleColumnNavigate = useCallback(
+    (columnName: string) => {
+      if (hiddenColumns.has(columnName)) {
+        setHiddenColumns((prev) => {
+          const next = new Set(prev);
+          next.delete(columnName);
+          return next;
+        });
+        pendingColumnFocusRef.current = columnName;
+        return;
+      }
+      scrollAndHighlightColumn(columnName);
+    },
+    [hiddenColumns, setHiddenColumns, scrollAndHighlightColumn],
+  );
+
+  useLayoutEffect(() => {
+    const pending = pendingColumnFocusRef.current;
+    if (!pending || hiddenColumns.has(pending)) {
+      return;
+    }
+    pendingColumnFocusRef.current = null;
+    scrollAndHighlightColumn(pending);
+  }, [visibleColumns, hiddenColumns, scrollAndHighlightColumn]);
+
   const handleSelectAll = useCallback(() => {
     const maxRow = tableRows.length - 1;
     if (maxRow < 0) return;
@@ -1281,6 +1342,18 @@ export const TableDataGrid = memo(function TableDataGrid({ columns, rows, totalR
 
   return (
     <div className="db-data-table-panel">
+    <div className="db-data-table-body">
+      {!colSidebarCollapsed ? (
+        <ColumnVisibilitySidebar
+          columns={effectiveColumns}
+          columnMetaMap={columnMetaMap}
+          hiddenColumns={hiddenColumns}
+          onChange={setHiddenColumns}
+          activeColumn={navigatedColumnId}
+          onColumnNavigate={handleColumnNavigate}
+        />
+      ) : null}
+      <div className="db-data-table-main">
     {allColumnsHidden ? (
       <div className="db-data-table-all-hidden">
         {t("database.results.columnVisibilityAllHidden")}
@@ -1446,37 +1519,44 @@ export const TableDataGrid = memo(function TableDataGrid({ columns, rows, totalR
         cellOverrides={displayCellOverrides}
       />
     )}
+    </div>
+    </div>
     <div className="db-pagination">
+      <Button
+        variant={!colSidebarCollapsed ? "default" : "ghost"}
+        size="sm"
+        className="db-col-sidebar-footer-toggle"
+        title={
+          colSidebarCollapsed
+            ? t("database.results.columnVisibilityExpand")
+            : t("database.results.columnVisibilityCollapse")
+        }
+        aria-label={
+          colSidebarCollapsed
+            ? t("database.results.columnVisibilityExpand")
+            : t("database.results.columnVisibilityCollapse")
+        }
+        aria-expanded={!colSidebarCollapsed}
+        onMouseDown={(e) => e.stopPropagation()}
+        onClick={() => setColSidebarCollapsed((prev) => !prev)}
+      >
+        <svg
+          viewBox="0 0 16 16"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.6"
+          width="14"
+          height="14"
+          aria-hidden
+          className={colSidebarCollapsed ? undefined : "db-col-sidebar-footer-toggle-icon--expanded"}
+        >
+          <rect x="1.5" y="2.5" width="13" height="11" rx="1.5" />
+          <path d="M5 2.5v11M9.5 2.5v11" />
+        </svg>
+      </Button>
       <div className="db-pagination-left">
         {toolbar ? <div className="db-pagination-toolbar">{toolbar}</div> : null}
         <div className="db-pagination-info">
-        {effectiveColumns.length > 0 && (
-          <Button
-            ref={colVisAnchorRef}
-            variant={colVisOpen ? "default" : "ghost"}
-            size="sm"
-            className="db-col-visibility-toggle"
-            title={t("database.results.columnVisibilityTitle")}
-            aria-label={t("database.results.columnVisibility")}
-            aria-haspopup="dialog"
-            aria-expanded={colVisOpen}
-            onMouseDown={(e) => e.stopPropagation()}
-            onClick={() => setColVisOpen((prev) => !prev)}
-          >
-            <svg
-              viewBox="0 0 16 16"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.6"
-              width="14"
-              height="14"
-              aria-hidden
-            >
-              <rect x="1.5" y="2.5" width="13" height="11" rx="1.5" />
-              <path d="M5 2.5v11M9.5 2.5v11" />
-            </svg>
-          </Button>
-        )}
         {enableTranspose && (
           <Button
             variant={transposed ? "default" : "ghost"}
@@ -1586,15 +1666,6 @@ export const TableDataGrid = memo(function TableDataGrid({ columns, rows, totalR
         </Button>
       </div>
     </div>
-    {colVisOpen && colVisAnchorRef.current && (
-      <ColumnVisibilityPopover
-        anchorRect={colVisAnchorRef.current.getBoundingClientRect()}
-        columns={effectiveColumns}
-        hiddenColumns={hiddenColumns}
-        onChange={setHiddenColumns}
-        onClose={() => setColVisOpen(false)}
-      />
-    )}
     {filterOpen && filterAnchorRect && filterLockedField && columnMeta && onFilterChange && (
       <TableDataGridFilterPopover
         anchorRect={filterAnchorRect}

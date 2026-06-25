@@ -83,8 +83,9 @@ export function schedulePersistWorkspaceSession(snapshot: DbWorkspaceSessionSnap
   }
   saveTimer = setTimeout(() => {
     saveTimer = null;
-    useDbWorkspaceSessionStore.getState().setSession(snapshot);
+    const next = pendingSnapshot;
     pendingSnapshot = undefined;
+    useDbWorkspaceSessionStore.getState().setSession(next ?? null);
   }, 400);
 }
 

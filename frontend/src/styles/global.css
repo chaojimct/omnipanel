@@ -3344,6 +3344,12 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    font-style: normal;
+}
+
+.dockable-workspace .dv-default-tab--preview .dock-tab-label,
+.dock-tab-label--preview {
+    font-style: italic;
 }
 
 .dock-tab-header-inner svg {
@@ -12272,13 +12278,80 @@
     gap: var(--sp-2);
 }
 
+/* Software update row */
+.setting-row--update {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--sp-2);
+}
+
+.setting-update-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sp-3);
+    width: 100%;
+}
+
+.setting-update-info {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    min-width: 0;
+    flex: 1;
+}
+
+.setting-update-info h4 {
+    margin: 0;
+    flex-shrink: 0;
+}
+
+.setting-update-version {
+    margin: 0;
+    font-size: 11px;
+    color: var(--muted);
+    min-width: 0;
+}
+
+.setting-update-status {
+    margin-left: var(--sp-2);
+}
+
+.setting-update-status--new {
+    color: var(--accent);
+}
+
+.setting-update-status--ok {
+    color: var(--success);
+}
+
+.setting-update-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    flex-shrink: 0;
+}
+
+.setting-update-installing {
+    font-size: 11px;
+    color: var(--meta);
+    white-space: nowrap;
+}
+
+.setting-update-error {
+    margin: 0;
+    font-size: 11px;
+    color: var(--danger);
+}
+
 /* Update progress bar */
 .update-progress-bar {
-    width: 140px;
+    width: 100px;
     height: 4px;
     background: var(--border);
     border-radius: 2px;
     overflow: hidden;
+    flex-shrink: 0;
 }
 
 .update-progress-fill {
@@ -12289,7 +12362,8 @@
 }
 
 .update-changelog {
-    margin-top: var(--sp-1);
+    width: 100%;
+    margin: 0;
 }
 
 .update-changelog summary {
@@ -12308,6 +12382,10 @@
     border-radius: var(--r-sm);
     padding: var(--sp-2);
     margin-top: var(--sp-1);
+    font-size: 11px;
+    max-height: 160px;
+    overflow: auto;
+    white-space: pre-wrap;
 }
 
 /* ══════════════════════════════════════════════════════════════════════

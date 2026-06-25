@@ -95,6 +95,7 @@ import {
   refreshAndApplySchemaTreeNode,
   type SchemaTreeRefreshHooks,
 } from "./schemaTreeRefresh";
+import type { SchemaDockOpenMode } from "./workspaceTabs";
 
 type LoadedConnection = CachedConnection;
 
@@ -118,6 +119,9 @@ function buildLayoutDragPayload(item: SchemaTreeItem): SchemaLayoutDragPayload |
   return null;
 }
 
+/** 区分单击预览与双击常驻的延迟（ms）。 */
+const SCHEMA_LABEL_CLICK_DELAY_MS = 200;
+
 interface TreeNodeProps {
   item: SchemaTreeItem;
   depth: number;
@@ -130,6 +134,8 @@ interface TreeNodeProps {
   active?: boolean;
   onSelect?: () => void;
   onLabelClick?: () => void;
+  /** 双击打开常驻面板（单击为预览，需配合 onLabelClick） */
+  onLabelDoubleClick?: () => void;
   onContextMenu?: (e: ReactMouseEvent) => void;
   iconUrl?: string | null;
   onMetaClick?: () => void;
@@ -190,6 +196,7 @@ function TreeNode({
   active,
   onSelect,
   onLabelClick,
+  onLabelDoubleClick,
   onContextMenu,
   iconUrl,
   onMetaClick,
@@ -210,6 +217,15 @@ function TreeNode({
   onLayoutPointerDown,
 }: TreeNodeProps) {
   const { t } = useI18n();
+  const labelClickTimerRef = useRef<number | null>(null);
+  useEffect(
+    () => () => {
+      if (labelClickTimerRef.current !== null) {
+        window.clearTimeout(labelClickTimerRef.current);
+      }
+    },
+    [],
+  );
   const { type, label } = item;
   const indent = depth * 16 + 8;
   const isConnection = type === "connection";
@@ -231,7 +247,37 @@ function TreeNode({
     onToggle();
   };
 
-  const handleLabelClick = () => {
+  const handleNodeClick = (event: ReactMouseEvent) => {
+    if (isLayoutPointerDragExcludedTarget(event.target)) {
+      return;
+    }
+    if (onLabelDoubleClick && onLabelClick) {
+      if (labelClickTimerRef.current !== null) {
+        window.clearTimeout(labelClickTimerRef.current);
+      }
+      labelClickTimerRef.current = window.setTimeout(() => {
+        labelClickTimerRef.current = null;
+        onLabelClick();
+      }, SCHEMA_LABEL_CLICK_DELAY_MS);
+      return;
+    }
+    runLabelClick();
+  };
+
+  const handleNodeDoubleClick = (event: ReactMouseEvent) => {
+    if (isLayoutPointerDragExcludedTarget(event.target)) {
+      return;
+    }
+    if (labelClickTimerRef.current !== null) {
+      window.clearTimeout(labelClickTimerRef.current);
+      labelClickTimerRef.current = null;
+    }
+    if (onLabelDoubleClick) {
+      event.preventDefault();
+      event.stopPropagation();
+      onLabelDoubleClick();
+      return;
+    }
     runLabelClick();
   };
 
@@ -250,6 +296,8 @@ function TreeNode({
       style={nodeStyle}
       data-schema-item-type={type}
       data-schema-node-id={item.id}
+      onClick={handleNodeClick}
+      onDoubleClick={handleNodeDoubleClick}
       onPointerDown={(event) => {
         if (layoutDraggable) {
           onLayoutPointerDown?.(event);
@@ -260,8 +308,8 @@ function TreeNode({
       <span
         className={`tree-arrow${hasChildren ? "" : " tree-leaf"}${expanded ? " tree-arrow--open" : ""}`}
         onClick={(event) => {
-          event.stopPropagation();
           if (hasChildren) {
+            event.stopPropagation();
             onToggle();
           }
         }}
@@ -347,10 +395,7 @@ function TreeNode({
           aria-hidden
         />
       )}
-      <span
-        className="tree-label"
-        onClick={handleLabelClick}
-      >
+      <span className="tree-label">
         <span className="tree-label-name">{label}</span>
         {labelComment ? (
           <span className="tree-label-comment" title={labelComment}>
@@ -509,9 +554,9 @@ export type SchemaContextMenuContext = {
 export interface SchemaBrowserProps {
   activeConnId?: string | null;
   onCreateConnection?: () => void;
-  onSelectConnection?: (connId: string) => void;
-  onSelectTable?: (selection: SchemaTableSelection) => void;
-  onSelectDatabase?: (selection: SchemaDatabaseSelection) => void;
+  onSelectConnection?: (connId: string, mode?: SchemaDockOpenMode) => void;
+  onSelectTable?: (selection: SchemaTableSelection, mode?: SchemaDockOpenMode) => void;
+  onSelectDatabase?: (selection: SchemaDatabaseSelection, mode?: SchemaDockOpenMode) => void;
   buildSchemaContextMenuItems?: (
     item: SchemaTreeItem,
     context: SchemaContextMenuContext,
@@ -1499,8 +1544,10 @@ export function SchemaBrowser({
             : undefined;
 
       let onLabelClick: (() => void) | undefined;
+      let onLabelDoubleClick: (() => void) | undefined;
       if (row.labelClickKind === "connection" && row.labelClickConnId) {
-        onLabelClick = () => onSelectConnection?.(row.labelClickConnId!);
+        onLabelClick = () => onSelectConnection?.(row.labelClickConnId!, "preview");
+        onLabelDoubleClick = () => onSelectConnection?.(row.labelClickConnId!, "permanent");
       } else if (
         row.labelClickKind === "database" &&
         row.labelClickConnId &&
@@ -1508,14 +1555,30 @@ export function SchemaBrowser({
         connection
       ) {
         onLabelClick = () => {
+          onSelectDatabase?.(
+            {
+              connId: row.labelClickConnId!,
+              dbName: row.labelClickDbName!,
+              connection,
+            },
+            "preview",
+          );
           if (!expandedNodeIds.has(row.item.id)) {
-            toggle(row.item.id);
+            requestAnimationFrame(() => toggle(row.item.id));
           }
-          onSelectDatabase?.({
-            connId: row.labelClickConnId!,
-            dbName: row.labelClickDbName!,
-            connection,
-          });
+        };
+        onLabelDoubleClick = () => {
+          onSelectDatabase?.(
+            {
+              connId: row.labelClickConnId!,
+              dbName: row.labelClickDbName!,
+              connection,
+            },
+            "permanent",
+          );
+          if (!expandedNodeIds.has(row.item.id)) {
+            requestAnimationFrame(() => toggle(row.item.id));
+          }
         };
       } else if (
         row.labelClickKind === "table" &&
@@ -1524,13 +1587,14 @@ export function SchemaBrowser({
         row.labelClickTableName &&
         connection
       ) {
-        onLabelClick = () =>
-          onSelectTable?.({
-            connId: row.labelClickConnId!,
-            dbName: row.labelClickDbName!,
-            tableName: row.labelClickTableName!,
-            connection,
-          });
+        const tableSelection: SchemaTableSelection = {
+          connId: row.labelClickConnId!,
+          dbName: row.labelClickDbName!,
+          tableName: row.labelClickTableName!,
+          connection,
+        };
+        onLabelClick = () => onSelectTable?.(tableSelection, "preview");
+        onLabelDoubleClick = () => onSelectTable?.(tableSelection, "permanent");
       }
 
       let onPinToggle: (() => void) | undefined;
@@ -1588,6 +1652,7 @@ export function SchemaBrowser({
           pinActive={row.pinActive}
           onPinToggle={onPinToggle}
           onLabelClick={onLabelClick}
+          onLabelDoubleClick={onLabelDoubleClick}
           onContextMenu={(e) => handleContextSchemaNode(row.item, e)}
           stickyAncestor={options?.stickyAncestor}
           layoutDraggable={isLayoutDraggable}
