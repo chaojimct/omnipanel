@@ -1,6 +1,6 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 import type { TerminalPane, TerminalTab } from "../../stores/terminalStore";
-import type { WorkspaceResource } from "../../lib/resourceRegistry";
+import type { EnvironmentTag, WorkspaceResource } from "../../lib/resourceRegistry";
 import { CommandInput, type CommandInputHandle } from "./CommandInput";
 import { TerminalView } from "./TerminalView";
 import { type BlueprintSource } from "./sessionBlueprints";
@@ -22,6 +22,64 @@ type CommonProps = {
     sender: ((cmd: string) => void) | null,
   ) => void;
 };
+
+const ENV_BADGE_LABELS: Record<EnvironmentTag, string> = {
+  prod: "PROD",
+  staging: "STG",
+  dev: "DEV",
+  local: "LOCAL",
+  unknown: "SSH",
+};
+
+function parseSshSubtitle(subtitle?: string) {
+  const match = subtitle?.match(/^([^@\s]+)@([^:\s]+)(?::(\d+))?/);
+  return {
+    user: match?.[1],
+    host: match?.[2],
+    port: match?.[3],
+  };
+}
+
+function TerminalSessionHeader({
+  resource,
+  blueprintSource,
+}: {
+  resource: WorkspaceResource | null;
+  blueprintSource: BlueprintSource;
+}) {
+  if (resource?.type !== "ssh") return null;
+
+  const parsed = parseSshSubtitle(resource.subtitle);
+  const user = parsed.user ?? "root";
+  const host = parsed.host ?? resource.name;
+  const path = "~";
+  const shellLabel = resource.tags?.find((tag) => /bash|zsh|fish|powershell/i.test(tag)) ?? "bash";
+  const osLabel =
+    resource.tags?.find((tag) => /ubuntu|debian|centos|linux|windows|macos/i.test(tag)) ??
+    resource.metrics?.OS ??
+    "Ubuntu 22.04";
+  const hardwareLabel =
+    resource.metrics?.配置 ??
+    resource.metrics?.Hardware ??
+    resource.metrics?.硬件 ??
+    "32C/128G";
+
+  return (
+    <div className="term-session-header">
+      <span className={`term-session-env term-session-env--${resource.environment}`}>
+        {ENV_BADGE_LABELS[resource.environment] ?? "SSH"}
+      </span>
+      <span className="term-session-host">{user}@{resource.name}</span>
+      <span className="term-session-muted">:</span>
+      <span className="term-session-path">{path}</span>
+      {parsed.port ? <span className="term-session-muted">· {host}:{parsed.port}</span> : null}
+      <span className="term-session-spacer" />
+      <span className="term-session-meta">
+        {shellLabel} · {osLabel} · {blueprintSource.type === "remote" ? hardwareLabel : "本地"}
+      </span>
+    </div>
+  );
+}
 
 function PaneViewBody(
   {
@@ -63,6 +121,7 @@ function PaneViewBody(
       data-pane-id={paneId}
       onMouseDown={onActivate}
     >
+      <TerminalSessionHeader resource={resource} blueprintSource={blueprintSource} />
       <div
         className="terminal-area term-terminal-shell"
         tabIndex={-1}
