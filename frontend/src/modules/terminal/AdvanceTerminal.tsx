@@ -53,14 +53,14 @@ export function AdvanceTerminal({ tabId, isActive, onActivate }: AdvanceTerminal
     if (isLocal) {
       return [
         {
-          id: "files",
-          label: t("terminal.sideTabs.files"),
+          id: "monitor",
+          label: t("terminal.sideTabs.monitor"),
           panelType: "terminal-side",
           closable: false,
         },
         {
-          id: "monitor",
-          label: t("terminal.sideTabs.monitor"),
+          id: "files",
+          label: t("terminal.sideTabs.files"),
           panelType: "terminal-side",
           closable: false,
         },
@@ -136,7 +136,7 @@ export function AdvanceTerminal({ tabId, isActive, onActivate }: AdvanceTerminal
     [resource?.id, sideTabs, t],
   );
 
-  const defaultSideTab = isLocal ? "files" : "processes";
+  const defaultSideTab = isLocal ? "monitor" : "processes";
   const [activeSideTab, setActiveSideTab] = useState<SidePanelId>(defaultSideTab);
   const [sideContentCollapsed, setSideContentCollapsed] = useState(false);
   const sideContentCollapsedRef = useRef(false);

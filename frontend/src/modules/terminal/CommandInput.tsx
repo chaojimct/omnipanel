@@ -18,8 +18,10 @@ export type CommandInputHandle = {
   focus: () => void;
 };
 
-export const CommandInput = forwardRef<CommandInputHandle, { onSend: (cmd: string) => void }>(
-  function CommandInput({ onSend }, ref) {
+export const CommandInput = forwardRef<
+  CommandInputHandle,
+  { onSend: (cmd: string) => void; promptSymbol?: string }
+>(function CommandInput({ onSend, promptSymbol = "$" }, ref) {
     const [value, setValue] = useState("");
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const { t } = useI18n();
@@ -59,7 +61,7 @@ export const CommandInput = forwardRef<CommandInputHandle, { onSend: (cmd: strin
 
     return (
       <div className="term-cmd-input">
-        <span className="term-cmd-prompt">$</span>
+        <span className="term-cmd-prompt">{promptSymbol}</span>
         <textarea
           ref={textareaRef}
           className="term-cmd-textarea"

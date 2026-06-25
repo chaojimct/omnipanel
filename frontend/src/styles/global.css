@@ -854,6 +854,10 @@
     flex: 1;
 }
 
+.advance-terminal-side-panel-root{
+    background: #201d1d;
+}
+
 .workspace-component-panel {
     display: flex;
     flex-direction: column;
