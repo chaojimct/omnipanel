@@ -15,7 +15,6 @@ import {
 } from "../../lib/workspaceTabPreview";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { useI18n } from "../../i18n";
-import { workspaceAddPanelModifierLabel } from "../../lib/platform";
 import type { WorkspaceDockTab } from "../../stores/workspaceBottomDockStore";
 import { WorkspaceTaskBarPanelSubWindow } from "../workspace/WorkspaceTaskBarPanelSubWindow";
 import { WorkspaceSwitcher } from "../shell/WorkspaceSwitcher";
@@ -186,9 +185,7 @@ export function WorkspacePreviewTaskBar() {
         <div className="workspace-preview-taskbar__panels" role="tablist">
           {tabs.length === 0 ? (
             <p className="workspace-preview-taskbar__empty">
-              {t("shell.workspacePreview.noPanels", {
-                modifier: workspaceAddPanelModifierLabel(),
-              })}
+              {t("shell.workspacePreview.noPanels")}
             </p>
           ) : (
             tabs.map((tab) => (

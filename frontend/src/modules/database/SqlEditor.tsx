@@ -28,6 +28,9 @@ import { createSqlCompletionSource } from "./lsp/codemirrorSqlCompletion";
 import { positionToOffset, sqlAtOffset, isSqlEditorFocused } from "./lsp/sqlStatement";
 import { getSqlEditorThemeExtensions, isLightTheme } from "./sqlEditorTheme";
 import { getSearchHighlightExtension, updateSearchHighlight } from "./sqlSearchHighlight";
+import { formatSql } from "./formatSql";
+import { getShortcutKeys, matchesShortcut } from "../../stores/shortcutsStore";
+import { useSettingsStore } from "../../stores/settingsStore";
 
 /** 打开方式：独立查询页（sql）或侧栏点表后的表数据预览（data）。 */
 export type SqlEditorOpenMode = "query" | "table";
@@ -61,6 +64,20 @@ function runStatementAtCursor(
   onRun(sqlAtOffset(text, offset));
 }
 
+function formatSqlInView(view: EditorView): boolean {
+  const current = view.state.doc.toString();
+  const formatted = formatSql(current);
+  if (formatted === current) {
+    return true;
+  }
+  const head = view.state.selection.main.head;
+  view.dispatch({
+    changes: { from: 0, to: current.length, insert: formatted },
+    selection: { anchor: Math.min(head, formatted.length) },
+  });
+  return true;
+}
+
 export function SqlEditor({
   value,
   onChange,
@@ -73,6 +90,10 @@ export function SqlEditor({
   highlightQuery = "",
   editorActive = true,
 }: SqlEditorProps) {
+  const sqlEditorFontFamily = useSettingsStore((s) => s.sqlEditorFontFamily);
+  const sqlEditorFontSize = useSettingsStore((s) => s.sqlEditorFontSize);
+  const sqlEditorLineHeight = useSettingsStore((s) => s.sqlEditorLineHeight);
+
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
   const onChangeRef = useRef(onChange);
@@ -241,7 +262,11 @@ export function SqlEditor({
       if (!view) return;
       view.dispatch({
         effects: themeCompartment.current.reconfigure(
-          getSqlEditorThemeExtensions(isLightTheme()),
+          getSqlEditorThemeExtensions(isLightTheme(), {
+            fontFamily: sqlEditorFontFamily,
+            fontSize: sqlEditorFontSize,
+            lineHeight: sqlEditorLineHeight,
+          }),
         ),
       });
     });
@@ -250,7 +275,21 @@ export function SqlEditor({
       attributeFilter: ["data-theme"],
     });
     return () => observer.disconnect();
-  }, []);
+  }, [sqlEditorFontFamily, sqlEditorFontSize, sqlEditorLineHeight]);
+
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view) return;
+    view.dispatch({
+      effects: themeCompartment.current.reconfigure(
+        getSqlEditorThemeExtensions(isLightTheme(), {
+          fontFamily: sqlEditorFontFamily,
+          fontSize: sqlEditorFontSize,
+          lineHeight: sqlEditorLineHeight,
+        }),
+      ),
+    });
+  }, [sqlEditorFontFamily, sqlEditorFontSize, sqlEditorLineHeight]);
 
   // macOS Tauri WebView 下 CodeMirror keymap 对 Cmd+Enter 可能不可靠；仅编辑器有焦点时在此处理。
   useEffect(() => {
@@ -286,6 +325,23 @@ export function SqlEditor({
       e.preventDefault();
       e.stopPropagation();
       save();
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, []);
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.isComposing) return;
+      if (!matchesShortcut(e, getShortcutKeys("format-sql"))) {
+        return;
+      }
+      if (!isSqlEditorFocused()) return;
+      const view = viewRef.current;
+      if (!view?.hasFocus || readOnlyRef.current) return;
+      e.preventDefault();
+      e.stopPropagation();
+      formatSqlInView(view);
     };
     window.addEventListener("keydown", onKeyDown, true);
     return () => window.removeEventListener("keydown", onKeyDown, true);

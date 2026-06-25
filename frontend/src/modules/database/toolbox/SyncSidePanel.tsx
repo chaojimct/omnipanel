@@ -95,6 +95,11 @@ function ConnectionDatabaseFilters({
   allVisibleSelected,
   visibleNames,
   onSelectAllTables,
+  search,
+  onSearchChange,
+  onSearchKeyDown,
+  searchPlaceholder,
+  toolbarLayout = "default",
 }: {
   connections: DbConnectionConfig[];
   connectionId: string;
@@ -108,15 +113,24 @@ function ConnectionDatabaseFilters({
   allVisibleSelected: boolean;
   visibleNames: string[];
   onSelectAllTables: (tableNames: string[], selected: boolean) => void;
+  search?: string;
+  onSearchChange?: (value: string) => void;
+  onSearchKeyDown?: (e: KeyboardEvent<HTMLInputElement>) => void;
+  searchPlaceholder?: string;
+  toolbarLayout?: "default" | "sourceRow";
 }) {
   const { t } = useI18n();
   const conn = useMemo(
     () => connections.find((c) => c.id === connectionId) ?? null,
     [connections, connectionId],
   );
+  const filtersClassName =
+    toolbarLayout === "sourceRow"
+      ? "db-toolbox-side__filters db-toolbox-side__filters--source-row"
+      : "db-toolbox-side__filters";
 
   return (
-    <div className="db-toolbox-side__filters">
+    <div className={filtersClassName}>
       <Select
         className="db-select"
         value={connectionId}
@@ -143,6 +157,17 @@ function ConnectionDatabaseFilters({
             : databases.map((dbName) => ({ value: dbName, label: dbName }))
         }
       />
+      {search !== undefined && onSearchChange && (
+        <input
+          type="search"
+          className="input db-toolbox-search"
+          value={search}
+          onChange={(e) => onSearchChange(e.target.value)}
+          onKeyDown={onSearchKeyDown}
+          placeholder={searchPlaceholder ?? t("database.toolbox.side.searchTables")}
+          aria-label={searchPlaceholder ?? t("database.toolbox.side.searchTables")}
+        />
+      )}
       {showSelectAll && (
         <label className="db-toolbox-select-all">
           <input
@@ -528,18 +553,12 @@ export function SyncSidePanel({
           allVisibleSelected={allVisibleSelected}
           visibleNames={visibleNames}
           onSelectAllTables={onSelectAllTables}
+          search={!isTargetSync ? search : undefined}
+          onSearchChange={!isTargetSync ? setSearch : undefined}
+          onSearchKeyDown={!isTargetSync ? handleSearchKeyDown : undefined}
+          searchPlaceholder={t("database.toolbox.side.searchTables")}
+          toolbarLayout={isTargetSync ? "default" : "sourceRow"}
         />
-        {!isTargetSync && (
-          <input
-            type="search"
-            className="input db-toolbox-search"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            onKeyDown={handleSearchKeyDown}
-            placeholder={t("database.toolbox.side.searchTables")}
-            aria-label={t("database.toolbox.side.searchTables")}
-          />
-        )}
       </header>
 
       <div className="db-toolbox-side__list">

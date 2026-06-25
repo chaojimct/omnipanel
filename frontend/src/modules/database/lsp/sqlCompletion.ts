@@ -353,6 +353,55 @@ function currentPrefix(text: string, offset: number) {
   return line.match(/(\w+)$/)?.[1] ?? "";
 }
 
+/** IS / NOT 谓词尾部：此位置只应补关键字（如 NULL），不应出现字段名。 */
+export type IsNotCompletionTail = "is" | "is_not" | "not" | null;
+
+export function resolveIsNotCompletionTail(text: string, offset: number): IsNotCompletionTail {
+  const before = currentStatementBefore(text, offset);
+  const linePrefix = before.split("\n").pop() ?? before;
+  const trimmed = linePrefix.trimEnd();
+  if (/\bIS\s+NOT\s*$/i.test(trimmed)) {
+    return "is_not";
+  }
+  if (/\bIS\s*$/i.test(trimmed)) {
+    return "is";
+  }
+  if (/\bNOT\s*$/i.test(trimmed)) {
+    return "not";
+  }
+  return null;
+}
+
+function buildIsNotTailCompletions(tail: Exclude<IsNotCompletionTail, null>): CompletionItem[] {
+  const nullItem: CompletionItem = {
+    label: "NULL",
+    kind: KEYWORD_KIND,
+    insertText: "NULL",
+    detail: "SQL 关键字",
+  };
+  if (tail === "is") {
+    return [
+      nullItem,
+      {
+        label: "NOT",
+        kind: KEYWORD_KIND,
+        insertText: "NOT NULL",
+        detail: "SQL 关键字",
+      },
+    ];
+  }
+  if (tail === "is_not") {
+    return [nullItem];
+  }
+  return [
+    nullItem,
+    { label: "IN", kind: KEYWORD_KIND, insertText: "IN ()", detail: "SQL 关键字" },
+    { label: "LIKE", kind: KEYWORD_KIND, insertText: "LIKE ", detail: "SQL 关键字" },
+    { label: "EXISTS", kind: KEYWORD_KIND, insertText: "EXISTS ()", detail: "SQL 关键字" },
+    { label: "BETWEEN", kind: KEYWORD_KIND, insertText: "BETWEEN ", detail: "SQL 关键字" },
+  ];
+}
+
 function filterItems(items: CompletionItem[], prefix: string): CompletionItem[] {
   if (!prefix) return items;
   const normalized = prefix.toUpperCase();
@@ -459,6 +508,11 @@ export function getCompletionItems(
   schemas: DatabaseSchema[],
 ): CompletionItem[] {
   const prefix = currentPrefix(text, offset);
+  const isNotTail = resolveIsNotCompletionTail(text, offset);
+  if (isNotTail) {
+    return filterItems(buildIsNotTailCompletions(isNotTail), prefix);
+  }
+
   const context = resolveSqlCompletionContext(text, offset);
   const fromTable =
     context === "select_list" ? resolveFromTableInStatement(text, offset, schemas) : null;

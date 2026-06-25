@@ -12,10 +12,8 @@ import { SftpPanel } from "@/components/sftp";
 import { TunnelPanel } from "@/components/tunnel";
 import { WorkspaceComponent } from "@/components/workspace/WorkspaceComponent";
 import { useI18n } from "@/i18n";
-import { addComponentToWorkspace } from "@/lib/workspaceTabActions";
 import { normalizeTerminalCwdForSftp } from "@/modules/server/ssh/utils/parseCommandPaths";
 import { useSshDetailNavigationStore } from "@/stores/sshDetailNavigationStore";
-import { useWorkspaceStore } from "@/stores/workspaceStore";
 import { TerminalTabPaneView } from "./TerminalPaneView";
 import { AdvanceTerminalMonitorStack } from "./AdvanceTerminalMonitorStack";
 import { useTerminalTabDockPane } from "./useTerminalTabDockPane";
@@ -39,7 +37,6 @@ export type AdvanceTerminalProps = {
 
 export function AdvanceTerminal({ tabId, isActive, onActivate }: AdvanceTerminalProps) {
   const { t } = useI18n();
-  const workspaceId = useWorkspaceStore((state) => state.workspace.id);
   const { paneProps, resource, tab } = useTerminalTabDockPane(tabId, isActive, onActivate);
 
   const isRemoteSsh = useMemo(
@@ -133,15 +130,6 @@ export function AdvanceTerminal({ tabId, isActive, onActivate }: AdvanceTerminal
       return null;
     },
     [resource?.id, sideTabs, t],
-  );
-
-  const handleSideCtrlCopyTab = useCallback(
-    (sideTabId: string) => {
-      const spec = resolveSidePanelSpec(sideTabId);
-      if (!spec) return;
-      addComponentToWorkspace(workspaceId, spec);
-    },
-    [resolveSidePanelSpec, workspaceId],
   );
 
   const defaultSideTab = isLocal ? "files" : "sftp";
@@ -274,7 +262,6 @@ export function AdvanceTerminal({ tabId, isActive, onActivate }: AdvanceTerminal
             defaultHeaderPosition="right"
             disableTabsOverflowList
             scrollbars="native"
-            onCtrlCopyTab={handleSideCtrlCopyTab}
           />
         </DockPanel>
       </DockLayout>

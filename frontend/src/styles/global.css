@@ -854,12 +854,6 @@
     flex: 1;
 }
 
-.workspace-component-root--copy-ready {
-    outline: 2px dashed color-mix(in srgb, var(--accent) 55%, transparent);
-    outline-offset: -2px;
-    cursor: copy;
-}
-
 .workspace-component-panel {
     display: flex;
     flex-direction: column;
@@ -3139,24 +3133,6 @@
     flex: 1;
     min-height: 0;
     min-width: 0;
-}
-
-/* 加入工作区修饰键悬停：目标 panel 显示半透明遮罩 */
-.dockable-workspace.dock-copy-mode {
-    cursor: copy;
-}
-
-.dockable-workspace.dock-copy-mode .dv-content-container.dock-panel--copy-target {
-    position: relative;
-}
-
-.dockable-workspace.dock-copy-mode .dock-panel-copy-overlay {
-    position: absolute;
-    inset: 0;
-    z-index: 9999;
-    pointer-events: auto;
-    cursor: copy;
-    background: color-mix(in srgb, var(--accent) 16%, transparent);
 }
 
 /* dockview tab 栏与面板区域（视觉对齐 .topbar-tab / .topbar-tabs） */
@@ -6948,6 +6924,57 @@
 
     .terminal-preview-body>div {
         white-space: pre;
+    }
+
+    .settings-subsection-title {
+        margin: var(--sp-5) 0 var(--sp-3);
+        font-size: 12px;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: var(--meta);
+    }
+
+    .sql-editor-preview {
+        border: 1px solid var(--border);
+        border-radius: var(--r-md);
+        overflow: hidden;
+        margin-bottom: var(--sp-4);
+        background: color-mix(in srgb, var(--surface) 88%, var(--bg-deeper));
+    }
+
+    .sql-editor-preview__body {
+        padding: 14px 16px;
+        min-height: 96px;
+        white-space: pre-wrap;
+        color: var(--fg);
+    }
+
+    .sql-editor-preview__kw {
+        color: var(--accent);
+        font-weight: 600;
+    }
+
+    .sql-editor-preview__str {
+        color: var(--success);
+    }
+
+    .font-family-select .omni-select-value {
+        font-family: var(--font-family-select-value), var(--font-ui);
+    }
+
+    .font-family-select__retry {
+        margin-top: 6px;
+        padding: 0;
+        border: none;
+        background: none;
+        color: var(--accent);
+        font-size: 11px;
+        cursor: pointer;
+    }
+
+    .font-family-select__retry:hover {
+        text-decoration: underline;
     }
 
     @keyframes term-blink {

@@ -48,7 +48,7 @@ export function terminalTabToSnapshot(tab: TerminalTab): TerminalTabSnapshot {
   };
 }
 
-/** Ctrl+?? / ???????????????? Tab?? id??????? */
+/** Copy terminal session into workspace as a new tab (new id and backend session). */
 export function copyTerminalTabToWorkspaceSnapshot(
   source: TerminalTab,
 ): TerminalTabSnapshot {
@@ -65,7 +65,7 @@ export function copyTerminalTabToWorkspaceSnapshot(
   };
 }
 
-/** ?????????????? id ????????????? */
+/** Move terminal session into workspace (keeps id/connection; hidden from source panel). */
 export function moveTerminalTabToWorkspaceSnapshot(
   source: TerminalTab,
 ): TerminalTabSnapshot {
@@ -104,7 +104,7 @@ export function dockerTabToSnapshot(
   return {
     module: "docker",
     id: `docker:${subTab}:${containerId}:${Date.now()}`,
-    label: `${containerName} · ${subTab === "logs" ? "??" : "??"}`,
+    label: `${containerName} \u00B7 ${subTab === "logs" ? "\u65E5\u5FD7" : "\u7EC8\u7AEF"}`,
     subTab,
     connectionId,
     containerId,
@@ -112,7 +112,7 @@ export function dockerTabToSnapshot(
   };
 }
 
-/** ??? Dock ? payload ????? id */
+/** Stable id for workspace Dock payload panels. */
 export function payloadDockTabId(snapshot: WorkspaceTabSnapshot): string {
   if (snapshot.module === "route") {
     return `ws-payload:${snapshot.id}`;
@@ -123,7 +123,7 @@ export function payloadDockTabId(snapshot: WorkspaceTabSnapshot): string {
   return `ws-payload:${snapshot.module}:${snapshot.id}`;
 }
 
-/** ???????????? Dock Tab??????? */
+/** Expand bottom workspace and activate a Dock tab without route navigation. */
 function activateWorkspaceDockTab(workspaceId: string, tab: WorkspaceDockTab): void {
   const bottom = useBottomPanelStore.getState();
   if (!bottom.isFullscreen && bottom.workspaceMode === "hidden") {
@@ -142,7 +142,6 @@ function activateWorkspaceDockTab(workspaceId: string, tab: WorkspaceDockTab): v
   };
 
   const needsExpand = !bottom.isFullscreen && bottom.workspaceMode === "hidden";
-  // ???? / ??????????? Dock ?????? focus
   if (needsExpand) {
     requestAnimationFrame(() => requestAnimationFrame(applyActivation));
   } else {
@@ -160,7 +159,7 @@ function resolveActiveTerminalTab(): TerminalTab | undefined {
   return moduleTabs[0];
 }
 
-/** ???? store ???????? Tab????? payload ?? */
+/** Ensure terminal store has a tab for the snapshot (workspace payload rendering). */
 export function ensureTerminalTabFromSnapshot(snapshot: TerminalTabSnapshot): string {
   const store = useTerminalStore.getState();
   const existing = store.tabs.find((tab) => tab.id === snapshot.id);
@@ -181,20 +180,16 @@ export function ensureTerminalTabFromSnapshot(snapshot: TerminalTabSnapshot): st
   return snapshot.id;
 }
 
-/** ????? Dock ???? payload ??????? */
+/** Release resources when closing a workspace Dock payload tab. */
 export function cleanupWorkspaceDockTab(tab: WorkspaceDockTab | undefined): void {
   if (!tab || tab.kind !== "payload" || !tab.payload) return;
   if (tab.payload.module === "database") {
     const dbTabId = tab.payload.id;
-    // We cannot call DatabasePanel directly, but we can update the store to close it.
-    // Actually, closeWorkspaceTab is in DatabasePanel.
-    // Let's dispatch an event to DatabasePanel to close it globally
     window.dispatchEvent(new CustomEvent("omnipanel:close-db-workspace-tab", { detail: dbTabId }));
     return;
   }
 
-  if (!tab) return;
-  if (tab.kind !== "payload" || tab.payload?.module !== "terminal") return;
+  if (tab.payload.module !== "terminal") return;
   const terminalId = tab.payload.id;
   const terminalTab = useTerminalStore.getState().tabs.find((item) => item.id === terminalId);
   if (!terminalTab?.workspaceOnly) return;
@@ -211,10 +206,8 @@ function resolveWorkspaceInfo(workspaceId: string): WorkspaceInfo | null {
 }
 
 /**
- * ?????????????????? Dock Tab?
- *
- * ???????? workspaceTabStore?workspaceTabStore ??????/???
- * ?????????????????? Tab??? Dock Tab ??? Tab ?????
+ * Materialize a source snapshot as an engineering-workspace Dock tab.
+ * Does not write workspaceTabStore (module tabs restore separately on workspace switch).
  */
 export function addSnapshotToWorkspace(
   workspaceId: string,
@@ -257,7 +250,7 @@ export function addSnapshotToWorkspace(
   activateWorkspaceDockTab(workspaceId, addedTab);
 }
 
-/** ??? Ctrl+???????????????????????????????? */
+/** Sidebar add-to-workspace: prefer module context (e.g. terminal session), else module route panel. */
 export function addModulePanelToWorkspace(
   workspaceId: string,
   moduleKey: ModuleKey,
@@ -279,7 +272,7 @@ export function addModulePanelToWorkspace(
   addModuleRouteToWorkspace(workspaceId, moduleKey, label, options);
 }
 
-/** ???????????????? Ctrl+?????? Ctrl+???? ?? 1??????? */
+/** Add a module route panel to workspace (top-level route panel). */
 export function addModuleRouteToWorkspace(
   workspaceId: string,
   moduleKey: ModuleKey,
@@ -295,7 +288,7 @@ export function addModuleRouteToWorkspace(
   );
 }
 
-/** ???????/???????? ? ?? 2 & 3?componentType + props */
+/** Add a serializable component/sub-panel to workspace. */
 export function addComponentToWorkspace(
   workspaceId: string,
   input: {
@@ -319,7 +312,7 @@ export function addComponentToWorkspace(
   addSnapshotToWorkspace(workspaceId, snapshot, options);
 }
 
-/** ?????????????????? Tab ????? Dock ??? */
+/** Sync table data tab to bottom Dock when a database workspace panel already exists. */
 export function syncDatabaseTableTabToWorkspace(
   tab: DbWorkspaceTab,
   tabMode: "data" | "sql" = "data",
@@ -337,7 +330,7 @@ export function syncDatabaseTableTabToWorkspace(
   addSnapshotToWorkspace(workspaceId, dbTabToSnapshot(tab, tabMode), { activate: true });
 }
 
-/** ?????????????? Dock Tab */
+/** Reopen a tab from the recent-closed list. */
 export function reopenWorkspaceDockTab(
   workspaceId: string,
   workspace: WorkspaceInfo,

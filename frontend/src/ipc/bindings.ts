@@ -248,6 +248,8 @@ export const commands = {
 	localProcessDetail: (pid: number) => typedError<SshProcessDetail_Serialize, OmniError_Serialize>(__TAURI_INVOKE("local_process_detail", { pid })),
 	/**  强制终止本机进程。 */
 	localKillProcess: (pid: number) => typedError<null, OmniError_Serialize>(__TAURI_INVOKE("local_kill_process", { pid })),
+	/**  枚举本机已安装字体族名（可选仅等宽字体）。 */
+	listSystemFonts: (monospaceOnly: boolean | null) => typedError<string[], OmniError_Serialize>(__TAURI_INVOKE("list_system_fonts", { monospaceOnly })),
 	/**
 	 *  创建 SSH 隧道（端口转发）。
 	 *  通过 SSH exec 运行 `ssh -L/-R/-D` 命令实现，隧道进程在后台运行。
@@ -513,11 +515,24 @@ export type CreateDatabaseArgs = {
 	collation?: string | null,
 };
 
-export type DbColumnMeta = {
+export type DbColumnMeta = DbColumnMeta_Serialize | DbColumnMeta_Deserialize;
+
+export type DbColumnMeta_Deserialize = {
 	name: string,
 	type: string,
 	isPk: boolean,
 	isFk: boolean,
+	nullable?: boolean,
+	comment?: string | null,
+};
+
+export type DbColumnMeta_Serialize = {
+	name: string,
+	type: string,
+	isPk: boolean,
+	isFk: boolean,
+	nullable: boolean,
+	comment?: string | null,
 };
 
 /**  数据库连接配置（与前端 `DbConnectionConfig` / Tauri IPC 一致）。 */
@@ -585,14 +600,14 @@ export type DbTableSchema = DbTableSchema_Serialize | DbTableSchema_Deserialize;
 
 export type DbTableSchema_Deserialize = {
 	name: string,
-	columns: DbColumnMeta[],
+	columns: DbColumnMeta_Deserialize[],
 	indexes?: DbIndexMeta[],
 	comment?: string | null,
 };
 
 export type DbTableSchema_Serialize = {
 	name: string,
-	columns: DbColumnMeta[],
+	columns: DbColumnMeta_Serialize[],
 	indexes: DbIndexMeta[],
 	comment?: string | null,
 };

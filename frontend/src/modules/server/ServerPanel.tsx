@@ -5,7 +5,6 @@ import { ServerSidebar } from "../../components/workspace/ServerSidebar";
 import { Button } from "../../components/ui/Button";
 import { WorkspaceEmptyPage } from "../../components/ui/WorkspaceEmptyPage";
 import { ModuleSegmentDock } from "../../components/dock";
-import { useWorkspaceCtrlCopyTab } from "../../hooks/useWorkspaceCtrlCopyTab";
 import { useConnectionStore } from "../../stores/connectionStore";
 import { useServerGroupStore } from "../../stores/serverGroupStore";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
@@ -68,9 +67,6 @@ export function ServerPanel() {
     [topbarTabs],
   );
 
-  const handleCtrlCopyTab = useWorkspaceCtrlCopyTab("server", (tabId) =>
-    segmentTabs.find((item) => item.id === tabId)?.label ?? tabId,
-  );
 
   useEffect(() => {
     if (!selectedResourceByPath[SERVER_PATH] && panelServers[0]) {
@@ -176,7 +172,6 @@ export function ServerPanel() {
         onActiveTabChange={(id) => setTab(id as ServerWorkspaceTab)}
         enabled={isActiveRoute}
         renderPanel={renderPanel}
-        onCtrlCopyTab={handleCtrlCopyTab}
       />
       <ServerConnectionDialog
         open={showDialog}

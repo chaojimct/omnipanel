@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, type ReactNode } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { detectMonospaceFonts } from "../../lib/systemFonts";
 import { appConfirm } from "../../lib/appConfirm";
+import { FontFamilySelect } from "../../components/settings/FontFamilySelect";
 import {
   countEnabledModels,
   useAiModelsStore,
@@ -29,14 +29,16 @@ import {
   clampKnowledgeChunkSize,
   clampKnowledgeChunkOverlap,
   clampKnowledgeTopN,
-  WORKSPACE_ADD_PANEL_MODIFIER_OPTIONS,
   DATABASE_QUERY_PAGE_SIZE_OPTIONS,
   clampDatabaseQueryPageSize,
+  SQL_EDITOR_FONT_SIZE_OPTIONS,
+  SQL_EDITOR_LINE_HEIGHT_OPTIONS,
+  clampSqlEditorFontSize,
+  clampSqlEditorLineHeight,
   type Locale,
   type ProxyProtocol,
   type AiDisplayMode,
   type DetailPanelMode,
-  type WorkspaceAddPanelModifier,
 } from "../../stores/settingsStore";
 import { KnowledgeEmbeddingModelSelect } from "../../components/knowledge/KnowledgeEmbeddingModelSelect";
 import {
@@ -54,11 +56,11 @@ import { AddMcpServiceDialog } from "../../components/settings/AddMcpServiceDial
 import { McpServiceToolList } from "../../components/settings/McpServiceToolList";
 import { ProviderModelList } from "../../components/settings/ProviderModelList";
 import { DataBackupSection } from "../../components/settings/DataBackupSection";
+import { AiScenarioSection } from "../../components/settings/AiScenarioSection";
 import { Button } from "../../components/ui/Button";
 import { ModuleEmptyState } from "../../components/ui/ModuleEmptyState";
 import { Select } from "../../components/ui/Select";
 import { useI18n } from "../../i18n";
-import { workspaceAddPanelModifierLabel } from "../../lib/platform";
 import { commands } from "../../ipc/bindings";
 import { invoke } from "@tauri-apps/api/core";
 import type { UpdateInfo } from "../../ipc/bindings";
@@ -279,8 +281,6 @@ function KeybindingsSection() {
   const { t } = useI18n();
   const overrides = useShortcutsStore((s) => s.overrides);
   const resetAll = useShortcutsStore((s) => s.resetAll);
-  const workspaceAddPanelModifier = useSettingsStore((s) => s.workspaceAddPanelModifier);
-  const setWorkspaceAddPanelModifier = useSettingsStore((s) => s.setWorkspaceAddPanelModifier);
   const hasOverrides = Object.keys(overrides).length > 0;
   const [expandedCategories, setExpandedCategories] = useState<Set<ShortcutCategory>>(
     () => new Set(SHORTCUT_CATEGORY_ORDER),
@@ -347,31 +347,6 @@ function KeybindingsSection() {
                 </button>
                 {isExpanded && (
                   <div className="keybindings-category__body">
-                    {category === "workspace" ? (
-                      <div className="setting-row">
-                        <div className="setting-label">
-                          <h4>{t("settings.keybindings.items.addPanelToWorkspace")}</h4>
-                          <p>{t("settings.keybindings.items.addPanelToWorkspaceDesc")}</p>
-                        </div>
-                        <Select
-                          className="setting-select"
-                          size="sm"
-                          value={workspaceAddPanelModifier ?? "Alt"}
-                          options={WORKSPACE_ADD_PANEL_MODIFIER_OPTIONS.map((value) => ({
-                            value,
-                            label:
-                              value === "Mod"
-                                ? t("settings.keybindings.modifiers.mod", {
-                                    mod: workspaceAddPanelModifierLabel("Mod"),
-                                  })
-                                : t(`settings.keybindings.modifiers.${value.toLowerCase()}`),
-                          }))}
-                          onChange={(value) =>
-                            setWorkspaceAddPanelModifier(value as WorkspaceAddPanelModifier)
-                          }
-                        />
-                      </div>
-                    ) : null}
                     {defs.map((def) => {
                       const current = getShortcutKeys(def.id);
                       const label = t(def.labelKey);
@@ -1292,6 +1267,8 @@ function AiSection() {
     <div className="settings-panel active">
       <ModelsSection />
       <div className="settings-section-divider" />
+      <AiScenarioSection />
+      <div className="settings-section-divider" />
       <AcpServicesSection />
       <div className="settings-section-divider" />
       <McpServicesSection />
@@ -1351,9 +1328,20 @@ export function SettingsPanel() {
   const setKnowledgeSettings = useSettingsStore((s) => s.setKnowledgeSettings);
 
   const databaseQueryPageSize = useSettingsStore((s) => s.databaseQueryPageSize);
+  const sqlEditorFontFamily = useSettingsStore((s) => s.sqlEditorFontFamily);
+  const sqlEditorFontSize = useSettingsStore((s) => s.sqlEditorFontSize);
+  const sqlEditorLineHeight = useSettingsStore((s) => s.sqlEditorLineHeight);
   const setDatabaseSettings = useSettingsStore((s) => s.setDatabaseSettings);
   const databaseQueryPageSizeOptions = useMemo(
     () => DATABASE_QUERY_PAGE_SIZE_OPTIONS.map((n) => String(n)),
+    [],
+  );
+  const sqlEditorFontSizeOptions = useMemo(
+    () => SQL_EDITOR_FONT_SIZE_OPTIONS.map((n) => String(n)),
+    [],
+  );
+  const sqlEditorLineHeightOptions = useMemo(
+    () => SQL_EDITOR_LINE_HEIGHT_OPTIONS.map((n) => String(n)),
     [],
   );
 
@@ -1381,12 +1369,6 @@ export function SettingsPanel() {
     () => ["1", "3", "5", "8", "10", "15", "20", "30", "50"],
     [],
   );
-
-  // Detect installed monospace fonts on mount
-  const [systemFonts, setSystemFonts] = useState<string[]>([]);
-  useEffect(() => {
-    detectMonospaceFonts().then(setSystemFonts);
-  }, []);
 
   // Update state
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
@@ -1903,16 +1885,11 @@ export function SettingsPanel() {
                   <h4>{t("settings.terminal.fontFamily")}</h4>
                   <p>{t("settings.terminal.fontFamilyDesc")}</p>
                 </div>
-                <SettingSelect
+                <FontFamilySelect
                   value={terminalFontFamily}
                   onChange={(v) => setTerminalSettings({ terminalFontFamily: v })}
-                  options={
-                    systemFonts.length > 0
-                      ? systemFonts.includes(terminalFontFamily)
-                        ? systemFonts
-                        : [terminalFontFamily, ...systemFonts]
-                      : [terminalFontFamily, "Cascadia Code", "JetBrains Mono", "Fira Code", "IBM Plex Mono", "Consolas", "Menlo"]
-                  }
+                  monospaceOnly
+                  className="setting-select"
                 />
               </div>
               <div className="setting-row">
@@ -1982,6 +1959,64 @@ export function SettingsPanel() {
                     setDatabaseSettings({ databaseQueryPageSize: clampDatabaseQueryPageSize(Number(v)) })
                   }
                   options={databaseQueryPageSizeOptions}
+                />
+              </div>
+
+              <div className="settings-subsection-title">{t("settings.database.editorSection")}</div>
+
+              <div className="sql-editor-preview" aria-hidden>
+                <div
+                  className="sql-editor-preview__body"
+                  style={{
+                    fontFamily: `"${sqlEditorFontFamily}", "Cascadia Code", "Fira Code", Menlo, Consolas, monospace`,
+                    fontSize: `${sqlEditorFontSize}px`,
+                    lineHeight: sqlEditorLineHeight,
+                  }}
+                >
+                  <span className="sql-editor-preview__kw">SELECT</span> id, name
+                  <br />
+                  <span className="sql-editor-preview__kw">FROM</span> users
+                  <br />
+                  <span className="sql-editor-preview__kw">WHERE</span> status ={" "}
+                  <span className="sql-editor-preview__str">'active'</span>;
+                </div>
+              </div>
+
+              <div className="setting-row">
+                <div className="setting-label">
+                  <h4>{t("settings.database.editorFontFamily")}</h4>
+                  <p>{t("settings.database.editorFontFamilyDesc")}</p>
+                </div>
+                <FontFamilySelect
+                  value={sqlEditorFontFamily}
+                  onChange={(v) => setDatabaseSettings({ sqlEditorFontFamily: v })}
+                  monospaceOnly
+                  className="setting-select"
+                />
+              </div>
+              <div className="setting-row">
+                <div className="setting-label">
+                  <h4>{t("settings.database.editorFontSize")}</h4>
+                </div>
+                <SettingSelect
+                  value={String(sqlEditorFontSize)}
+                  onChange={(v) =>
+                    setDatabaseSettings({ sqlEditorFontSize: clampSqlEditorFontSize(Number(v)) })
+                  }
+                  options={sqlEditorFontSizeOptions}
+                />
+              </div>
+              <div className="setting-row">
+                <div className="setting-label">
+                  <h4>{t("settings.database.editorLineHeight")}</h4>
+                  <p>{t("settings.database.editorLineHeightDesc")}</p>
+                </div>
+                <SettingSelect
+                  value={String(sqlEditorLineHeight)}
+                  onChange={(v) =>
+                    setDatabaseSettings({ sqlEditorLineHeight: clampSqlEditorLineHeight(Number(v)) })
+                  }
+                  options={sqlEditorLineHeightOptions}
                 />
               </div>
             </div>

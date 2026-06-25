@@ -13,7 +13,6 @@ export interface DatabaseWorkspaceDockProps {
   softRefreshKey?: string;
   panelContentKeysByTab?: Record<string, string>;
   onTabContextMenu: (event: React.MouseEvent, tabId: string, index: number) => void;
-  onCtrlCopyTab: (tabId: string) => void;
   recentClosedActionItems: Array<{ id: string; label: string; meta: string; onClick: () => void }>;
   emptyPrompt: string;
   recentClosedTitle: string;
@@ -75,7 +74,6 @@ export function DatabaseWorkspaceDock({
   softRefreshKey,
   panelContentKeysByTab,
   onTabContextMenu,
-  onCtrlCopyTab,
   recentClosedActionItems,
   emptyPrompt,
   recentClosedTitle,
@@ -102,7 +100,6 @@ export function DatabaseWorkspaceDock({
       softRefreshKey={softRefreshKey}
       panelContentKeysByTab={panelContentKeysByTab}
       onTabContextMenu={onTabContextMenu}
-      onCtrlCopyTab={onCtrlCopyTab}
       windowControl={false}
       emptyContent={
         <DatabaseWorkspaceEmpty

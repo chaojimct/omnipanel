@@ -20,6 +20,8 @@ export interface SelectOption {
   /** 悬停 tooltip；默认由 label + subtitle 拼接 */
   title?: string;
   disabled?: boolean;
+  /** 选项主标签行内样式（如字体预览） */
+  labelStyle?: CSSProperties;
 }
 
 export type SelectOptionsInput = readonly SelectOption[] | readonly string[];
@@ -359,7 +361,9 @@ export function Select({
                       onMouseDown={(e) => e.preventDefault()}
                       onClick={() => selectOption(opt)}
                     >
-                      <span className="omni-select-option-label">{opt.label}</span>
+                      <span className="omni-select-option-label" style={opt.labelStyle}>
+                        {opt.label}
+                      </span>
                       {opt.subtitle ? (
                         <span className="omni-select-option-sub">{opt.subtitle}</span>
                       ) : null}

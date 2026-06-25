@@ -156,6 +156,7 @@ fn export_ipc_bindings() {
         commands::system::local_list_processes,
         commands::system::local_process_detail,
         commands::system::local_kill_process,
+        commands::system::list_system_fonts,
         commands::ssh::ssh_create_tunnel,
         commands::ssh::ssh_close_tunnel,
         commands::ssh::ssh_list_tunnels,
@@ -567,6 +568,7 @@ pub fn run() {
             commands::system::local_list_processes,
             commands::system::local_process_detail,
             commands::system::local_kill_process,
+            commands::system::list_system_fonts,
             // Updater
             commands::updater::check_update,
             commands::updater::install_update,

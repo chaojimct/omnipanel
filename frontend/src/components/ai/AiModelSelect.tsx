@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 
 import { useI18n } from "../../i18n";
+import { useAssistantScenarioModelSelectionId } from "../../lib/aiScenarioModels";
 import {
   listModelSelections,
   parseModelSelectionId,
@@ -19,6 +20,7 @@ export function AiModelSelect({ disabled = false, className }: AiModelSelectProp
   const { t } = useI18n();
   const providers = useAiModelsStore((s) => s.providers);
   const currentModelSelectionId = useAiStore((s) => s.currentModelSelectionId);
+  const scenarioDefaultModelId = useAssistantScenarioModelSelectionId();
   const setCurrentModelSelectionId = useAiStore((s) => s.setCurrentModelSelectionId);
 
   const options = useMemo(() => {
@@ -45,7 +47,9 @@ export function AiModelSelect({ disabled = false, className }: AiModelSelectProp
   const value =
     currentModelSelectionId && options.some((o) => o.value === currentModelSelectionId)
       ? currentModelSelectionId
-      : options[0]!.value;
+      : scenarioDefaultModelId && options.some((o) => o.value === scenarioDefaultModelId)
+        ? scenarioDefaultModelId
+        : options[0]!.value;
 
   return (
     <Select

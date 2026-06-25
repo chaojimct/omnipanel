@@ -28,6 +28,11 @@ type TreeNodeComponent = (props: {
   labelComment?: string;
   pinActive?: boolean;
   onPinToggle?: () => void;
+  onRefresh?: () => void;
+  refreshing?: boolean;
+  refreshDisabled?: boolean;
+  onDelete?: () => void;
+  deleteDisabled?: boolean;
 }) => ReactElement;
 
 type LoadMoreComponent = (props: {
@@ -55,13 +60,13 @@ export function SchemaTreeObjectDetails({
   depth,
   expandedNodeIds,
   childVisibleLimits,
-  searchActive = false,
   activeTableKey,
   onToggle,
   onLoadMore,
   onSelectTable,
   onContextSchemaNode,
   resolveNodeMeta,
+  resolveNodeActions,
   tablePinned,
   onToggleTablePin,
 }: {
@@ -74,7 +79,6 @@ export function SchemaTreeObjectDetails({
   depth: number;
   expandedNodeIds: Set<string>;
   childVisibleLimits: Record<string, number>;
-  searchActive?: boolean;
   activeTableKey: string | null;
   onToggle: (id: string) => void;
   onLoadMore: (parentNodeId: string) => void;
@@ -86,6 +90,12 @@ export function SchemaTreeObjectDetails({
   }) => void;
   onContextSchemaNode?: (item: SchemaTreeItem, event: ReactMouseEvent) => void;
   resolveNodeMeta?: (nodeId: string, meta?: string) => string | undefined;
+  resolveNodeActions?: (
+    item: SchemaTreeItem,
+  ) => Pick<
+    Parameters<TreeNodeComponent>[0],
+    "onRefresh" | "refreshing" | "refreshDisabled" | "onDelete" | "deleteDisabled"
+  >;
   tablePinned?: boolean;
   onToggleTablePin?: () => void;
 }) {
@@ -94,17 +104,16 @@ export function SchemaTreeObjectDetails({
     objectKind === "view"
       ? makeViewNodeId(conn.config.id, dbName, tbl.name)
       : makeTableNodeId(conn.config.id, dbName, tbl.name);
-  const tableExpanded = searchActive || expandedNodeIds.has(tableKey);
+  const tableExpanded = expandedNodeIds.has(tableKey);
   const showTableSchemaChildren = connectionHasTableSchemaChildren(conn.config);
   const colsFolderId = tableColumnsFolderId(tableKey);
   const idxFolderId = tableIndexesFolderId(tableKey);
-  const colsExpanded = searchActive || expandedNodeIds.has(colsFolderId);
-  const idxExpanded = searchActive || expandedNodeIds.has(idxFolderId);
+  const colsExpanded = expandedNodeIds.has(colsFolderId);
+  const idxExpanded = expandedNodeIds.has(idxFolderId);
   const columns = tbl.columns ?? [];
   const indexes = tbl.indexes ?? [];
-  const paginateOpts = searchActive ? { unpaginated: true as const } : undefined;
-  const pagedColumns = paginateSchemaChildren(columns, colsFolderId, childVisibleLimits, paginateOpts);
-  const pagedIndexes = paginateSchemaChildren(indexes, idxFolderId, childVisibleLimits, paginateOpts);
+  const pagedColumns = paginateSchemaChildren(columns, colsFolderId, childVisibleLimits);
+  const pagedIndexes = paginateSchemaChildren(indexes, idxFolderId, childVisibleLimits);
   const tableItem: SchemaTreeItem =
     objectKind === "view"
       ? {
@@ -126,6 +135,21 @@ export function SchemaTreeObjectDetails({
     ? (item: SchemaTreeItem, event: ReactMouseEvent) => onContextSchemaNode(item, event)
     : undefined;
   const metaFor = (nodeId: string, meta?: string) => resolveNodeMeta?.(nodeId, meta) ?? meta;
+  const actionsFor = (item: SchemaTreeItem) => resolveNodeActions?.(item) ?? {};
+  const colsFolderItem = buildFolderTreeItem(
+    colsFolderId,
+    t("database.sidebar.fields"),
+    conn.config.id,
+    dbName,
+    tbl.name,
+  );
+  const idxFolderItem = buildFolderTreeItem(
+    idxFolderId,
+    t("database.sidebar.indexes"),
+    conn.config.id,
+    dbName,
+    tbl.name,
+  );
 
   return (
     <div key={tbl.name}>
@@ -159,46 +183,29 @@ export function SchemaTreeObjectDetails({
       {showTableSchemaChildren && tableExpanded && tbl.columns && (
         <>
           <TreeNode
-            item={buildFolderTreeItem(
-              colsFolderId,
-              t("database.sidebar.fields"),
-              conn.config.id,
-              dbName,
-              tbl.name,
-            )}
+            item={colsFolderItem}
             depth={depth + 1}
             expanded={colsExpanded}
             onToggle={() => onToggle(colsFolderId)}
             meta={metaFor(colsFolderId, String(columns.length))}
             hasChildren={columns.length > 0}
-            onContextMenu={
-              openContextMenu
-                ? (e) =>
-                    openContextMenu(
-                      buildFolderTreeItem(
-                        colsFolderId,
-                        t("database.sidebar.fields"),
-                        conn.config.id,
-                        dbName,
-                        tbl.name,
-                      ),
-                      e,
-                    )
-                : undefined
-            }
+            onContextMenu={openContextMenu ? (e) => openContextMenu(colsFolderItem, e) : undefined}
+            {...actionsFor(colsFolderItem)}
           />
           {colsExpanded &&
-            pagedColumns.visible.map((col) => (
+            pagedColumns.visible.map((col) => {
+              const colItem = buildColumnTreeItem(
+                conn.config.id,
+                dbName,
+                tbl.name,
+                col.name,
+                col.type,
+                `${tableKey}:col:${col.name}`,
+              );
+              return (
               <TreeNode
                 key={`${tableKey}:col:${col.name}`}
-                item={buildColumnTreeItem(
-                  conn.config.id,
-                  dbName,
-                  tbl.name,
-                  col.name,
-                  col.type,
-                  `${tableKey}:col:${col.name}`,
-                )}
+                item={colItem}
                 depth={depth + 2}
                 expanded={false}
                 onToggle={() => {}}
@@ -206,24 +213,11 @@ export function SchemaTreeObjectDetails({
                 meta={metaFor(`${tableKey}:col:${col.name}`, col.type)}
                 isPk={col.isPk}
                 isFk={col.isFk}
-                onContextMenu={
-                  openContextMenu
-                    ? (e) =>
-                        openContextMenu(
-                          buildColumnTreeItem(
-                            conn.config.id,
-                            dbName,
-                            tbl.name,
-                            col.name,
-                            col.type,
-                            `${tableKey}:col:${col.name}`,
-                          ),
-                          e,
-                        )
-                    : undefined
-                }
+                onContextMenu={openContextMenu ? (e) => openContextMenu(colItem, e) : undefined}
+                {...actionsFor(colItem)}
               />
-            ))}
+              );
+            })}
           {colsExpanded && pagedColumns.hasMore && (
             <LoadMoreButton
               depth={depth + 2}
@@ -235,67 +229,38 @@ export function SchemaTreeObjectDetails({
           {objectKind === "table" && (
             <>
               <TreeNode
-                item={buildFolderTreeItem(
-                  idxFolderId,
-                  t("database.sidebar.indexes"),
-                  conn.config.id,
-                  dbName,
-                  tbl.name,
-                )}
+                item={idxFolderItem}
                 depth={depth + 1}
                 expanded={idxExpanded}
                 onToggle={() => onToggle(idxFolderId)}
                 meta={metaFor(idxFolderId, String(indexes.length))}
                 hasChildren={indexes.length > 0}
-                onContextMenu={
-                  openContextMenu
-                    ? (e) =>
-                        openContextMenu(
-                          buildFolderTreeItem(
-                            idxFolderId,
-                            t("database.sidebar.indexes"),
-                            conn.config.id,
-                            dbName,
-                            tbl.name,
-                          ),
-                          e,
-                        )
-                    : undefined
-                }
+                onContextMenu={openContextMenu ? (e) => openContextMenu(idxFolderItem, e) : undefined}
+                {...actionsFor(idxFolderItem)}
               />
               {idxExpanded &&
-                pagedIndexes.visible.map((idx) => (
+                pagedIndexes.visible.map((idx) => {
+                  const idxItem = buildIndexTreeItem(
+                    conn.config.id,
+                    dbName,
+                    tbl.name,
+                    idx.name,
+                    `${tableKey}:idx:${idx.name}`,
+                  );
+                  return (
                   <TreeNode
                     key={`${tableKey}:idx:${idx.name}`}
-                    item={buildIndexTreeItem(
-                      conn.config.id,
-                      dbName,
-                      tbl.name,
-                      idx.name,
-                      `${tableKey}:idx:${idx.name}`,
-                    )}
+                    item={idxItem}
                     depth={depth + 2}
                     expanded={false}
                     onToggle={() => {}}
                     hasChildren={false}
                     meta={metaFor(`${tableKey}:idx:${idx.name}`, idx.columns.join(", "))}
-                    onContextMenu={
-                      openContextMenu
-                        ? (e) =>
-                            openContextMenu(
-                              buildIndexTreeItem(
-                                conn.config.id,
-                                dbName,
-                                tbl.name,
-                                idx.name,
-                                `${tableKey}:idx:${idx.name}`,
-                              ),
-                              e,
-                            )
-                        : undefined
-                    }
+                    onContextMenu={openContextMenu ? (e) => openContextMenu(idxItem, e) : undefined}
+                    {...actionsFor(idxItem)}
                   />
-                ))}
+                  );
+                })}
               {idxExpanded && pagedIndexes.hasMore && (
                 <LoadMoreButton
                   depth={depth + 2}

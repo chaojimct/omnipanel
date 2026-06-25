@@ -6,7 +6,6 @@ import { useConnectionStore } from "../stores/connectionStore";
 import { useAiStore } from "../stores/aiStore";
 import { useAiModelsStore } from "../stores/aiModelsStore";
 import { useAcpServicesStore } from "../stores/acpServicesStore";
-import { useDbWorkspaceSessionStore } from "../stores/dbWorkspaceSessionStore";
 import { useDbDockLayoutStore } from "../stores/dbDockLayoutStore";
 import { useFileManagerStore } from "../stores/fileManagerStore";
 import { useKnowledgeStore } from "../stores/knowledgeStore";
@@ -24,6 +23,7 @@ import { useWorkflowStore } from "../stores/workflowStore";
 import { DEFAULT_WORKSPACE, useWorkspaceStore } from "../stores/workspaceStore";
 import { useWorkspaceBottomDockStore } from "../stores/workspaceBottomDockStore";
 import { resetModuleTabs } from "../hooks/usePersistedModuleTab";
+import { clearDatabaseModuleData } from "./clearDatabaseModuleData";
 
 const PROTECTED_CONNECTION_IDS = new Set([
   DOCKER_LOCAL_CONNECTION_ID,
@@ -116,7 +116,7 @@ export async function clearAppUserData(): Promise<void> {
     groups: BUILTIN_SERVER_GROUPS,
     activeGroupId: "default",
   });
-  useDbWorkspaceSessionStore.getState().setSession(null);
+  await clearDatabaseModuleData();
   useFileManagerStore.setState({ transfers: [] });
 
   const workspaceState = useWorkspaceStore.getState();

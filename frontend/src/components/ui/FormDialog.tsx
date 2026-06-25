@@ -11,6 +11,7 @@ import {
   type FormFillFieldDef,
   type FormFillValue,
 } from "../ai/simple/formFill";
+import { useFormFillModelSelectionId } from "../../lib/aiScenarioModels";
 import { useAiModelsStore } from "../../stores/aiModelsStore";
 
 export { FormField, type FormFieldProps } from "./FormField";
@@ -66,7 +67,11 @@ export interface FormDialogProps {
   aiModelSelectionId?: string | null;
 }
 
-function renderAction(action: FormDialogAction, fallbackKey: string) {
+function renderAction(
+  action: FormDialogAction,
+  fallbackKey: string,
+  onBeforeClick?: () => void,
+) {
   return (
     <Button
       key={action.key ?? fallbackKey}
@@ -74,7 +79,10 @@ function renderAction(action: FormDialogAction, fallbackKey: string) {
       variant={action.variant ?? "secondary"}
       size={action.size ?? "sm"}
       disabled={action.disabled}
-      onClick={action.onClick}
+      onClick={() => {
+        onBeforeClick?.();
+        action.onClick?.();
+      }}
     >
       {action.label}
     </Button>
@@ -111,6 +119,7 @@ export function FormDialog({
 }: FormDialogProps) {
   const { t } = useI18n();
   const providers = useAiModelsStore((s) => s.providers);
+  const formFillScenarioModelId = useFormFillModelSelectionId();
   const [aiRecognizing, setAiRecognizing] = useState(false);
   const [clipboardStatus, setClipboardStatus] = useState<{
     kind: FormDialogStatusKind;
@@ -138,7 +147,10 @@ export function FormDialog({
         return;
       }
 
-      const modelConfig = resolveFormFillModelConfig(providers, aiModelSelectionId);
+      const modelConfig = resolveFormFillModelConfig(
+        providers,
+        aiModelSelectionId ?? formFillScenarioModelId,
+      );
       if (!modelConfig) {
         setClipboardStatus({ kind: "error", message: t("formDialog.clipboard.noModel") });
         return;
@@ -163,12 +175,17 @@ export function FormDialog({
       aiFillContext,
       aiFillFields,
       aiModelSelectionId,
+      formFillScenarioModelId,
       onAiFill,
       onClipboardRecognize,
       providers,
       t,
     ],
   );
+
+  const clearClipboardStatus = useCallback(() => {
+    setClipboardStatus(null);
+  }, []);
 
   if (!open) {
     return null;
@@ -177,7 +194,8 @@ export function FormDialog({
   const handleCancel = onCancel ?? onClose;
   const showCancel = cancelLabel !== false;
   const resolvedCancelLabel = cancelLabel === undefined ? t("common.cancel") : cancelLabel;
-  const resolvedStatus = clipboardStatus ?? status;
+  /** 父组件 status（保存/校验/测试）优先于剪贴板 AI 状态，避免识别成功后遮挡操作反馈 */
+  const resolvedStatus = status ?? clipboardStatus;
 
   const dialogClass = ["modal-dialog", "form-dialog", `form-dialog--${size}`, className]
     .filter(Boolean)
@@ -191,7 +209,10 @@ export function FormDialog({
             type="button"
             variant={cancelVariant}
             size="sm"
-            onClick={handleCancel}
+            onClick={() => {
+              clearClipboardStatus();
+              handleCancel();
+            }}
             disabled={cancelDisabled || aiRecognizing}
           >
             {resolvedCancelLabel}
@@ -208,7 +229,11 @@ export function FormDialog({
           <div className="modal-footer-spacer" />
         )}
         {actions?.map((action, index) =>
-          renderAction({ ...action, disabled: action.disabled || aiRecognizing }, `action-${index}`),
+          renderAction(
+            { ...action, disabled: action.disabled || aiRecognizing },
+            `action-${index}`,
+            clearClipboardStatus,
+          ),
         )}
         {primaryAction &&
           renderAction(
@@ -218,6 +243,7 @@ export function FormDialog({
               disabled: primaryAction.disabled || aiRecognizing,
             },
             "primary",
+            clearClipboardStatus,
           )}
       </div>
     ) : null;

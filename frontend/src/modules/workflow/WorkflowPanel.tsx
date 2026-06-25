@@ -5,7 +5,6 @@ import { useActionStore } from "../../stores/actionStore";
 import { useI18n } from "../../i18n";
 import { ModuleSegmentDock } from "../../components/dock";
 import { usePersistedModuleTab } from "../../hooks/usePersistedModuleTab";
-import { useWorkspaceCtrlCopyTab } from "../../hooks/useWorkspaceCtrlCopyTab";
 import { Select } from "../../components/ui/Select";
 import type {
   Workflow,
@@ -197,9 +196,6 @@ export function WorkflowPanel() {
     [t],
   );
 
-  const handleCtrlCopyTab = useWorkspaceCtrlCopyTab("workflow", (tabId) =>
-    segmentTabs.find((item) => item.id === tabId)?.label ?? tabId,
-  );
 
   const renderPanel = useCallback(
     (tabId: string) => (
@@ -464,7 +460,6 @@ export function WorkflowPanel() {
         onActiveTabChange={(id) => setTab(id as WfTab)}
         enabled={isActiveRoute}
         renderPanel={renderPanel}
-        onCtrlCopyTab={handleCtrlCopyTab}
       />
 
       {/* ═══════════════════════════════════════════════ */}
