@@ -6,7 +6,11 @@ use std::time::{Duration, Instant};
 use futures::future::join_all;
 use omnipanel_error::{ErrorCode, OmniError, OmniResult};
 use omnipanel_ssh::attach_ports;
-use omnipanel_ssh::{SshAuth, SshConfig, SshProcessInfo, SshSession};
+use omnipanel_ssh::{
+    attach_process_gpu, parse_nvidia_process_gpu, parse_remote_stats_output, CpuStats, DiskStats,
+    GpuStats, HostSystemStats, MemoryStats, NetworkStats, SshAuth, SshConfig, SshProcessInfo,
+    SshSession, NVIDIA_PROCESS_GPU_QUERY,
+};
 use omnipanel_store::Connection;
 use omnipanel_store::{ConnectionKind, Storage};
 use serde::Serialize;
@@ -24,15 +28,76 @@ const PROCESSES_CACHE_TTL: Duration = Duration::from_secs(30);
 const PORTS_CACHE_TTL: Duration = Duration::from_secs(60);
 const MONITOR_POLL_INTERVAL: Duration = Duration::from_secs(5);
 
-const STATS_SCRIPT: &str = r#"
-echo "load=$(cat /proc/loadavg | cut -d' ' -f1-3)";
-echo "cores=$(nproc)";
-echo "cpu=$(top -bn1 | grep 'Cpu(s)' | awk '{print $2+$4}')";
-echo "mem=$(awk '/^MemTotal:/ {total=$2*1024} /^MemAvailable:/ {avail=$2*1024} END {if (total>0) {used=total-avail; if (used<0) used=0; print total, used, avail} else print "0 0 0"}' /proc/meminfo 2>/dev/null || free -b | awk '/^Mem:/ {print $2, $3, $7; exit}')";
-echo "disk=$(df -B1 / | tail -1 | awk '{print $2,$3,$4}')";
-echo "net=$(awk 'NR>2 {rx+=$2; tx+=$10} END{print rx, tx}' /proc/net/dev 2>/dev/null)";
-echo "os=$(cat /etc/os-release | grep '^PRETTY_NAME=' | cut -d'"' -f2)"
-"#;
+const STATS_SCRIPT: &str = r#"/bin/bash -lc '
+sec() { echo "@SECTION $1"; }
+
+sec load
+awk "{print \$1,\$2,\$3}" /proc/loadavg 2>/dev/null || echo "0 0 0"
+
+sec cores
+nproc 2>/dev/null || echo 1
+
+sec cpu_stat1
+grep -E "^cpu" /proc/stat 2>/dev/null || true
+sleep 0.25
+sec cpu_stat2
+grep -E "^cpu" /proc/stat 2>/dev/null || true
+
+sec mem
+awk "/^MemTotal:/ {t=\$2*1024} /^MemAvailable:/ {a=\$2*1024} END {u=t-a; if(u<0)u=0; print t,u,a}" /proc/meminfo 2>/dev/null || echo "0 0 0"
+
+sec swap
+awk "/^SwapTotal:/ {t=\$2*1024} /^SwapFree:/ {f=\$2*1024} END {u=t-f; if(u<0)u=0; print t,u,f}" /proc/meminfo 2>/dev/null || echo "0 0 0"
+
+sec disks
+df -B1 -P -T 2>/dev/null | awk "NR>1 {
+  dev=\$1; fs=\$2; total=\$3; used=\$4; avail=\$5;
+  mount=\$7; for(i=8;i<=NF;i++) mount=mount\" \"\$i;
+  print dev \"\\t\" mount \"\\t\" fs \"\\t\" total \"\\t\" used \"\\t\" avail
+}" || true
+
+sec net
+awk "NR>2 {rx+=\$2; tx+=\$10} END{print rx, tx}" /proc/net/dev 2>/dev/null || echo "0 0"
+
+sec net_if
+awk "NR>2 && (\$2+\$10)>max {max=\$2+\$10; iface=\$1} END {gsub(/:/,\"\",iface); print iface}" /proc/net/dev 2>/dev/null || true
+
+sec conn_count
+(ss -Htan state established 2>/dev/null || netstat -tan 2>/dev/null | grep ESTABLISHED) | wc -l | tr -d " " || echo 0
+
+sec uptime
+awk "{print int(\$1)}" /proc/uptime 2>/dev/null || echo 0
+
+sec mem_detail
+awk "/^Cached:/ {c=\$2*1024} /^Buffers:/ {b=\$2*1024} END {print c+0,b+0}" /proc/meminfo 2>/dev/null || echo "0 0"
+
+sec diskio
+awk "NR>2 {r+=\$6; w+=\$10} END {print r*512, w*512}" /proc/diskstats 2>/dev/null || echo "0 0"
+
+sec cpu_freq
+awk -F: "/cpu MHz/ {gsub(/ /,\"\",\$2); print \$2; exit}" /proc/cpuinfo 2>/dev/null || true
+
+sec cpu_temp
+if [ -r /sys/class/thermal/thermal_zone0/temp ]; then awk "{printf \"%.0f\\n\", \$1/1000}" /sys/class/thermal/thermal_zone0/temp; fi
+
+sec os
+grep "^PRETTY_NAME=" /etc/os-release 2>/dev/null | cut -d\" -f2 || uname -sr
+
+sec gpu_nvidia
+if command -v nvidia-smi >/dev/null 2>&1; then
+  nvidia-smi --query-gpu=index,name,utilization.gpu,memory.total,memory.used,temperature.gpu,power.draw,power.limit,fan.speed --format=csv,noheader,nounits 2>/dev/null || true
+fi
+
+sec gpu_amd
+if command -v rocm-smi >/dev/null 2>&1; then
+  rocm-smi --showuse --showtemp --showpower --showproductname 2>/dev/null || true
+fi
+
+sec gpu_intel
+if command -v lspci >/dev/null 2>&1; then
+  lspci 2>/dev/null | grep -iE "VGA|3D|Display" | grep -i intel || true
+fi
+'"#;
 
 // ── Status event ─────────────────────────────────────────────────────────
 
@@ -51,53 +116,6 @@ pub struct PoolStatusEvent {
 pub struct PoolSessionEvent {
     pub resource_id: String,
     pub active: bool,
-}
-
-#[derive(Debug, Clone, Serialize, Type)]
-#[serde(rename_all = "camelCase")]
-pub struct MemoryStats {
-    #[specta(type = f64)]
-    pub total: u64,
-    #[specta(type = f64)]
-    pub used: u64,
-    #[specta(type = f64)]
-    pub available: u64,
-}
-
-#[derive(Debug, Clone, Serialize, Type)]
-#[serde(rename_all = "camelCase")]
-pub struct DiskStats {
-    #[specta(type = f64)]
-    pub total: u64,
-    #[specta(type = f64)]
-    pub used: u64,
-    #[specta(type = f64)]
-    pub available: u64,
-}
-
-#[derive(Debug, Clone, Serialize, Type)]
-#[serde(rename_all = "camelCase")]
-pub struct NetworkStats {
-    #[specta(type = f64)]
-    pub rx_bytes: u64,
-    #[specta(type = f64)]
-    pub tx_bytes: u64,
-}
-
-#[derive(Debug, Clone, Serialize, Type)]
-#[serde(rename_all = "camelCase")]
-pub struct HostSystemStats {
-    pub host_id: String,
-    pub host_name: String,
-    pub load: String,
-    pub cpu_cores: u32,
-    pub cpu_usage: f64,
-    pub memory: MemoryStats,
-    pub disk: DiskStats,
-    pub network: NetworkStats,
-    pub os_info: String,
-    #[specta(type = f64)]
-    pub timestamp: u64,
 }
 
 /// 概览页一次加载的完整数据（系统指标 + 进程列表）。
@@ -865,6 +883,7 @@ impl SshPool {
             ),
             (true, false) => {
                 let mut processes = session.process_list_fast().await?;
+                Self::enrich_process_gpu(&session, &mut processes).await;
                 self.apply_cached_ports(resource_id, &mut processes).await;
                 (cached_stats.expect("stats cache"), processes)
             }
@@ -881,6 +900,7 @@ impl SshPool {
                 );
                 let stats = stats?;
                 let mut processes = processes?;
+                Self::enrich_process_gpu(&session, &mut processes).await;
                 self.apply_cached_ports(resource_id, &mut processes).await;
                 (stats, processes)
             }
@@ -915,6 +935,7 @@ impl SshPool {
     pub async fn load_processes(&self, resource_id: &str) -> OmniResult<Vec<SshProcessInfo>> {
         let session = self.ensure_session(resource_id).await?;
         let mut processes = session.process_list_fast().await?;
+        Self::enrich_process_gpu(&session, &mut processes).await;
         self.apply_cached_ports(resource_id, &mut processes).await;
         let now = Instant::now();
         {
@@ -926,23 +947,15 @@ impl SshPool {
                         host_id: resource_id.to_string(),
                         host_name: resource_id.to_string(),
                         load: String::new(),
+                        cpu: CpuStats::default(),
                         cpu_cores: 0,
                         cpu_usage: 0.0,
-                        memory: MemoryStats {
-                            total: 0,
-                            used: 0,
-                            available: 0,
-                        },
-                        disk: DiskStats {
-                            total: 0,
-                            used: 0,
-                            available: 0,
-                        },
-                        network: NetworkStats {
-                            rx_bytes: 0,
-                            tx_bytes: 0,
-                        },
+                        memory: MemoryStats::default(),
+                        disk: DiskStats::default(),
+                        gpu: GpuStats::default(),
+                        network: NetworkStats::default(),
                         os_info: String::new(),
+                        uptime_secs: None,
                         timestamp: 0,
                     },
                     processes: Vec::new(),
@@ -1037,91 +1050,17 @@ impl SshPool {
         host_name: &str,
     ) -> OmniResult<HostSystemStats> {
         let output = session.exec_command(STATS_SCRIPT).await?;
-        Self::parse_stats(resource_id, host_name, &output)
+        parse_remote_stats_output(resource_id, host_name, &output, &[])
             .ok_or_else(|| OmniError::new(ErrorCode::Internal, "解析系统指标失败"))
     }
 
-    fn parse_stats(session_id: &str, host_name: &str, output: &str) -> Option<HostSystemStats> {
-        let mut map = HashMap::new();
-        for line in output.lines() {
-            if let Some((key, value)) = line.split_once('=') {
-                map.insert(key.trim().to_string(), value.trim().to_string());
+    async fn enrich_process_gpu(session: &SshSession, processes: &mut [SshProcessInfo]) {
+        if let Ok(output) = session.exec_command(NVIDIA_PROCESS_GPU_QUERY).await {
+            let map = parse_nvidia_process_gpu(&output);
+            if !map.is_empty() {
+                attach_process_gpu(processes, &map);
             }
         }
-
-        let load = map.get("load").cloned().unwrap_or_default();
-        let cpu_cores: u32 = map
-            .get("cores")
-            .and_then(|s| s.trim().parse().ok())
-            .unwrap_or(0);
-        let cpu_usage: f64 = map
-            .get("cpu")
-            .and_then(|s| s.trim().parse().ok())
-            .unwrap_or(0.0);
-
-        let memory = parse_memory_stats(map.get("mem").map(String::as_str).unwrap_or(""));
-        let disk = Self::parse_disk(map.get("disk").map(String::as_str).unwrap_or(""));
-        let network = Self::parse_net(map.get("net").map(String::as_str).unwrap_or(""));
-        let os_info = map.get("os").cloned().unwrap_or_default();
-
-        Some(HostSystemStats {
-            host_id: session_id.to_string(),
-            host_name: host_name.to_string(),
-            load,
-            cpu_cores,
-            cpu_usage,
-            memory,
-            disk,
-            network,
-            os_info,
-            timestamp: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_secs(),
-        })
-    }
-
-    fn parse_mem(raw: &str) -> MemoryStats {
-        parse_memory_stats(raw)
-    }
-
-    fn parse_disk(raw: &str) -> DiskStats {
-        let parts: Vec<&str> = raw.split_whitespace().collect();
-        let total = parts.first().and_then(|s| s.parse().ok()).unwrap_or(0);
-        let used = parts.get(1).and_then(|s| s.parse().ok()).unwrap_or(0);
-        let available = parts.get(2).and_then(|s| s.parse().ok()).unwrap_or(0);
-        DiskStats {
-            total,
-            used,
-            available,
-        }
-    }
-
-    fn parse_net(raw: &str) -> NetworkStats {
-        let parts: Vec<&str> = raw.split_whitespace().collect();
-        NetworkStats {
-            rx_bytes: parts.first().and_then(|s| s.parse().ok()).unwrap_or(0),
-            tx_bytes: parts.get(1).and_then(|s| s.parse().ok()).unwrap_or(0),
-        }
-    }
-}
-
-fn parse_memory_stats(raw: &str) -> MemoryStats {
-    let parts: Vec<&str> = raw.split_whitespace().collect();
-    let total: u64 = parts.first().and_then(|s| s.parse().ok()).unwrap_or(0);
-    let mut used: u64 = parts.get(1).and_then(|s| s.parse().ok()).unwrap_or(0);
-    let mut available: u64 = parts.get(2).and_then(|s| s.parse().ok()).unwrap_or(0);
-    if total > 0 {
-        if used == 0 && available > 0 && available <= total {
-            used = total.saturating_sub(available);
-        } else if available == 0 && used > 0 && used <= total {
-            available = total.saturating_sub(used);
-        }
-    }
-    MemoryStats {
-        total,
-        used,
-        available,
     }
 }
 
@@ -1143,29 +1082,29 @@ fn emit_status(
 
 #[cfg(test)]
 mod stats_tests {
-    use super::parse_memory_stats;
+    use omnipanel_ssh::parse_memory_triplet;
 
     #[test]
     fn parse_mem_three_column_line() {
-        let mem = parse_memory_stats("17179869184 8589934592 8589934592");
-        assert_eq!(mem.total, 17179869184);
-        assert_eq!(mem.used, 8589934592);
-        assert_eq!(mem.available, 8589934592);
+        let (total, used, available) = parse_memory_triplet("17179869184 8589934592 8589934592");
+        assert_eq!(total, 17179869184);
+        assert_eq!(used, 8589934592);
+        assert_eq!(available, 8589934592);
     }
 
     #[test]
     fn parse_mem_derives_used_from_total_and_available() {
-        let mem = parse_memory_stats("1000 0 400");
-        assert_eq!(mem.total, 1000);
-        assert_eq!(mem.used, 600);
-        assert_eq!(mem.available, 400);
+        let (total, used, available) = parse_memory_triplet("1000 0 400");
+        assert_eq!(total, 1000);
+        assert_eq!(used, 600);
+        assert_eq!(available, 400);
     }
 
     #[test]
     fn parse_mem_empty_returns_zero() {
-        let mem = parse_memory_stats("");
-        assert_eq!(mem.total, 0);
-        assert_eq!(mem.used, 0);
-        assert_eq!(mem.available, 0);
+        let (total, used, available) = parse_memory_triplet("");
+        assert_eq!(total, 0);
+        assert_eq!(used, 0);
+        assert_eq!(available, 0);
     }
 }

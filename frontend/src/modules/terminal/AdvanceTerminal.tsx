@@ -64,6 +64,12 @@ export function AdvanceTerminal({ tabId, isActive, onActivate }: AdvanceTerminal
     }
     return [
       {
+        id: "processes",
+        label: t("ssh.detailTabs.processes"),
+        panelType: "terminal-side",
+        closable: false,
+      },
+      {
         id: "sftp",
         label: t("ssh.detailTabs.sftp"),
         panelType: "terminal-side",
@@ -72,12 +78,6 @@ export function AdvanceTerminal({ tabId, isActive, onActivate }: AdvanceTerminal
       {
         id: "tunnel",
         label: t("ssh.detailTabs.tunnels"),
-        panelType: "terminal-side",
-        closable: false,
-      },
-      {
-        id: "processes",
-        label: t("ssh.detailTabs.processes"),
         panelType: "terminal-side",
         closable: false,
       },
@@ -132,7 +132,7 @@ export function AdvanceTerminal({ tabId, isActive, onActivate }: AdvanceTerminal
     [resource?.id, sideTabs, t],
   );
 
-  const defaultSideTab = isLocal ? "files" : "sftp";
+  const defaultSideTab = isLocal ? "files" : "processes";
   const [activeSideTab, setActiveSideTab] = useState<SidePanelId>(defaultSideTab);
   const sideLayoutRef = useRef<SerializedDockview | null>(null);
   const handleSideLayoutChange = useCallback((layout: SerializedDockview | null) => {

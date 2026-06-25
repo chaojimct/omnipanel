@@ -5,16 +5,32 @@
 //! - shell 输出通过 [`SshSink`] 抽象回流，crate 不依赖 Tauri；事件桥接由 `src-tauri` 提供。
 //! - SFTP 在独立 channel 上按需打开。
 
+mod gpu;
 mod openssh_config;
 mod process;
+mod stats;
 
+pub use gpu::{
+    attach_process_gpu, parse_intel_lspci_output, parse_nvidia_gpu_output, parse_nvidia_process_gpu,
+    parse_remote_gpu_sections, parse_rocm_smi_output, INTEL_GPU_QUERY, NVIDIA_GPU_QUERY,
+    NVIDIA_PROCESS_GPU_QUERY, ROCM_SMI_QUERY,
+};
 pub use openssh_config::{
     SshConfigEntry, default_ssh_config_path, default_ssh_dir, discover_ssh_identity_file,
     discover_ssh_identity_file_in, find_ssh_config_entry, list_ssh_private_key_paths,
     list_ssh_private_key_paths_in, load_ssh_config_hosts, load_ssh_config_hosts_from,
     ssh_config_to_connect_config, ssh_public_key_meta,
 };
-pub use process::{SshProcessDetail, SshProcessInfo, SshProcessPort, attach_ports};
+pub use process::{
+    attach_ports, merge_ports, parse_netstat_ports, parse_ss_ports, parse_windows_netstat_ports,
+    SshProcessDetail, SshProcessInfo, SshProcessPort,
+};
+pub use stats::{
+    aggregate_disk_stats, build_memory_stats, compute_cpu_stats, format_load, is_pseudo_filesystem,
+    parse_disk_line, parse_disk_lines, parse_memory_triplet, parse_network, parse_proc_stat_sample,
+    parse_remote_stats_output, CpuStats, DiskDeviceStats, DiskStats, GpuDeviceStats, GpuStats,
+    HostSystemStats, MemoryStats, NetworkStats,
+};
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};

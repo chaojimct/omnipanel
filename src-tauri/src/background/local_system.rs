@@ -1,10 +1,14 @@
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use omnipanel_error::{ErrorCode, OmniError, OmniResult};
-use omnipanel_ssh::{SshProcessDetail, SshProcessInfo};
-use sysinfo::{Disks, LoadAvg, Pid, ProcessesToUpdate, System, Users};
+use omnipanel_ssh::{
+    aggregate_disk_stats, attach_ports, format_load, is_pseudo_filesystem, CpuStats, DiskDeviceStats,
+    DiskStats, HostSystemStats, MemoryStats, NetworkStats, SshProcessDetail, SshProcessInfo,
+};
+use sysinfo::{Disks, Networks, Pid, ProcessesToUpdate, System, Users};
 
-use super::ssh_pool::{DiskStats, HostSystemStats, MemoryStats, NetworkStats};
+use super::gpu_local::{collect_local_gpu, enrich_local_process_gpu};
+use super::local_ports::collect_local_listen_ports;
 
 /// 与前端 `LOCAL_TERMINAL_RESOURCE_ID` 一致。
 pub const LOCAL_HOST_ID: &str = "local-terminal";
@@ -18,17 +22,47 @@ pub fn fetch_stats() -> OmniResult<HostSystemStats> {
     system.refresh_cpu_all();
 
     let host_name = System::host_name().unwrap_or_else(|| "localhost".to_string());
-    let cpu_cores = system.physical_core_count().unwrap_or(1) as u32;
-    let cpu_usage = f64::from(system.global_cpu_usage());
+    let load_avg = System::load_average();
+    let (load1, load5, load15) = (load_avg.one, load_avg.five, load_avg.fifteen);
+    let load = format_load(load1, load5, load15);
 
+    let per_core_usage: Vec<f64> = system
+        .cpus()
+        .iter()
+        .map(|cpu| f64::from(cpu.cpu_usage()))
+        .collect();
+    let cpu_cores = per_core_usage.len().max(1) as u32;
+    let cpu_usage = f64::from(system.global_cpu_usage());
+    let cpu = CpuStats {
+        usage: cpu_usage,
+        cores: cpu_cores,
+        per_core_usage,
+        load1,
+        load5,
+        load15,
+        frequency_mhz: system
+            .cpus()
+            .first()
+            .map(|cpu| cpu.frequency() as f64),
+        temperature: read_cpu_temperature(),
+    };
+
+    let (mem_cached, mem_buffers) = read_memory_detail();
     let total_mem = system.total_memory();
     let avail_mem = system.available_memory();
     let used_mem = total_mem.saturating_sub(avail_mem);
+    let swap_total = system.total_swap();
+    let swap_free = system.free_swap();
+    let swap_used = swap_total.saturating_sub(swap_free);
 
-    let disks = Disks::new_with_refreshed_list();
-    let (disk_total, disk_used, disk_avail) = primary_disk_stats(&disks);
+    let disks_sys = Disks::new_with_refreshed_list();
+    let disk_devices = collect_disk_devices(&disks_sys);
+    let (disk_total, disk_used, disk_avail) = aggregate_disk_stats(&disk_devices);
+    let (disk_read, disk_write) = read_disk_io_counters();
 
-    let load = format_load(System::load_average());
+    let networks = Networks::new_with_refreshed_list();
+    let (network, _) = collect_network_stats(&networks);
+
     let os_info = System::long_os_version()
         .or_else(System::name)
         .unwrap_or_default();
@@ -37,23 +71,31 @@ pub fn fetch_stats() -> OmniResult<HostSystemStats> {
         host_id: LOCAL_HOST_ID.to_string(),
         host_name,
         load,
+        cpu,
         cpu_cores,
         cpu_usage,
         memory: MemoryStats {
             total: total_mem,
             used: used_mem,
             available: avail_mem,
+            swap_total,
+            swap_used,
+            swap_available: swap_free,
+            cached: mem_cached,
+            buffers: mem_buffers,
         },
         disk: DiskStats {
             total: disk_total,
             used: disk_used,
             available: disk_avail,
+            disks: disk_devices,
+            read_bytes: disk_read,
+            write_bytes: disk_write,
         },
-        network: NetworkStats {
-            rx_bytes: 0,
-            tx_bytes: 0,
-        },
+        gpu: collect_local_gpu(),
+        network,
         os_info,
+        uptime_secs: Some(System::uptime()),
         timestamp: now_ms(),
     })
 }
@@ -92,9 +134,14 @@ pub fn list_processes() -> OmniResult<Vec<SshProcessInfo>> {
                 time: format_cpu_time(process.run_time()),
                 command,
                 ports: Vec::new(),
+                gpu_usage: None,
             }
         })
         .collect();
+
+    enrich_local_process_gpu(&mut processes);
+    let ports_by_pid = collect_local_listen_ports();
+    attach_ports(&mut processes, &ports_by_pid);
 
     processes.sort_by(|a, b| {
         b.cpu
@@ -158,38 +205,144 @@ pub fn kill_process(pid: u32) -> OmniResult<()> {
     }
 }
 
+fn collect_disk_devices(disks: &Disks) -> Vec<DiskDeviceStats> {
+    let mut devices: Vec<DiskDeviceStats> = disks
+        .iter()
+        .filter_map(|disk| {
+            let mount = disk.mount_point().to_string_lossy().into_owned();
+            let file_system = disk.file_system().to_string_lossy().into_owned();
+            if is_pseudo_filesystem(&file_system) {
+                return None;
+            }
+            let total = disk.total_space();
+            if total == 0 {
+                return None;
+            }
+            let available = disk.available_space();
+            let used = total.saturating_sub(available);
+            Some(DiskDeviceStats {
+                name: disk.name().to_string_lossy().into_owned(),
+                mount_point: mount,
+                file_system,
+                total,
+                used,
+                available,
+            })
+        })
+        .collect();
+
+    devices.sort_by(|a, b| {
+        b.total
+            .cmp(&a.total)
+            .then_with(|| a.mount_point.cmp(&b.mount_point))
+    });
+    devices
+}
+
+fn collect_network_stats(networks: &Networks) -> (NetworkStats, u64) {
+    let mut rx_bytes = 0u64;
+    let mut tx_bytes = 0u64;
+    let mut primary_iface: Option<String> = None;
+    let mut max_traffic = 0u64;
+
+    for (name, data) in networks.iter() {
+        let received = data.received();
+        let transmitted = data.transmitted();
+        rx_bytes = rx_bytes.saturating_add(received);
+        tx_bytes = tx_bytes.saturating_add(transmitted);
+        let total = received.saturating_add(transmitted);
+        if total > max_traffic {
+            max_traffic = total;
+            primary_iface = Some(name.clone());
+        }
+    }
+
+    (
+        NetworkStats {
+            rx_bytes,
+            tx_bytes,
+            interface: primary_iface,
+            connections: None,
+        },
+        max_traffic,
+    )
+}
+
+#[cfg(unix)]
+fn read_memory_detail() -> (Option<u64>, Option<u64>) {
+    let raw = std::fs::read_to_string("/proc/meminfo").unwrap_or_default();
+    let mut cached = None;
+    let mut buffers = None;
+    for line in raw.lines() {
+        if line.starts_with("Cached:") {
+            cached = line
+                .split_whitespace()
+                .nth(1)
+                .and_then(|v| v.parse::<u64>().ok())
+                .map(|kb| kb * 1024);
+        } else if line.starts_with("Buffers:") {
+            buffers = line
+                .split_whitespace()
+                .nth(1)
+                .and_then(|v| v.parse::<u64>().ok())
+                .map(|kb| kb * 1024);
+        }
+    }
+    (cached, buffers)
+}
+
+#[cfg(not(unix))]
+fn read_memory_detail() -> (Option<u64>, Option<u64>) {
+    (None, None)
+}
+
+#[cfg(unix)]
+fn read_disk_io_counters() -> (Option<u64>, Option<u64>) {
+    let raw = std::fs::read_to_string("/proc/diskstats").unwrap_or_default();
+    let mut read_sectors = 0u64;
+    let mut write_sectors = 0u64;
+    for line in raw.lines() {
+        let parts: Vec<&str> = line.split_whitespace().collect();
+        if parts.len() < 11 {
+            continue;
+        }
+        read_sectors = read_sectors.saturating_add(parts[5].parse().unwrap_or(0));
+        write_sectors = write_sectors.saturating_add(parts[9].parse().unwrap_or(0));
+    }
+    (
+        Some(read_sectors.saturating_mul(512)),
+        Some(write_sectors.saturating_mul(512)),
+    )
+}
+
+#[cfg(windows)]
+fn read_disk_io_counters() -> (Option<u64>, Option<u64>) {
+    (None, None)
+}
+
+#[cfg(all(not(unix), not(windows)))]
+fn read_disk_io_counters() -> (Option<u64>, Option<u64>) {
+    (None, None)
+}
+
+#[cfg(unix)]
+fn read_cpu_temperature() -> Option<f64> {
+    std::fs::read_to_string("/sys/class/thermal/thermal_zone0/temp")
+        .ok()
+        .and_then(|raw| raw.trim().parse::<f64>().ok())
+        .map(|millideg| millideg / 1000.0)
+}
+
+#[cfg(not(unix))]
+fn read_cpu_temperature() -> Option<f64> {
+    None
+}
+
 fn join_os_args(cmd: &[std::ffi::OsString]) -> String {
     cmd.iter()
         .map(|part| part.to_string_lossy())
         .collect::<Vec<_>>()
         .join(" ")
-}
-
-fn primary_disk_stats(disks: &Disks) -> (u64, u64, u64) {
-    let preferred = if cfg!(windows) {
-        disks
-            .iter()
-            .find(|disk| {
-                disk.mount_point()
-                    .to_string_lossy()
-                    .eq_ignore_ascii_case("C:\\")
-            })
-            .or_else(|| disks.iter().next())
-    } else {
-        disks
-            .iter()
-            .find(|disk| disk.mount_point().to_string_lossy() == "/")
-            .or_else(|| disks.iter().next())
-    };
-
-    if let Some(disk) = preferred {
-        let total = disk.total_space();
-        let available = disk.available_space();
-        let used = total.saturating_sub(available);
-        (total, used, available)
-    } else {
-        (0, 0, 0)
-    }
 }
 
 fn resolve_user_name(user_id: Option<&sysinfo::Uid>, users: &Users) -> String {
@@ -257,10 +410,6 @@ fn format_cpu_time(run_time: u64) -> String {
     } else {
         format!("{mins}:{secs:02}")
     }
-}
-
-fn format_load(load: LoadAvg) -> String {
-    format!("{:.2} {:.2} {:.2}", load.one, load.five, load.fifteen)
 }
 
 fn now_ms() -> u64 {

@@ -34,6 +34,9 @@ pub struct SshProcessInfo {
     pub command: String,
     #[serde(default)]
     pub ports: Vec<SshProcessPort>,
+    /// 进程 GPU 使用率（%），采集不到时为 None。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gpu_usage: Option<f64>,
 }
 
 /// 通过 `/proc/<pid>` 深入采集的进程详情。
@@ -229,6 +232,7 @@ pub fn parse_ps_eo_line(line: &str) -> Option<SshProcessInfo> {
         time,
         command,
         ports: Vec::new(),
+        gpu_usage: None,
     })
 }
 
@@ -259,6 +263,7 @@ pub fn parse_ps_aux_line(line: &str) -> Option<SshProcessInfo> {
         time: fields[9].to_string(),
         command,
         ports: Vec::new(),
+        gpu_usage: None,
     })
 }
 
@@ -436,6 +441,65 @@ pub fn parse_proc_ports(output: &str) -> HashMap<u32, Vec<SshProcessPort>> {
     map
 }
 
+/// 解析 Windows `netstat -ano` 单行（TCP LISTENING / UDP）。
+pub fn parse_windows_netstat_line(line: &str) -> Option<(u32, SshProcessPort)> {
+    let line = line.trim();
+    if line.is_empty()
+        || line.starts_with("Active")
+        || line.starts_with("Proto")
+        || line.starts_with('=')
+    {
+        return None;
+    }
+    let parts: Vec<&str> = line.split_whitespace().collect();
+    if parts.len() < 4 {
+        return None;
+    }
+    let protocol = parts[0].to_lowercase();
+    if protocol != "tcp" && protocol != "udp" {
+        return None;
+    }
+    let local = parts[1];
+    let (state, pid) = if protocol == "tcp" {
+        if parts.len() < 5 {
+            return None;
+        }
+        let state = parts[3];
+        if !state.eq_ignore_ascii_case("LISTENING") {
+            return None;
+        }
+        (state.to_string(), parts[4].parse().ok()?)
+    } else {
+        let pid: u32 = parts[parts.len() - 1].parse().ok()?;
+        ("LISTEN".to_string(), pid)
+    };
+    if pid == 0 {
+        return None;
+    }
+    let (local_address, local_port) = parse_host_port(local)?;
+    Some((
+        pid,
+        SshProcessPort {
+            protocol,
+            local_address,
+            local_port,
+            state,
+            remote_address: None,
+            remote_port: None,
+        },
+    ))
+}
+
+pub fn parse_windows_netstat_ports(output: &str) -> HashMap<u32, Vec<SshProcessPort>> {
+    let mut map: HashMap<u32, Vec<SshProcessPort>> = HashMap::new();
+    for line in output.lines() {
+        if let Some((pid, port)) = parse_windows_netstat_line(line) {
+            map.entry(pid).or_default().push(port);
+        }
+    }
+    map
+}
+
 pub fn merge_ports(
     map: &mut HashMap<u32, Vec<SshProcessPort>>,
     other: HashMap<u32, Vec<SshProcessPort>>,
@@ -532,6 +596,32 @@ mod tests {
     }
 
     #[test]
+    fn parse_windows_netstat_tcp_listening() {
+        let line = "  TCP    0.0.0.0:8080           0.0.0.0:0              LISTENING       4242";
+        let (pid, port) = parse_windows_netstat_line(line).expect("parse");
+        assert_eq!(pid, 4242);
+        assert_eq!(port.local_port, 8080);
+        assert_eq!(port.protocol, "tcp");
+    }
+
+    #[test]
+    fn parse_windows_netstat_ipv6_listening() {
+        let line = "  TCP    [::1]:5173             [::]:0                 LISTENING       1001";
+        let (pid, port) = parse_windows_netstat_line(line).expect("parse");
+        assert_eq!(pid, 1001);
+        assert_eq!(port.local_port, 5173);
+    }
+
+    #[test]
+    fn parse_windows_netstat_udp() {
+        let line = "  UDP    0.0.0.0:5353           *:*                                    5678";
+        let (pid, port) = parse_windows_netstat_line(line).expect("parse");
+        assert_eq!(pid, 5678);
+        assert_eq!(port.local_port, 5353);
+        assert_eq!(port.protocol, "udp");
+    }
+
+    #[test]
     fn parse_proc_port_line_basic() {
         let line = "P 2954325 tcp 127.0.0.1 8080 LISTEN";
         let (pid, port) = parse_proc_port_line(line).expect("parse");
@@ -554,6 +644,7 @@ mod tests {
             time: "0:00".into(),
             command: "nginx".into(),
             ports: vec![],
+            gpu_usage: None,
         }];
         let mut map = HashMap::new();
         map.insert(
@@ -586,6 +677,7 @@ mod tests {
             time: "0:00".into(),
             command: "sleep".into(),
             ports: vec![],
+            gpu_usage: None,
         }];
         attach_ports(&mut processes, &HashMap::new());
         assert!(processes[0].ports.is_empty());

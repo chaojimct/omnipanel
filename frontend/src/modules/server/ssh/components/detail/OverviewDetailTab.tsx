@@ -1,6 +1,6 @@
 import { useSshOverview } from "@/modules/server/ssh/hooks/useSshOverview";
 import type { SshManagerContext } from "@/modules/server/ssh/hooks/useSshManager";
-import { OverviewStatsCards } from "./OverviewStatsCards";
+import { MonitoringDashboard } from "@/modules/server/ssh/components/monitoring/MonitoringDashboard";
 import { ProcessListPanel } from "./ProcessListPanel";
 
 type Props = Pick<
@@ -9,7 +9,6 @@ type Props = Pick<
 >;
 
 export function OverviewDetailTab({
-  profile,
   activeResource,
   setDetailTab,
 }: Props) {
@@ -27,26 +26,29 @@ export function OverviewDetailTab({
 
   return (
     <div className="ssh-ov-page">
-      <OverviewStatsCards
+      <MonitoringDashboard
         phase={phase}
         stats={stats}
         error={error}
-        fallback={{
-          cpu: profile.cpu,
-          memory: profile.memory,
-          disk: profile.disk,
-        }}
-        onRetry={() => refresh()}
-      />
-      <ProcessListPanel
-        resourceId={resourceId}
-        processes={processes}
-        loading={refreshing}
-        refreshing={refreshing}
+        hostLabel={activeResource?.name}
+        hostAddress={activeResource?.subtitle}
         updatedAt={updatedAt}
-        setDetailTab={setDetailTab}
-        onRefresh={refreshProcesses}
-      />
+        refreshing={refreshing}
+        processCount={processes.length}
+        onRetry={() => refresh()}
+        onRefresh={() => refresh()}
+      >
+        <ProcessListPanel
+          resourceId={resourceId}
+          processes={processes}
+          loading={refreshing}
+          refreshing={refreshing}
+          updatedAt={updatedAt}
+          setDetailTab={setDetailTab}
+          onRefresh={refreshProcesses}
+          variant="monitor"
+        />
+      </MonitoringDashboard>
     </div>
   );
 }

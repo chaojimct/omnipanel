@@ -9,6 +9,7 @@ import "./styles/modules/files.css";
 import "./styles/modules/knowledge.css";
 import "./styles/modules/protocol.css";
 import "./styles/modules/server.css";
+import "./styles/modules/monitoring.css";
 import "./styles/modules/workflow.css";
 import { initProductionDiagnostics } from "./lib/productionDiagnostics";
 import { Bootstrap } from "./Bootstrap";

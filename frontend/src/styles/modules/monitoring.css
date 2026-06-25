@@ -1,0 +1,909 @@
+/* SSH 监控面板 — 对齐设计稿 ssh-session.html */
+
+.mon-dashboard {
+    flex: 1;
+    overflow-y: auto;
+    padding: var(--sp-3);
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-3);
+    min-height: 0;
+}
+
+.mon-dashboard--compact {
+    padding: var(--sp-2);
+    gap: var(--sp-2);
+}
+
+.mon-status-bar {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-3);
+    padding: var(--sp-2) var(--sp-3);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    font-size: 10px;
+    color: var(--meta);
+    flex-wrap: wrap;
+    flex-shrink: 0;
+}
+
+.mon-status-bar .host-chip {
+    color: var(--fg);
+    font-weight: 600;
+    font-size: 11px;
+}
+
+.mon-status-bar .live-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--success);
+    animation: mon-pulse 2s ease infinite;
+    flex-shrink: 0;
+}
+
+.mon-status-bar .live-dot--paused {
+    background: var(--meta);
+    animation: none;
+}
+
+@keyframes mon-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+}
+
+.mon-status-spacer { flex: 1; }
+
+.mon-refresh-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    color: var(--muted);
+    font-size: 10px;
+    background: transparent;
+    cursor: pointer;
+    transition: border-color 0.12s, color 0.12s;
+}
+
+.mon-refresh-btn:hover:not(:disabled) {
+    border-color: var(--accent);
+    color: var(--fg);
+}
+
+.mon-refresh-btn:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
+.mon-refresh-btn svg {
+    width: 12px;
+    height: 12px;
+}
+
+.mon-refresh-btn.spinning svg {
+    animation: mon-spin 0.8s linear infinite;
+}
+
+@keyframes mon-spin {
+    to { transform: rotate(360deg); }
+}
+
+.mon-metrics {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: var(--sp-2);
+    flex-shrink: 0;
+    align-items: stretch;
+}
+
+/* 终端侧栏：一行 2 卡 */
+.mon-dashboard--compact .mon-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+/* 详情页窄屏时降为 2 列，宽屏保持 4 列 */
+@media (max-width: 1100px) {
+    .mon-dashboard:not(.mon-dashboard--compact) .mon-metrics {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+.mon-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+    padding: var(--sp-3);
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-2);
+    position: relative;
+    overflow: hidden;
+    min-width: 0;
+}
+
+.mon-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: var(--card-accent, var(--accent));
+}
+
+.mon-card[data-metric="cpu"] { --card-accent: var(--accent); }
+.mon-card[data-metric="mem"] { --card-accent: var(--success); }
+.mon-card[data-metric="disk"] { --card-accent: var(--warn); }
+.mon-card[data-metric="gpu"] { --card-accent: #64d2ff; }
+
+.mon-card-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--sp-2);
+}
+
+.mon-card-title {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--meta);
+}
+
+.mon-card-icon {
+    width: 22px;
+    height: 22px;
+    display: grid;
+    place-items: center;
+    border-radius: var(--r-sm);
+    background: color-mix(in oklch, var(--card-accent) 15%, transparent);
+    color: var(--card-accent);
+}
+
+.mon-card-icon svg {
+    width: 12px;
+    height: 12px;
+}
+
+.mon-card-main {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--sp-3);
+    min-width: 0;
+    flex: 1;
+}
+
+.mon-card-stats {
+    flex: 1;
+    min-width: 0;
+}
+
+/* 四列 / 侧栏双列：略缩小仪表与字号，避免卡片撑太宽 */
+.mon-dashboard:not(.mon-dashboard--compact) .mon-gauge {
+    width: 48px;
+    height: 48px;
+}
+
+.mon-dashboard:not(.mon-dashboard--compact) .mon-gauge-val {
+    font-size: 11px;
+}
+
+.mon-dashboard:not(.mon-dashboard--compact) .mon-card-primary {
+    font-size: 10px;
+}
+
+.mon-dashboard:not(.mon-dashboard--compact) .mon-card-secondary {
+    font-size: 9px;
+}
+
+.mon-dashboard--compact .mon-gauge {
+    width: 44px;
+    height: 44px;
+}
+
+.mon-dashboard--compact .mon-gauge-val {
+    font-size: 10px;
+}
+
+.mon-dashboard--compact .mon-card {
+    padding: var(--sp-2);
+    gap: var(--sp-1);
+}
+
+.mon-dashboard--compact .mon-card-main {
+    gap: var(--sp-2);
+}
+
+.mon-dashboard--compact .mon-card-primary {
+    font-size: 9px;
+    line-height: 1.3;
+}
+
+.mon-dashboard--compact .mon-card-secondary {
+    font-size: 8px;
+}
+
+.mon-dashboard--compact .mon-sparkline {
+    height: 22px;
+}
+
+.mon-dashboard--compact .mon-core-cell {
+    width: 10px;
+    height: 10px;
+}
+
+.mon-gauge {
+    position: relative;
+    width: 56px;
+    height: 56px;
+    flex-shrink: 0;
+}
+
+.mon-gauge svg {
+    width: 100%;
+    height: 100%;
+    transform: rotate(-90deg);
+}
+
+.mon-gauge-track {
+    fill: none;
+    stroke: var(--bg-deeper);
+    stroke-width: 4;
+}
+
+.mon-gauge-fill {
+    fill: none;
+    stroke: var(--card-accent);
+    stroke-width: 4;
+    stroke-linecap: round;
+    transition: stroke-dashoffset 0.4s ease;
+}
+
+.mon-gauge-val {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--card-accent);
+    font-variant-numeric: tabular-nums;
+}
+
+.mon-card-primary {
+    font-size: 11px;
+    color: var(--fg-2);
+    font-variant-numeric: tabular-nums;
+    margin-bottom: 2px;
+    line-height: 1.35;
+}
+
+.mon-card-secondary {
+    font-size: 10px;
+    color: var(--meta);
+    font-variant-numeric: tabular-nums;
+    line-height: 1.35;
+}
+
+.mon-sparkline {
+    height: 28px;
+    margin-top: auto;
+    flex-shrink: 0;
+}
+
+.mon-sparkline svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+}
+
+.mon-sparkline path.spark-line {
+    fill: none;
+    stroke: var(--card-accent);
+    stroke-width: 1.5;
+    opacity: 0.85;
+}
+
+.mon-sparkline path.spark-area {
+    fill: color-mix(in oklch, var(--card-accent) 12%, transparent);
+    stroke: none;
+}
+
+.mon-core-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 3px;
+    margin-top: var(--sp-1);
+}
+
+.mon-core-cell {
+    width: 14px;
+    height: 14px;
+    border-radius: 2px;
+    background: var(--bg-deeper);
+    border: 1px solid var(--border-soft);
+    font-size: 0;
+    transition: background 0.2s;
+}
+
+.mon-core-cell[data-load="1"] { background: color-mix(in oklch, var(--accent) 20%, var(--bg-deeper)); }
+.mon-core-cell[data-load="2"] { background: color-mix(in oklch, var(--accent) 45%, var(--bg-deeper)); }
+.mon-core-cell[data-load="3"] { background: color-mix(in oklch, var(--accent) 70%, var(--bg-deeper)); }
+.mon-core-cell[data-load="4"] { background: color-mix(in oklch, var(--accent) 90%, var(--bg-deeper)); }
+
+.mon-mem-stack {
+    height: 8px;
+    display: flex;
+    border-radius: 2px;
+    overflow: hidden;
+    background: var(--bg-deeper);
+    margin-top: var(--sp-1);
+}
+
+.mon-mem-stack span {
+    height: 100%;
+    transition: width 0.3s;
+}
+
+.mon-mem-used { background: var(--success); }
+.mon-mem-cache { background: color-mix(in oklch, var(--success) 50%, var(--bg-deeper)); }
+
+.mon-mem-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sp-2);
+    margin-top: 4px;
+    font-size: 9px;
+    color: var(--meta);
+}
+
+.mon-mem-legend i {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 1px;
+    margin-right: 3px;
+    vertical-align: middle;
+}
+
+.mon-mount-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-top: var(--sp-1);
+}
+
+.mon-mount-row {
+    display: grid;
+    grid-template-columns: 1fr 48px 36px;
+    align-items: center;
+    gap: var(--sp-2);
+    font-size: 9px;
+    color: var(--meta);
+}
+
+.mon-mount-row .mount-path {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--fg-2);
+}
+
+.mon-mount-bar {
+    height: 4px;
+    background: var(--bg-deeper);
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+.mon-mount-bar-fill {
+    height: 100%;
+    border-radius: 2px;
+    background: var(--warn);
+}
+
+.mon-mount-row .mount-pct {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    color: var(--fg-2);
+}
+
+.mon-gpu-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-2);
+    flex: 1;
+    min-height: 0;
+}
+
+.mon-gpu-list--row {
+    flex-direction: row;
+    align-items: stretch;
+}
+
+.mon-gpu-item {
+    padding: var(--sp-2);
+    background: var(--bg-deeper);
+    border: 1px solid var(--border-soft);
+    border-radius: var(--r-sm);
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    min-width: 0;
+}
+
+.mon-gpu-list--row .mon-gpu-item {
+    flex: 1;
+}
+
+.mon-gpu-item-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 10px;
+    color: var(--fg-2);
+    margin-bottom: 4px;
+    gap: var(--sp-2);
+    min-width: 0;
+}
+
+.mon-gpu-item-head > span:first-child {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+}
+
+.mon-gpu-item-head .gpu-idx {
+    color: var(--meta);
+    font-size: 9px;
+    flex-shrink: 0;
+}
+
+.mon-gpu-metrics {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 4px;
+    font-size: 9px;
+    color: var(--meta);
+}
+
+.mon-dashboard:not(.mon-dashboard--compact) .mon-gpu-metrics {
+    grid-template-columns: repeat(4, 1fr);
+}
+
+.mon-gpu-list--row .mon-gpu-metrics {
+    grid-template-columns: repeat(2, 1fr);
+}
+
+.mon-gpu-item .mon-sparkline {
+    margin-top: auto;
+}
+
+.mon-gpu-metrics span {
+    font-variant-numeric: tabular-nums;
+}
+
+.mon-gpu-metrics strong {
+    color: var(--fg-2);
+    display: block;
+    font-size: 10px;
+    font-weight: 600;
+}
+
+.mon-net-strip {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: var(--sp-2);
+    padding: var(--sp-2) var(--sp-3);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    flex-shrink: 0;
+}
+
+/* 终端侧栏：单行四列，压缩高度 */
+.mon-dashboard--compact .mon-net-strip {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    padding: 4px 8px;
+    gap: 6px;
+}
+
+.mon-net-item {
+    text-align: center;
+    min-width: 0;
+}
+
+.mon-dashboard--compact .mon-net-item {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    flex-wrap: nowrap;
+    text-align: left;
+    overflow: hidden;
+    line-height: 1.2;
+}
+
+.mon-dashboard--compact .mon-net-item .net-label {
+    flex-shrink: 0;
+    font-size: 8px;
+    letter-spacing: 0;
+}
+
+.mon-dashboard--compact .mon-net-item .net-val {
+    flex-shrink: 0;
+    font-size: 9px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.mon-dashboard--compact .mon-net-item .net-val span {
+    font-size: 8px !important;
+    font-weight: 400;
+}
+
+.mon-dashboard--compact .mon-net-item .net-sub {
+    flex: 1;
+    min-width: 0;
+    font-size: 8px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.mon-dashboard--compact .mon-net-item .net-sub::before {
+    content: "·";
+    margin: 0 2px;
+    opacity: 0.5;
+}
+
+.mon-net-item .net-label {
+    font-size: 9px;
+    color: var(--meta);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.mon-net-item .net-val {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--fg);
+    font-variant-numeric: tabular-nums;
+}
+
+.mon-net-item .net-sub {
+    font-size: 9px;
+    color: var(--meta);
+}
+
+.mon-loading,
+.mon-error {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--sp-3);
+    padding: var(--sp-6);
+    color: var(--meta);
+    font-size: 13px;
+    flex: 1;
+    min-height: 160px;
+}
+
+.mon-loading-spinner {
+    width: 28px;
+    height: 28px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: mon-spin 0.8s linear infinite;
+}
+
+.mon-error-text {
+    color: var(--danger);
+    margin: 0;
+    text-align: center;
+}
+
+/* 进程列表 — 设计稿样式 */
+.mon-process-section,
+.proc-panel.mon-process-section {
+    flex: 1;
+    min-height: 200px;
+    display: flex;
+    flex-direction: column;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+    overflow: hidden;
+}
+
+.mon-process-head,
+.proc-panel.mon-process-section .proc-header {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    padding: var(--sp-2) var(--sp-3);
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+}
+
+.mon-process-head h3,
+.proc-panel.mon-process-section .proc-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--fg);
+    margin: 0;
+}
+
+.mon-process-count,
+.proc-panel.mon-process-section .proc-count {
+    font-size: 10px;
+    color: var(--meta);
+}
+
+.mon-process-updated,
+.proc-panel.mon-process-section .proc-updated {
+    font-size: 10px;
+    color: var(--meta);
+    font-variant-numeric: tabular-nums;
+}
+
+.mon-process-tools,
+.proc-panel.mon-process-section .proc-header-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    margin-left: auto;
+}
+
+.mon-process-search,
+.proc-panel.mon-process-section .proc-search {
+    width: 180px;
+    padding: 4px 8px;
+    background: var(--bg-deeper);
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    color: var(--fg);
+    font-size: 10px;
+    flex: 0 1 auto;
+    min-width: 100px;
+    max-width: 200px;
+    margin-left: 0;
+}
+
+.mon-process-search:focus,
+.proc-panel.mon-process-section .proc-search:focus {
+    border-color: var(--accent);
+    outline: none;
+}
+
+.mon-filter-select {
+    padding: 4px 6px;
+    background: var(--bg-deeper);
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    color: var(--muted);
+    font-size: 10px;
+}
+
+.mon-kill-btn {
+    padding: 4px 10px;
+    background: transparent;
+    border: 1px solid var(--danger);
+    border-radius: var(--r-sm);
+    color: var(--danger);
+    font-size: 10px;
+    opacity: 0.5;
+    pointer-events: none;
+    cursor: default;
+}
+
+.mon-kill-btn.enabled {
+    opacity: 1;
+    pointer-events: auto;
+    cursor: pointer;
+}
+
+.mon-kill-btn.enabled:hover {
+    background: var(--danger-soft);
+}
+
+.mon-process-table-wrap,
+.proc-panel.mon-process-section .proc-table-wrap {
+    flex: 1;
+    overflow: auto;
+    min-height: 0;
+}
+
+.mon-process-table,
+.proc-panel.mon-process-section .proc-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 10px;
+    font-variant-numeric: tabular-nums;
+}
+
+.mon-process-table thead,
+.proc-panel.mon-process-section .proc-table thead {
+    position: sticky;
+    top: 0;
+    background: var(--bg-deeper);
+    z-index: 1;
+}
+
+.mon-process-table th,
+.proc-panel.mon-process-section .proc-table th {
+    padding: 6px 8px;
+    text-align: left;
+    font-weight: 600;
+    color: var(--meta);
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+}
+
+.mon-process-table th:hover,
+.proc-panel.mon-process-section .proc-table th:hover {
+    color: var(--fg-2);
+}
+
+.mon-process-table th.sorted,
+.proc-panel.mon-process-section .proc-table th.proc-sorted {
+    color: var(--accent);
+}
+
+.mon-process-table td,
+.proc-panel.mon-process-section .proc-table td {
+    padding: 5px 8px;
+    border-bottom: 1px solid var(--border-soft);
+    color: var(--fg-2);
+    vertical-align: middle;
+}
+
+.mon-process-table tbody tr,
+.proc-panel.mon-process-section .proc-table tbody tr {
+    transition: background 0.1s;
+    cursor: pointer;
+}
+
+.mon-process-table tbody tr:hover,
+.proc-panel.mon-process-section .proc-table tbody tr:hover {
+    background: var(--surface-hover);
+}
+
+.mon-process-table tbody tr.selected,
+.proc-panel.mon-process-section .proc-table tbody tr.proc-row-selected {
+    background: var(--accent-soft);
+    box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.mon-process-table .col-user,
+.proc-panel.mon-process-section .proc-col-user {
+    color: var(--muted);
+}
+
+.mon-process-table .col-pid,
+.proc-panel.mon-process-section .proc-col-pid {
+    color: var(--meta);
+}
+
+.mon-process-table .col-cmd,
+.proc-panel.mon-process-section .proc-cell-cmd {
+    max-width: 180px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--fg);
+}
+
+.mon-port-badge,
+.proc-panel.mon-process-section .proc-port-badge {
+    display: inline-block;
+    padding: 1px 5px;
+    background: var(--accent-soft);
+    color: var(--accent);
+    border: none;
+    border-radius: 2px;
+    font-size: 9px;
+    margin-right: 2px;
+    cursor: pointer;
+}
+
+.proc-port-badge--readonly {
+    cursor: default;
+}
+
+.mon-inline-bar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+    min-width: 0;
+}
+
+.mon-inline-bar-track {
+    flex: 1 1 auto;
+    min-width: 52px;
+    height: 5px;
+    background: var(--bg-deeper);
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+.mon-inline-bar-fill {
+    height: 100%;
+    border-radius: 2px;
+    min-width: 0;
+    transition: width 0.2s ease;
+}
+
+.mon-inline-bar-val {
+    flex-shrink: 0;
+    min-width: 26px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+/* 监控进程表：指标列加宽以容纳进度条 */
+.mon-process-section .proc-col-cpu,
+.mon-process-section .proc-col-gpu,
+.mon-process-section .proc-col-mem {
+    width: 92px;
+    min-width: 92px;
+}
+
+.mon-process-section .proc-table td.proc-cell-right:has(.mon-inline-bar) {
+    min-width: 92px;
+}
+
+.mon-process-foot,
+.proc-panel.mon-process-section .proc-pager {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--sp-2);
+    padding: var(--sp-2);
+    border-top: 1px solid var(--border);
+    font-size: 10px;
+    color: var(--meta);
+}
+
+.mon-page-btn,
+.proc-panel.mon-process-section .proc-pager button {
+    width: 24px;
+    height: 24px;
+    display: grid;
+    place-items: center;
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    color: var(--muted);
+    background: transparent;
+    cursor: pointer;
+}
+
+.mon-page-btn:hover:not(:disabled),
+.proc-panel.mon-process-section .proc-pager button:hover:not(:disabled) {
+    border-color: var(--accent);
+    color: var(--fg);
+}
+
+.mon-page-btn:disabled,
+.proc-panel.mon-process-section .proc-pager button:disabled {
+    opacity: 0.3;
+    cursor: default;
+}

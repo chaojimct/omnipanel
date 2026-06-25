@@ -828,6 +828,37 @@ export function DockableWorkspace({
     });
   }, [layoutReady, defaultHeaderPosition]);
 
+  // 侧栏 header：容器尺寸变化时（如底部半屏工作区展开/收起）重新 layout，
+  // 仅作用于 defaultHeaderPosition !== top 的 dock（如 advance-terminal-side-dock）。
+  useEffect(() => {
+    if (defaultHeaderPosition === "top") return;
+    const wrapper = wrapperRef.current;
+    if (!wrapper) return;
+
+    const dockRoot = wrapper.querySelector<HTMLElement>(
+      ".dockable-workspace__dockview",
+    );
+    if (!dockRoot) return;
+
+    const relayout = () => {
+      const api = apiRef.current;
+      if (!api || !layoutLoadedRef.current) return;
+      const w = dockRoot.clientWidth;
+      const h = dockRoot.clientHeight;
+      if (w <= 0 || h <= 0) return;
+      syncGroupHeaderPosition(api, defaultHeaderPositionRef.current);
+      api.layout(w, h);
+    };
+
+    const observer = new ResizeObserver(() => {
+      relayout();
+    });
+    observer.observe(dockRoot);
+    relayout();
+
+    return () => observer.disconnect();
+  }, [layoutReady, defaultHeaderPosition]);
+
   // 同步 activeTabId
   useEffect(() => {
     const api = apiRef.current;
