@@ -34,7 +34,7 @@ export function BlockContextMenu({ block, position, onClose, onRunCommand }: Pro
     const menu: ContextMenuItem[] = [
       {
         id: "explain-command",
-        label: "Explain command",
+        label: "解释命令",
         icon: (
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <circle cx="12" cy="12" r="10" />
@@ -51,7 +51,7 @@ export function BlockContextMenu({ block, position, onClose, onRunCommand }: Pro
       menu.push(
         {
           id: "explain-error",
-          label: "Explain error",
+          label: "解释错误",
           icon: (
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <circle cx="12" cy="12" r="10" />
@@ -66,7 +66,7 @@ export function BlockContextMenu({ block, position, onClose, onRunCommand }: Pro
         },
         {
           id: "fix-error",
-          label: "Fix error",
+          label: "修复错误",
           icon: (
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z" />
@@ -84,7 +84,7 @@ export function BlockContextMenu({ block, position, onClose, onRunCommand }: Pro
       { id: "sep-ai", separator: true, label: "" },
       {
         id: "send-to-ai",
-        label: "Send to AI",
+        label: "发送给 AI",
         icon: (
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M12 2a4 4 0 014 4v1a4 4 0 01-8 0V6a4 4 0 014-4z" />
@@ -106,7 +106,7 @@ export function BlockContextMenu({ block, position, onClose, onRunCommand }: Pro
         { id: "sep-run", separator: true, label: "" },
         {
           id: "run-again",
-          label: "Run again",
+          label: "重新执行",
           icon: (
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M4 17l6-6-6-6" />
@@ -123,7 +123,7 @@ export function BlockContextMenu({ block, position, onClose, onRunCommand }: Pro
 
     menu.push({
       id: "copy-command",
-      label: "Copy command",
+      label: "复制命令",
       icon: (
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
           <rect x="9" y="9" width="13" height="13" rx="2" />

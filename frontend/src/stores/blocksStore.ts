@@ -15,11 +15,17 @@ export interface TerminalBlock {
   status: "running" | "completed" | "failed";
 }
 
+const MAX_BLOCK_OUTPUT_CHARS = 64_000;
+
+/** Zustand selector 中缺失 session 时的稳定空数组引用 */
+export const EMPTY_TERMINAL_BLOCKS: TerminalBlock[] = [];
+
 interface BlocksState {
   blocks: Record<string, TerminalBlock[]>; // sessionId -> blocks
 
   addBlock: (sessionId: string, block: TerminalBlock) => void;
   updateBlock: (blockId: string, update: Partial<TerminalBlock>) => void;
+  appendBlockOutput: (blockId: string, chunk: string) => void;
   getBlocks: (sessionId: string) => TerminalBlock[];
   getLastBlock: (sessionId: string) => TerminalBlock | null;
   getLastError: (sessionId: string) => TerminalBlock | null;
@@ -54,7 +60,25 @@ export const useBlocksStore = create<BlocksState>((set, get) => ({
       return { blocks: newBlocks };
     }),
 
-  getBlocks: (sessionId) => get().blocks[sessionId] || [],
+  appendBlockOutput: (blockId, chunk) => {
+    if (!chunk) return;
+    set((state) => {
+      const newBlocks: Record<string, TerminalBlock[]> = {};
+      for (const [sid, blocks] of Object.entries(state.blocks)) {
+        newBlocks[sid] = blocks.map((b) => {
+          if (b.id !== blockId) return b;
+          let output = b.output + chunk;
+          if (output.length > MAX_BLOCK_OUTPUT_CHARS) {
+            output = `…[输出已截断]\n${output.slice(-MAX_BLOCK_OUTPUT_CHARS)}`;
+          }
+          return { ...b, output };
+        });
+      }
+      return { blocks: newBlocks };
+    });
+  },
+
+  getBlocks: (sessionId) => get().blocks[sessionId] ?? EMPTY_TERMINAL_BLOCKS,
 
   getLastBlock: (sessionId) => {
     const blocks = get().blocks[sessionId] || [];

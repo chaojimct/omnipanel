@@ -16,6 +16,9 @@ import type { TopbarTabDef } from "../../stores/topbarStore";
 import { navigateToPath } from "../../lib/terminalSession";
 import { LOCAL_TERMINAL_RESOURCE_ID } from "./paneResource";
 import { TerminalTabDockPane } from "./TerminalTabDockPane";
+import { TerminalModuleContextBridge } from "./ai/TerminalModuleContextBridge";
+import { buildTerminalModuleContext } from "./ai/types";
+import { EMPTY_TERMINAL_BLOCKS, useBlocksStore } from "../../stores/blocksStore";
 import { clearTerminalPaneSender } from "./terminalPaneSenders";
 import {
   copyTerminalTabToWorkspaceSnapshot,
@@ -77,6 +80,28 @@ export function TerminalPanel() {
   const selectResource = useWorkspaceStore((state) => state.selectResource);
 
   const activeWorkspaceId = useWorkspaceStore((s) => s.workspace.id);
+
+  const activeTerminalTab = useMemo(
+    () => tabs.find((tab) => tab.id === activeTabId) ?? null,
+    [activeTabId, tabs],
+  );
+  const activeTerminalResource = useMemo(
+    () => resolveResourceById(activeTerminalTab?.session.resourceId ?? null),
+    [activeTerminalTab?.session.resourceId],
+  );
+  const sessionBlocks = useBlocksStore((state) =>
+    activeTabId ? state.blocks[activeTabId] ?? EMPTY_TERMINAL_BLOCKS : EMPTY_TERMINAL_BLOCKS,
+  );
+  const terminalAiContext = useMemo(
+    () =>
+      buildTerminalModuleContext({
+        activeTabId,
+        session: activeTerminalTab?.session ?? null,
+        resource: activeTerminalResource,
+        blocks: sessionBlocks,
+      }),
+    [activeTerminalResource, activeTerminalTab?.session, activeTabId, sessionBlocks],
+  );
 
   useEffect(() => {
     return subscribeDockviewTransfer((meta) => {
@@ -335,6 +360,7 @@ export function TerminalPanel() {
 
   return (
     <>
+      <TerminalModuleContextBridge active={isActiveRoute} context={terminalAiContext} />
       <ModuleSegmentDock
         className="terminal-module-dock"
         dockScope="terminal"

@@ -1,6 +1,7 @@
 import type { ModuleKey } from "../../paths";
 import type { McpToolInfo } from "../../../ipc/bindings";
 import { DATABASE_MODULE_MCP_TOOLS } from "../../../modules/database/ai/mcpTools";
+import { TERMINAL_MODULE_MCP_TOOLS } from "../../../modules/terminal/ai/mcpTools";
 import type { McpToolRegistration } from "./types";
 
 /** 与 Rust `BUILTIN_SERVICE_ID` 保持一致 */
@@ -8,6 +9,7 @@ export const OMNIMCP_BUILTIN_SERVICE_ID = "omnimcp-builtin";
 
 const MODULE_MCP_CATALOG: Partial<Record<ModuleKey, McpToolRegistration[]>> = {
   database: DATABASE_MODULE_MCP_TOOLS,
+  terminal: TERMINAL_MODULE_MCP_TOOLS,
 };
 
 export function getModuleMcpToolsFromCatalog(moduleKey: ModuleKey): McpToolRegistration[] {

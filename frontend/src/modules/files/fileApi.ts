@@ -10,19 +10,23 @@ function ipcErrorToError(error: OmniError_Serialize): Error {
 
 async function unwrap<T>(
   res: { status: string; data?: T; error?: OmniError_Serialize },
-  debugContext?: Record<string, unknown>,
+  debugContext?: Record<string, unknown> & { quiet?: boolean },
 ): Promise<T> {
   if (res.status === "ok" && res.data !== undefined) return res.data;
   if (res.error) {
-    console.error("[files] IPC error:", {
-      ...debugContext,
-      code: res.error.code,
-      message: res.error.message,
-      cause: res.error.cause ?? null,
-    });
+    if (!debugContext?.quiet) {
+      console.error("[files] IPC error:", {
+        ...debugContext,
+        code: res.error.code,
+        message: res.error.message,
+        cause: res.error.cause ?? null,
+      });
+    }
     throw ipcErrorToError(res.error);
   }
-  console.error("[files] IPC error: unknown failure", debugContext);
+  if (!debugContext?.quiet) {
+    console.error("[files] IPC error: unknown failure", debugContext);
+  }
   throw new Error("请求失败");
 }
 
@@ -35,6 +39,7 @@ export async function listDirectory(
   path: string,
   search?: string | null,
   continuationToken?: string | null,
+  options?: { quiet?: boolean },
 ): Promise<FileListDirResult> {
   const query = search?.trim() ? search.trim() : null;
   const token = continuationToken?.trim() ? continuationToken.trim() : null;
@@ -44,6 +49,7 @@ export async function listDirectory(
     path,
     search: query,
     continuationToken: token,
+    quiet: options?.quiet,
   });
 }
 

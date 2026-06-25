@@ -16,6 +16,7 @@ import { useSettingsStore } from "../../../stores/settingsStore";
 import { resolveScenarioModelSelectionId } from "../../../lib/aiScenarioModels";
 import { useAiStore } from "../../../stores/aiStore";
 import { getModuleAiContextText, getModuleMcpTools, executeModuleMcpTool } from "../../../lib/ai/context";
+import { registerAiPromptSubmit } from "../../../lib/ai/submitAiPrompt";
 import type { ModuleKey } from "../../../lib/paths";
 import { moduleKeyFromPath } from "../../../lib/workspaceModuleRoutes";
 
@@ -386,15 +387,29 @@ export function AiRuntimeProvider({ children }: { children: ReactNode }) {
 
   const onNewRef = useRef<(message: AppendMessage) => Promise<void>>(undefined);
   const onReloadRef = useRef<(parentId: string | null) => Promise<void>>(undefined);
+  const runUserPromptRef =
+    useRef<
+      (
+        userText: string,
+        options?: { newConversation?: boolean; contextChips?: { type: string; label: string }[] },
+      ) => Promise<void>
+    >(undefined);
 
-  onNewRef.current = async (msg: AppendMessage) => {
-    const userText = extractUserContent(msg);
+  runUserPromptRef.current = async (userText, options) => {
     if (!userText.trim()) return;
-    if (isGenerating) return;
+    if (useAiStore.getState().isGenerating) return;
 
-    let convId = activeConversationId;
+    let convId = options?.newConversation
+      ? null
+      : useAiStore.getState().activeConversationId;
     if (!convId) {
       convId = createConversation();
+    }
+
+    if (options?.contextChips) {
+      for (const chip of options.contextChips) {
+        useAiStore.getState().addContext(convId, chip);
+      }
     }
 
     const modelConfig = getModelConfig();
@@ -428,6 +443,10 @@ export function AiRuntimeProvider({ children }: { children: ReactNode }) {
 
     const priorMessages = getPriorMessages(convId);
     await runGenerationRef.current!(convId, assistantMsgId, priorMessages, modelConfig);
+  };
+
+  onNewRef.current = async (msg: AppendMessage) => {
+    await runUserPromptRef.current!(extractUserContent(msg));
   };
 
   onReloadRef.current = async (parentId) => {
@@ -471,6 +490,12 @@ export function AiRuntimeProvider({ children }: { children: ReactNode }) {
 
   const handleCancel = useCallback(async () => {
     abortRef.current?.abort();
+  }, []);
+
+  useEffect(() => {
+    return registerAiPromptSubmit((prompt, options) =>
+      runUserPromptRef.current!(prompt, options),
+    );
   }, []);
 
   const adapter = useMemo<ExternalStoreAdapter>(

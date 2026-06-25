@@ -136,6 +136,7 @@
     }
 
     .term-cmd-textarea {
+        width: 100%;
         flex: 1;
         height: 24px;
         min-height: 24px;
@@ -183,6 +184,119 @@
         color: #fff;
         font-size: 11px;
         line-height: 1;
+    }
+
+    .term-cmd-input-wrap {
+        display: flex;
+        flex-direction: column;
+        flex-shrink: 0;
+        border-top: 1px solid var(--border);
+        background: var(--bg-deeper);
+    }
+
+    .term-cmd-input.is-disabled {
+        opacity: 0.55;
+        pointer-events: none;
+    }
+
+    .term-cmd-editor {
+        position: relative;
+        flex: 1;
+        min-width: 0;
+    }
+
+    .term-cmd-actions {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        flex-shrink: 0;
+    }
+
+    .term-cmd-completion {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: calc(100% + 4px);
+        max-height: 220px;
+        overflow: auto;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--r-md);
+        box-shadow: var(--shadow-md);
+        z-index: 20;
+        padding: 4px;
+    }
+
+    .term-cmd-completion-item {
+        display: grid;
+        grid-template-columns: 1fr auto auto;
+        gap: 8px;
+        align-items: center;
+        width: 100%;
+        padding: 6px 8px;
+        border: none;
+        border-radius: var(--r-sm);
+        background: transparent;
+        color: var(--fg);
+        font: inherit;
+        font-size: 11px;
+        text-align: left;
+        cursor: pointer;
+    }
+
+    .term-cmd-completion-item.is-active,
+    .term-cmd-completion-item:hover {
+        background: var(--surface-2);
+    }
+
+    .term-cmd-completion-label {
+        font-family: var(--font-mono);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .term-cmd-completion-desc,
+    .term-cmd-completion-source {
+        color: var(--meta);
+        font-size: 10px;
+        white-space: nowrap;
+    }
+
+    .term-cmd-plan {
+        padding: 8px 12px;
+        border-bottom: 1px solid var(--border-soft);
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+    }
+
+    .term-cmd-plan-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        font-size: 11px;
+        color: var(--fg-2);
+    }
+
+    .term-cmd-plan-step {
+        display: grid;
+        grid-template-columns: auto 1fr auto;
+        gap: 8px;
+        align-items: center;
+        font-size: 11px;
+    }
+
+    .term-cmd-plan-step code {
+        font-family: var(--font-mono);
+        color: var(--fg);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .term-input-mode-toggle {
+        flex-shrink: 0;
     }
 
     .term-workspace {
