@@ -574,14 +574,33 @@ export const zhCN = {
     tabs: {
       browser: "文件管理",
     },
+    workspace: {
+      emptyTabs: "在左侧选择一个连接以打开文件浏览面板",
+    },
     loading: "正在加载…",
     empty: "空目录",
+    searchNoResults: "当前目录无匹配项",
     groups: {
       other: "其他",
     },
     protocol: {
       local: "本地文件系统",
     },
+    s3: {
+      loadingMore: "正在加载更多…",
+    },
+    preview: {
+      title: "文件预览",
+      loading: "正在加载…",
+      tooLarge: "文件超过预览阈值（{limit}）",
+      unsupported: "不支持预览此文件类型",
+      error: "加载失败：{message}",
+      empty: "无法预览此文件",
+      downloadHint: "可点击标题栏「下载」保存到本地查看",
+    },
+    copyLinkDone: "链接已复制",
+    copyLinkFailed: "复制失败",
+    copyLinkUnavailable: "无法生成链接，请配置自定义域名或 Endpoint",
     sidebar: {
       title: "连接",
       add: "新建连接",
@@ -600,6 +619,8 @@ export const zhCN = {
       search: "筛选当前目录…",
       listView: "列表视图",
       gridView: "网格视图",
+      showDetail: "显示详情侧栏",
+      hideDetail: "隐藏详情侧栏",
     },
     columns: {
       name: "名称",
@@ -635,6 +656,7 @@ export const zhCN = {
     },
     context: {
       open: "打开",
+      copyLink: "复制链接",
       properties: "属性",
       edit: "编辑连接",
       test: "测试连接",
@@ -663,6 +685,9 @@ export const zhCN = {
       bucketRequired: "请输入 Bucket",
       region: "Region",
       endpoint: "Endpoint（可选）",
+      publicDomain: "自定义域名",
+      publicDomainPlaceholder: "例如：https://cdn.example.com",
+      publicDomainDesc: "用于生成公开访问链接；留空则根据 Endpoint / Bucket 推断",
       accessKey: "Access Key",
       accessKeyRequired: "请输入 Access Key",
       secretKey: "Secret Key",
@@ -1847,6 +1872,12 @@ export const zhCN = {
       editorFontSize: "字号",
       editorLineHeight: "行高",
       editorLineHeightDesc: "行高倍数，影响代码行间距",
+    },
+    files: {
+      label: "文件",
+      desc: "文件浏览与预览相关参数",
+      previewThreshold: "预览阈值",
+      previewThresholdDesc: "超过此大小的文件不进行内容预览（详情侧栏文本预览与网格缩略图）",
     },
     knowledge: {
       label: "知识库",

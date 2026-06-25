@@ -76,6 +76,15 @@ export function IconUpload({ className }: IconProps) {
   );
 }
 
+export function IconDetailPanel({ className }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <rect x="2" y="3" width="12" height="10" rx="1" />
+      <path d="M10 3v10" />
+    </svg>
+  );
+}
+
 export function IconNewFolder({ className }: IconProps) {
   return (
     <svg className={className} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">

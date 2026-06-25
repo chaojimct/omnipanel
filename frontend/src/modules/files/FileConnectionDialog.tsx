@@ -20,6 +20,8 @@ export type FileConfigJson = {
   bucket?: string;
   region?: string;
   endpoint?: string;
+  /** 公开访问自定义域名，如 cdn.example.com */
+  publicDomain?: string;
   prefix?: string;
   accessKey?: string;
 };
@@ -28,6 +30,7 @@ type Props = {
   open: boolean;
   onClose: () => void;
   onSaved?: () => void;
+  onTestSuccess?: (connectionId: string) => void;
   editConnection?: Connection;
 };
 
@@ -44,6 +47,7 @@ const EMPTY = {
   bucket: "",
   region: "us-east-1",
   endpoint: "",
+  publicDomain: "",
   prefix: "",
   accessKey: "",
 };
@@ -65,6 +69,7 @@ function parseConfig(conn?: Connection): typeof EMPTY {
       bucket: cfg.bucket ?? "",
       region: cfg.region ?? "us-east-1",
       endpoint: cfg.endpoint ?? "",
+      publicDomain: cfg.publicDomain ?? "",
       prefix: cfg.prefix ?? "",
       accessKey: cfg.accessKey ?? "",
     };
@@ -91,6 +96,7 @@ function buildConnection(form: typeof EMPTY, existing?: Connection): Connection 
     cfg.bucket = form.bucket.trim();
     cfg.region = form.region.trim();
     cfg.endpoint = form.endpoint.trim();
+    cfg.publicDomain = form.publicDomain.trim();
     cfg.prefix = form.prefix.trim();
     cfg.accessKey = form.accessKey.trim();
   }
@@ -109,7 +115,7 @@ function buildConnection(form: typeof EMPTY, existing?: Connection): Connection 
   };
 }
 
-export function FileConnectionDialog({ open, onClose, onSaved, editConnection }: Props) {
+export function FileConnectionDialog({ open, onClose, onSaved, onTestSuccess, editConnection }: Props) {
   const { t } = useI18n();
   const connections = useConnectionStore((s) => s.connections);
   const [form, setForm] = useState(EMPTY);
@@ -172,6 +178,9 @@ export function FileConnectionDialog({ open, onClose, onSaved, editConnection }:
       const res = await commands.connTest(conn);
       if (res.status === "ok" && res.data !== undefined) {
         setSuccessMsg(res.data);
+        if (editConnection?.id) {
+          onTestSuccess?.(editConnection.id);
+        }
       } else if (res.status === "error") {
         const e = res.error;
         setError(e.cause ? `${e.message}（${e.cause}）` : e.message);
@@ -183,7 +192,7 @@ export function FileConnectionDialog({ open, onClose, onSaved, editConnection }:
     } finally {
       setTesting(false);
     }
-  }, [form, editConnection]);
+  }, [form, editConnection, onTestSuccess]);
 
   const handleSave = async () => {
     const err = validate();
@@ -315,6 +324,17 @@ export function FileConnectionDialog({ open, onClose, onSaved, editConnection }:
               <label className="form-label">{t("files.dialog.endpoint")}</label>
               <input className="input" value={form.endpoint} onChange={(e) => update("endpoint", e.target.value)} style={{ width: "100%" }} />
             </div>
+          </div>
+          <div className="form-field">
+            <label className="form-label">{t("files.dialog.publicDomain")}</label>
+            <input
+              className="input"
+              value={form.publicDomain}
+              onChange={(e) => update("publicDomain", e.target.value)}
+              placeholder={t("files.dialog.publicDomainPlaceholder")}
+              style={{ width: "100%" }}
+            />
+            <p className="form-field-hint">{t("files.dialog.publicDomainDesc")}</p>
           </div>
           <div className="form-row">
             <div className="form-field" style={{ flex: 1 }}>

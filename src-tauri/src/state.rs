@@ -1,5 +1,5 @@
-use std::collections::HashMap;
-use std::sync::Arc;
+use std::collections::{HashMap, HashSet};
+use std::sync::{Arc, Mutex as StdMutex};
 
 use tauri::AppHandle;
 use tokio::sync::Mutex;
@@ -83,6 +83,8 @@ pub struct AppState {
     pub running_tasks: Arc<Mutex<HashMap<String, tokio::task::JoinHandle<()>>>>,
     /// 文件管理器独立 SFTP 会话（按 file 连接 id 索引）。
     pub file_sftp_sessions: Arc<Mutex<HashMap<String, Arc<SshSession>>>>,
+    /// 本轮会话内已验证可用的文件连接（测试通过或成功列目录）。
+    pub file_connection_online: Arc<StdMutex<HashSet<String>>>,
     /// 网络代理配置（由前端通用设置同步而来）。
     pub proxy_config: Arc<Mutex<ProxyConfig>>,
     /// MCP 服务管理器（内置 OmniMCP + 用户自定义服务）。
@@ -133,6 +135,7 @@ impl AppState {
             running_workflows: Arc::new(Mutex::new(HashMap::new())),
             running_tasks: Arc::new(Mutex::new(HashMap::new())),
             file_sftp_sessions: Arc::new(Mutex::new(HashMap::new())),
+            file_connection_online: Arc::new(StdMutex::new(HashSet::new())),
             proxy_config: Arc::new(Mutex::new(ProxyConfig::default())),
             mcp_manager,
         }

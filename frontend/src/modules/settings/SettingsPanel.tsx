@@ -35,6 +35,8 @@ import {
   SQL_EDITOR_LINE_HEIGHT_OPTIONS,
   clampSqlEditorFontSize,
   clampSqlEditorLineHeight,
+  FILE_PREVIEW_THRESHOLD_OPTIONS,
+  clampFilePreviewThresholdBytes,
   type Locale,
   type ProxyProtocol,
   type AiDisplayMode,
@@ -64,8 +66,9 @@ import { useI18n } from "../../i18n";
 import { commands } from "../../ipc/bindings";
 import { invoke } from "@tauri-apps/api/core";
 import type { UpdateInfo } from "../../ipc/bindings";
+import { formatFileSize } from "../files/utils";
 
-type Section = "general" | "appearance" | "keybindings" | "ai" | "security" | "terminal" | "database" | "knowledge" | "data";
+type Section = "general" | "appearance" | "keybindings" | "ai" | "security" | "terminal" | "database" | "files" | "knowledge" | "data";
 
 interface NavItem {
   id: Section;
@@ -141,6 +144,16 @@ const NAV_ITEMS: NavItem[] = [
         <ellipse cx="12" cy="5" rx="9" ry="3" />
         <path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5" />
         <path d="M3 12c0 1.66 4.03 3 9 3s9-1.34 9-3" />
+      </svg>
+    ),
+  },
+  {
+    id: "files",
+    label: "文件",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+        <path d="M14 2v6h6M16 13H8M16 17H8M10 9H8" />
       </svg>
     ),
   },
@@ -1332,6 +1345,8 @@ export function SettingsPanel() {
   const sqlEditorFontSize = useSettingsStore((s) => s.sqlEditorFontSize);
   const sqlEditorLineHeight = useSettingsStore((s) => s.sqlEditorLineHeight);
   const setDatabaseSettings = useSettingsStore((s) => s.setDatabaseSettings);
+  const filePreviewThresholdBytes = useSettingsStore((s) => s.filePreviewThresholdBytes);
+  const setFileSettings = useSettingsStore((s) => s.setFileSettings);
   const databaseQueryPageSizeOptions = useMemo(
     () => DATABASE_QUERY_PAGE_SIZE_OPTIONS.map((n) => String(n)),
     [],
@@ -1342,6 +1357,14 @@ export function SettingsPanel() {
   );
   const sqlEditorLineHeightOptions = useMemo(
     () => SQL_EDITOR_LINE_HEIGHT_OPTIONS.map((n) => String(n)),
+    [],
+  );
+  const filePreviewThresholdOptions = useMemo(
+    () => FILE_PREVIEW_THRESHOLD_OPTIONS.map((n) => String(n)),
+    [],
+  );
+  const filePreviewThresholdLabels = useMemo(
+    () => FILE_PREVIEW_THRESHOLD_OPTIONS.map((n) => formatFileSize(n)),
     [],
   );
 
@@ -2009,6 +2032,33 @@ export function SettingsPanel() {
                     setDatabaseSettings({ sqlEditorLineHeight: clampSqlEditorLineHeight(Number(v)) })
                   }
                   options={sqlEditorLineHeightOptions}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Files */}
+        {activeSection === "files" && (
+          <div className="settings-panel active">
+            <div className="settings-section">
+              <h2>{t("settings.files.label")}</h2>
+              <p className="section-desc">{t("settings.files.desc")}</p>
+
+              <div className="setting-row">
+                <div className="setting-label">
+                  <h4>{t("settings.files.previewThreshold")}</h4>
+                  <p>{t("settings.files.previewThresholdDesc")}</p>
+                </div>
+                <SettingSelect
+                  value={String(filePreviewThresholdBytes)}
+                  onChange={(v) =>
+                    setFileSettings({
+                      filePreviewThresholdBytes: clampFilePreviewThresholdBytes(Number(v)),
+                    })
+                  }
+                  options={filePreviewThresholdOptions}
+                  optionLabels={filePreviewThresholdLabels}
                 />
               </div>
             </div>

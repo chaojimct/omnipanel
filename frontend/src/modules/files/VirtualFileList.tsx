@@ -1,14 +1,36 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type RefObject } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { FileEntryIcon } from "../../components/ui/FileEntryIcon";
 import { useI18n } from "../../i18n";
 import type { FileEntry } from "../../ipc/bindings";
 import { fileTypeLabel, formatFileSize, formatFileTime } from "./utils";
+import { FileGridThumbnail } from "./FileGridThumbnail";
 
 const LIST_ROW_HEIGHT = 32;
 const GRID_MIN_COLUMN = 100;
 const GRID_GAP = 8;
-const GRID_ROW_HEIGHT = 88;
+const GRID_ROW_HEIGHT = 100;
+const SCROLL_LOAD_THRESHOLD = 160;
+
+function useNearEndScroll(
+  scrollRef: RefObject<HTMLDivElement | null>,
+  onNearEnd: (() => void) | undefined,
+  enabled: boolean,
+) {
+  const onNearEndRef = useRef(onNearEnd);
+  onNearEndRef.current = onNearEnd;
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el || !enabled || !onNearEnd) return;
+    const handler = () => {
+      if (el.scrollTop + el.clientHeight >= el.scrollHeight - SCROLL_LOAD_THRESHOLD) {
+        onNearEndRef.current?.();
+      }
+    };
+    el.addEventListener("scroll", handler, { passive: true });
+    return () => el.removeEventListener("scroll", handler);
+  }, [scrollRef, enabled, onNearEnd]);
+}
 
 export interface VirtualFileListProps {
   entries: FileEntry[];
@@ -17,7 +39,10 @@ export interface VirtualFileListProps {
   scrollResetSignal?: string;
   onActivate: (entry: FileEntry) => void;
   onContextMenu: (e: React.MouseEvent, entry: FileEntry) => void;
-  onDownload: (entry: FileEntry) => void;
+  onOpenFile: (entry: FileEntry) => void;
+  onLoadMore?: () => void;
+  loadingMore?: boolean;
+  loadMoreLabel?: string;
 }
 
 export function VirtualFileList({
@@ -26,13 +51,17 @@ export function VirtualFileList({
   scrollResetSignal,
   onActivate,
   onContextMenu,
-  onDownload,
+  onOpenFile,
+  onLoadMore,
+  loadingMore,
+  loadMoreLabel,
 }: VirtualFileListProps) {
   const { t } = useI18n();
   const scrollRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = 0;
   }, [scrollResetSignal]);
+  useNearEndScroll(scrollRef, onLoadMore, Boolean(onLoadMore));
   const rowVirtualizer = useVirtualizer({
     count: entries.length,
     getScrollElement: () => scrollRef.current,
@@ -57,7 +86,7 @@ export function VirtualFileList({
           className={`fm-file-row${selected?.path === entry.path ? " selected" : ""}`}
           onClick={() => onActivate(entry)}
           onContextMenu={(e) => onContextMenu(e, entry)}
-          onDoubleClick={() => !isDir && void onDownload(entry)}
+          onDoubleClick={() => (isDir ? onActivate(entry) : onOpenFile(entry))}
         >
           <span className={`fm-file-icon${isDir ? " folder" : ""}`}>
             <FileEntryIcon type={isDir ? "dir" : "file"} />
@@ -70,7 +99,7 @@ export function VirtualFileList({
         </div>
       );
     },
-    [entries, selected?.path, onActivate, onContextMenu, onDownload],
+    [entries, selected?.path, onActivate, onContextMenu, onOpenFile],
   );
 
   return (
@@ -86,6 +115,9 @@ export function VirtualFileList({
         {paddingTop > 0 && <div style={{ height: paddingTop }} />}
         {virtualItems.map((item) => renderRow(item.index))}
         {paddingBottom > 0 && <div style={{ height: paddingBottom }} />}
+        {loadingMore && (
+          <div className="fm-list-load-more">{loadMoreLabel ?? t("files.s3.loadingMore")}</div>
+        )}
       </div>
     </>
   );
@@ -94,25 +126,35 @@ export function VirtualFileList({
 export interface VirtualFileGridProps {
   entries: FileEntry[];
   selected: FileEntry | null;
+  connectionId: string;
   /** Change this value (e.g. `${path}|${connId}`) to reset scroll to top. */
   scrollResetSignal?: string;
   onActivate: (entry: FileEntry) => void;
   onContextMenu: (e: React.MouseEvent, entry: FileEntry) => void;
-  onDownload: (entry: FileEntry) => void;
+  onOpenFile: (entry: FileEntry) => void;
+  onLoadMore?: () => void;
+  loadingMore?: boolean;
+  loadMoreLabel?: string;
 }
 
 export function VirtualFileGrid({
   entries,
   selected,
+  connectionId,
   scrollResetSignal,
   onActivate,
   onContextMenu,
-  onDownload,
+  onOpenFile,
+  onLoadMore,
+  loadingMore,
+  loadMoreLabel,
 }: VirtualFileGridProps) {
+  const { t } = useI18n();
   const scrollRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = 0;
   }, [scrollResetSignal]);
+  useNearEndScroll(scrollRef, onLoadMore, Boolean(onLoadMore));
   const [columns, setColumns] = useState(1);
 
   useEffect(() => {
@@ -135,7 +177,7 @@ export function VirtualFileGrid({
     count: rowCount,
     getScrollElement: () => scrollRef.current,
     estimateSize: () => GRID_ROW_HEIGHT,
-    overscan: 4,
+    overscan: 2,
   });
   const virtualRows = rowVirtualizer.getVirtualItems();
   const paddingTop = virtualRows.length > 0 ? virtualRows[0]!.start : 0;
@@ -165,10 +207,10 @@ export function VirtualFileGrid({
                 className={`fm-grid-item${selected?.path === entry.path ? " selected" : ""}`}
                 onClick={() => onActivate(entry)}
                 onContextMenu={(e) => onContextMenu(e, entry)}
-                onDoubleClick={() => !isDir && void onDownload(entry)}
+                onDoubleClick={() => (isDir ? onActivate(entry) : onOpenFile(entry))}
               >
                 <span className={`grid-icon${isDir ? " folder" : ""}`}>
-                  <FileEntryIcon type={isDir ? "dir" : "file"} />
+                  <FileGridThumbnail connectionId={connectionId} entry={entry} />
                 </span>
                 <span className="grid-name">{entry.name}</span>
                 <span className="grid-size">{isDir ? "—" : formatFileSize(entry.size)}</span>
@@ -178,7 +220,7 @@ export function VirtualFileGrid({
         </div>
       );
     },
-    [columns, entries, selected?.path, onActivate, onContextMenu, onDownload],
+    [columns, connectionId, entries, selected?.path, onActivate, onContextMenu, onOpenFile],
   );
 
   return (
@@ -186,6 +228,9 @@ export function VirtualFileGrid({
       {paddingTop > 0 && <div style={{ height: paddingTop }} />}
       {virtualRows.map((item) => renderRow(item.index))}
       {paddingBottom > 0 && <div style={{ height: paddingBottom }} />}
+      {loadingMore && (
+        <div className="fm-list-load-more">{loadMoreLabel ?? t("files.s3.loadingMore")}</div>
+      )}
     </div>
   );
 }
