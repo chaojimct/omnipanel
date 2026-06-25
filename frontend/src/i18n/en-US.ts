@@ -1183,6 +1183,7 @@ export const enUS: TranslationDict = {
     sideTabs: {
       files: "Files",
       monitor: "System Monitor",
+      rail: "Tool panels",
     },
     monitor: {
       loading: "Loading local system metrics…",

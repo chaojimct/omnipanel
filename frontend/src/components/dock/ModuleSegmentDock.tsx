@@ -95,13 +95,14 @@ export function ModuleSegmentDock({
     [tabs],
   );
 
-  const rootClassName = className
-    ? `module-root-dock module-segment-dock ${className}`
-    : "module-root-dock module-segment-dock";
-
-  if (!enabled) {
-    return <>{renderPanel(activeTabId)}</>;
-  }
+  const rootClassName = [
+    "module-root-dock",
+    "module-segment-dock",
+    className,
+    !enabled && "module-segment-dock--route-inactive",
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   return (
     <DockableWorkspace
@@ -117,7 +118,7 @@ export function ModuleSegmentDock({
       enableTabGroups={false}
       windowControl={windowControl}
       renderPanel={renderPanel}
-      addTabConfig={addTabConfig}
+      addTabConfig={enabled ? addTabConfig : undefined}
       onTabContextMenu={onTabContextMenu}
       onCtrlCopyTab={onCtrlCopyTab}
       emptyContent={emptyContent}

@@ -267,11 +267,13 @@ export function AdvanceTerminal({ tabId, isActive, onActivate }: AdvanceTerminal
             activeTabId={activeSideTab}
             onActiveTabChange={(id) => setActiveSideTab(id as SidePanelId)}
             onCloseTab={() => {}}
-            savedLayout={null}
+            savedLayout={sideLayoutRef.current}
             onSavedLayoutChange={handleSideLayoutChange}
             renderPanel={renderSidePanel}
             enableTabGroups={false}
-            defaultHeaderPosition="top"
+            defaultHeaderPosition="right"
+            disableTabsOverflowList
+            scrollbars="native"
             onCtrlCopyTab={handleSideCtrlCopyTab}
           />
         </DockPanel>

@@ -147,6 +147,12 @@ export interface DockableWorkspaceProps extends DockPanelRefreshProps {
   windowChromeVariant?: "default" | "segment";
   /** 窗口控制按钮左侧的额外操作按钮 */
   windowChromeLeftActions?: ReactNode;
+  /** 使用 dockview 内置 DefaultTab（不注入自定义 DockTabHeader） */
+  nativeTabs?: boolean;
+  /** 禁用 tab 溢出折叠菜单（侧栏 tab 较少时建议开启） */
+  disableTabsOverflowList?: boolean;
+  /** tab 栏滚动条实现；侧栏竖排 tab 建议 native 避免 custom scrollable 裁切 */
+  scrollbars?: "native" | "custom";
 }
 
 interface PanelParams {
@@ -211,6 +217,9 @@ export function DockableWorkspace({
   onPanelTransferredOut,
   windowChromeVariant = "default",
   windowChromeLeftActions,
+  nativeTabs = false,
+  disableTabsOverflowList = false,
+  scrollbars,
 }: DockableWorkspaceProps) {
   const [windowChromeHosts, setWindowChromeHosts] = useState<{
     dragGroupId: string | null;
@@ -484,7 +493,7 @@ export function DockableWorkspace({
   }, [softRefreshKey, layoutReady, bumpPanelSoftRev]);
 
   // 自定义 tab：元数据通过 panel params + DockWorkspaceTabHeader 内 liveMeta 同步
-  const defaultTabComponent = DockWorkspaceTabHeader;
+  const defaultTabComponent = nativeTabs ? undefined : DockWorkspaceTabHeader;
 
   const rightHeaderActions = useCallback(
     (props: IDockviewHeaderActionsProps) => {
@@ -923,6 +932,29 @@ export function DockableWorkspace({
     syncTabsToApi(api);
   }, [tabs, syncTabsToApi]);
 
+  // 侧栏 header 等非常规方位：布局就绪后强制同步 group 方位并触发一次 layout，
+  // 避免 custom scrollable + overflow 检测把 tab 全部收进底部折叠菜单。
+  useLayoutEffect(() => {
+    const api = apiRef.current;
+    const root = wrapperRef.current?.querySelector<HTMLElement>(
+      ".dockable-workspace__dockview",
+    );
+    if (!api || !layoutLoadedRef.current || !root) return;
+    if (defaultHeaderPosition === "top") return;
+    syncGroupHeaderPosition(api, defaultHeaderPosition);
+    // 仅在容器有真实尺寸时 relayout；隐藏路由下 clientWidth/Height 为 0，
+    // 用 0 调 api.layout 会把整个 dock（含侧栏 tab）压扁成不可见。
+    const relayout = () => {
+      const w = root.clientWidth;
+      const h = root.clientHeight;
+      if (w > 0 && h > 0) api.layout(w, h);
+    };
+    relayout();
+    requestAnimationFrame(() => {
+      relayout();
+    });
+  }, [layoutReady, defaultHeaderPosition]);
+
   // 同步 activeTabId
   useEffect(() => {
     const api = apiRef.current;
@@ -1204,7 +1236,7 @@ export function DockableWorkspace({
           <DockviewReact
             className="dockable-workspace__dockview"
             components={components}
-            defaultTabComponent={defaultTabComponent}
+            {...(defaultTabComponent ? { defaultTabComponent } : {})}
             leftHeaderActionsComponent={
               createPanelRequest || addTabConfig?.show ? leftHeaderActions : undefined
             }
@@ -1216,6 +1248,8 @@ export function DockableWorkspace({
             theme={themeDark}
             dndStrategy="pointer"
             defaultHeaderPosition={defaultHeaderPosition}
+            disableTabsOverflowList={disableTabsOverflowList}
+            {...(scrollbars ? { scrollbars } : {})}
             onReady={handleReady}
           />
         </DockTabHeaderRuntimeContext.Provider>

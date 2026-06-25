@@ -187,7 +187,6 @@ function AppShell() {
   const isDocker = location.pathname === MODULE_PATHS.docker;
   const isDatabase = location.pathname === MODULE_PATHS.database;
   const [otherRoutesMounted, setOtherRoutesMounted] = useState(!isTerminal);
-  const [terminalMounted, setTerminalMounted] = useState(isTerminal);
   const [dockerMounted, setDockerMounted] = useState(isDocker);
   const [databaseMounted, setDatabaseMounted] = useState(isDatabase);
   const aiDisplayMode = useSettingsStore((s) => s.aiDisplayMode);
@@ -205,12 +204,6 @@ function AppShell() {
   useEffect(() => {
     if (!isTerminal) {
       setOtherRoutesMounted(true);
-    }
-  }, [isTerminal]);
-
-  useEffect(() => {
-    if (isTerminal) {
-      setTerminalMounted(true);
     }
   }, [isTerminal]);
 
@@ -379,11 +372,9 @@ function AppShell() {
       <div
         className={`route-panel${isTerminal ? " route-panel--active" : ""}`}
       >
-        {terminalMounted && (
-          <SuspendedModulePanel active={isTerminal}>
-            <LazyTerminalPanel />
-          </SuspendedModulePanel>
-        )}
+        <SuspendedModulePanel active={isTerminal} suspendWhenHidden={false}>
+          <LazyTerminalPanel />
+        </SuspendedModulePanel>
       </div>
       <div
         className={`route-panel${isDocker ? " route-panel--active" : ""}`}

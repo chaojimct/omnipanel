@@ -2903,7 +2903,7 @@
 }
 
 .route-panel {
-    display: none;
+    display: flex;
     flex: 1;
     flex-direction: column;
     min-height: 0;
@@ -2911,13 +2911,18 @@
     overflow: hidden;
 }
 
-.route-panel--active {
-    display: flex;
+.route-panel:not(.route-panel--active) {
+    visibility: hidden;
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
 }
 
-.route-panel:not(.route-panel--active) {
-    pointer-events: none;
-    content-visibility: hidden;
+.route-panel--active {
+    visibility: visible;
+    position: relative;
+    z-index: 0;
 }
 
 .route-module-fallback {
@@ -3112,6 +3117,11 @@
     height: var(--shell-dv-tab-bar-h);
     min-height: var(--shell-dv-tab-bar-h);
     max-height: var(--shell-dv-tab-bar-h);
+}
+
+/* 路由未激活时保留 dock 实例，仅隐藏模块顶栏 tab（不影响嵌套 dock 如终端右侧面板） */
+.module-segment-dock--route-inactive.dockable-workspace > .dockable-workspace__dockview .dv-groupview > .dv-tabs-and-actions-container {
+    display: none;
 }
 
 .module-root-dock .dv-content-container {
@@ -3413,15 +3423,15 @@
     background: var(--danger);
 }
 
-/* 侧栏 Tab（left/right）：仅图标，收窄宽度 */
-.dockable-workspace.dock-header-left .dv-tabs-and-actions-container,
-.dockable-workspace.dock-header-right .dv-tabs-and-actions-container {
+/* 侧栏 Tab（left/right）：仅图标，收窄宽度（终端侧栏用原生 DefaultTab 单独样式） */
+.dockable-workspace.dock-header-left:not(.advance-terminal-side-dock) .dv-tabs-and-actions-container,
+.dockable-workspace.dock-header-right:not(.advance-terminal-side-dock) .dv-tabs-and-actions-container {
     width: 36px;
     min-width: 36px;
 }
 
-.dockable-workspace.dock-header-left .dock-tab-header-inner,
-.dockable-workspace.dock-header-right .dock-tab-header-inner {
+.dockable-workspace.dock-header-left:not(.advance-terminal-side-dock) .dock-tab-header-inner,
+.dockable-workspace.dock-header-right:not(.advance-terminal-side-dock) .dock-tab-header-inner {
     justify-content: center;
     max-width: none;
 }
@@ -4040,6 +4050,10 @@
     overflow: hidden;
 }
 
+/* 终端右侧工具面板：dockview 原生 right header（保留拖拽分屏），
+   保持 dockview 默认竖排文字（writing-mode: vertical-rl）的窄栏样式。
+   选择器锚点用 DOM 确定存在的 dv-groupview-header-vertical /
+   dv-tabs-container-vertical（不依赖外层 group 的 header-right）。 */
 .advance-terminal-side-dock.dockable-workspace {
     flex: 1;
     min-height: 0;
@@ -4047,21 +4061,132 @@
     height: 100%;
 }
 
+.advance-terminal-side-dock .dv-groupview {
+    height: 100%;
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+}
+
+/* dockview 的 right header 是 row-reverse flex。默认 content-container
+   没有 min-width:0，内部表格 min-width 会把整个 groupview 撑大，
+   导致所有 width:100% 都基于错误父宽计算。 */
+.advance-terminal-side-dock .dv-groupview.dv-groupview-header-right > .dv-content-container {
+    flex: 1 1 0;
+    min-width: 0;
+    max-width: calc(100% - 38px);
+    overflow: hidden;
+}
+
+/* header 竖条：窄宽、占满高度、贴右缘 */
+.advance-terminal-side-dock .dv-tabs-and-actions-container.dv-groupview-header-vertical {
+    width: 38px !important;
+    min-width: 38px;
+    height: 100% !important;
+    max-height: 100%;
+    flex-shrink: 0;
+    box-sizing: border-box;
+    border-left: 1px solid var(--border);
+    border-bottom: none;
+}
+
+/* 关键：空的 pre-actions / left-actions 全局有 height:100%，在 column 布局下
+   会吃掉整列高度，把 tabs-container 挤成 0 高度（tab 全部不可见）。
+   归零让它们按内容高度，把空间留给 tabs-container。 */
+.advance-terminal-side-dock .dv-groupview-header-vertical .dv-pre-actions-container,
+.advance-terminal-side-dock .dv-groupview-header-vertical .dv-left-actions-container {
+    height: auto;
+    min-height: 0;
+    flex: 0 0 auto;
+}
+
+/* 空白拖拽区 / 竖向 right-actions 纵向占位，隐藏 */
+.advance-terminal-side-dock .dv-groupview-header-vertical .dv-void-container,
+.advance-terminal-side-dock .dv-groupview-header-vertical .dv-right-actions-container {
+    display: none;
+}
+
+/* tabs 列：保留 dockview 默认竖排文字（不覆盖 writing-mode），占满剩余高度 */
+.advance-terminal-side-dock .dv-tabs-container.dv-tabs-container-vertical {
+    flex: 1 1 auto;
+    width: 100%;
+    height: auto;
+    max-height: 100%;
+    overflow: hidden auto;
+}
+
+.advance-terminal-side-dock .dv-tabs-container-vertical .dv-tab {
+    width: 100% !important;
+    flex-shrink: 0;
+    padding: 0;
+    margin: 0;
+}
+
+/* React 自定义 tab 的包裹层（高度依赖父，强制按内容撑开） */
+.advance-terminal-side-dock .dv-tabs-container-vertical .dv-react-part {
+    width: 100%;
+    height: auto !important;
+}
+
+/* 单个 tab：竖排文字、水平居中、占满宽度，激活态用左侧 accent 边框 */
+.advance-terminal-side-dock .dv-tabs-container-vertical .dv-tab .dv-default-tab {
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: auto;
+    min-height: 56px;
+    padding: 14px 0;
+    border-bottom: none;
+    border-left: 2px solid transparent;
+    color: var(--fg-2);
+    font-size: 13px;
+    box-sizing: border-box;
+}
+
+/* 竖排文字不被全局 overflow:hidden / max-width 裁切 */
+.advance-terminal-side-dock .dv-tabs-container-vertical .dv-default-tab-content.dock-tab-header-inner,
+.advance-terminal-side-dock .dv-tabs-container-vertical .dock-tab-label {
+    overflow: visible;
+    text-overflow: clip;
+    max-width: none;
+    max-height: none;
+    min-width: 0;
+}
+
+.advance-terminal-side-dock .dv-tabs-container-vertical .dv-tab .dv-default-tab:hover {
+    color: var(--fg);
+    background: var(--surface-hover);
+}
+
+.advance-terminal-side-dock .dv-tabs-container-vertical .dv-tab.dv-active-tab .dv-default-tab,
+.advance-terminal-side-dock .dv-tabs-container-vertical .dv-tab.dv-tab-dragging .dv-default-tab {
+    color: var(--fg);
+    border-bottom-color: transparent;
+    border-left-color: var(--accent);
+    background: var(--surface-hover);
+}
+
+.advance-terminal-side-dock .dv-tabs-container-vertical .dv-default-tab .dv-default-tab-action {
+    display: none;
+}
+
 .advance-terminal-side-dock .dock-pane-surface {
     display: flex;
     flex-direction: column;
     min-height: 0;
+    min-width: 0;
+    width: 100%;
+    max-width: 100%;
     overflow: hidden;
-}
-
-.advance-terminal-side-dock .dv-tabs-and-actions-container {
-    flex-shrink: 0;
-    background: var(--bg);
 }
 
 .advance-terminal-side-dock .advance-terminal-monitor-stack {
     flex: 1;
     min-height: 0;
+    min-width: 0;
+    width: 100%;
+    max-width: 100%;
 }
 
 .advance-terminal-monitor-stack {
@@ -4069,8 +4194,12 @@
     flex-direction: column;
     flex: 1;
     min-height: 0;
+    min-width: 0;
     height: 100%;
+    width: 100%;
+    max-width: 100%;
     gap: var(--sp-2);
+    overflow: hidden;
 }
 
 .advance-terminal-monitor-stack .ssh-ov {
@@ -4103,7 +4232,7 @@
 }
 
 .advance-terminal-monitor-stack .ssh-ov-cards {
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
     gap: var(--sp-2);
 }
 
@@ -4135,14 +4264,56 @@
 }
 
 .advance-terminal-monitor-stack .proc-panel {
-    flex: 1;
+    flex: 1 1 auto;
     min-height: 0;
+    min-width: 0;
 }
 
+/* 终端右侧进程面板：外层像 SFTP 一样跟随 dock 容器收缩；
+   表格仍使用通用进程表自己的列宽 / min-width，只在列表容器内部滚动。 */
 .advance-terminal-side .proc-panel {
-    flex: 1;
+    flex: 1 1 auto;
     min-height: 0;
+    min-width: 0;
+    width: 100%;
     height: 100%;
+    max-width: 100%;
+    overflow: hidden;
+}
+
+.advance-terminal-side .proc-header {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.advance-terminal-side .proc-search {
+    min-width: 0;
+}
+
+.advance-terminal-side .proc-table-wrap {
+    flex: 1 1 auto;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    min-height: 0;
+    overflow: auto;
+    scrollbar-gutter: stable;
+    overscroll-behavior: contain;
+    contain: inline-size;
+}
+
+.advance-terminal-side .proc-table-wrap::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+.advance-terminal-side .proc-table-wrap::-webkit-scrollbar-track {
+    background: var(--bg-deeper);
+}
+
+.advance-terminal-side .proc-table-wrap::-webkit-scrollbar-thumb {
+    background: color-mix(in srgb, var(--meta) 45%, transparent);
+    border-radius: 999px;
 }
 
 .advance-terminal-side-dock:has(.proc-panel) .dock-pane-surface,
