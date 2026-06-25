@@ -6,6 +6,15 @@ import { usePanelLayoutStore } from "../../stores/panelLayoutStore";
 /** 侧栏宽度预设（像素级默认值见 DockWorkspace） */
 export type RightSidebarWorkspacePreset = DockRailPreset;
 
+const SIDEBAR_MIN_BY_PRESET: Record<RightSidebarWorkspacePreset, number> = {
+  default: 220,
+  schema: 280,
+  host: 240,
+  server: 200,
+  settings: 180,
+  ai: 200,
+};
+
 export interface RightSidebarWorkspaceProps {
   /** 右侧边栏（可拖拽调整宽度，拖至最窄可折叠隐藏） */
   sidebar: ReactNode;
@@ -49,7 +58,12 @@ export function RightSidebarWorkspace({
   const savedSize = usePanelLayoutStore((s) => s.rightSizes[persistKey]);
   const setRightSize = usePanelLayoutStore((s) => s.setRightSize);
 
-  const sidebarSizePx = propSidebarSizePx ?? savedSize;
+  const effectiveMinSize = sidebarMinPx ?? SIDEBAR_MIN_BY_PRESET[preset];
+  const usableSavedSize =
+    typeof savedSize === "number" && savedSize >= effectiveMinSize
+      ? savedSize
+      : undefined;
+  const sidebarSizePx = propSidebarSizePx ?? usableSavedSize;
   const pendingRightSizeRef = useRef<number | null>(null);
 
   const handleRightResize = useCallback((sizePx: number) => {
@@ -59,9 +73,13 @@ export function RightSidebarWorkspace({
   const handleRightLayoutChanged = useCallback(() => {
     const size = pendingRightSizeRef.current;
     if (size == null) return;
+    if (size < effectiveMinSize) {
+      pendingRightSizeRef.current = null;
+      return;
+    }
     setRightSize(persistKey, size);
     pendingRightSizeRef.current = null;
-  }, [persistKey, setRightSize]);
+  }, [effectiveMinSize, persistKey, setRightSize]);
 
   return (
     <DockWorkspace
