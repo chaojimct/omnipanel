@@ -85,6 +85,8 @@ export interface DockableWorkspaceProps extends DockPanelRefreshProps {
     tabId: string,
     index: number,
   ) => void;
+  /** 预览 Tab 双击：升级为常驻 Tab */
+  onTabDoubleClick?: (tabId: string) => void;
   /**
    * 通过 dockview `containerApi.addPanel` 创建新面板。
    * 返回新面板的 id / title；由调用方同步业务 store。
@@ -171,6 +173,7 @@ export function DockableWorkspace({
   className,
   emptyContent,
   onTabContextMenu,
+  onTabDoubleClick,
   createPanelRequest,
   dockScope,
   acceptExternalDrops = false,
@@ -233,6 +236,8 @@ export function DockableWorkspace({
   onExternalDropRef.current = onExternalDrop;
   const onTabContextMenuRef = useRef(onTabContextMenu);
   onTabContextMenuRef.current = onTabContextMenu;
+  const onTabDoubleClickRef = useRef(onTabDoubleClick);
+  onTabDoubleClickRef.current = onTabDoubleClick;
   const onPanelTransferredOutRef = useRef(onPanelTransferredOut);
   onPanelTransferredOutRef.current = onPanelTransferredOut;
 
@@ -305,6 +310,7 @@ export function DockableWorkspace({
       tabsRef,
       tabStyleRef,
       onTabContextMenuRef,
+      onTabDoubleClickRef,
     }),
     [],
   );
@@ -720,15 +726,30 @@ export function DockableWorkspace({
       };
 
       if (currentTabs.length === 0) {
-        if (acceptExternalDropsRef.current) {
-          for (const panel of [...api.panels]) {
-            api.removePanel(panel);
+        isSyncingRef.current = true;
+        try {
+          if (api.panels.length > 0) {
+            if (acceptExternalDropsRef.current) {
+              for (const panel of [...api.panels]) {
+                try {
+                  api.removePanel(panel);
+                } catch {
+                  // panel 可能已被 clear 释放
+                }
+              }
+              ensureExternalDropTarget(api);
+            } else {
+              try {
+                api.clear();
+              } catch {
+                // 忽略重复 clear 导致的 disposed 错误
+              }
+            }
           }
-          ensureExternalDropTarget(api);
-        } else {
-          api.clear();
+          persistEmptyLayout();
+        } finally {
+          isSyncingRef.current = false;
         }
-        persistEmptyLayout();
         return;
       }
       isSyncingRef.current = true;
@@ -745,7 +766,11 @@ export function DockableWorkspace({
             ) {
               continue;
             }
-            api.removePanel(panel);
+            try {
+              api.removePanel(panel);
+            } catch {
+              // panel 可能已被 clear / unmount 释放
+            }
             layoutChanged = true;
           }
         }
@@ -790,11 +815,40 @@ export function DockableWorkspace({
     publishDockTabMeta(tabs);
   }, [tabs]);
 
+  const tabIdsKey = useMemo(() => tabs.map((tab) => tab.id).join("\0"), [tabs]);
+
+  // 仅 meta 变更（label / preview / dirty 等）：layout 阶段同步 panel params，Tab 头早一帧更新
+  useLayoutEffect(() => {
+    const api = apiRef.current;
+    if (!api || !layoutLoadedRef.current) {
+      return;
+    }
+    for (const tab of tabs) {
+      syncPanelTabParams(api, tab);
+    }
+  }, [tabs]);
+
+  // 无 tab 且未保留 dockview 挂载时，DockviewReact 会卸载；须重置 api/布局状态，
+  // 避免 tabs 再次增加时 syncTabsToApi 误用已 disposed 的 apiRef。
+  useLayoutEffect(() => {
+    if (tabs.length === 0 && !acceptExternalDrops) {
+      for (const d of disposablesRef.current) d.dispose();
+      disposablesRef.current = [];
+      if (viewIdRef.current) {
+        unregisterDockviewInstance(viewIdRef.current);
+        viewIdRef.current = null;
+      }
+      apiRef.current = null;
+      layoutLoadedRef.current = false;
+      setLayoutReady(false);
+    }
+  }, [tabs.length, acceptExternalDrops]);
+
   useEffect(() => {
     const api = apiRef.current;
     if (!api || !layoutLoadedRef.current) return;
     syncTabsToApi(api);
-  }, [tabs, syncTabsToApi]);
+  }, [tabIdsKey, syncTabsToApi]);
 
   // 同步 activeTabId
   useEffect(() => {
@@ -865,12 +919,12 @@ export function DockableWorkspace({
       // savedLayout 为 null 时：仅当外部曾传入非 null 布局再置 null 才清空。
       // 避免 onReady 已创建默认面板后，本 effect 因 savedLayout 恒为 null 误调 clear()。
       const prevProp = prevSavedLayoutPropRef.current;
-      if (prevProp !== undefined && prevProp !== null) {
+      if (prevProp !== undefined && prevProp !== null && apiRef.current.panels.length > 0) {
         try {
           apiRef.current.clear();
           needsPanelResync = true;
         } catch {
-          // 忽略
+          // 忽略重复 clear 导致的 disposed 错误
         }
       }
     }

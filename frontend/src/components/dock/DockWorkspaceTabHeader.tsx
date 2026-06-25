@@ -17,6 +17,7 @@ interface PanelParams {
   type?: DockTabPageType;
   dirty?: boolean;
   saved?: boolean;
+  preview?: boolean;
 }
 
 /** dockview 使用的稳定 Tab 头组件（勿包在 useCallback 内，否则 hook 订阅会失效）。 */
@@ -52,6 +53,12 @@ export function DockWorkspaceTabHeader(
           : props.params?.type === "file"
             ? props.params?.saved
             : undefined,
+    preview:
+      liveMeta.rev > 0
+        ? Boolean(liveMeta.preview)
+        : tab != null
+          ? Boolean(tab.preview)
+          : Boolean(props.params?.preview),
   };
 
   const closable = tab?.closable !== false;

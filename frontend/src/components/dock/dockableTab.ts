@@ -22,4 +22,6 @@ export interface DockableTab {
   dirty?: boolean;
   /** 已关联查询文件且内容已落盘（Tab 上显示已保存标记） */
   saved?: boolean;
+  /** Schema 预览 Tab：标题以斜体显示 */
+  preview?: boolean;
 }

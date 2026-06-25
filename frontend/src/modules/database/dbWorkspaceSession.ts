@@ -302,11 +302,12 @@ export function buildWorkspaceSessionSnapshot(params: {
   tabModes: Record<string, "data" | "sql">;
   tableDesignerStates: Record<string, TableDesignerTabState>;
 }): DbWorkspaceSessionSnapshot {
-  const tabIds = new Set(params.tabs.map((tab) => tab.id));
+  const persistedTabs = params.tabs.filter((tab) => !tab.preview);
+  const tabIds = new Set(persistedTabs.map((tab) => tab.id));
 
   const sqlTabStates: Record<string, DbSqlTabStateSnapshot> = {};
   for (const tabId of tabIds) {
-    const tab = params.tabs.find((item) => item.id === tabId);
+    const tab = persistedTabs.find((item) => item.id === tabId);
     const state = params.sqlTabStates[tabId];
     if (!state || tab?.kind !== "sql") {
       continue;
@@ -330,7 +331,7 @@ export function buildWorkspaceSessionSnapshot(params: {
 
   const tablePreviewStates: Record<string, DbTablePreviewStateSnapshot> = {};
   for (const tabId of tabIds) {
-    const tab = params.tabs.find((item) => item.id === tabId);
+    const tab = persistedTabs.find((item) => item.id === tabId);
     if (tab?.kind !== "table") {
       continue;
     }
@@ -343,7 +344,7 @@ export function buildWorkspaceSessionSnapshot(params: {
 
   const tableDesignerStates: Record<string, DbTableDesignerStateSnapshot> = {};
   for (const tabId of tabIds) {
-    const tab = params.tabs.find((item) => item.id === tabId);
+    const tab = persistedTabs.find((item) => item.id === tabId);
     if (tab?.kind !== "designer") {
       continue;
     }
@@ -358,8 +359,10 @@ export function buildWorkspaceSessionSnapshot(params: {
   }
 
   return {
-    tabs: params.tabs,
-    activeTabId: tabIds.has(params.activeTabId) ? params.activeTabId : params.tabs[0]?.id ?? "",
+    tabs: persistedTabs,
+    activeTabId: tabIds.has(params.activeTabId)
+      ? params.activeTabId
+      : persistedTabs[0]?.id ?? "",
     sqlTabStates,
     tablePreviewStates,
     tableDesignerStates,
@@ -371,6 +374,8 @@ export function buildClosedPanelEntry(params: {
   sqlTabStates: Record<string, SqlTabState>;
   tablePreviews: Record<string, TablePreviewState>;
   tableDesignerStates: Record<string, TableDesignerTabState>;
+  /** 批量关闭时须保证唯一，默认 Date.now() */
+  closedAt?: number;
 }): DbClosedPanelEntry {
   const { tab } = params;
   const sqlState = params.sqlTabStates[tab.id];
@@ -410,7 +415,7 @@ export function buildClosedPanelEntry(params: {
   }
 
   return {
-    closedAt: Date.now(),
+    closedAt: params.closedAt ?? Date.now(),
     tab: { ...tab },
     sqlTabState,
     tablePreviewState,

@@ -3328,6 +3328,12 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    font-style: normal;
+}
+
+.dockable-workspace .dv-default-tab--preview .dock-tab-label,
+.dock-tab-label--preview {
+    font-style: italic;
 }
 
 .dock-tab-header-inner svg {

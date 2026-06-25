@@ -7,6 +7,7 @@ export interface DockTabLiveMeta {
   type?: DockTabPageType;
   dirty?: boolean;
   saved?: boolean;
+  preview?: boolean;
   icon?: DockTabIconKind;
   label?: string;
   rev: number;
@@ -40,11 +41,17 @@ export function publishDockTabMeta(tabs: DockableTab[]): void {
 
   for (const tab of tabs) {
     const prev = metaByTabId.get(tab.id);
+    const nextPreview = Boolean(tab.preview);
+    // patch 可能已先于 workspace state 写入 preview=false，勿被陈旧 tabs 覆盖
+    if (prev && prev.preview === false && nextPreview) {
+      continue;
+    }
     if (
       prev &&
       prev.type === tab.type &&
       prev.dirty === tab.dirty &&
       prev.saved === tab.saved &&
+      Boolean(prev.preview) === nextPreview &&
       prev.icon === tab.icon &&
       prev.label === tab.label
     ) {
@@ -54,6 +61,7 @@ export function publishDockTabMeta(tabs: DockableTab[]): void {
       type: tab.type,
       dirty: tab.dirty,
       saved: tab.saved,
+      preview: nextPreview,
       icon: tab.icon,
       label: tab.label,
       rev: (prev?.rev ?? 0) + 1,
@@ -91,6 +99,25 @@ export function patchDockTabFileMeta(
     type: patch.type,
     dirty: patch.dirty,
     saved: patch.saved,
+    preview: prev?.preview,
+    icon: prev?.icon,
+    label: prev?.label,
+    rev: (prev?.rev ?? 0) + 1,
+  });
+  emit();
+}
+
+/** 预览 Tab 升级为常驻 / 打开预览 Tab 时即时刷新 Tab 头样式（不等待 tabs prop 同步）。 */
+export function patchDockTabPreviewMeta(tabId: string, preview: boolean): void {
+  const prev = metaByTabId.get(tabId);
+  if (prev && Boolean(prev.preview) === preview) {
+    return;
+  }
+  metaByTabId.set(tabId, {
+    type: prev?.type,
+    dirty: prev?.dirty,
+    saved: prev?.saved,
+    preview,
     icon: prev?.icon,
     label: prev?.label,
     rev: (prev?.rev ?? 0) + 1,

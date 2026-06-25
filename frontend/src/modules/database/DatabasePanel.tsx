@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
+import { flushSync } from "react-dom";
 import { useShallow } from "zustand/react/shallow";
 import { useLocation } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
@@ -59,7 +60,7 @@ import {
 import { buildDatabaseSchema, introspectToTableSchemas } from "./lsp/sqlCompletion";
 import { toCsv } from "./csvExport";
 import { buildRedisColumnMeta, buildRedisUpdateCommands } from "./redisTableMeta";
-import { getCachedDatabaseNames } from "./schemaCacheMerge";
+import { getCachedDatabaseNames, getCachedTableColumns } from "./schemaCacheMerge";
 import type { SchemaCacheConnectionEntry } from "./schemaCache";
 import { refreshConnectionSchemaCache } from "./schemaCacheRefresh";
 import { createSchemaCacheRefreshReporter } from "./schemaCacheStatusLog";
@@ -78,13 +79,14 @@ import {
   findTabIdForTable,
   findTabIdForDesigner,
   findTabIdForRedisQuery,
+  findPreviewDockTab,
   makeDesignerTabId,
   makeConnectionInfoTabId,
   makeRedisQueryTabId,
   isModuleDockTab,
   makeTableDesignerTabLabel,
+  type SchemaDockOpenMode,
   type ConnectionInfoWorkspaceTab,
-  type DatabaseListWorkspaceTab,
   type DbWorkspaceTab,
   type RedisQueryWorkspaceTab,
   type SqlWorkspaceTab,
@@ -98,6 +100,7 @@ import { DatabaseToolbox } from "./toolbox/DatabaseToolbox";
 import {
   createDefaultSqlTabState,
   createDefaultTablePreviewState,
+  estimateTablePreviewTotalRows,
   buildOrderByClause,
   NEW_ROW_KEY_PREFIX,
   PENDING_INSERT_ROW_KEY,
@@ -124,7 +127,7 @@ import { DbSidebarLinkageProvider } from "./DbSidebarLinkageContext";
 import { formatFilterWhere } from "./tablePreviewFilter";
 import type { RuleGroupType } from "react-querybuilder";
 import { ModuleSegmentDock } from "../../components/dock";
-import { patchDockTabFileMeta } from "../../components/dock/dockTabLiveMeta";
+import { patchDockTabFileMeta, patchDockTabPreviewMeta } from "../../components/dock/dockTabLiveMeta";
 import { DbWorkspaceProviders } from "../../contexts/DbWorkspaceContext";
 import type {
   DbWorkspaceMirrorContextValue,
@@ -161,6 +164,43 @@ import { connectionNodeId } from "./schemaTreeExpanded";
 type DbModuleTab = "query" | "transfer";
 const DB_MODULE_TABS: DbModuleTab[] = ["query", "transfer"];
 const EMPTY_DOCKED_DATABASE_TABS: string[] = [];
+
+function tabMatchesTableSelection(
+  tab: DbWorkspaceTab,
+  connId: string,
+  dbName: string,
+  tableName: string,
+): boolean {
+  return (
+    tab.kind === "table" &&
+    tab.connId === connId &&
+    tab.dbName === dbName &&
+    tab.tableName === tableName
+  );
+}
+
+function tabMatchesDatabaseSelection(
+  tab: DbWorkspaceTab,
+  connId: string,
+  dbName: string,
+  isRedis: boolean,
+): boolean {
+  if (isRedis) {
+    return tab.kind === "redis-query" && tab.connId === connId && tab.dbName === dbName;
+  }
+  return tab.kind === "database" && tab.connId === connId && tab.dbName === dbName;
+}
+
+function tabMatchesConnectionSelection(
+  tab: DbWorkspaceTab,
+  connId: string,
+  isRedis: boolean,
+): boolean {
+  if (isRedis) {
+    return tab.kind === "redis-query" && tab.connId === connId && !tab.dbName;
+  }
+  return tab.kind === "connection" && tab.connId === connId;
+}
 
 function restoreSqlTabStateFromSnapshot(snap: DbSqlTabStateSnapshot): SqlTabState {
   return {
@@ -372,6 +412,10 @@ export function DatabasePanel() {
   const [connectionsLoading, setConnectionsLoading] = useState(true);
   const [activeConnId, setActiveConnId] = useState<string | null>(null);
 
+  const setActiveConnIdIfChanged = useCallback((connId: string | null) => {
+    setActiveConnId((prev) => (prev === connId ? prev : connId));
+  }, []);
+
   const setSqlTabStates = useDbWorkspaceTabStore((state) => state.setSqlTabStates);
   const setTablePreviews = useDbWorkspaceTabStore((state) => state.setTablePreviews);
   const setTableColumnMeta = useDbWorkspaceTabStore((state) => state.setTableColumnMeta);
@@ -475,15 +519,15 @@ export function DatabasePanel() {
 
   const syncConnForTabId = useCallback((tabId: string) => {
     if (!tabId) {
-      setActiveConnId(null);
+      setActiveConnIdIfChanged(null);
       return;
     }
     const tab = workspaceTabsRef.current.find((item) => item.id === tabId);
     const connId = resolveConnIdForWorkspaceTab(tab, useDbWorkspaceTabStore.getState());
     if (connId) {
-      setActiveConnId(connId);
+      setActiveConnIdIfChanged(connId);
     }
-  }, []);
+  }, [setActiveConnIdIfChanged]);
 
   const activateWorkspaceTab = useCallback(
     (tabId: string) => {
@@ -491,6 +535,88 @@ export function DatabasePanel() {
       syncConnForTabId(tabId);
     },
     [syncConnForTabId],
+  );
+
+  const clearPreviewTabSlotData = useCallback(
+    (tabId: string) => {
+      removeTabWorkspaceData(tabId);
+      setTableDesignerStates((prev) => {
+        if (!(tabId in prev)) {
+          return prev;
+        }
+        const next = { ...prev };
+        delete next[tabId];
+        return next;
+      });
+    },
+    [removeTabWorkspaceData],
+  );
+
+  const promotePreviewTab = useCallback(
+    (tabId: string) => {
+      flushSync(() => {
+        setWorkspaceTabs((prev) =>
+          prev.map((tab) => (tab.id === tabId ? { ...tab, preview: undefined } : tab)),
+        );
+      });
+      patchDockTabPreviewMeta(tabId, false);
+    },
+    [setWorkspaceTabs],
+  );
+
+  const handleDockTabDoubleClick = useCallback(
+    (tabId: string) => {
+      const tab = workspaceTabsRef.current.find((item) => item.id === tabId);
+      if (!tab?.preview) {
+        return;
+      }
+      promotePreviewTab(tabId);
+      activateWorkspaceTab(tabId);
+    },
+    [promotePreviewTab, activateWorkspaceTab],
+  );
+
+  const replacePreviewDockTab = useCallback(
+    (previewTabId: string, nextTab: DbWorkspaceTab) => {
+      const prevTab = workspaceTabsRef.current.find((tab) => tab.id === previewTabId);
+      const inPlaceTableSwap = prevTab?.kind === "table" && nextTab.kind === "table";
+
+      if (inPlaceTableSwap) {
+        setTabDirtyRows((prev) => {
+          if (!(previewTabId in prev)) {
+            return prev;
+          }
+          const next = { ...prev };
+          delete next[previewTabId];
+          return next;
+        });
+        setCommittingTabs((prev) => {
+          if (!prev.has(previewTabId)) {
+            return prev;
+          }
+          const next = new Set(prev);
+          next.delete(previewTabId);
+          return next;
+        });
+      } else {
+        clearPreviewTabSlotData(previewTabId);
+      }
+      patchDockTabPreviewMeta(previewTabId, true);
+      setWorkspaceTabs((prev) =>
+        prev.map((tab) =>
+          tab.id === previewTabId ? { ...nextTab, id: previewTabId, preview: true } : tab,
+        ),
+      );
+      activateWorkspaceTab(previewTabId);
+      return previewTabId;
+    },
+    [
+      clearPreviewTabSlotData,
+      setWorkspaceTabs,
+      activateWorkspaceTab,
+      setTabDirtyRows,
+      setCommittingTabs,
+    ],
   );
 
   const activeGroupNameFromStore = useMemo(
@@ -681,6 +807,7 @@ export function DatabasePanel() {
       const session = sanitizeWorkspaceSession(useDbWorkspaceSessionStore.getState().session);
       if (!session) {
         applyDefaultWorkspaceSession(setWorkspaceTabs, activateWorkspaceTab);
+        useDbDockLayoutStore.getState().setSavedLayout(null);
         setWorkspaceInitialized(true);
         return;
       }
@@ -738,25 +865,27 @@ export function DatabasePanel() {
     }
     const persist = () => {
       const tabs = workspaceTabsRef.current;
-      if (tabs.length === 0) {
+      const moduleTabs = tabs.filter(isModuleDockTab);
+      if (moduleTabs.length === 0) {
+        useDbDockLayoutStore.getState().setSavedLayout(null);
         schedulePersistWorkspaceSession(null);
+        flushPersistWorkspaceSession();
         return;
       }
       const tabState = useDbWorkspaceTabStore.getState();
-      schedulePersistWorkspaceSession(
-        buildWorkspaceSessionSnapshot({
-          tabs,
-          activeTabId: activeWorkspaceTabIdRef.current,
-          sqlTabStates: tabState.sqlTabStates,
-          tablePreviews: tabState.tablePreviews,
-          tabModes: tabState.tabModes,
-          tableDesignerStates: tableDesignerStatesRef.current,
-        }),
-      );
+      const snapshot = buildWorkspaceSessionSnapshot({
+        tabs,
+        activeTabId: activeWorkspaceTabIdRef.current,
+        sqlTabStates: tabState.sqlTabStates,
+        tablePreviews: tabState.tablePreviews,
+        tabModes: tabState.tabModes,
+        tableDesignerStates: tableDesignerStatesRef.current,
+      });
+      schedulePersistWorkspaceSession(snapshot.tabs.length > 0 ? snapshot : null);
     };
     persist();
     return useDbWorkspaceTabStore.subscribe(persist);
-  }, [workspaceInitialized]);
+  }, [workspaceInitialized, workspaceTabs]);
 
   useEffect(() => {
     const flush = () => flushPersistWorkspaceSession();
@@ -1113,8 +1242,9 @@ export function DatabasePanel() {
     async (tabId: string, connection: DbConnectionConfig, dbName: string, tableName: string) => {
       const connForSchema = { ...connection, database: dbName };
       const defaultState = createDefaultTablePreviewState();
+      const pageSize =
+        useDbWorkspaceTabStore.getState().tablePreviews[tabId]?.pageSize ?? defaultState.pageSize;
 
-      // 1) 查询总数
       setTablePreviews((prevMap) => ({
         ...prevMap,
         [tabId]: {
@@ -1126,35 +1256,55 @@ export function DatabasePanel() {
           error: null,
         },
       }));
-      let totalRows = 0;
+
+      if (connection.db_type !== "redis") {
+        const cachedColumns = getCachedTableColumns(
+          useDbSchemaCacheStore.getState().snapshot,
+          connection.id,
+          dbName,
+          tableName,
+        );
+        if (cachedColumns?.length) {
+          setTableColumnMeta((prevMeta) => {
+            if (prevMeta[tabId]?.length) {
+              return prevMeta;
+            }
+            return { ...prevMeta, [tabId]: cachedColumns };
+          });
+        } else {
+          const existingMeta = useDbWorkspaceTabStore.getState().tableColumnMeta[tabId];
+          if (!existingMeta?.length) {
+            void introspectTable(connection, dbName, tableName)
+              .then((schema) => {
+                setTableColumnMeta((prevMeta) => {
+                  if (prevMeta[tabId]?.length) {
+                    return prevMeta;
+                  }
+                  return { ...prevMeta, [tabId]: schema.columns };
+                });
+              })
+              .catch(() => {});
+          }
+        }
+      }
+
+      const countPromise = countTable(connForSchema, tableName, dbName).catch(() => null);
+
       try {
-        totalRows = await countTable(connForSchema, tableName, dbName);
-      } catch (e) {
+        const data = await previewTable(connForSchema, tableName, pageSize, 0);
+        const rowCount = data.rows.length;
+        const estimatedTotal = estimateTablePreviewTotalRows(0, pageSize, rowCount);
         setTablePreviews((prevMap) => ({
           ...prevMap,
           [tabId]: {
             ...(prevMap[tabId] ?? defaultState),
             loading: false,
-            error: typeof e === "string" ? e : String(e),
+            error: null,
+            data,
+            totalRows: estimatedTotal,
+            page: 0,
+            pageSize,
           },
-        }));
-        return;
-      }
-
-      // 2) 查询当前页数据
-      const pageSize = useDbWorkspaceTabStore.getState().tablePreviews[tabId]?.pageSize ?? defaultState.pageSize;
-      if (connection.db_type !== "redis") {
-        void introspectTable(connection, dbName, tableName)
-          .then((schema) => {
-            setTableColumnMeta((prevMeta) => ({ ...prevMeta, [tabId]: schema.columns }));
-          })
-          .catch(() => {});
-      }
-      try {
-        const data = await previewTable(connForSchema, tableName, pageSize, 0);
-        setTablePreviews((prevMap) => ({
-          ...prevMap,
-          [tabId]: { ...(prevMap[tabId] ?? defaultState), loading: false, error: null, data, totalRows, page: 0, pageSize },
         }));
         if (connection.db_type === "redis") {
           setTableColumnMeta((prev) => ({
@@ -1162,6 +1312,19 @@ export function DatabasePanel() {
             [tabId]: buildRedisColumnMeta(data.columns),
           }));
         }
+
+        void countPromise.then((totalRows) => {
+          if (totalRows == null) {
+            return;
+          }
+          setTablePreviews((prevMap) => {
+            const cur = prevMap[tabId];
+            if (!cur) {
+              return prevMap;
+            }
+            return { ...prevMap, [tabId]: { ...cur, totalRows } };
+          });
+        });
       } catch (e) {
         setTablePreviews((prevMap) => ({
           ...prevMap,
@@ -1173,7 +1336,7 @@ export function DatabasePanel() {
         }));
       }
     },
-    [],
+    [setTablePreviews, setTableColumnMeta],
   );
 
   const refreshTablePreview = useCallback(
@@ -1489,6 +1652,7 @@ export function DatabasePanel() {
 
       const idSet = new Set(uniqueIds);
       const tabStoreSnapshot = useDbWorkspaceTabStore.getState();
+      let closedAtSeq = Date.now();
       for (const tab of workspaceTabsRef.current) {
         if (!idSet.has(tab.id)) continue;
         pushRecentClosedPanel(
@@ -1497,6 +1661,7 @@ export function DatabasePanel() {
             sqlTabStates: tabStoreSnapshot.sqlTabStates,
             tablePreviews: tabStoreSnapshot.tablePreviews,
             tableDesignerStates: tableDesignerStatesRef.current,
+            closedAt: closedAtSeq++,
           }),
         );
       }
@@ -1536,6 +1701,13 @@ export function DatabasePanel() {
         }
         return changed ? next : prev;
       });
+
+      const remainingModuleTabs = workspaceTabsRef.current.filter(isModuleDockTab);
+      if (remainingModuleTabs.length === 0) {
+        useDbDockLayoutStore.getState().setSavedLayout(null);
+        schedulePersistWorkspaceSession(null);
+        flushPersistWorkspaceSession();
+      }
     },
     [pushRecentClosedPanel, activateWorkspaceTab, removeTabWorkspaceData],
   );
@@ -1666,19 +1838,7 @@ export function DatabasePanel() {
         }));
         const connection = connections.find((item) => item.id === tab.connId);
         if (connection) {
-          queueMicrotask(() => {
-            void loadTablePreview(tab.id, connection, tab.dbName, tab.tableName);
-            if (connection.db_type !== "redis") {
-              void introspectTable(connection, tab.dbName, tab.tableName)
-                .then((schema) => {
-                  setTableColumnMeta((prev) => ({
-                    ...prev,
-                    [tab.id]: schema.columns,
-                  }));
-                })
-                .catch(() => {});
-            }
-          });
+          void loadTablePreview(tab.id, connection, tab.dbName, tab.tableName);
         }
       }
 
@@ -2336,20 +2496,56 @@ export function DatabasePanel() {
   );
 
   const handleSelectTable = useCallback(
-    (selection: SchemaTableSelection) => {
-      setActiveConnId(selection.connId);
+    (selection: SchemaTableSelection, mode: SchemaDockOpenMode = "preview") => {
+      setActiveConnIdIfChanged(selection.connId);
 
-      const existingTabId = findTabIdForTable(
-        workspaceTabsRef.current.filter(isModuleDockTab),
-        selection.connId,
-        selection.dbName,
-        selection.tableName,
-      );
+      const moduleTabs = workspaceTabsRef.current.filter(isModuleDockTab);
+      const { connId, dbName, tableName, connection } = selection;
+
+      const warmColumnMetaFromCache = (tabId: string) => {
+        if (connection.db_type === "redis") {
+          return false;
+        }
+        const columns = getCachedTableColumns(
+          useDbSchemaCacheStore.getState().snapshot,
+          connId,
+          dbName,
+          tableName,
+        );
+        if (!columns?.length) {
+          return false;
+        }
+        setTableColumnMeta((prev) => {
+          if (prev[tabId]?.length) {
+            return prev;
+          }
+          return { ...prev, [tabId]: columns };
+        });
+        return true;
+      };
+
+      const ensureTablePreview = (tabId: string) => {
+        warmColumnMetaFromCache(tabId);
+        setTablePreviews((prev) => ({
+          ...prev,
+          [tabId]: {
+            ...createDefaultTablePreviewState(),
+            loading: true,
+            connId,
+            dbName,
+            tableName,
+          },
+        }));
+        void loadTablePreview(tabId, connection, dbName, tableName);
+      };
+
+      const existingTabId = findTabIdForTable(moduleTabs, connId, dbName, tableName);
       if (existingTabId) {
         activateWorkspaceTab(existingTabId);
-        if (selection.connection.db_type !== "redis") {
-          queueMicrotask(() => {
-            void introspectTable(selection.connection, selection.dbName, selection.tableName)
+        if (connection.db_type !== "redis") {
+          const warmed = warmColumnMetaFromCache(existingTabId);
+          if (!warmed) {
+            void introspectTable(connection, dbName, tableName)
               .then((schema) => {
                 setTableColumnMeta((prev) => {
                   if (prev[existingTabId]?.length) return prev;
@@ -2357,52 +2553,61 @@ export function DatabasePanel() {
                 });
               })
               .catch(() => {});
-          });
+          }
         }
         return;
       }
 
-      const tabId = makeTableTabId();
-      const newTab: TablePreviewWorkspaceTab = {
-        id: tabId,
+      const previewTab = findPreviewDockTab(moduleTabs);
+      const tabTemplate: TablePreviewWorkspaceTab = {
+        id: "",
         kind: "table",
-        label: makeTableTabLabel(selection.dbName, selection.tableName),
-        connId: selection.connId,
-        dbName: selection.dbName,
-        tableName: selection.tableName,
+        label: makeTableTabLabel(dbName, tableName),
+        connId,
+        dbName,
+        tableName,
       };
 
-      setWorkspaceTabs((prev) => [...prev, newTab]);
-      activateWorkspaceTab(tabId);
-
-      setTablePreviews((prev) => ({
-        ...prev,
-        [tabId]: {
-          ...createDefaultTablePreviewState(),
-          loading: true,
-          connId: selection.connId,
-          dbName: selection.dbName,
-          tableName: selection.tableName,
-        },
-      }));
-
-      queueMicrotask(() => {
-        void loadTablePreview(
-          tabId,
-          selection.connection,
-          selection.dbName,
-          selection.tableName,
-        );
-        if (selection.connection.db_type !== "redis") {
-          void introspectTable(selection.connection, selection.dbName, selection.tableName)
-            .then((schema) => {
-              setTableColumnMeta((prev) => ({ ...prev, [tabId]: schema.columns }));
-            })
-            .catch(() => {});
+      if (mode === "permanent") {
+        if (previewTab && tabMatchesTableSelection(previewTab, connId, dbName, tableName)) {
+          promotePreviewTab(previewTab.id);
+          activateWorkspaceTab(previewTab.id);
+          return;
         }
-      });
+
+        const tabId = makeTableTabId();
+        setWorkspaceTabs((prev) => [...prev, { ...tabTemplate, id: tabId }]);
+        activateWorkspaceTab(tabId);
+        ensureTablePreview(tabId);
+        return;
+      }
+
+      if (previewTab && tabMatchesTableSelection(previewTab, connId, dbName, tableName)) {
+        activateWorkspaceTab(previewTab.id);
+        return;
+      }
+
+      if (previewTab) {
+        const tabId = replacePreviewDockTab(previewTab.id, tabTemplate);
+        ensureTablePreview(tabId);
+        return;
+      }
+
+      const tabId = makeTableTabId();
+      patchDockTabPreviewMeta(tabId, true);
+      setWorkspaceTabs((prev) => [...prev, { ...tabTemplate, id: tabId, preview: true }]);
+      activateWorkspaceTab(tabId);
+      ensureTablePreview(tabId);
     },
-    [loadTablePreview, activateWorkspaceTab],
+    [
+      loadTablePreview,
+      activateWorkspaceTab,
+      promotePreviewTab,
+      replacePreviewDockTab,
+      setActiveConnIdIfChanged,
+      setTableColumnMeta,
+      setTablePreviews,
+    ],
   );
 
   const activeSqlSidebarSeed = useDbWorkspaceTabStore(
@@ -2471,55 +2676,72 @@ export function DatabasePanel() {
   }, [activeWorkspaceTab, activeSqlSidebarSeed]);
 
   const handleSelectDatabase = useCallback(
-    (selection: SchemaDatabaseSelection) => {
-      setActiveConnId(selection.connId);
+    (selection: SchemaDatabaseSelection, mode: SchemaDockOpenMode = "preview") => {
+      setActiveConnIdIfChanged(selection.connId);
+      const moduleTabs = workspaceTabsRef.current.filter(isModuleDockTab);
+      const { connId, dbName, connection } = selection;
+      const isRedis = isRedisConnection(connection);
 
-      if (isRedisConnection(selection.connection)) {
-        const existingTabId = findTabIdForRedisQuery(
-          workspaceTabsRef.current,
-          selection.connId,
-          selection.dbName,
-        );
-        if (existingTabId) {
-          activateWorkspaceTab(existingTabId);
-          return;
-        }
-
-        const tabId = makeRedisQueryTabId();
-        const tab: RedisQueryWorkspaceTab = {
-          id: tabId,
-          kind: "redis-query",
-          label: `DB ${selection.dbName}`,
-          connId: selection.connId,
-          dbName: selection.dbName,
-        };
-        setWorkspaceTabs((prev) => [...prev, tab]);
-        activateWorkspaceTab(tabId);
-        return;
-      }
-
-      const existingTabId = findTabIdForDatabase(
-        workspaceTabsRef.current,
-        selection.connId,
-        selection.dbName,
-      );
+      const existingTabId = isRedis
+        ? findTabIdForRedisQuery(moduleTabs, connId, dbName)
+        : findTabIdForDatabase(moduleTabs, connId, dbName);
       if (existingTabId) {
         activateWorkspaceTab(existingTabId);
         return;
       }
 
-      const tabId = makeDatabaseTabId();
-      const tab: DatabaseListWorkspaceTab = {
-        id: tabId,
-        kind: "database",
-        label: selection.dbName,
-        connId: selection.connId,
-        dbName: selection.dbName,
-      };
-      setWorkspaceTabs((prev) => [...prev, tab]);
+      const previewTab = findPreviewDockTab(moduleTabs);
+      const tabTemplate: DbWorkspaceTab = isRedis
+        ? {
+            id: "",
+            kind: "redis-query",
+            label: `DB ${dbName}`,
+            connId,
+            dbName,
+          }
+        : {
+            id: "",
+            kind: "database",
+            label: dbName,
+            connId,
+            dbName,
+          };
+
+      const matchesSelection = (tab: DbWorkspaceTab) =>
+        tabMatchesDatabaseSelection(tab, connId, dbName, isRedis);
+
+      if (mode === "permanent") {
+        if (previewTab && matchesSelection(previewTab)) {
+          promotePreviewTab(previewTab.id);
+          activateWorkspaceTab(previewTab.id);
+          return;
+        }
+
+        const tabId = isRedis ? makeRedisQueryTabId() : makeDatabaseTabId();
+        setWorkspaceTabs((prev) => [...prev, { ...tabTemplate, id: tabId } as DbWorkspaceTab]);
+        activateWorkspaceTab(tabId);
+        return;
+      }
+
+      if (previewTab && matchesSelection(previewTab)) {
+        activateWorkspaceTab(previewTab.id);
+        return;
+      }
+
+      if (previewTab) {
+        replacePreviewDockTab(previewTab.id, tabTemplate);
+        return;
+      }
+
+      const tabId = isRedis ? makeRedisQueryTabId() : makeDatabaseTabId();
+      patchDockTabPreviewMeta(tabId, true);
+      setWorkspaceTabs((prev) => [
+        ...prev,
+        { ...tabTemplate, id: tabId, preview: true } as DbWorkspaceTab,
+      ]);
       activateWorkspaceTab(tabId);
     },
-    [activateWorkspaceTab],
+    [activateWorkspaceTab, promotePreviewTab, replacePreviewDockTab, setActiveConnIdIfChanged],
   );
 
   const openSqlFile = useCallback(
@@ -2766,30 +2988,61 @@ export function DatabasePanel() {
   }, [reopenRecentClosedPanel, activateWorkspaceTab, setTabModes]);
 
   const openRedisQueryTab = useCallback(
-    (connId: string, dbName: string | undefined, label: string) => {
-      const existingTabId = findTabIdForRedisQuery(workspaceTabs, connId, dbName);
+    (connId: string, dbName: string | undefined, label: string, mode: SchemaDockOpenMode = "preview") => {
+      const moduleTabs = workspaceTabsRef.current.filter(isModuleDockTab);
+      const existingTabId = findTabIdForRedisQuery(moduleTabs, connId, dbName);
       if (existingTabId) {
         activateWorkspaceTab(existingTabId);
         return;
       }
 
-      const tabId = makeRedisQueryTabId();
-      const tab: RedisQueryWorkspaceTab = {
-        id: tabId,
+      const previewTab = findPreviewDockTab(moduleTabs);
+      const tabTemplate: RedisQueryWorkspaceTab = {
+        id: "",
         kind: "redis-query",
         label,
         connId,
         dbName,
       };
-      setWorkspaceTabs((prev) => [...prev, tab]);
+      const matchesSelection = (tab: DbWorkspaceTab) =>
+        dbName === undefined
+          ? tabMatchesConnectionSelection(tab, connId, true)
+          : tabMatchesDatabaseSelection(tab, connId, dbName, true);
+
+      if (mode === "permanent") {
+        if (previewTab && matchesSelection(previewTab)) {
+          promotePreviewTab(previewTab.id);
+          activateWorkspaceTab(previewTab.id);
+          return;
+        }
+
+        const tabId = makeRedisQueryTabId();
+        setWorkspaceTabs((prev) => [...prev, { ...tabTemplate, id: tabId }]);
+        activateWorkspaceTab(tabId);
+        return;
+      }
+
+      if (previewTab && matchesSelection(previewTab)) {
+        activateWorkspaceTab(previewTab.id);
+        return;
+      }
+
+      if (previewTab) {
+        replacePreviewDockTab(previewTab.id, tabTemplate);
+        return;
+      }
+
+      const tabId = makeRedisQueryTabId();
+      patchDockTabPreviewMeta(tabId, true);
+      setWorkspaceTabs((prev) => [...prev, { ...tabTemplate, id: tabId, preview: true }]);
       activateWorkspaceTab(tabId);
     },
-    [workspaceTabs],
+    [activateWorkspaceTab, promotePreviewTab, replacePreviewDockTab],
   );
 
   const handleSelectConnection = useCallback(
-    (connId: string) => {
-      setActiveConnId(connId);
+    (connId: string, mode: SchemaDockOpenMode = "preview") => {
+      setActiveConnIdIfChanged(connId);
       const conn = connections.find((item) => item.id === connId);
       if (!conn) return;
       const normalized = normalizeConnectionGroup(conn.group);
@@ -2799,27 +3052,56 @@ export function DatabasePanel() {
       }
 
       if (isRedisConnection(conn)) {
-        openRedisQueryTab(connId, undefined, conn.name);
+        openRedisQueryTab(connId, undefined, conn.name, mode);
         return;
       }
 
-      const existingTabId = findTabIdForConnection(workspaceTabs, connId);
+      const moduleTabs = workspaceTabsRef.current.filter(isModuleDockTab);
+      const existingTabId = findTabIdForConnection(moduleTabs, connId);
       if (existingTabId) {
         activateWorkspaceTab(existingTabId);
         return;
       }
 
-      const tabId = makeConnectionInfoTabId();
-      const tab: ConnectionInfoWorkspaceTab = {
-        id: tabId,
+      const previewTab = findPreviewDockTab(moduleTabs);
+      const tabTemplate: ConnectionInfoWorkspaceTab = {
+        id: "",
         kind: "connection",
         label: conn.name,
         connId,
       };
-      setWorkspaceTabs((prev) => [...prev, tab]);
+      const matchesSelection = (tab: DbWorkspaceTab) =>
+        tabMatchesConnectionSelection(tab, connId, false);
+
+      if (mode === "permanent") {
+        if (previewTab && matchesSelection(previewTab)) {
+          promotePreviewTab(previewTab.id);
+          activateWorkspaceTab(previewTab.id);
+          return;
+        }
+
+        const tabId = makeConnectionInfoTabId();
+        setWorkspaceTabs((prev) => [...prev, { ...tabTemplate, id: tabId }]);
+        activateWorkspaceTab(tabId);
+        return;
+      }
+
+      if (previewTab && matchesSelection(previewTab)) {
+        activateWorkspaceTab(previewTab.id);
+        return;
+      }
+
+      if (previewTab) {
+        replacePreviewDockTab(previewTab.id, tabTemplate);
+        return;
+      }
+
+      const tabId = makeConnectionInfoTabId();
+      patchDockTabPreviewMeta(tabId, true);
+      setWorkspaceTabs((prev) => [...prev, { ...tabTemplate, id: tabId, preview: true }]);
       activateWorkspaceTab(tabId);
     },
-    [connections, groups, setActiveConnId, setActiveGroupId, workspaceTabs, openRedisQueryTab],
+    [connections, groups, setActiveGroupId, openRedisQueryTab, activateWorkspaceTab, promotePreviewTab, replacePreviewDockTab, setActiveConnIdIfChanged],
   );
 
   const runQuery = useCallback(async (
@@ -3144,6 +3426,7 @@ export function DatabasePanel() {
       workspaceTabs
         .filter((tab) => !tab.workspaceOnly)
         .map((tab) => {
+          const preview = Boolean(tab.preview);
           if (tab.kind === "database") {
             return {
               id: tab.id,
@@ -3152,6 +3435,7 @@ export function DatabasePanel() {
               icon: "database" as const,
               tooltip: tab.label,
               closable: true,
+              preview,
             };
           }
           if (tab.kind === "connection") {
@@ -3162,6 +3446,7 @@ export function DatabasePanel() {
               icon: "database" as const,
               tooltip: t("database.connectionInfo.subtitle"),
               closable: true,
+              preview,
             };
           }
           if (tab.kind === "redis-query") {
@@ -3172,6 +3457,7 @@ export function DatabasePanel() {
               icon: "database" as const,
               tooltip: t("database.redisQuery.search"),
               closable: true,
+              preview,
             };
           }
           if (tab.kind === "designer") {
@@ -3186,6 +3472,7 @@ export function DatabasePanel() {
               icon: "table" as const,
               tooltip: t("database.tableDesigner.tabTooltip", { label: tab.label }),
               closable: true,
+              preview,
             };
           }
           const isTableTab = tablePreviewTabIds.has(tab.id);
@@ -3201,6 +3488,7 @@ export function DatabasePanel() {
             icon: isTableTab ? ("table" as const) : ("sql" as const),
             tooltip: tab.label,
             closable: true,
+            preview,
           };
         }),
     [workspaceTabs, tablePreviewTabIds, dirtySqlWorkspaceTabIds, isDesignerTabDirty, t],
@@ -3212,7 +3500,7 @@ export function DatabasePanel() {
         .sort((a, b) => b.closedAt - a.closedAt)
         .slice(0, 5)
         .map((entry) => ({
-          id: String(entry.closedAt),
+          id: entry.tab.id,
           label: entry.tab.label,
           meta: new Date(entry.closedAt).toLocaleString(),
           onClick: () => reopenRecentClosedPanel(entry),
@@ -3495,6 +3783,7 @@ export function DatabasePanel() {
             softRefreshKey={activeWorkspaceTabId}
             panelContentKeysByTab={panelContentKeysByTab}
             onTabContextMenu={handleDockTabContextMenu}
+            onTabDoubleClick={handleDockTabDoubleClick}
             recentClosedActionItems={recentClosedActionItems}
             emptyPrompt={t("database.workspace.emptyTabs")}
             recentClosedTitle={t("database.workspace.recentClosed")}

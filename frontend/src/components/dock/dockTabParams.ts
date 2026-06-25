@@ -2,7 +2,7 @@ import type { DockviewApi } from "dockview-react";
 import type { DockableTab } from "./dockableTab";
 
 export function tabMetaRev(tab: DockableTab): string {
-  return `${tab.type ?? ""}|${tab.dirty ? 1 : 0}|${tab.saved ? 1 : 0}`;
+  return `${tab.type ?? ""}|${tab.dirty ? 1 : 0}|${tab.saved ? 1 : 0}|${tab.preview ? 1 : 0}`;
 }
 
 export function tabParamsFromDockableTab(tab: DockableTab) {
@@ -15,6 +15,7 @@ export function tabParamsFromDockableTab(tab: DockableTab) {
     type: tab.type,
     dirty: tab.dirty,
     saved: tab.saved,
+    preview: Boolean(tab.preview),
     tabMetaRev: tabMetaRev(tab),
   };
 }
@@ -38,6 +39,8 @@ export function syncPanelTabParams(api: DockviewApi, tab: DockableTab): void {
     current?.icon !== params.icon ||
     current?.tooltip !== params.tooltip ||
     current?.status !== params.status ||
+    Boolean(current?.preview) !== Boolean(tab.preview) ||
+    current?.tabMetaRev !== params.tabMetaRev ||
     fileMetaChanged ||
     (tab.type !== "file" &&
       (current?.type !== params.type ||

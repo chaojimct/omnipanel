@@ -1,3 +1,5 @@
+/** Schema 单击打开的临时预览 Tab；双击或编辑后变为常驻（无 preview）。 */
+export type SchemaDockOpenMode = "preview" | "permanent";
 
 export type SqlWorkspaceTab = {
   id: string;
@@ -7,6 +9,8 @@ export type SqlWorkspaceTab = {
   sqlFileId?: string;
   /** 是否仅在底部工作区中显示（例如移动到工作区后） */
   workspaceOnly?: boolean;
+  /** Schema 单击预览 Tab，标题斜体显示，下次单击其他节点时内容被替换 */
+  preview?: boolean;
 };
 
 export type TablePreviewWorkspaceTab = {
@@ -17,6 +21,7 @@ export type TablePreviewWorkspaceTab = {
   dbName: string;
   tableName: string;
   workspaceOnly?: boolean;
+  preview?: boolean;
 };
 
 export type DatabaseListWorkspaceTab = {
@@ -26,6 +31,7 @@ export type DatabaseListWorkspaceTab = {
   connId: string;
   dbName: string;
   workspaceOnly?: boolean;
+  preview?: boolean;
 };
 
 export type TableDesignerWorkspaceTab = {
@@ -36,6 +42,7 @@ export type TableDesignerWorkspaceTab = {
   dbName: string;
   tableName: string;
   workspaceOnly?: boolean;
+  preview?: boolean;
 };
 
 export type ConnectionInfoWorkspaceTab = {
@@ -44,6 +51,7 @@ export type ConnectionInfoWorkspaceTab = {
   label: string;
   connId: string;
   workspaceOnly?: boolean;
+  preview?: boolean;
 };
 
 export type RedisQueryWorkspaceTab = {
@@ -54,6 +62,7 @@ export type RedisQueryWorkspaceTab = {
   /** 从侧栏点选具体库时锁定；点连接时为空 */
   dbName?: string;
   workspaceOnly?: boolean;
+  preview?: boolean;
 };
 
 export type DbWorkspaceTab =
@@ -91,6 +100,16 @@ export function isRedisQueryTab(tab: DbWorkspaceTab): tab is RedisQueryWorkspace
 /** 模块功能区 Dock 中可见的 Tab（排除已移入工程工作区的 Tab） */
 export function isModuleDockTab(tab: DbWorkspaceTab): boolean {
   return !tab.workspaceOnly;
+}
+
+/** 常驻 Dock Tab（非 Schema 预览 Tab） */
+export function isPermanentModuleDockTab(tab: DbWorkspaceTab): boolean {
+  return isModuleDockTab(tab) && !tab.preview;
+}
+
+/** 当前唯一的 Schema 预览 Tab（单击打开、可被下一次单击替换） */
+export function findPreviewDockTab(tabs: DbWorkspaceTab[]): DbWorkspaceTab | undefined {
+  return tabs.find((tab) => isModuleDockTab(tab) && tab.preview);
 }
 
 export function makeSqlTabId(): string {
@@ -158,7 +177,7 @@ export function findTabIdForDesigner(
 ): string | undefined {
   return tabs.find(
     (tab) =>
-      isModuleDockTab(tab) &&
+      isPermanentModuleDockTab(tab) &&
       tab.kind === "designer" &&
       tab.connId === connId &&
       tab.dbName === dbName &&
@@ -184,7 +203,7 @@ export function findTabIdForDatabase(
 ): string | undefined {
   return tabs.find(
     (tab) =>
-      isModuleDockTab(tab) &&
+      isPermanentModuleDockTab(tab) &&
       tab.kind === "database" &&
       tab.connId === connId &&
       tab.dbName === dbName,
@@ -209,7 +228,7 @@ export function findTabIdForRedisQuery(
 ): string | undefined {
   return tabs.find(
     (tab) =>
-      isModuleDockTab(tab) &&
+      isPermanentModuleDockTab(tab) &&
       tab.kind === "redis-query" &&
       tab.connId === connId &&
       (tab.dbName ?? "") === (dbName ?? ""),
@@ -225,7 +244,7 @@ export function findTabIdForTable(
 ): string | undefined {
   return tabs.find(
     (tab) =>
-      isModuleDockTab(tab) &&
+      isPermanentModuleDockTab(tab) &&
       tab.kind === "table" &&
       tab.connId === connId &&
       tab.dbName === dbName &&

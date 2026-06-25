@@ -1,4 +1,4 @@
-import type { DbConnectionConfig } from "./api";
+import type { DbColumnMeta, DbConnectionConfig } from "./api";
 import type { SchemaCacheSnapshot } from "./schemaCache";
 
 export interface CachedTableColumn {
@@ -228,6 +228,20 @@ export function getCachedTableNames(
 ): string[] {
   const db = snapshot.connections[connId]?.databases.find((entry) => entry.name === dbName);
   return db?.tables.map((table) => table.name) ?? [];
+}
+
+export function getCachedTableColumns(
+  snapshot: SchemaCacheSnapshot,
+  connId: string,
+  dbName: string,
+  tableName: string,
+): DbColumnMeta[] | null {
+  const db = snapshot.connections[connId]?.databases.find((entry) => entry.name === dbName);
+  const table = db?.tables.find((entry) => entry.name === tableName);
+  if (!table?.columns?.length) {
+    return null;
+  }
+  return table.columns;
 }
 
 export function getCachedTableCommentMap(

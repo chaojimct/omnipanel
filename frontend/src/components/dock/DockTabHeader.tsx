@@ -4,6 +4,7 @@ import { DockTabChrome } from "./DockTabChrome";
 import { DockTabIcon, type DockTabIconKind } from "./DockTabIcon";
 import type { DockTabPageType } from "./dockableTab";
 import { useDockTabLiveMeta } from "./dockTabLiveMeta";
+import { useDockTabHeaderRuntime } from "./dockTabHeaderRuntime";
 
 interface PanelParams {
   tabId: string;
@@ -13,6 +14,7 @@ interface PanelParams {
   type?: DockTabPageType;
   dirty?: boolean;
   saved?: boolean;
+  preview?: boolean;
 }
 
 interface DockTabHeaderProps extends IDockviewPanelHeaderProps<PanelParams> {
@@ -40,8 +42,22 @@ export function DockTabHeader({
     pageType === "file"
       ? !dirty && Boolean(liveMeta.saved ?? props.params?.saved)
       : undefined;
+  const preview =
+    liveMeta.rev > 0
+      ? Boolean(liveMeta.preview)
+      : Boolean(props.params?.preview);
   const headerPosition = props.api.group.api.getHeaderPosition();
   const isSide = headerPosition === "left" || headerPosition === "right";
+  const runtime = useDockTabHeaderRuntime();
+
+  const handleDoubleClick = (event: ReactMouseEvent) => {
+    if (!preview) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    runtime?.onTabDoubleClickRef.current?.(tabId);
+  };
 
   const statusMark = dirty ? (
     <span className="dock-tab-dirty" aria-label="未保存" />
@@ -54,13 +70,20 @@ export function DockTabHeader({
       {...props}
       closable={closable}
       tooltip={tooltip}
+      isPreview={preview}
       onContextMenu={onContextMenu}
       onPointerUp={onPointerUp}
+      onDoubleClick={handleDoubleClick}
     >
       {icon ? <DockTabIcon kind={icon} /> : null}
       {!isSide ? (
         <>
-          <span className="dock-tab-label">{label}</span>
+          <span
+            className={`dock-tab-label${preview ? " dock-tab-label--preview" : ""}`}
+            style={preview ? { fontStyle: "italic" } : { fontStyle: "normal" }}
+          >
+            {label}
+          </span>
           {statusMark}
         </>
       ) : statusMark ? (
