@@ -82,6 +82,33 @@ jobs:
           console.log(`Synced app version to ${v}`);
           EOF
 
+      - name: Extract release notes from CHANGELOG
+        id: changelog
+        shell: bash
+        run: |
+          node <<'EOF'
+          const fs = require('fs');
+          const version = process.env.VERSION;
+          const text = fs.readFileSync('CHANGELOG.md', 'utf8');
+          const escaped = version.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          const re = new RegExp(
+            `^## \\[${escaped}\\][^\\n]*\\n([\\s\\S]*?)(?=\\n---\\s*\\n|\\n## \\[|\\z)`,
+            'm',
+          );
+          const match = text.match(re);
+          if (!match) {
+            console.error(`::error::CHANGELOG.md 中未找到 ## [${version}] 段落，请先补充后再打 tag。`);
+            process.exit(1);
+          }
+          const body = match[1].trim();
+          const delimiter = 'CHANGELOG_EOF';
+          fs.appendFileSync(
+            process.env.GITHUB_OUTPUT,
+            `body<<${delimiter}\n${body}\n${delimiter}\n`,
+          );
+          console.log(`已从 CHANGELOG.md 提取 v${version} 发布说明（${body.split('\n').length} 行）`);
+          EOF
+
       - name: Prepare Tauri signing key
         shell: bash
         env:
@@ -122,7 +149,7 @@ jobs:
         with:
           tagName: ${{ github.ref_name }}
           releaseName: 'OmniPanel v${{ steps.version.outputs.version }}'
-          releaseBody: 'See the assets to download and install this version.'
+          releaseBody: ${{ steps.changelog.outputs.body }}
           releaseDraft: false
           prerelease: false
           includeUpdaterJson: true
