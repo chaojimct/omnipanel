@@ -1212,6 +1212,7 @@ export const zhCN = {
     sideTabs: {
       files: "文件",
       monitor: "系统监控",
+      rail: "工具面板",
     },
     monitor: {
       loading: "正在加载本机监控数据…",

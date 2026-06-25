@@ -86,16 +86,21 @@ export function DockTabHeader({
           </span>
           {statusMark}
         </>
-      ) : statusMark ? (
-        <span
-          className={
-            dirty
-              ? "dock-tab-dirty dock-tab-dirty--side"
-              : "dock-tab-saved dock-tab-saved--side"
-          }
-          aria-label={dirty ? "未保存" : "已保存"}
-        />
-      ) : null}
+      ) : (
+        <>
+          {!icon ? <span className="dock-tab-label">{label}</span> : null}
+          {statusMark ? (
+            <span
+              className={
+                dirty
+                  ? "dock-tab-dirty dock-tab-dirty--side"
+                  : "dock-tab-saved dock-tab-saved--side"
+              }
+              aria-label={dirty ? "未保存" : "已保存"}
+            />
+          ) : null}
+        </>
+      )}
     </DockTabChrome>
   );
 }

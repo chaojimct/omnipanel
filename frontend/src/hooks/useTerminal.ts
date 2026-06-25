@@ -20,6 +20,7 @@ import { isOpenSshHostId, openSshHostAlias } from "../lib/sshConfigHosts";
 import { createBlockId, useBlocksStore, type TerminalBlock } from "../stores/blocksStore";
 import { createTerminalOutputBatcher } from "../lib/terminalOutputBatcher";
 import { triggerAiDrawerToggle } from "./useAiDrawerShortcut";
+import { useModuleVisibility } from "../lib/moduleVisibility";
 
 const TERMINAL_THEME: ITheme = {
   background: "#1a1717",
@@ -350,6 +351,7 @@ export function useTerminal(
   options: UseTerminalOptions = {},
 ) {
   const { inputMode = "interactive", sendRef, active = true, reconnectKey = 0 } = options;
+  const { active: moduleActive } = useModuleVisibility();
   const termRef = useRef<Terminal | null>(null);
   const searchAddonRef = useRef<SearchAddon | null>(null);
   const sendCommandRef = useRef<((cmd: string) => void) | null>(null);
@@ -899,8 +901,32 @@ export function useTerminal(
       }
       rt.outputBuffer = [];
     }
-    requestAnimationFrame(() => rt.fitAddon?.fit());
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => rt.fitAddon?.fit());
+    });
   }, [suspended]);
+
+  useEffect(() => {
+    if (!moduleActive || suspended) return;
+    const rt = runtimeRef.current;
+    if (rt.container && rt.resizeObserver) {
+      rt.resizeObserver.observe(rt.container);
+    }
+    if (!termRef.current && rt.container && rt.initTerminal) {
+      const rect = rt.container.getBoundingClientRect();
+      if (rect.width > 0 && rect.height > 0) {
+        rt.initTerminal();
+      }
+    }
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        rt.fitAddon?.fit();
+        if (active && inputMode !== "external") {
+          termRef.current?.focus();
+        }
+      });
+    });
+  }, [moduleActive, active, inputMode, suspended]);
 
   useEffect(() => {
     if (!sendRef) return;
