@@ -682,24 +682,21 @@
 
     /* SSH Overview cards */
     .ssh-ov-page {
-        padding: var(--sp-4);
+        padding: 0;
         display: flex;
         flex-direction: column;
-        gap: var(--sp-4);
         flex: 1;
         min-height: 0;
         overflow: hidden;
     }
 
-    .ssh-ov-page > .ssh-ov {
-        flex: 0 0 auto;
-        padding: 0;
-        overflow: visible;
-    }
-
-    .ssh-ov-page > .proc-panel {
+    .ssh-ov-page .mon-dashboard {
         flex: 1;
         min-height: 0;
+    }
+
+    .ssh-ov-page .mon-process-section {
+        min-height: 280px;
     }
 
     .ssh-ov {
@@ -757,7 +754,7 @@
 
     .ssh-ov-cards {
         display: grid;
-        grid-template-columns: repeat(3, 1fr);
+        grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
         gap: var(--sp-4);
         flex-shrink: 0;
     }
@@ -769,7 +766,7 @@
         padding: var(--sp-5);
         display: flex;
         flex-direction: column;
-        gap: var(--sp-3);
+        gap: var(--sp-2);
         transition: border-color 0.15s, box-shadow 0.15s;
     }
 
@@ -778,10 +775,20 @@
         box-shadow: 0 0 0 1px var(--border-focus);
     }
 
+    .ssh-ov-card-top {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: var(--sp-2);
+        min-height: 0;
+    }
+
     .ssh-ov-card-head {
         display: flex;
         align-items: center;
         gap: var(--sp-3);
+        flex-shrink: 0;
+        min-width: 0;
     }
 
     .ssh-ov-card-icon {
@@ -790,6 +797,7 @@
         display: grid;
         place-items: center;
         border-radius: var(--r-md);
+        flex-shrink: 0;
     }
 
     .ssh-ov-card-label {
@@ -798,12 +806,117 @@
         text-transform: uppercase;
         letter-spacing: 0.06em;
         color: var(--meta);
+        white-space: nowrap;
+    }
+
+    .ssh-ov-card-meta {
+        flex: 1 1 auto;
+        min-width: 0;
+        max-width: 62%;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 1px;
+        text-align: right;
+    }
+
+    .ssh-ov-card-metrics {
+        flex: 1 1 auto;
+        min-width: 0;
+        max-width: 58%;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+    }
+
+    .ssh-ov-mini-metric {
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+    }
+
+    .ssh-ov-mini-metric-head {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: var(--sp-2);
+        min-width: 0;
+    }
+
+    .ssh-ov-mini-metric-label {
+        flex: 1 1 auto;
+        min-width: 0;
+        font-size: 9px;
+        font-weight: 600;
+        color: var(--meta);
+        letter-spacing: 0.03em;
+        text-transform: uppercase;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .ssh-ov-mini-metric-value {
+        flex-shrink: 0;
+        font-size: 9px;
+        font-weight: 700;
+        color: var(--fg-2);
+        font-variant-numeric: tabular-nums;
+    }
+
+    .ssh-ov-mini-metric-bar-track {
+        width: 100%;
+        height: 3px;
+        background: var(--bg-deeper);
+        border-radius: 999px;
+        overflow: hidden;
+    }
+
+    .ssh-ov-mini-metric-bar-fill {
+        height: 100%;
+        border-radius: 999px;
+        transition: width 0.35s ease;
+        opacity: 0.92;
+    }
+
+    .ssh-ov-mini-metric--muted .ssh-ov-mini-metric-label,
+    .ssh-ov-mini-metric--muted .ssh-ov-mini-metric-value {
+        color: var(--meta);
+        font-weight: 500;
+    }
+
+    .ssh-ov-card-meta-line {
+        display: block;
+        width: 100%;
+        font-size: 10px;
+        font-weight: 600;
+        line-height: 1.35;
+        color: var(--fg-2);
+        font-variant-numeric: tabular-nums;
+        letter-spacing: 0.02em;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .ssh-ov-card-meta-line:first-child {
+        color: color-mix(in oklch, var(--meta-accent, var(--accent)) 82%, var(--fg-2));
+        font-weight: 700;
+    }
+
+    .ssh-ov-card-meta-line:last-child:not(:first-child) {
+        color: var(--meta);
+        font-weight: 500;
+        font-size: 9px;
     }
 
     .ssh-ov-card-pct {
         font-size: 32px;
         font-weight: 800;
         line-height: 1;
+        font-variant-numeric: tabular-nums;
+        letter-spacing: -0.02em;
     }
 
     .ssh-ov-card-bar {
@@ -824,32 +937,9 @@
         transition: width 0.4s ease;
     }
 
+    /* 兼容旧类名，详情已迁至右上角 meta */
     .ssh-ov-card-details {
-        list-style: none;
-        margin: 0;
-        padding: 0;
-        display: flex;
-        flex-direction: column;
-        gap: var(--sp-1);
-        border-top: 1px solid var(--border-soft);
-        padding-top: var(--sp-3);
-    }
-
-    .ssh-ov-card-details li {
-        font-size: 12px;
-        color: var(--fg-2);
-        display: flex;
-        align-items: center;
-        gap: var(--sp-2);
-    }
-
-    .ssh-ov-card-details li::before {
-        content: "";
-        width: 4px;
-        height: 4px;
-        border-radius: 50%;
-        background: var(--meta);
-        flex-shrink: 0;
+        display: none;
     }
 
     .ssh-ov--compact {
@@ -878,8 +968,18 @@
         font-size: 22px;
     }
 
-    .ssh-ov--compact .ssh-ov-card-details {
-        font-size: 11px;
+    .ssh-ov--compact .ssh-ov-card-metrics {
+        max-width: 55%;
+        gap: 3px;
+    }
+
+    .ssh-ov--compact .ssh-ov-mini-metric-label,
+    .ssh-ov--compact .ssh-ov-mini-metric-value {
+        font-size: 8px;
+    }
+
+    .ssh-ov--compact .ssh-ov-mini-metric-bar-track {
+        height: 2px;
     }
 
     /* SFTP panel */

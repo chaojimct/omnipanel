@@ -1,36 +1,27 @@
 import { useEffect } from "react";
 import { create } from "zustand";
 import { listen } from "@tauri-apps/api/event";
+import type {
+  CpuStats,
+  DiskDeviceStats,
+  DiskStats,
+  GpuDeviceStats,
+  GpuStats,
+  HostSystemStats,
+  MemoryStats,
+  NetworkStats,
+} from "@/ipc/bindings";
 import { useTerminalStore } from "./terminalStore";
 
-export type MemoryStats = {
-  total: number | null;
-  used: number | null;
-  available: number | null;
-};
-
-export type DiskStats = {
-  total: number | null;
-  used: number | null;
-  available: number | null;
-};
-
-export type NetworkStats = {
-  rxBytes: number | null;
-  txBytes: number | null;
-};
-
-export type HostSystemStats = {
-  hostId: string;
-  hostName: string;
-  load: string;
-  cpuCores: number;
-  cpuUsage: number | null;
-  memory: MemoryStats;
-  disk: DiskStats;
-  network: NetworkStats;
-  osInfo: string;
-  timestamp: number | null;
+export type {
+  CpuStats,
+  DiskDeviceStats,
+  DiskStats,
+  GpuDeviceStats,
+  GpuStats,
+  HostSystemStats,
+  MemoryStats,
+  NetworkStats,
 };
 
 type SshStatsState = {
@@ -138,4 +129,14 @@ export function formatUsageBytes(
 
 export function formatPercent(used: number, total: number): string {
   return formatUsagePercent(used, total);
+}
+
+/** GPU 汇总利用率（多卡平均，无数据返回 null） */
+export function aggregateGpuUtilization(gpu: GpuStats | undefined | null): number | null {
+  const devices = "devices" in (gpu ?? {}) ? (gpu as { devices: GpuDeviceStats[] }).devices : [];
+  const utils = devices
+    .map((d) => d.utilization)
+    .filter((u): u is number => u != null && !Number.isNaN(u));
+  if (utils.length === 0) return null;
+  return Math.round(utils.reduce((a, b) => a + b, 0) / utils.length);
 }

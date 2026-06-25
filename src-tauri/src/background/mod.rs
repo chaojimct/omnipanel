@@ -1,10 +1,13 @@
+pub mod gpu_local;
+pub mod local_ports;
 pub mod local_system;
 pub mod ssh_pool;
 
 use std::sync::Arc;
 
 use omnipanel_store::Storage;
-pub use ssh_pool::{HostSystemStats, PoolStatusEvent, SshHostOverview, SshPool};
+pub use ssh_pool::{PoolStatusEvent, SshHostOverview, SshPool};
+pub use omnipanel_ssh::HostSystemStats;
 
 /// Background scheduler — SSH 连接池初始化。
 pub struct BackgroundScheduler;

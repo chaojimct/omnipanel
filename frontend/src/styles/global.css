@@ -1159,7 +1159,13 @@
     box-sizing: border-box;
 }
 
-.workspace-panel-frame:has(.workspace-panel-mode-controls) .workspace-panel-dock .dv-tabs-and-actions-container {
+/* 半屏嵌入：仅为工程工作区根级顶部 tab 栏留白，避开右上角 mode-controls；
+   勿用后代选择器命中嵌套的 advance-terminal-side-dock 竖排侧栏（38px 宽加 padding 会整列空白） */
+.workspace-panel-frame:has(.workspace-panel-mode-controls)
+    .workspace-panel-dock.dockable-workspace.dock-header-top
+    > .dockable-workspace__dockview
+    .dv-groupview
+    > .dv-tabs-and-actions-container:not(.dv-groupview-header-vertical) {
     padding-right: calc(var(--shell-dv-tab-bar-h) * 3);
 }
 
@@ -3113,8 +3119,8 @@
     max-height: var(--shell-dv-tab-bar-h);
 }
 
-/* 路由未激活时保留 dock 实例，仅隐藏模块顶栏 tab（不影响嵌套 dock 如终端右侧面板） */
-.module-segment-dock--route-inactive.dockable-workspace > .dockable-workspace__dockview .dv-groupview > .dv-tabs-and-actions-container {
+/* 路由未激活时仅隐藏模块顶栏（横向 tab）；竖排侧栏 .dv-groupview-header-vertical 不受影响 */
+.module-segment-dock--route-inactive.dockable-workspace > .dockable-workspace__dockview .dv-groupview > .dv-tabs-and-actions-container:not(.dv-groupview-header-vertical) {
     display: none;
 }
 
@@ -4082,6 +4088,11 @@
     flex: 0 0 auto;
 }
 
+.advance-terminal-side-dock .dv-groupview-header-vertical .dv-pre-actions-container:empty,
+.advance-terminal-side-dock .dv-groupview-header-vertical .dv-left-actions-container:empty {
+    display: none;
+}
+
 /* 空白拖拽区 / 竖向 right-actions 纵向占位，隐藏 */
 .advance-terminal-side-dock .dv-groupview-header-vertical .dv-void-container,
 .advance-terminal-side-dock .dv-groupview-header-vertical .dv-right-actions-container {
@@ -4180,8 +4191,16 @@
     height: 100%;
     width: 100%;
     max-width: 100%;
-    gap: var(--sp-2);
     overflow: hidden;
+}
+
+.advance-terminal-monitor-stack .mon-dashboard {
+    flex: 1;
+    min-height: 0;
+}
+
+.advance-terminal-monitor-stack .mon-process-section {
+    min-height: 180px;
 }
 
 .advance-terminal-monitor-stack .ssh-ov {
@@ -4218,9 +4237,82 @@
     gap: var(--sp-2);
 }
 
+.ssh-ov-cards--4 {
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+}
+
+.proc-columns-picker {
+    position: relative;
+}
+
+.proc-columns-btn {
+    font-size: 11px;
+    padding: 2px 8px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm, 4px);
+    background: var(--bg-deeper);
+    color: var(--text);
+    cursor: pointer;
+}
+
+.proc-columns-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.proc-columns-menu {
+    position: absolute;
+    top: calc(100% + 4px);
+    right: 0;
+    z-index: 20;
+    min-width: 140px;
+    max-height: 280px;
+    overflow-y: auto;
+    padding: var(--sp-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm, 4px);
+    background: var(--bg-deeper);
+    box-shadow: var(--shadow-md, 0 4px 12px rgba(0, 0, 0, 0.15));
+}
+
+.proc-columns-item {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    font-size: 11px;
+    padding: 2px 0;
+    cursor: pointer;
+    user-select: none;
+}
+
+.proc-columns-item input {
+    margin: 0;
+}
+
+.proc-columns-reset {
+    display: block;
+    width: 100%;
+    margin-top: var(--sp-2);
+    padding: 4px 0;
+    font-size: 10px;
+    border: none;
+    border-top: 1px solid var(--border);
+    background: transparent;
+    color: var(--meta);
+    cursor: pointer;
+}
+
+.proc-columns-reset:hover {
+    color: var(--accent);
+}
+
 .advance-terminal-monitor-stack .ssh-ov-card {
     padding: var(--sp-2) var(--sp-3);
-    gap: var(--sp-2);
+    gap: var(--sp-1);
+}
+
+.advance-terminal-monitor-stack .ssh-ov-card-top {
+    gap: var(--sp-1);
 }
 
 .advance-terminal-monitor-stack .ssh-ov-card-icon {
@@ -4237,12 +4329,26 @@
     font-size: 10px;
 }
 
+.advance-terminal-monitor-stack .ssh-ov-card-metrics {
+    max-width: 62%;
+    gap: 3px;
+}
+
+.advance-terminal-monitor-stack .ssh-ov-mini-metric-label,
+.advance-terminal-monitor-stack .ssh-ov-mini-metric-value {
+    font-size: 8px;
+}
+
+.advance-terminal-monitor-stack .ssh-ov-mini-metric-bar-track {
+    height: 2px;
+}
+
 .advance-terminal-monitor-stack .ssh-ov-card-pct {
     font-size: 18px;
 }
 
-.advance-terminal-monitor-stack .ssh-ov-card-details {
-    display: none;
+.advance-terminal-monitor-stack .ssh-ov-card-bar-track {
+    height: 4px;
 }
 
 .advance-terminal-monitor-stack .proc-panel {
@@ -11855,6 +11961,10 @@
 }
 
 .proc-col-cpu {
+    width: 56px;
+}
+
+.proc-col-gpu {
     width: 56px;
 }
 

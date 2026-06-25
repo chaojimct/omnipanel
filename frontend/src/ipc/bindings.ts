@@ -225,7 +225,7 @@ export const commands = {
 	/**  释放连接池中指定资源的 SSH 会话（离开概览等场景）。 */
 	sshPoolRelease: (resourceId: string) => typedError<null, OmniError_Serialize>(__TAURI_INVOKE("ssh_pool_release", { resourceId })),
 	/**  监控页：复用连接池会话，仅拉取系统指标。 */
-	sshPoolFetchStats: (resourceId: string) => typedError<HostSystemStats, OmniError_Serialize>(__TAURI_INVOKE("ssh_pool_fetch_stats", { resourceId })),
+	sshPoolFetchStats: (resourceId: string) => typedError<HostSystemStats_Serialize, OmniError_Serialize>(__TAURI_INVOKE("ssh_pool_fetch_stats", { resourceId })),
 	/**  获取所有 SSH 主机的连接状态快照。 */
 	sshPoolGetStatuses: () => typedError<PoolStatusEvent[], OmniError_Serialize>(__TAURI_INVOKE("ssh_pool_get_statuses")),
 	/**  获取当前已建立 SSH 会话的主机 ID 列表。 */
@@ -241,7 +241,7 @@ export const commands = {
 	/**  强制终止远程进程（默认 SIGKILL）。 */
 	sshPoolKillProcess: (resourceId: string, pid: number, signal: number | null) => typedError<null, OmniError_Serialize>(__TAURI_INVOKE("ssh_pool_kill_process", { resourceId, pid, signal })),
 	/**  拉取本机 CPU / 内存 / 磁盘指标。 */
-	localFetchStats: () => typedError<HostSystemStats, OmniError_Serialize>(__TAURI_INVOKE("local_fetch_stats")),
+	localFetchStats: () => typedError<HostSystemStats_Serialize, OmniError_Serialize>(__TAURI_INVOKE("local_fetch_stats")),
 	/**  列出本机进程。 */
 	localListProcesses: () => typedError<SshProcessInfo_Serialize[], OmniError_Serialize>(__TAURI_INVOKE("local_list_processes")),
 	/**  查询本机进程详情。 */
@@ -507,6 +507,33 @@ export type Connection = {
 /**  连接类型。统一覆盖工作站内所有可持久化的连接资源。 */
 export type ConnectionKind = "ssh" | "database" | "docker" | "panel" | "protocol" | "file";
 
+/**  CPU 指标：总使用率、核心数、每核使用率、负载。 */
+export type CpuStats = CpuStats_Serialize | CpuStats_Deserialize;
+
+/**  CPU 指标：总使用率、核心数、每核使用率、负载。 */
+export type CpuStats_Deserialize = {
+	usage: number | null,
+	cores: number,
+	perCoreUsage: (number | null)[],
+	load1: number | null,
+	load5: number | null,
+	load15: number | null,
+	frequencyMhz?: number | null,
+	temperature?: number | null,
+};
+
+/**  CPU 指标：总使用率、核心数、每核使用率、负载。 */
+export type CpuStats_Serialize = {
+	usage: number | null,
+	cores: number,
+	perCoreUsage: (number | null)[],
+	load1: number | null,
+	load5: number | null,
+	load15: number | null,
+	frequencyMhz?: number | null,
+	temperature?: number | null,
+};
+
 /**  创建数据库参数。name 必填；charset 可选，留空时使用服务器默认。 */
 export type CreateDatabaseArgs = {
 	connection: DbConnectionConfig,
@@ -624,10 +651,37 @@ export type DbUserMeta_Serialize = {
 	host?: string | null,
 };
 
-export type DiskStats = {
+/**  单个磁盘 / 挂载点。 */
+export type DiskDeviceStats = {
+	name: string,
+	mountPoint: string,
+	fileSystem: string,
 	total: number | null,
 	used: number | null,
 	available: number | null,
+};
+
+/**  磁盘汇总与明细列表。 */
+export type DiskStats = DiskStats_Serialize | DiskStats_Deserialize;
+
+/**  磁盘汇总与明细列表。 */
+export type DiskStats_Deserialize = {
+	total: number | null,
+	used: number | null,
+	available: number | null,
+	disks: DiskDeviceStats[],
+	readBytes?: number | null,
+	writeBytes?: number | null,
+};
+
+/**  磁盘汇总与明细列表。 */
+export type DiskStats_Serialize = {
+	total: number | null,
+	used: number | null,
+	available: number | null,
+	disks: DiskDeviceStats[],
+	readBytes?: number | null,
+	writeBytes?: number | null,
 };
 
 /**  Docker auto-detection result. */
@@ -1190,6 +1244,50 @@ export type FileQuickPaths = {
 	downloads: string,
 };
 
+/**  单块 GPU 设备。 */
+export type GpuDeviceStats = GpuDeviceStats_Serialize | GpuDeviceStats_Deserialize;
+
+/**  单块 GPU 设备。 */
+export type GpuDeviceStats_Deserialize = {
+	vendor: string,
+	name: string,
+	index: number,
+	utilization?: number | null,
+	memoryTotal?: number | null,
+	memoryUsed?: number | null,
+	temperature?: number | null,
+	power?: number | null,
+	powerLimit?: number | null,
+	fanSpeed?: number | null,
+};
+
+/**  单块 GPU 设备。 */
+export type GpuDeviceStats_Serialize = {
+	vendor: string,
+	name: string,
+	index: number,
+	utilization?: number | null,
+	memoryTotal?: number | null,
+	memoryUsed?: number | null,
+	temperature?: number | null,
+	power?: number | null,
+	powerLimit?: number | null,
+	fanSpeed?: number | null,
+};
+
+/**  GPU 总览（多卡列表，空列表表示未检测到）。 */
+export type GpuStats = GpuStats_Serialize | GpuStats_Deserialize;
+
+/**  GPU 总览（多卡列表，空列表表示未检测到）。 */
+export type GpuStats_Deserialize = {
+	devices: GpuDeviceStats_Deserialize[],
+};
+
+/**  GPU 总览（多卡列表，空列表表示未检测到）。 */
+export type GpuStats_Serialize = {
+	devices: GpuDeviceStats_Serialize[],
+};
+
 /**  gRPC 调用请求。 */
 export type GrpcCallRequest = {
 	/**  完整方法名，如 `mypackage.MyService/MyMethod` */
@@ -1224,16 +1322,42 @@ export type GrpcConnectionConfig = {
 	useTls?: boolean,
 };
 
-export type HostSystemStats = {
+/**  主机系统监控快照（本机与远程 SSH 共用）。 */
+export type HostSystemStats = HostSystemStats_Serialize | HostSystemStats_Deserialize;
+
+/**  主机系统监控快照（本机与远程 SSH 共用）。 */
+export type HostSystemStats_Deserialize = {
 	hostId: string,
 	hostName: string,
+	/**  格式化的负载字符串，如 `0.52 0.48 0.45`。 */
 	load: string,
+	cpu: CpuStats_Deserialize,
 	cpuCores: number,
 	cpuUsage: number | null,
-	memory: MemoryStats,
-	disk: DiskStats,
-	network: NetworkStats,
+	memory: MemoryStats_Deserialize,
+	disk: DiskStats_Deserialize,
+	gpu: GpuStats_Deserialize,
+	network: NetworkStats_Deserialize,
 	osInfo: string,
+	uptimeSecs?: number | null,
+	timestamp: number | null,
+};
+
+/**  主机系统监控快照（本机与远程 SSH 共用）。 */
+export type HostSystemStats_Serialize = {
+	hostId: string,
+	hostName: string,
+	/**  格式化的负载字符串，如 `0.52 0.48 0.45`。 */
+	load: string,
+	cpu: CpuStats_Serialize,
+	cpuCores: number,
+	cpuUsage: number | null,
+	memory: MemoryStats_Serialize,
+	disk: DiskStats_Serialize,
+	gpu: GpuStats_Serialize,
+	network: NetworkStats_Serialize,
+	osInfo: string,
+	uptimeSecs?: number | null,
 	timestamp: number | null,
 };
 
@@ -1373,10 +1497,31 @@ export type McpTransport = { kind: "stdio"; config: McpStdioTransport } | { kind
 
 export type McpTransportKind = "stdio" | "sse";
 
-export type MemoryStats = {
+/**  物理内存与 swap / 虚拟内存。 */
+export type MemoryStats = MemoryStats_Serialize | MemoryStats_Deserialize;
+
+/**  物理内存与 swap / 虚拟内存。 */
+export type MemoryStats_Deserialize = {
 	total: number | null,
 	used: number | null,
 	available: number | null,
+	swapTotal: number | null,
+	swapUsed: number | null,
+	swapAvailable: number | null,
+	cached?: number | null,
+	buffers?: number | null,
+};
+
+/**  物理内存与 swap / 虚拟内存。 */
+export type MemoryStats_Serialize = {
+	total: number | null,
+	used: number | null,
+	available: number | null,
+	swapTotal: number | null,
+	swapUsed: number | null,
+	swapAvailable: number | null,
+	cached?: number | null,
+	buffers?: number | null,
 };
 
 /**  Modbus 连接配置。 */
@@ -1394,9 +1539,20 @@ export type NetworkInterface = {
 	addresses: string[],
 };
 
-export type NetworkStats = {
+export type NetworkStats = NetworkStats_Serialize | NetworkStats_Deserialize;
+
+export type NetworkStats_Deserialize = {
 	rxBytes: number | null,
 	txBytes: number | null,
+	interface?: string | null,
+	connections?: number | null,
+};
+
+export type NetworkStats_Serialize = {
+	rxBytes: number | null,
+	txBytes: number | null,
+	interface?: string | null,
+	connections?: number | null,
 };
 
 /**  统一错误结构。Tauri 命令统一返回 `Result<T, OmniError>`。 */
@@ -1708,13 +1864,13 @@ export type SshHostOverview = SshHostOverview_Serialize | SshHostOverview_Deseri
 
 /**  概览页一次加载的完整数据（系统指标 + 进程列表）。 */
 export type SshHostOverview_Deserialize = {
-	stats: HostSystemStats,
+	stats: HostSystemStats_Deserialize,
 	processes: SshProcessInfo_Deserialize[],
 };
 
 /**  概览页一次加载的完整数据（系统指标 + 进程列表）。 */
 export type SshHostOverview_Serialize = {
-	stats: HostSystemStats,
+	stats: HostSystemStats_Serialize,
 	processes: SshProcessInfo_Serialize[],
 };
 
@@ -1768,6 +1924,8 @@ export type SshProcessInfo_Deserialize = {
 	time: string,
 	command: string,
 	ports?: SshProcessPort_Deserialize[],
+	/**  进程 GPU 使用率（%），采集不到时为 None。 */
+	gpuUsage?: number | null,
 };
 
 /**  远程进程信息。 */
@@ -1783,6 +1941,8 @@ export type SshProcessInfo_Serialize = {
 	time: string,
 	command: string,
 	ports: SshProcessPort_Serialize[],
+	/**  进程 GPU 使用率（%），采集不到时为 None。 */
+	gpuUsage?: number | null,
 };
 
 /**  进程关联的监听端口。 */

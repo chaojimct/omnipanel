@@ -1,10 +1,11 @@
 import { useCallback } from "react";
 import { useI18n } from "@/i18n";
-import { OverviewStatsCards } from "@/modules/server/ssh/components/detail/OverviewStatsCards";
+import { MonitoringDashboard } from "@/modules/server/ssh/components/monitoring/MonitoringDashboard";
 import { ProcessListPanel } from "@/modules/server/ssh/components/detail/ProcessListPanel";
 import { useSshOverview } from "@/modules/server/ssh/hooks/useSshOverview";
 import type { DetailTab } from "@/modules/server/ssh/types";
 import { LOCAL_TERMINAL_RESOURCE_ID } from "@/modules/terminal/paneResource";
+import { resolveResourceById } from "@/stores/connectionStore";
 import { useLocalOverview } from "./useLocalOverview";
 
 type Props = {
@@ -49,26 +50,36 @@ export function AdvanceTerminalMonitorStack({
     [onOpenTunnelTab],
   );
 
+  const resource = mode === "remote" && resourceId ? resolveResourceById(resourceId) : null;
+
   return (
     <div className="advance-terminal-monitor-stack">
-      <OverviewStatsCards
-        embedded
+      <MonitoringDashboard
+        compact
         phase={phase}
         stats={stats}
         error={error}
+        hostLabel={resource?.name ?? stats?.hostName}
+        hostAddress={resource?.subtitle}
+        updatedAt={updatedAt}
+        refreshing={refreshing}
+        processCount={processes.length}
         loadingMessage={mode === "local" ? t("terminal.monitor.loading") : undefined}
         onRetry={() => refresh()}
-      />
-      <ProcessListPanel
-        resourceId={processResourceId}
-        processes={processes}
-        loading={refreshing}
-        refreshing={refreshing}
-        updatedAt={updatedAt}
-        setDetailTab={handleDetailTab}
-        onRefresh={refreshProcesses}
-        enableTunnels={enableTunnels}
-      />
+        onRefresh={() => refresh()}
+      >
+        <ProcessListPanel
+          resourceId={processResourceId}
+          processes={processes}
+          loading={refreshing}
+          refreshing={refreshing}
+          updatedAt={updatedAt}
+          setDetailTab={handleDetailTab}
+          onRefresh={refreshProcesses}
+          enableTunnels={enableTunnels}
+          variant="monitor"
+        />
+      </MonitoringDashboard>
     </div>
   );
 }
