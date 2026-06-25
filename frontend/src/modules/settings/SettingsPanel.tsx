@@ -1513,41 +1513,27 @@ export function SettingsPanel() {
                 </div>
                 <Toggle value={checkUpdates} onChange={setCheckUpdates} />
               </div>
-              <div className="setting-row">
-                <div className="setting-label">
-                  <h4>{t("settings.update.updateLabel")}</h4>
-                  <p>
-                    {t("settings.update.currentVersion", {
-                      version: updateInfo?.current_version ?? "0.1.0",
-                    })}
-                    {updateInfo?.available && (
-                      <span style={{ color: "var(--accent)", marginLeft: "var(--sp-2)" }}>
-                        {t("settings.update.newVersion", { version: updateInfo.version })}
-                      </span>
-                    )}
-                    {updateInfo && !updateInfo.available && !checking && (
-                      <span style={{ color: "var(--success)", marginLeft: "var(--sp-2)" }}>
-                        {t("settings.update.upToDate")}
-                      </span>
-                    )}
-                  </p>
-                  {updateInfo?.body && (
-                    <details className="update-changelog" style={{ marginTop: "var(--sp-1)" }}>
-                      <summary>{t("settings.update.releaseNotes")}</summary>
-                      <pre
-                        className="update-changelog-body"
-                        style={{ fontSize: 11, maxHeight: 160, overflow: "auto", whiteSpace: "pre-wrap" }}
-                      >
-                        {updateInfo.body}
-                      </pre>
-                    </details>
-                  )}
-                  {updateError && (
-                    <p style={{ color: "var(--danger)", marginTop: "var(--sp-1)" }}>{updateError}</p>
-                  )}
-                </div>
-                <div style={{ display: "flex", flexDirection: "column", gap: "var(--sp-2)", alignItems: "flex-end" }}>
-                  <div style={{ display: "flex", gap: "var(--sp-2)" }}>
+              <div className="setting-row setting-row--update">
+                <div className="setting-update-header">
+                  <div className="setting-update-info">
+                    <h4>{t("settings.update.updateLabel")}</h4>
+                    <p className="setting-update-version">
+                      {t("settings.update.currentVersion", {
+                        version: updateInfo?.current_version ?? "0.1.0",
+                      })}
+                      {updateInfo?.available && (
+                        <span className="setting-update-status setting-update-status--new">
+                          {t("settings.update.newVersion", { version: updateInfo.version })}
+                        </span>
+                      )}
+                      {updateInfo && !updateInfo.available && !checking && (
+                        <span className="setting-update-status setting-update-status--ok">
+                          {t("settings.update.upToDate")}
+                        </span>
+                      )}
+                    </p>
+                  </div>
+                  <div className="setting-update-actions">
                     <Button
                       variant="secondary"
                       size="sm"
@@ -1557,26 +1543,32 @@ export function SettingsPanel() {
                       {checking ? t("settings.update.checking") : t("settings.update.checkBtn")}
                     </Button>
                     {updateInfo?.available && !updating && (
-                      <Button
-                        variant="primary"
-                        size="sm"
-                        onClick={installUpdateFn}
-                      >
+                      <Button variant="primary" size="sm" onClick={installUpdateFn}>
                         {t("settings.update.installBtn")}
                       </Button>
                     )}
+                    {updating && downloadPercent != null && (
+                      <div className="update-progress-bar">
+                        <div
+                          className="update-progress-fill"
+                          style={{ width: `${downloadPercent}%` }}
+                        />
+                      </div>
+                    )}
+                    {updating && (
+                      <span className="setting-update-installing">
+                        {t("settings.update.installing")}
+                      </span>
+                    )}
                   </div>
-                  {updating && downloadPercent != null && (
-                    <div className="update-progress-bar">
-                      <div className="update-progress-fill" style={{ width: `${downloadPercent}%` }} />
-                    </div>
-                  )}
-                  {updating && (
-                    <span style={{ fontSize: 11, color: "var(--meta)" }}>
-                      {t("settings.update.installing")}
-                    </span>
-                  )}
                 </div>
+                {updateInfo?.body && (
+                  <details className="update-changelog">
+                    <summary>{t("settings.update.releaseNotes")}</summary>
+                    <pre className="update-changelog-body">{updateInfo.body}</pre>
+                  </details>
+                )}
+                {updateError && <p className="setting-update-error">{updateError}</p>}
               </div>
               <div className="setting-row">
                 <div className="setting-label">
