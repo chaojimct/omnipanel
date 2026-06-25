@@ -20,6 +20,44 @@ use crate::state::AppState;
 /// 内置本地文件连接 id。
 pub const LOCAL_CONNECTION_ID: &str = "__local__";
 
+pub(crate) fn mark_file_connection_online(state: &AppState, connection_id: &str) {
+    if connection_id == LOCAL_CONNECTION_ID {
+        return;
+    }
+    if let Ok(mut online) = state.file_connection_online.lock() {
+        online.insert(connection_id.to_string());
+    }
+}
+
+async fn file_connection_is_online(state: &AppState, connection_id: &str) -> bool {
+    if connection_id == LOCAL_CONNECTION_ID {
+        return true;
+    }
+    if state
+        .file_connection_online
+        .lock()
+        .ok()
+        .is_some_and(|online| online.contains(connection_id))
+    {
+        return true;
+    }
+    state
+        .file_sftp_sessions
+        .lock()
+        .await
+        .contains_key(connection_id)
+}
+
+/// 目录列表结果。
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct FileListDirResult {
+    pub entries: Vec<FileEntry>,
+    /// 是否还有下一页（S3 分页）。
+    pub truncated: bool,
+    pub next_continuation_token: Option<String>,
+}
+
 /// 文件条目（统一模型）。
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
@@ -72,6 +110,8 @@ struct FileConnConfig {
     region: String,
     #[serde(default)]
     endpoint: String,
+    #[serde(default, rename = "publicDomain")]
+    public_domain: String,
     #[serde(default)]
     prefix: String,
     #[serde(default, rename = "accessKey")]
@@ -462,97 +502,103 @@ async fn list_s3_dir(
     cfg: &FileConnConfig,
     secret: &str,
     path: &str,
-) -> Result<Vec<FileEntry>, OmniError> {
+    search: Option<&str>,
+    start_token: Option<&str>,
+) -> Result<(Vec<FileEntry>, bool, Option<String>), OmniError> {
     let bucket = s3_bucket(cfg, secret)?;
     let prefix = normalize_s3_prefix(path, cfg);
+    let search_q = search
+        .map(|s| s.trim().to_lowercase())
+        .filter(|s| !s.is_empty());
     tracing::debug!(
         bucket = %cfg.bucket,
         region = %cfg.region,
         endpoint = %cfg.endpoint,
         prefix = %prefix,
         path = %path,
+        search = ?search_q,
+        start_token = ?start_token,
         "list_s3_dir"
     );
-    // 使用单页 list_page（max_keys=1000 + delimiter='/')），避免 bucket.list 内部
-    // 无限翻页导致大桶文件数多时延迟爆炸。最多翻 MAX_PAGES 页（5000 条）即截断。
-    const MAX_PAGES: usize = 5;
+    const S3_PAGE_SIZE: usize = 200;
+    let matches_search = |name: &str| -> bool {
+        search_q
+            .as_ref()
+            .map_or(true, |q| name.to_lowercase().contains(q))
+    };
+    let (page, _status) = bucket
+        .list_page(
+            prefix.clone(),
+            Some("/".to_string()),
+            start_token.map(str::to_string),
+            None,
+            Some(S3_PAGE_SIZE),
+        )
+        .await
+        .map_err(|e| {
+            tracing::error!(
+                bucket = %cfg.bucket,
+                region = %cfg.region,
+                endpoint = %cfg.endpoint,
+                prefix = %prefix,
+                error = %e,
+                "列出 S3 对象失败"
+            );
+            OmniError::new(ErrorCode::Io, "列出 S3 对象失败").with_cause(e.to_string())
+        })?;
     let mut entries = Vec::new();
-    let mut continuation_token: Option<String> = None;
-    for page_idx in 0..MAX_PAGES {
-        let (page, _status) = bucket
-            .list_page(
-                prefix.clone(),
-                Some("/".to_string()),
-                continuation_token.clone(),
-                None,
-                Some(1000),
-            )
-            .await
-            .map_err(|e| {
-                tracing::error!(
-                    bucket = %cfg.bucket,
-                    region = %cfg.region,
-                    endpoint = %cfg.endpoint,
-                    prefix = %prefix,
-                    page = page_idx,
-                    error = %e,
-                    "列出 S3 对象失败"
-                );
-                OmniError::new(ErrorCode::Io, "列出 S3 对象失败").with_cause(e.to_string())
-            })?;
-        if let Some(prefixes) = page.common_prefixes {
-            for cp in prefixes {
-                let key = cp.prefix.trim_end_matches('/');
-                let name = key.rsplit('/').next().unwrap_or(&key).to_string();
-                entries.push(FileEntry {
-                    name: name.clone(),
-                    path: cp.prefix,
-                    kind: "dir".into(),
-                    size: 0,
-                    modified: 0,
-                    permissions: None,
-                });
-            }
-        }
-        for obj in page.contents {
-            if obj.key.ends_with('/') {
+    if let Some(prefixes) = page.common_prefixes {
+        for cp in prefixes {
+            let key = cp.prefix.trim_end_matches('/');
+            let name = key.rsplit('/').next().unwrap_or(&key).to_string();
+            if !matches_search(&name) {
                 continue;
             }
-            let name = obj
-                .key
-                .trim_end_matches('/')
-                .rsplit('/')
-                .next()
-                .unwrap_or(&obj.key)
-                .to_string();
             entries.push(FileEntry {
                 name: name.clone(),
-                path: obj.key,
-                kind: "file".into(),
-                size: obj.size,
+                path: cp.prefix,
+                kind: "dir".into(),
+                size: 0,
                 modified: 0,
                 permissions: None,
             });
         }
-        if !page.is_truncated {
-            break;
-        }
-        continuation_token = page.next_continuation_token.clone();
     }
-    if continuation_token.is_some() {
-        tracing::warn!(
-            bucket = %cfg.bucket,
-            prefix = %prefix,
-            entries = entries.len(),
-            "S3 目录条目超过最大可取页数 (MAX_PAGES=5)，已截断；请缩小目录范围"
-        );
+    for obj in page.contents {
+        if obj.key.ends_with('/') {
+            continue;
+        }
+        let name = obj
+            .key
+            .trim_end_matches('/')
+            .rsplit('/')
+            .next()
+            .unwrap_or(&obj.key)
+            .to_string();
+        if !matches_search(&name) {
+            continue;
+        }
+        entries.push(FileEntry {
+            name: name.clone(),
+            path: obj.key,
+            kind: "file".into(),
+            size: obj.size,
+            modified: 0,
+            permissions: None,
+        });
     }
     entries.sort_by(|a, b| {
         let ad = a.kind == "dir";
         let bd = b.kind == "dir";
         ad.cmp(&bd).then_with(|| a.name.cmp(&b.name))
     });
-    Ok(entries)
+    let has_more = page.is_truncated;
+    let next_token = if has_more {
+        page.next_continuation_token
+    } else {
+        None
+    };
+    Ok((entries, has_more, next_token))
 }
 
 // ─── Dispatch ────────────────────────────────────────────────────────────────
@@ -589,11 +635,16 @@ pub async fn file_list_connections(
     let storage = state.storage.lock().await;
     for conn in storage.list_connections_by_kind(ConnectionKind::File)? {
         let cfg = parse_file_config(&conn)?;
+        let online = file_connection_is_online(&state, &conn.id).await;
         out.push(FileManagerConnectionInfo {
             id: conn.id,
             name: conn.name,
             protocol: cfg.protocol,
-            status: "offline".to_string(),
+            status: if online {
+                "online".to_string()
+            } else {
+                "offline".to_string()
+            },
             group: conn.group,
         });
     }
@@ -694,7 +745,9 @@ pub async fn file_test_connection(
     let conn = load_file_connection(&state, &connection_id)
         .await?
         .ok_or_else(|| OmniError::new(ErrorCode::NotFound, "连接不存在"))?;
-    file_test_connection_config(&state, &conn).await
+    let result = file_test_connection_config(&state, &conn).await?;
+    mark_file_connection_online(&state, &connection_id);
+    Ok(result)
 }
 
 /// 列出目录内容。
@@ -704,21 +757,74 @@ pub async fn file_list_dir(
     state: State<'_, AppState>,
     connection_id: String,
     path: String,
-) -> Result<Vec<FileEntry>, OmniError> {
+    search: Option<String>,
+    continuation_token: Option<String>,
+) -> Result<FileListDirResult, OmniError> {
     if connection_id == LOCAL_CONNECTION_ID {
-        return list_local_dir(&path);
+        let entries = filter_file_entries(list_local_dir(&path)?, search.as_deref())?;
+        mark_file_connection_online(&state, &connection_id);
+        return Ok(FileListDirResult {
+            entries,
+            truncated: false,
+            next_continuation_token: None,
+        });
     }
     let conn = load_file_connection(&state, &connection_id)
         .await?
         .ok_or_else(|| OmniError::new(ErrorCode::NotFound, "连接不存在"))?;
     let cfg = parse_file_config(&conn)?;
     let secret = resolve_secret(&conn).unwrap_or_default();
-    match protocol_of(&cfg) {
-        FileProtocol::Local => list_local_dir(&path),
-        FileProtocol::Sftp => list_sftp_dir(&state, &connection_id, &conn, &cfg, &path).await,
-        FileProtocol::Ftp => list_ftp_dir(&cfg, &secret, &path).await,
-        FileProtocol::S3 => list_s3_dir(&cfg, &secret, &path).await,
-    }
+    let token = continuation_token
+        .as_deref()
+        .filter(|t| !t.is_empty());
+    let (entries, truncated, next_continuation_token) = match protocol_of(&cfg) {
+        FileProtocol::Local => {
+            let entries = filter_file_entries(list_local_dir(&path)?, search.as_deref())?;
+            (entries, false, None)
+        }
+        FileProtocol::Sftp => {
+            let entries = filter_file_entries(
+                list_sftp_dir(&state, &connection_id, &conn, &cfg, &path).await?,
+                search.as_deref(),
+            )?;
+            (entries, false, None)
+        }
+        FileProtocol::Ftp => {
+            let entries = filter_file_entries(
+                list_ftp_dir(&cfg, &secret, &path).await?,
+                search.as_deref(),
+            )?;
+            (entries, false, None)
+        }
+        FileProtocol::S3 => {
+            list_s3_dir(&cfg, &secret, &path, search.as_deref(), token).await?
+        }
+    };
+    mark_file_connection_online(&state, &connection_id);
+    Ok(FileListDirResult {
+        entries,
+        truncated,
+        next_continuation_token,
+    })
+}
+
+fn filter_file_entries(
+    mut entries: Vec<FileEntry>,
+    search: Option<&str>,
+) -> Result<Vec<FileEntry>, OmniError> {
+    let Some(q) = search
+        .map(|s| s.trim().to_lowercase())
+        .filter(|s| !s.is_empty())
+    else {
+        return Ok(entries);
+    };
+    entries.retain(|e| e.name.to_lowercase().contains(&q));
+    entries.sort_by(|a, b| {
+        let ad = a.kind == "dir";
+        let bd = b.kind == "dir";
+        ad.cmp(&bd).then_with(|| a.name.cmp(&b.name))
+    });
+    Ok(entries)
 }
 
 /// 读取文件内容（字节）。

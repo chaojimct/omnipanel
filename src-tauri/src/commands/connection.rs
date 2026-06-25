@@ -127,7 +127,16 @@ pub async fn conn_test(
             }
         }
         ConnectionKind::File => {
-            crate::commands::file_manager::file_test_connection_config(&state, &connection).await
+            let msg =
+                crate::commands::file_manager::file_test_connection_config(&state, &connection)
+                    .await?;
+            if !connection.id.is_empty() {
+                crate::commands::file_manager::mark_file_connection_online(
+                    &state,
+                    &connection.id,
+                );
+            }
+            Ok(msg)
         }
         other => Err(OmniError::new(
             ErrorCode::InvalidInput,

@@ -578,14 +578,33 @@ export const enUS: TranslationDict = {
     tabs: {
       browser: "File Manager",
     },
+    workspace: {
+      emptyTabs: "Select a connection on the left to open a file browser panel",
+    },
     loading: "Loading…",
     empty: "Empty folder",
+    searchNoResults: "No matches in this folder",
     groups: {
       other: "Other",
     },
     protocol: {
       local: "Local filesystem",
     },
+    s3: {
+      loadingMore: "Loading more…",
+    },
+    preview: {
+      title: "File preview",
+      loading: "Loading…",
+      tooLarge: "File exceeds preview limit ({limit})",
+      unsupported: "This file type cannot be previewed",
+      error: "Failed to load: {message}",
+      empty: "Nothing to preview",
+      downloadHint: "Use Download in the title bar to save and open locally",
+    },
+    copyLinkDone: "Link copied",
+    copyLinkFailed: "Copy failed",
+    copyLinkUnavailable: "Cannot build URL — configure a custom domain or endpoint",
     sidebar: {
       title: "Connections",
       add: "New connection",
@@ -604,6 +623,8 @@ export const enUS: TranslationDict = {
       search: "Filter current folder…",
       listView: "List view",
       gridView: "Grid view",
+      showDetail: "Show details sidebar",
+      hideDetail: "Hide details sidebar",
     },
     columns: {
       name: "Name",
@@ -639,6 +660,7 @@ export const enUS: TranslationDict = {
     },
     context: {
       open: "Open",
+      copyLink: "Copy link",
       properties: "Properties",
       edit: "Edit connection",
       test: "Test connection",
@@ -667,6 +689,9 @@ export const enUS: TranslationDict = {
       bucketRequired: "Enter bucket",
       region: "Region",
       endpoint: "Endpoint (optional)",
+      publicDomain: "Custom domain",
+      publicDomainPlaceholder: "e.g. https://cdn.example.com",
+      publicDomainDesc: "Used to build public URLs; if empty, inferred from endpoint and bucket",
       accessKey: "Access Key",
       accessKeyRequired: "Enter access key",
       secretKey: "Secret Key",
@@ -1931,6 +1956,12 @@ export const enUS: TranslationDict = {
       editorFontSize: "Font size",
       editorLineHeight: "Line height",
       editorLineHeightDesc: "Line height multiplier for code spacing",
+    },
+    files: {
+      label: "Files",
+      desc: "File browsing and preview options",
+      previewThreshold: "Preview size limit",
+      previewThresholdDesc: "Files larger than this are not previewed (detail panel text preview and grid thumbnails)",
     },
     knowledge: {
       label: "Knowledge Base",

@@ -1,4 +1,4 @@
-import { commands, type Connection, type FileEntry, type FileManagerConnectionInfo, type OmniError_Serialize } from "../../ipc/bindings";
+import { commands, type Connection, type FileListDirResult, type FileManagerConnectionInfo, type OmniError_Serialize } from "../../ipc/bindings";
 import { fmtError } from "./utils";
 
 function ipcErrorToError(error: OmniError_Serialize): Error {
@@ -30,11 +30,20 @@ export async function listFileConnections(): Promise<FileManagerConnectionInfo[]
   return unwrap(await commands.fileListConnections());
 }
 
-export async function listDirectory(connectionId: string, path: string): Promise<FileEntry[]> {
-  return unwrap(await commands.fileListDir(connectionId, path), {
+export async function listDirectory(
+  connectionId: string,
+  path: string,
+  search?: string | null,
+  continuationToken?: string | null,
+): Promise<FileListDirResult> {
+  const query = search?.trim() ? search.trim() : null;
+  const token = continuationToken?.trim() ? continuationToken.trim() : null;
+  return unwrap(await commands.fileListDir(connectionId, path, query, token), {
     op: "fileListDir",
     connectionId,
     path,
+    search: query,
+    continuationToken: token,
   });
 }
 

@@ -2,11 +2,53 @@ import type { FileEntry } from "../../ipc/bindings";
 
 export const LOCAL_CONNECTION_ID = "__local__";
 
+const GRID_IMAGE_EXTENSIONS = new Set(["svg", "png", "jpg", "jpeg", "webp"]);
+
+export function isGridImageFile(name: string): boolean {
+  const ext = name.split(".").pop()?.toLowerCase() ?? "";
+  return GRID_IMAGE_EXTENSIONS.has(ext);
+}
+
+export function imageMimeType(name: string): string {
+  const ext = name.split(".").pop()?.toLowerCase() ?? "";
+  switch (ext) {
+    case "svg":
+      return "image/svg+xml";
+    case "png":
+      return "image/png";
+    case "jpg":
+    case "jpeg":
+      return "image/jpeg";
+    case "webp":
+      return "image/webp";
+    default:
+      return "application/octet-stream";
+  }
+}
+
 export function formatFileSize(bytes: number | null | undefined): string {
   if (bytes == null || bytes === 0) return "—";
   const units = ["B", "KB", "MB", "GB", "TB"];
   const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
   return `${(bytes / 1024 ** i).toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
+}
+
+/** 远程 read 会先拉取整文件再校验 maxBytes，需按文件大小与预览阈值取上限。 */
+export function resolvePreviewReadMaxBytes(
+  fileSize: number | null | undefined,
+  thresholdBytes: number,
+): number {
+  if (fileSize != null && fileSize > 0) {
+    return Math.min(fileSize, thresholdBytes);
+  }
+  return thresholdBytes;
+}
+
+export function exceedsPreviewThreshold(
+  fileSize: number | null | undefined,
+  thresholdBytes: number,
+): boolean {
+  return fileSize != null && fileSize > thresholdBytes;
 }
 
 export function formatFileTime(ts: number | null | undefined): string {

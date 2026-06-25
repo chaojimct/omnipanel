@@ -143,6 +143,26 @@ export function clampSqlEditorLineHeight(value: number): SqlEditorLineHeight {
   return DEFAULT_SQL_EDITOR_LINE_HEIGHT;
 }
 
+/** 文件详情预览允许的最大文件大小（字节）。 */
+export const FILE_PREVIEW_THRESHOLD_OPTIONS = [
+  256 * 1024,
+  512 * 1024,
+  1024 * 1024,
+  2 * 1024 * 1024,
+  5 * 1024 * 1024,
+  10 * 1024 * 1024,
+] as const;
+export type FilePreviewThresholdBytes = (typeof FILE_PREVIEW_THRESHOLD_OPTIONS)[number];
+export const DEFAULT_FILE_PREVIEW_THRESHOLD_BYTES: FilePreviewThresholdBytes = 1024 * 1024;
+
+export function clampFilePreviewThresholdBytes(value: number): FilePreviewThresholdBytes {
+  const n = Math.round(value);
+  if ((FILE_PREVIEW_THRESHOLD_OPTIONS as readonly number[]).includes(n)) {
+    return n as FilePreviewThresholdBytes;
+  }
+  return DEFAULT_FILE_PREVIEW_THRESHOLD_BYTES;
+}
+
 interface SettingsState {
   locale: Locale;
   uiDensity: UiDensity;
@@ -173,6 +193,7 @@ interface SettingsState {
   sqlEditorFontFamily: string;
   sqlEditorFontSize: SqlEditorFontSize;
   sqlEditorLineHeight: SqlEditorLineHeight;
+  filePreviewThresholdBytes: FilePreviewThresholdBytes;
   resolved: "light" | "dark";
   setLocale: (locale: Locale) => void;
   setUiDensity: (density: UiDensity) => void;
@@ -197,6 +218,7 @@ interface SettingsState {
   setDatabaseSettings: (patch: Partial<Pick<SettingsState,
     "databaseQueryPageSize" | "sqlEditorFontFamily" | "sqlEditorFontSize" | "sqlEditorLineHeight"
   >>) => void;
+  setFileSettings: (patch: Partial<Pick<SettingsState, "filePreviewThresholdBytes">>) => void;
 }
 
 export function clampUiScale(percent: number): number {
@@ -274,6 +296,7 @@ export const useSettingsStore = create<SettingsState>()(
       sqlEditorFontFamily: DEFAULT_SQL_EDITOR_FONT_FAMILY,
       sqlEditorFontSize: DEFAULT_SQL_EDITOR_FONT_SIZE,
       sqlEditorLineHeight: DEFAULT_SQL_EDITOR_LINE_HEIGHT,
+      filePreviewThresholdBytes: DEFAULT_FILE_PREVIEW_THRESHOLD_BYTES,
       resolved: resolveTheme("system"),
       setLocale: (locale) => {
         applyDocumentLocale(locale);
@@ -336,6 +359,13 @@ export const useSettingsStore = create<SettingsState>()(
               ? clampSqlEditorLineHeight(patch.sqlEditorLineHeight)
               : state.sqlEditorLineHeight,
         })),
+      setFileSettings: (patch) =>
+        set((state) => ({
+          filePreviewThresholdBytes:
+            patch.filePreviewThresholdBytes !== undefined
+              ? clampFilePreviewThresholdBytes(patch.filePreviewThresholdBytes)
+              : state.filePreviewThresholdBytes,
+        })),
     }),
     {
       name: "omnipanel-settings",
@@ -368,6 +398,7 @@ export const useSettingsStore = create<SettingsState>()(
         sqlEditorFontFamily: state.sqlEditorFontFamily,
         sqlEditorFontSize: state.sqlEditorFontSize,
         sqlEditorLineHeight: state.sqlEditorLineHeight,
+        filePreviewThresholdBytes: state.filePreviewThresholdBytes,
       }),
       onRehydrateStorage: () => (state) => {
         applyDocumentLocale(state?.locale ?? "zh-CN");
@@ -378,6 +409,8 @@ export const useSettingsStore = create<SettingsState>()(
           resolved,
           databaseQueryPageSize:
             state?.databaseQueryPageSize ?? DEFAULT_DATABASE_QUERY_PAGE_SIZE,
+          filePreviewThresholdBytes:
+            state?.filePreviewThresholdBytes ?? DEFAULT_FILE_PREVIEW_THRESHOLD_BYTES,
         });
       },
     }

@@ -283,7 +283,7 @@ export const commands = {
 	/**  测试文件连接。 */
 	fileTestConnection: (connectionId: string) => typedError<string, OmniError_Serialize>(__TAURI_INVOKE("file_test_connection", { connectionId })),
 	/**  列出目录内容。 */
-	fileListDir: (connectionId: string, path: string) => typedError<FileEntry[], OmniError_Serialize>(__TAURI_INVOKE("file_list_dir", { connectionId, path })),
+	fileListDir: (connectionId: string, path: string, search: string | null, continuationToken: string | null) => typedError<FileListDirResult, OmniError_Serialize>(__TAURI_INVOKE("file_list_dir", { connectionId, path, search, continuationToken })),
 	/**  读取文件内容（字节）。 */
 	fileReadFile: (connectionId: string, path: string, maxBytes: number | null) => typedError<number[], OmniError_Serialize>(__TAURI_INVOKE("file_read_file", { connectionId, path, maxBytes })),
 	/**  上传文件（覆盖）。 */
@@ -1216,6 +1216,14 @@ export type FileEntry = {
 	size: number | null,
 	modified: number | null,
 	permissions: string | null,
+};
+
+/**  目录列表结果。 */
+export type FileListDirResult = {
+	entries: FileEntry[],
+	/**  是否还有下一页（S3 分页）。 */
+	truncated: boolean,
+	nextContinuationToken: string | null,
 };
 
 /**  文件管理器连接摘要。 */
