@@ -110,7 +110,9 @@ struct FileConnConfig {
     region: String,
     #[serde(default)]
     endpoint: String,
+    /// 前端生成公开链接用，后端 S3 API 不读取。
     #[serde(default, rename = "publicDomain")]
+    #[allow(dead_code)]
     public_domain: String,
     #[serde(default)]
     prefix: String,
