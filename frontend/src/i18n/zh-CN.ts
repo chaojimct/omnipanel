@@ -1224,7 +1224,7 @@ export const zhCN = {
     localTab: "local",
     sidebar: { title: "终端资源", collapse: "收起侧栏", expand: "展开侧栏" },
     command: {
-      placeholder: "输入命令… (Enter 发送, Shift+Enter 换行)",
+      placeholder: "Enter 发送，Shift+Enter 换行",
       send: "发送",
     },
     newSession: {

@@ -59,7 +59,7 @@ export const CommandInput = forwardRef<CommandInputHandle, { onSend: (cmd: strin
 
     return (
       <div className="term-cmd-input">
-        <span className="term-cmd-prompt">&gt;</span>
+        <span className="term-cmd-prompt">$</span>
         <textarea
           ref={textareaRef}
           className="term-cmd-textarea"
@@ -76,23 +76,14 @@ export const CommandInput = forwardRef<CommandInputHandle, { onSend: (cmd: strin
           spellCheck={false}
         />
         <Button
-          variant="icon"
+          variant="primary"
+          size="xs"
           className="term-cmd-send"
           onClick={submit}
           title={t("terminal.command.send")}
           type="button"
         >
-          <svg
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            width="16"
-            height="16"
-          >
-            <path d="M22 2L11 13" />
-            <path d="M22 2L15 22L11 13L2 9L22 2Z" />
-          </svg>
+          ↵
         </Button>
       </div>
     );
