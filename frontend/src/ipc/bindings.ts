@@ -1264,15 +1264,6 @@ export type FileIndexStatus = {
 	finishedAt: number | null,
 };
 
-/**  文件索引构建进度事件 payload。 */
-export type FileIndexProgress = {
-	connectionId: string,
-	/**  building | done | failed */
-	status: string,
-	indexedCount: number | null,
-	error: string | null,
-};
-
 /**  文件索引存储目录信息。 */
 export type FileIndexStorageInfo = {
 	/**  当前生效的索引目录（数据库文件所在目录）。 */

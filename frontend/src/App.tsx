@@ -19,6 +19,7 @@ import { CommandPalette } from "./components/shell/CommandPalette";
 import { NotificationDrawer } from "./components/shell/NotificationDrawer";
 import { AiDrawer } from "./components/ai/AiDrawer";
 import { AiDockView } from "./components/ai/AiDockView";
+import { AiRuntimeProvider } from "./components/ai/assistant-ui/AiRuntimeProvider";
 import { DangerConfirmDialog } from "./components/terminal/DangerConfirmDialog";
 import { QuickInputHost } from "./components/ui/QuickInputHost";
 import { Button } from "./components/ui/Button";
@@ -475,7 +476,8 @@ function AppShell() {
   );
 
   return (
-    <div className="app">
+    <AiRuntimeProvider>
+      <div className="app">
       <Sidebar />
       <div
         className={`workspace workspace--${wsState}${isBottomFullscreen ? " workspace--bottom-fullscreen" : ""}${embeddedModeClass}`}
@@ -518,7 +520,8 @@ function AppShell() {
           onCancel={() => cancelAction(pendingRiskAction.id)}
         />
       )}
-    </div>
+      </div>
+    </AiRuntimeProvider>
   );
 }
 

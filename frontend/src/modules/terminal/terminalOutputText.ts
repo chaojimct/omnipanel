@@ -6,11 +6,16 @@ export function stripTerminalControlSequences(text: string): string {
     .replace(/\x1b\[[0-9;?]*[ -/]*[@-~]/g, "")
     .replace(/\x1b\][^\x07]*(?:\x07|\x1b\\)/g, "")
     .replace(/\r\n/g, "\n")
-    .replace(/\r/g, "\n");
+    .replace(/\r(?!\n)/g, "");
 }
 
 export function decodeTerminalBytes(bytes: Uint8Array): string {
   return stripTerminalControlSequences(new TextDecoder().decode(bytes));
+}
+
+/** 保留 OSC，供 shell 历史同步等协议解析使用 */
+export function decodeTerminalBytesRaw(bytes: Uint8Array): string {
+  return new TextDecoder().decode(bytes);
 }
 
 /** Ctrl+C(130) 与 SIGPIPE(141) 不按普通失败处理 */
@@ -25,6 +30,8 @@ export type TerminalBlockStatus = "running" | "completed" | "failed";
 
 const PROMPT_LINE_RE = /^[^\n]*[$#>]\s*$/;
 const PROMPT_WITH_CMD_RE = /^[^\n]*[$#>]\s+/;
+const WRAPPED_PROMPT_SUFFIX_RE = /^[[(]?[A-Za-z0-9._-]+@[A-Za-z0-9._-]+.*(?:[\])}]|[#$>])$/;
+const MAX_WRAPPED_PROMPT_LINES = 24;
 
 /** 从块记录或 OSC 读行中取出纯命令文本 */
 export function normalizeBlockCommand(command: string): string {
@@ -69,6 +76,27 @@ function stripLeadingEchoLines(lines: string[], sent: string): string[] {
     break;
   }
   return lines.slice(index);
+}
+
+/** 剥离尾部被窄 PTY 硬折行的 shell prompt（如 [ro/ot@.../]#）。 */
+function stripTrailingPromptLines(lines: string[]): string[] {
+  const minStart = Math.max(0, lines.length - MAX_WRAPPED_PROMPT_LINES);
+  for (let start = minStart; start < lines.length; start += 1) {
+    const compact = lines
+      .slice(start)
+      .join("")
+      .replace(/\s+/g, "");
+    if (compact.includes("@") && WRAPPED_PROMPT_SUFFIX_RE.test(compact)) {
+      return lines.slice(0, start);
+    }
+  }
+
+  let end = lines.length;
+  while (end > 0 && PROMPT_LINE_RE.test(lines[end - 1]?.trim() ?? "")) {
+    end -= 1;
+  }
+
+  return lines.slice(0, end);
 }
 
 /**
@@ -145,7 +173,7 @@ export function extractCommandOutput(raw: string, command: string): string {
     filtered.push(withoutPrompt || line);
   }
 
-  return filtered.join("\n").trim();
+  return stripTrailingPromptLines(filtered).join("\n").trim();
 }
 
 export function isMeaningfulTerminalBlock(

@@ -266,13 +266,33 @@ export const useTerminalStore = create<TerminalState>()(
       setTerminal: (tabId, terminal) =>
         set((state) => ({ tabs: updateTabById(state.tabs, tabId, (tab) => ({ ...tab, terminal })) })),
 
-      setStatus: (tabId, status) =>
-        set((state) => ({ tabs: updateTabById(state.tabs, tabId, (tab) => ({ ...tab, status })) })),
+      setStatus: (sessionId, status) =>
+        set((state) => {
+          const tabs = updateTabById(state.tabs, sessionId, (tab) => ({ ...tab, status }));
+          const pane = state.embeddedPanes[sessionId];
+          if (!pane) return { tabs };
+          return {
+            tabs,
+            embeddedPanes: {
+              ...state.embeddedPanes,
+              [sessionId]: { ...pane, status },
+            },
+          };
+        }),
 
-      setBackendSessionId: (tabId, backendSessionId) =>
-        set((state) => ({
-          tabs: updateTabById(state.tabs, tabId, (tab) => ({ ...tab, backendSessionId })),
-        })),
+      setBackendSessionId: (sessionId, backendSessionId) =>
+        set((state) => {
+          const tabs = updateTabById(state.tabs, sessionId, (tab) => ({ ...tab, backendSessionId }));
+          const pane = state.embeddedPanes[sessionId];
+          if (!pane) return { tabs };
+          return {
+            tabs,
+            embeddedPanes: {
+              ...state.embeddedPanes,
+              [sessionId]: { ...pane, backendSessionId },
+            },
+          };
+        }),
 
       setSessionCwd: (sessionId, cwd) =>
         set((state) => {

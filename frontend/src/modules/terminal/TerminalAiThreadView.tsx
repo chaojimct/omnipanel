@@ -12,6 +12,7 @@ import {
   type TerminalBlock,
 } from "../../stores/blocksStore";
 import { aiThreadToThreadMessages, getResolvedAiThread } from "./aiThreadBridge";
+import { cancelAiGeneration } from "../../lib/ai/cancelAiGeneration";
 
 const EMPTY_MESSAGES: ReturnType<typeof aiThreadToThreadMessages> = [];
 
@@ -43,7 +44,9 @@ function TerminalAiThreadRuntime({ block }: TerminalAiThreadRuntimeProps) {
       onNew: async () => {},
       setMessages: () => {},
       onReload: async () => {},
-      onCancel: async () => {},
+      onCancel: async () => {
+        cancelAiGeneration();
+      },
     }),
     [messages, isRunning],
   );

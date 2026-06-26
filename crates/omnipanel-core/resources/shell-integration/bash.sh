@@ -16,13 +16,40 @@ __omnipanel_prompt_end() {
     printf "\033]133;B\007"
 }
 
+__omnipanel_is_history_sync() {
+    case "${BASH_COMMAND:-}" in
+        __omnipanel_history_sync__|__omnipanel_emit_history*) return 0 ;;
+    esac
+    return 1
+}
+
 __omnipanel_cmd_start() {
+    __omnipanel_is_history_sync && return
     printf "\033]133;C\007"
 }
 
 __omnipanel_cmd_end() {
+    __omnipanel_is_history_sync && return
     printf "\033]133;D;%s\007" "$?"
 }
+
+__omnipanel_emit_history() {
+    local max="${1:-5000}"
+    export HISTCONTROL="${HISTCONTROL:+${HISTCONTROL}:}ignorespace"
+    local histfile="${HISTFILE:-$HOME/.bash_history}"
+    if [[ -f "$histfile" ]]; then
+        local blob chunk_size=8192 len pos=0
+        blob=$(tail -n "$max" "$histfile" | base64 -w0 2>/dev/null || tail -n "$max" "$histfile" | base64 | tr -d '\n')
+        len=${#blob}
+        while (( pos < len )); do
+            printf '\033]1337;HistoryPart;%s\007' "${blob:pos:chunk_size}"
+            pos=$((pos + chunk_size))
+        done
+    fi
+    printf '\033]1337;HistoryBlobEnd\007'
+}
+
+alias __omnipanel_history_sync__='__omnipanel_emit_history 5000'
 
 if [[ -n "${BASH_VERSION:-}" ]]; then
     # Bash: use PROMPT_COMMAND with a single callback + DEBUG trap
@@ -33,6 +60,11 @@ if [[ -n "${BASH_VERSION:-}" ]]; then
         __omnipanel_cmd_end
         __omnipanel_prompt_start
         ${__omnipanel_orig_prompt}
+        case "${BASH_COMMAND:-}" in
+            __omnipanel_history_sync__|__omnipanel_emit_history*)
+                history -d "$((HISTCMD - 1))" 2>/dev/null || true
+                ;;
+        esac
         __omnipanel_in_prompt=0
     }
     PROMPT_COMMAND="__omnipanel_prompt_callback"
@@ -40,7 +72,11 @@ if [[ -n "${BASH_VERSION:-}" ]]; then
 elif [[ -n "${ZSH_VERSION:-}" ]]; then
     # Zsh: use precmd and preexec hooks
     autoload -Uz add-zsh-hook 2>/dev/null
+    __omnipanel_zsh_preexec() {
+        [[ "$1" == "__omnipanel_history_sync__" ]] && return
+        __omnipanel_cmd_start
+    }
     add-zsh-hook precmd __omnipanel_prompt_start
     add-zsh-hook precmd __omnipanel_cmd_end
-    add-zsh-hook preexec __omnipanel_cmd_start
+    add-zsh-hook preexec __omnipanel_zsh_preexec
 fi
