@@ -13,6 +13,8 @@ import { AiDockResizeHandle } from "./AiDockResizeHandle";
 import { DEFAULT_AI_DOCK_HEIGHT } from "./terminalAiDock";
 import { useStickyAiBlockId } from "./useStickyAiBlockId";
 import { useStickyActive } from "./useStickyActive";
+import { cancelInlineAiBlock } from "./warpInlineAi";
+import { useI18n } from "../../i18n";
 
 type TerminalBlockFeedProps = {
   sessionId: string;
@@ -75,7 +77,7 @@ function buildFeedActivitySignature(blocks: TerminalBlock[]): string {
           .join("|");
         return `ai:${block.id}:${block.status}:${threadSig}`;
       }
-      return `sh:${block.id}:${block.status}:${shellOutput(block).length}`;
+      return `sh:${block.id}:${block.status}:${block.output.length}:${shellOutput(block).length}`;
     })
     .join(";");
 }
@@ -98,9 +100,38 @@ function isFeedPinnedToBottom(container: HTMLElement): boolean {
   return distance <= FEED_SCROLL_PIN_THRESHOLD_PX;
 }
 
-function scrollFeedToLatestIfPinned(container: HTMLElement) {
-  if (!isFeedPinnedToBottom(container)) return;
+function scrollFeedToLatestIfFollowing(
+  container: HTMLElement,
+  followOutput: boolean,
+) {
+  if (!followOutput) return;
   scrollFeedToLatest(container);
+}
+
+function AiBlockStopButton({
+  block,
+  sessionId,
+}: {
+  block: TerminalBlock;
+  sessionId: string;
+}) {
+  const { t } = useI18n();
+  if (block.status !== "running") return null;
+
+  return (
+    <button
+      type="button"
+      className="term-warp-block__stop"
+      aria-label={t("terminal.ai.stop")}
+      title={t("terminal.ai.stop")}
+      onClick={(event) => {
+        event.stopPropagation();
+        cancelInlineAiBlock(sessionId, block.id);
+      }}
+    >
+      ■
+    </button>
+  );
 }
 
 function AiStatusIcon({ block }: { block: TerminalBlock }) {
@@ -154,6 +185,7 @@ function AiBlockCard({
             </span>
             <AiStatusIcon block={block} />
             <span className="term-warp-block__title">{blockTitle(block)}</span>
+            <AiBlockStopButton block={block} sessionId={sessionId} />
             <span className="term-warp-block__chevron" aria-hidden>
               ›
             </span>
@@ -182,6 +214,7 @@ function AiBlockCard({
               ›
             </span>
           </button>
+          <AiBlockStopButton block={block} sessionId={sessionId} />
           <span className="term-warp-block__badge">助手</span>
         </header>
         <TerminalAiThreadView blockId={block.id} />
@@ -213,6 +246,7 @@ function AiBlockCard({
             </span>
             <AiStatusIcon block={block} />
             <span className="term-warp-block__title">{blockTitle(block)}</span>
+            <AiBlockStopButton block={block} sessionId={sessionId} />
             <span className="term-warp-block__chevron" aria-hidden>
               ›
             </span>
@@ -244,6 +278,7 @@ function AiBlockCard({
           </span>
         </button>
         <span className="term-warp-block__badge">助手</span>
+        <AiBlockStopButton block={block} sessionId={sessionId} />
       </header>
       <TerminalAiThreadView
         blockId={block.id}
@@ -385,6 +420,8 @@ export function TerminalBlockFeed({ sessionId, promptSymbol }: TerminalBlockFeed
   const scrollRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const prevBlockCountRef = useRef(0);
+  /** 用户未主动上滚时持续跟随输出；内容增高后不能用即时 isFeedPinnedToBottom 判断 */
+  const followOutputRef = useRef(true);
   const [feedPinnedToBottom, setFeedPinnedToBottom] = useState(true);
 
   const visibleBlocks = blocks.filter(shouldRenderBlock);
@@ -399,7 +436,9 @@ export function TerminalBlockFeed({ sessionId, promptSymbol }: TerminalBlockFeed
     if (!el) return;
 
     const syncPinned = () => {
-      setFeedPinnedToBottom(isFeedPinnedToBottom(el));
+      const pinned = isFeedPinnedToBottom(el);
+      followOutputRef.current = pinned;
+      setFeedPinnedToBottom(pinned);
     };
 
     syncPinned();
@@ -418,14 +457,17 @@ export function TerminalBlockFeed({ sessionId, promptSymbol }: TerminalBlockFeed
     const blockCountGrew = visibleBlocks.length > prevBlockCountRef.current;
     prevBlockCountRef.current = visibleBlocks.length;
 
-    if (blockCountGrew || isFeedPinnedToBottom(el)) {
+    const shouldFollow = blockCountGrew || followOutputRef.current;
+    if (!shouldFollow) return;
+
+    scrollFeedToLatest(el);
+    followOutputRef.current = true;
+    setFeedPinnedToBottom(true);
+
+    requestAnimationFrame(() => {
+      if (!blockCountGrew && !followOutputRef.current) return;
       scrollFeedToLatest(el);
-      requestAnimationFrame(() => {
-        if (blockCountGrew || isFeedPinnedToBottom(el)) {
-          scrollFeedToLatest(el);
-        }
-      });
-    }
+    });
   }, [activitySignature, visibleBlocks.length]);
 
   useEffect(() => {
@@ -434,7 +476,7 @@ export function TerminalBlockFeed({ sessionId, promptSymbol }: TerminalBlockFeed
     if (!list || !container) return;
 
     const observer = new ResizeObserver(() => {
-      scrollFeedToLatestIfPinned(container);
+      scrollFeedToLatestIfFollowing(container, followOutputRef.current);
     });
     observer.observe(list);
     return () => observer.disconnect();

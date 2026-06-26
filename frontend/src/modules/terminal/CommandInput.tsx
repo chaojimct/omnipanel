@@ -7,16 +7,25 @@ import {
   useMemo,
   useRef,
   useState,
+  type KeyboardEvent,
 } from "react";
 import { useI18n } from "../../i18n";
 import { Button } from "../../components/ui/Button";
 import type { TerminalBlock } from "../../stores/blocksStore";
 import { CommandCompletionPopover } from "./commandBar/CommandCompletionPopover";
+import { CommandHistoryPopover } from "./commandBar/CommandHistoryPopover";
 import {
   applyCompletionCandidate,
   useCommandCompletion,
 } from "./commandBar/useCommandCompletion";
 import type { TerminalCompletionContext } from "./commandBar/types";
+import {
+  filterCompletionLabels,
+  type CommandHistoryEntry,
+} from "./commandBar/commandHistory";
+import { requestShellHistorySyncWithRetry } from "./commandBar/shellHistorySync";
+import { useSessionCommandHistory } from "./commandBar/useSessionCommandHistory";
+import { useCommandHistoryBrowse } from "./commandBar/useCommandHistoryBrowse";
 import {
   buildCommandPlanPrompt,
   buildExplainErrorPrompt,
@@ -80,8 +89,14 @@ export const CommandInput = forwardRef<CommandInputHandle, CommandInputProps>(
     const [cursor, setCursor] = useState(0);
     const [activeIndex, setActiveIndex] = useState(0);
     const [completionOpen, setCompletionOpen] = useState(false);
+    const [completionFilter, setCompletionFilter] = useState("");
+    const [historyOpen, setHistoryOpen] = useState(false);
+    const [historyFilter, setHistoryFilter] = useState("");
+    const [historyIndex, setHistoryIndex] = useState(0);
     const [planSteps, setPlanSteps] = useState<CommandPlanStep[] | null>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
+    const historyIndexRef = useRef(0);
+    const historyEntriesRef = useRef<CommandHistoryEntry[]>([]);
     const { t } = useI18n();
     const expandedAiBlockId = useTerminalUiStore(
       (state) => state.expandedAiBlockIds[sessionId] ?? null,
@@ -103,6 +118,73 @@ export const CommandInput = forwardRef<CommandInputHandle, CommandInputProps>(
     const { candidates } = useCommandCompletion(completionCtx, {
       fetchPaths: completionOpen,
     });
+
+    const filteredCandidates = useMemo(
+      () => filterCompletionLabels(candidates, completionFilter),
+      [candidates, completionFilter],
+    );
+
+    const historyEntries = useSessionCommandHistory(sessionId, historyFilter);
+
+    historyIndexRef.current = historyIndex;
+    historyEntriesRef.current = historyEntries;
+
+    const activeHistoryIndex =
+      historyEntries.length === 0
+        ? 0
+        : Math.min(historyIndex, historyEntries.length - 1);
+
+    const {
+      resetBrowse,
+      browseOlder,
+      browseNewer,
+      onManualEdit,
+      applyCommand: applyHistoryLine,
+      isProgrammaticEdit,
+      clearProgrammaticEdit,
+    } = useCommandHistoryBrowse(sessionId, value, setValue, setCursor);
+
+    const closeHistory = useCallback(() => {
+      setHistoryOpen(false);
+      setHistoryFilter("");
+      setHistoryIndex(0);
+      requestAnimationFrame(() => textareaRef.current?.focus());
+    }, []);
+
+    const closeCompletion = useCallback(() => {
+      setCompletionOpen(false);
+      setCompletionFilter("");
+      setActiveIndex(0);
+    }, []);
+
+    const applyHistoryCommand = useCallback(
+      (entry: CommandHistoryEntry) => {
+        const command = entry.text;
+        applyHistoryLine(command);
+        resetBrowse();
+        closeHistory();
+        requestAnimationFrame(() => {
+          const el = textareaRef.current;
+          if (!el) return;
+          el.selectionStart = command.length;
+          el.selectionEnd = command.length;
+          syncCommandInputHeight(el);
+        });
+      },
+      [applyHistoryLine, closeHistory, resetBrowse],
+    );
+
+    const openHistory = useCallback(() => {
+      if (disabled) return;
+      closeCompletion();
+      const seed = value.trim();
+      const searchSeed = seed.startsWith("#") ? seed.slice(1).trim() : seed;
+      setHistoryFilter(searchSeed);
+      setHistoryIndex(0);
+      setHistoryOpen(true);
+      requestShellHistorySyncWithRetry(sessionId);
+      requestAnimationFrame(() => textareaRef.current?.focus());
+    }, [closeCompletion, disabled, sessionId, value]);
 
     useImperativeHandle(ref, () => ({
       focus: () => {
@@ -130,12 +212,12 @@ export const CommandInput = forwardRef<CommandInputHandle, CommandInputProps>(
 
     const applyCandidate = useCallback(
       (index: number) => {
-        const candidate = candidates[index];
+        const candidate = filteredCandidates[index];
         if (!candidate) return;
         const next = applyCompletionCandidate(value, candidate);
         setValue(next.value);
         setCursor(next.cursor);
-        setCompletionOpen(false);
+        closeCompletion();
         requestAnimationFrame(() => {
           const el = textareaRef.current;
           if (!el) return;
@@ -143,7 +225,7 @@ export const CommandInput = forwardRef<CommandInputHandle, CommandInputProps>(
           el.selectionEnd = next.cursor;
         });
       },
-      [candidates, value],
+      [closeCompletion, filteredCandidates, value],
     );
 
     const submit = useCallback(() => {
@@ -162,7 +244,9 @@ export const CommandInput = forwardRef<CommandInputHandle, CommandInputProps>(
           }
         }
         setValue("");
-        setCompletionOpen(false);
+        closeCompletion();
+        closeHistory();
+        resetBrowse();
         return;
       }
 
@@ -178,12 +262,14 @@ export const CommandInput = forwardRef<CommandInputHandle, CommandInputProps>(
       const isInteractive = INTERACTIVE_COMMAND_HINT.test(trimmed);
       onSend(trimmed);
       setValue("");
-      setCompletionOpen(false);
+      closeCompletion();
+      closeHistory();
+      resetBrowse();
       if (isInteractive && onRequestNativeMode) {
         requestAnimationFrame(() => onRequestNativeMode());
       }
       return;
-    }, [cwd, followUpBlockId, onRequestNativeMode, onSend, sessionId, value]);
+    }, [closeCompletion, closeHistory, cwd, followUpBlockId, onRequestNativeMode, onSend, resetBrowse, sessionId, value]);
 
     useLayoutEffect(() => {
       const element = textareaRef.current;
@@ -206,8 +292,102 @@ export const CommandInput = forwardRef<CommandInputHandle, CommandInputProps>(
     }, []);
 
     useEffect(() => {
-      if (!completionOpen) setActiveIndex(0);
-    }, [candidates, completionOpen]);
+      if (!completionOpen) {
+        setCompletionFilter("");
+        setActiveIndex(0);
+      }
+    }, [completionOpen]);
+
+    useEffect(() => {
+      if (!historyOpen) {
+        setHistoryFilter("");
+        setHistoryIndex(0);
+      }
+    }, [historyOpen]);
+
+    useEffect(() => {
+      setActiveIndex(0);
+    }, [completionFilter, filteredCandidates.length]);
+
+    useEffect(() => {
+      setHistoryIndex(0);
+    }, [historyFilter]);
+
+    const cycleHistoryMatch = useCallback(() => {
+      const entries = historyEntriesRef.current;
+      if (entries.length === 0) return;
+      setHistoryIndex((prev) => {
+        const safe = entries.length === 0 ? 0 : Math.min(prev, entries.length - 1);
+        return (safe + 1) % entries.length;
+      });
+    }, []);
+
+    const handleHistoryKeyDown = useCallback(
+      (event: KeyboardEvent) => {
+        const entries = historyEntriesRef.current;
+
+        if (event.ctrlKey && !event.shiftKey && !event.altKey && event.key.toLowerCase() === "r") {
+          event.preventDefault();
+          cycleHistoryMatch();
+          return;
+        }
+
+        if (event.key === "ArrowDown") {
+          event.preventDefault();
+          if (entries.length === 0) return;
+          setHistoryIndex((prev) => (prev + 1) % entries.length);
+          return;
+        }
+        if (event.key === "ArrowUp") {
+          event.preventDefault();
+          if (entries.length === 0) return;
+          setHistoryIndex((prev) => (prev - 1 + entries.length) % entries.length);
+          return;
+        }
+        if (event.key === "Enter" && !event.shiftKey) {
+          event.preventDefault();
+          const index = Math.min(historyIndexRef.current, Math.max(entries.length - 1, 0));
+          const entry = entries[index];
+          if (entry) applyHistoryCommand(entry);
+          return;
+        }
+        if (event.key === "Escape") {
+          event.preventDefault();
+          closeHistory();
+        }
+      },
+      [applyHistoryCommand, closeHistory, cycleHistoryMatch],
+    );
+
+    const handleCompletionKeyDown = useCallback(
+      (event: KeyboardEvent) => {
+        if (!completionOpen) return;
+        if (event.key === "ArrowDown") {
+          event.preventDefault();
+          if (filteredCandidates.length === 0) return;
+          setActiveIndex((prev) => (prev + 1) % filteredCandidates.length);
+          return;
+        }
+        if (event.key === "ArrowUp") {
+          event.preventDefault();
+          if (filteredCandidates.length === 0) return;
+          setActiveIndex(
+            (prev) => (prev - 1 + filteredCandidates.length) % filteredCandidates.length,
+          );
+          return;
+        }
+        if (event.key === "Enter" && !event.shiftKey) {
+          event.preventDefault();
+          applyCandidate(activeIndex);
+          return;
+        }
+        if (event.key === "Escape") {
+          event.preventDefault();
+          closeCompletion();
+        }
+      },
+      [activeIndex, applyCandidate, closeCompletion, completionOpen, filteredCandidates.length],
+    );
 
     const placeholder = lastError
       ? t("terminal.command.explainHint")
@@ -260,51 +440,80 @@ export const CommandInput = forwardRef<CommandInputHandle, CommandInputProps>(
               value={value}
               disabled={disabled}
               onChange={(event) => {
-                setValue(event.target.value);
-                setCursor(event.target.selectionStart ?? event.target.value.length);
-                setCompletionOpen(false);
+                const next = event.target.value;
+                setValue(next);
+                setCursor(event.target.selectionStart ?? next.length);
+                if (isProgrammaticEdit()) {
+                  clearProgrammaticEdit();
+                  return;
+                }
+                if (historyOpen) {
+                  const seed = next.trim();
+                  setHistoryFilter(seed.startsWith("#") ? seed.slice(1).trim() : seed);
+                  onManualEdit();
+                  return;
+                }
+                onManualEdit();
               }}
               onSelect={(event) => {
                 const target = event.target as HTMLTextAreaElement;
                 setCursor(target.selectionStart ?? 0);
               }}
               onKeyDown={(event) => {
+                if (historyOpen) {
+                  handleHistoryKeyDown(event);
+                  return;
+                }
+
+                if (completionOpen) {
+                  handleCompletionKeyDown(event);
+                  if (
+                    ["ArrowUp", "ArrowDown", "Enter", "Escape"].includes(event.key) &&
+                    !(event.key === "Enter" && event.shiftKey)
+                  ) {
+                    return;
+                  }
+                }
+
+                if (event.ctrlKey && !event.shiftKey && !event.altKey && event.key.toLowerCase() === "r") {
+                  event.preventDefault();
+                  if (historyOpen) {
+                    cycleHistoryMatch();
+                  } else {
+                    openHistory();
+                  }
+                  return;
+                }
+
                 if (event.key === "Tab") {
                   event.preventDefault();
+                  closeHistory();
                   if (!completionOpen) {
                     setCompletionOpen(true);
+                    setCompletionFilter("");
                     setActiveIndex(0);
                     return;
                   }
-                  if (candidates.length === 0) return;
-                  if (candidates.length === 1) {
+                  if (filteredCandidates.length === 0) return;
+                  if (filteredCandidates.length === 1) {
                     applyCandidate(0);
                     return;
                   }
                   const next = event.shiftKey
-                    ? (activeIndex - 1 + candidates.length) % candidates.length
-                    : (activeIndex + 1) % candidates.length;
+                    ? (activeIndex - 1 + filteredCandidates.length) % filteredCandidates.length
+                    : (activeIndex + 1) % filteredCandidates.length;
                   setActiveIndex(next);
                   return;
                 }
 
-                if (completionOpen && event.key === "ArrowDown") {
+                if (!completionOpen && !historyOpen && event.key === "ArrowUp" && !event.shiftKey) {
                   event.preventDefault();
-                  setActiveIndex((prev) => (prev + 1) % candidates.length);
+                  browseOlder();
                   return;
                 }
-                if (completionOpen && event.key === "ArrowUp") {
+                if (!completionOpen && !historyOpen && event.key === "ArrowDown" && !event.shiftKey) {
                   event.preventDefault();
-                  setActiveIndex((prev) => (prev - 1 + candidates.length) % candidates.length);
-                  return;
-                }
-                if (completionOpen && event.key === "Enter" && !event.shiftKey) {
-                  event.preventDefault();
-                  applyCandidate(activeIndex);
-                  return;
-                }
-                if (event.key === "Escape") {
-                  setCompletionOpen(false);
+                  browseNewer();
                   return;
                 }
 
@@ -328,12 +537,25 @@ export const CommandInput = forwardRef<CommandInputHandle, CommandInputProps>(
               rows={1}
               spellCheck={false}
             />
+            <CommandHistoryPopover
+              entries={historyEntries}
+              activeIndex={activeHistoryIndex}
+              filter={historyFilter}
+              onFilterChange={setHistoryFilter}
+              onHighlightIndex={setHistoryIndex}
+              onSelect={applyHistoryCommand}
+              onNavigateKeyDown={handleHistoryKeyDown}
+              visible={historyOpen}
+            />
             <CommandCompletionPopover
-              candidates={candidates}
+              candidates={filteredCandidates}
               activeIndex={activeIndex}
-              visible={completionOpen && candidates.length > 0}
+              filter={completionFilter}
+              onFilterChange={setCompletionFilter}
+              onNavigateKeyDown={handleCompletionKeyDown}
+              visible={completionOpen}
               onSelect={(candidate) => {
-                const index = candidates.findIndex((item) => item.id === candidate.id);
+                const index = filteredCandidates.findIndex((item) => item.id === candidate.id);
                 applyCandidate(index >= 0 ? index : 0);
               }}
             />

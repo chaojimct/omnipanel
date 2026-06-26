@@ -1,6 +1,5 @@
 import { useAiStore } from "../../stores/aiStore";
 import { AiAssistantBody } from "./assistant-ui/AiAssistantBody";
-import { AiRuntimeProvider } from "./assistant-ui/AiRuntimeProvider";
 import { AiAssistantHeaderToolbar } from "./assistant-ui/AiAssistantHeaderActions";
 import { AiConversationTitle } from "./assistant-ui/AiConversationTitle";
 import { SubWindow } from "../ui/SubWindow";
@@ -26,9 +25,7 @@ export function AiDrawer() {
       headerExtra={<AiAssistantHeaderToolbar />}
     >
       <div className="ai-subwindow-content ai-assistant-shell aui-shell">
-        <AiRuntimeProvider>
-          <AiAssistantBody />
-        </AiRuntimeProvider>
+        <AiAssistantBody />
       </div>
     </SubWindow>
   );

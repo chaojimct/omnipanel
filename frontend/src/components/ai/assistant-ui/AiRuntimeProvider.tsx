@@ -17,16 +17,19 @@ import { resolveScenarioModelSelectionId } from "../../../lib/aiScenarioModels";
 import { useAiStore } from "../../../stores/aiStore";
 import { getModuleAiContextText, getModuleMcpTools, executeModuleMcpTool } from "../../../lib/ai/context";
 import { registerAiPromptSubmit, type InlineTerminalAiTarget } from "../../../lib/ai/submitAiPrompt";
-import { useBlocksStore } from "../../../stores/blocksStore";
+import { registerAiGenerationCancel } from "../../../lib/ai/cancelAiGeneration";
+import { useBlocksStore, isAiThreadMessage } from "../../../stores/blocksStore";
 import { useTerminalUiStore } from "../../../modules/terminal/terminalUiStore";
 import {
   aiThreadToModelMessages,
+  getResolvedAiThread,
   pushAssistantErrorMessage,
 } from "../../../modules/terminal/aiThreadBridge";
 import {
   cancelPendingInlineTools,
   createInlineTerminalToolCall,
   newInlineToolCallId,
+  rejectInlineTerminalTool,
   waitForInlineToolDecision,
 } from "../../../modules/terminal/inlineToolBridge";
 import type { ModuleKey } from "../../../lib/paths";
@@ -125,6 +128,55 @@ async function executeMcpTool(
 }
 
 const EMPTY_MESSAGE_LIST: ThreadMessage[] = [];
+const GENERATION_STALL_MS = 120_000;
+const INLINE_TOOL_DECISION_TIMEOUT_MS = 120_000;
+const AI_TOOL_LOAD_TIMEOUT_MS = 20_000;
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = window.setTimeout(() => {
+      reject(new Error(message));
+    }, timeoutMs);
+    promise.then(
+      (value) => {
+        window.clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        window.clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
+}
+
+function inlineHasAssistantContent(blockId: string): boolean {
+  const block = useBlocksStore.getState().findBlockById(blockId);
+  if (!block) return false;
+  return getResolvedAiThread(block).some(
+    (item) =>
+      isAiThreadMessage(item) &&
+      item.role === "assistant" &&
+      Boolean(item.content.trim() || item.reasoning?.trim()),
+  );
+}
+
+function finalizeInlineBlock(
+  inline: InlineTerminalAiTarget,
+  options: { failed: boolean; aborted?: boolean; reason?: string },
+): void {
+  if (options.aborted) {
+    cancelPendingInlineTools(inline.blockId);
+  }
+  if (options.reason && !inlineHasAssistantContent(inline.blockId)) {
+    pushAssistantErrorMessage(inline.blockId, options.reason);
+  }
+  useBlocksStore.getState().updateBlock(inline.blockId, {
+    status: options.failed ? "failed" : "completed",
+    exitCode: options.failed ? (options.aborted ? 130 : 1) : 0,
+  });
+  useTerminalUiStore.getState().setExpandedAiBlock(inline.sessionId, inline.blockId);
+}
 
 export function AiRuntimeProvider({ children }: { children: ReactNode }) {
   const conversations = useAiStore((s) => s.conversations);
@@ -145,6 +197,7 @@ export function AiRuntimeProvider({ children }: { children: ReactNode }) {
   const providers = useAiModelsStore((s) => s.providers);
 
   const abortRef = useRef<AbortController | null>(null);
+  const currentInlineRef = useRef<InlineTerminalAiTarget | null>(null);
 
   const activeConversation = conversations.find((c) => c.id === activeConversationId);
 
@@ -264,18 +317,31 @@ export function AiRuntimeProvider({ children }: { children: ReactNode }) {
     abortRef.current?.abort();
     abortRef.current = new AbortController();
     const signal = abortRef.current.signal;
+    currentInlineRef.current = inline ?? null;
 
-    const finishGeneration = (failed = false) => {
+    let lastActivityAt = Date.now();
+    const stallTimer = window.setInterval(() => {
+      if (signal.aborted) return;
+      if (Date.now() - lastActivityAt > GENERATION_STALL_MS) {
+        abortRef.current?.abort();
+      }
+    }, 3_000);
+
+    const touchActivity = () => {
+      lastActivityAt = Date.now();
+    };
+
+    const finishGeneration = (failed = false, aborted = false) => {
       if (inline) {
-        if (signal.aborted) {
-          cancelPendingInlineTools(inline.blockId);
+        if (aborted) {
+          finalizeInlineBlock(inline, {
+            failed: true,
+            aborted: true,
+            reason: "已停止",
+          });
+        } else {
+          finalizeInlineBlock(inline, { failed });
         }
-        useBlocksStore.getState().updateBlock(inline.blockId, {
-          status: failed ? "failed" : "completed",
-          exitCode: failed ? 1 : 0,
-        });
-        // 输出结束后保持展开，便于阅读与追问
-        useTerminalUiStore.getState().setExpandedAiBlock(inline.sessionId, inline.blockId);
       } else if (convId && assistantMsgId) {
         updateMessage(convId, assistantMsgId, {
           isStreaming: false,
@@ -289,7 +355,11 @@ export function AiRuntimeProvider({ children }: { children: ReactNode }) {
         ? moduleKeyFromPath(window.location.pathname)
         : null;
 
-    const toolDefs = await loadAiToolDefs(moduleKey);
+    const toolDefs = await withTimeout(
+      loadAiToolDefs(moduleKey),
+      AI_TOOL_LOAD_TIMEOUT_MS,
+      "加载 AI 工具超时",
+    );
     setConnectedMcpServices(
       toolDefs.map((t) => ({
         serviceId: t.serviceId,
@@ -320,6 +390,8 @@ export function AiRuntimeProvider({ children }: { children: ReactNode }) {
 
         for await (const chunk of stream) {
           if (signal.aborted) break;
+
+          touchActivity();
 
           if (chunk.type === "text") {
             appendText(chunk.delta);
@@ -405,12 +477,28 @@ export function AiRuntimeProvider({ children }: { children: ReactNode }) {
               tc.name,
               tc.args,
             );
-            const decision = await waitForInlineToolDecision(
-              inline.blockId,
-              toolCallId,
-              inline.sessionId,
-              created.command,
-            );
+            const decision = await new Promise<
+              Awaited<ReturnType<typeof waitForInlineToolDecision>>
+            >((resolve) => {
+              const timer = window.setTimeout(() => {
+                rejectInlineTerminalTool(inline.blockId, toolCallId);
+                resolve({
+                  approved: false,
+                  result: "等待命令确认超时",
+                  exitCode: 1,
+                });
+              }, INLINE_TOOL_DECISION_TIMEOUT_MS);
+
+              void waitForInlineToolDecision(
+                inline.blockId,
+                toolCallId,
+                inline.sessionId,
+                created.command,
+              ).then((result) => {
+                window.clearTimeout(timer);
+                resolve(result);
+              });
+            });
             result = decision.result;
             success =
               decision.approved &&
@@ -465,14 +553,20 @@ export function AiRuntimeProvider({ children }: { children: ReactNode }) {
       finishGeneration();
     } catch (err) {
       if (signal.aborted) {
-        finishGeneration();
+        finishGeneration(true, true);
       } else {
-        appendText(`\n\nError: ${err instanceof Error ? err.message : String(err)}`);
+        const message = err instanceof Error ? err.message : String(err);
+        appendText(`\n\nError: ${message}`);
+        if (inline && !inlineHasAssistantContent(inline.blockId)) {
+          pushAssistantErrorMessage(inline.blockId, message || "AI 请求失败");
+        }
         finishGeneration(true);
       }
     } finally {
+      window.clearInterval(stallTimer);
       setIsGenerating(false);
       abortRef.current = null;
+      currentInlineRef.current = null;
     }
   };
 
@@ -492,7 +586,15 @@ export function AiRuntimeProvider({ children }: { children: ReactNode }) {
 
   runUserPromptRef.current = async (userText, options) => {
     if (!userText.trim()) return;
-    if (useAiStore.getState().isGenerating) return;
+    if (useAiStore.getState().isGenerating) {
+      if (options?.inline) {
+        abortRef.current?.abort();
+        setIsGenerating(false);
+        await new Promise((resolve) => window.setTimeout(resolve, 0));
+      } else {
+        return;
+      }
+    }
 
     const modelConfig = getModelConfig();
 
@@ -637,8 +739,9 @@ export function AiRuntimeProvider({ children }: { children: ReactNode }) {
     await runGenerationRef.current!(convId, assistantMsgId, priorMessages, modelConfig);
   };
 
-  const handleCancel = useCallback(async () => {
+  const handleCancel = useCallback(() => {
     abortRef.current?.abort();
+    setIsGenerating(false);
   }, []);
 
   useEffect(() => {
@@ -646,6 +749,10 @@ export function AiRuntimeProvider({ children }: { children: ReactNode }) {
       runUserPromptRef.current!(prompt, options),
     );
   }, []);
+
+  useEffect(() => {
+    return registerAiGenerationCancel(handleCancel);
+  }, [handleCancel]);
 
   const adapter = useMemo<ExternalStoreAdapter>(
     () => ({

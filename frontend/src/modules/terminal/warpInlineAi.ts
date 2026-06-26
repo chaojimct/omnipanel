@@ -1,7 +1,10 @@
 import { submitAiPrompt } from "../../lib/ai/submitAiPrompt";
-import { createBlockId, useBlocksStore } from "../../stores/blocksStore";
+import { cancelAiGeneration } from "../../lib/ai/cancelAiGeneration";
+import { createBlockId, isAiThreadMessage, useBlocksStore } from "../../stores/blocksStore";
 import { useTerminalUiStore } from "./terminalUiStore";
 import { buildNaturalLanguagePrompt } from "./warpExperience";
+import { cancelPendingInlineTools } from "./inlineToolBridge";
+import { getResolvedAiThread, pushAssistantErrorMessage } from "./aiThreadBridge";
 
 function beginAiBlock(sessionId: string, query: string, cwd: string): string {
   const blockId = createBlockId();
@@ -36,6 +39,38 @@ function beginAiBlock(sessionId: string, query: string, cwd: string): string {
   return blockId;
 }
 
+const INLINE_AI_STOPPED = "已手动停止";
+
+/** 强制停止卡住的终端内联 AI 卡片 */
+export function cancelInlineAiBlock(sessionId: string, blockId: string): void {
+  cancelAiGeneration();
+  cancelPendingInlineTools(blockId);
+
+  const forceStopStuckBlock = () => {
+    const block = useBlocksStore.getState().findBlockById(blockId);
+    if (!block || block.status !== "running") return;
+
+    const thread = getResolvedAiThread(block);
+    const hasAssistantContent = thread.some(
+      (item) =>
+        isAiThreadMessage(item) &&
+        item.role === "assistant" &&
+        Boolean(item.content.trim() || item.reasoning?.trim()),
+    );
+    if (!hasAssistantContent) {
+      pushAssistantErrorMessage(blockId, INLINE_AI_STOPPED);
+    }
+
+    useBlocksStore.getState().updateBlock(blockId, {
+      status: "failed",
+      exitCode: 130,
+    });
+    useTerminalUiStore.getState().setExpandedAiBlock(sessionId, blockId);
+  };
+
+  window.setTimeout(forceStopStuckBlock, 120);
+}
+
 /** 在终端 Block 流内发起自然语言 AI（Warp 式，不打开侧栏） */
 export async function submitInlineNaturalLanguage(
   sessionId: string,
@@ -45,9 +80,15 @@ export async function submitInlineNaturalLanguage(
   const blockId = beginAiBlock(sessionId, query, cwd);
   const prompt = buildNaturalLanguagePrompt(query, cwd);
 
-  await submitAiPrompt(prompt, {
-    inline: { sessionId, blockId },
-  });
+  try {
+    await submitAiPrompt(prompt, {
+      inline: { sessionId, blockId },
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    pushAssistantErrorMessage(blockId, message || "AI 请求失败");
+    useBlocksStore.getState().updateBlock(blockId, { status: "failed", exitCode: 1 });
+  }
 
   return blockId;
 }
@@ -73,7 +114,13 @@ export async function submitInlineFollowUp(
   useTerminalUiStore.getState().setExpandedAiBlock(sessionId, blockId);
 
   const prompt = buildNaturalLanguagePrompt(trimmed, cwd);
-  await submitAiPrompt(prompt, {
-    inline: { sessionId, blockId, continueThread: true },
-  });
+  try {
+    await submitAiPrompt(prompt, {
+      inline: { sessionId, blockId, continueThread: true },
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    pushAssistantErrorMessage(blockId, message || "AI 请求失败");
+    useBlocksStore.getState().updateBlock(blockId, { status: "failed", exitCode: 1 });
+  }
 }

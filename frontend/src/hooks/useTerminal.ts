@@ -19,7 +19,13 @@ import { useSettingsStore } from "../stores/settingsStore";
 import { isOpenSshHostId, openSshHostAlias } from "../lib/sshConfigHosts";
 import { createBlockId, useBlocksStore, type TerminalBlock } from "../stores/blocksStore";
 import { createTerminalOutputBatcher } from "../lib/terminalOutputBatcher";
-import { decodeTerminalBytes, extractCommandOutput, normalizeBlockCommand, resolveBlockStatus } from "../modules/terminal/terminalOutputText";
+import {
+  decodeTerminalBytesRaw,
+  extractCommandOutput,
+  normalizeBlockCommand,
+  resolveBlockStatus,
+  stripTerminalControlSequences,
+} from "../modules/terminal/terminalOutputText";
 import {
   claimFeedCaptureBlockId,
   clearOutputWatch,
@@ -27,6 +33,14 @@ import {
   hasActiveFeedCapture,
   releaseFeedCapture,
 } from "../modules/terminal/executeTerminalCommand";
+import {
+  isSilentHistorySync,
+  isSilentHistorySyncCommand,
+  registerShellHistoryPtySender,
+  requestShellHistorySync,
+} from "../modules/terminal/commandBar/shellHistorySync";
+import { ingestTerminalHistoryOutput } from "../modules/terminal/commandBar/shellHistoryIngest";
+import { registerRuntimeBackendSession } from "../modules/terminal/commandBar/shellHistoryFetch";
 import {
   trackTerminalOutputForAutoReturn,
   tryAutoReturnAfterBlockEnd,
@@ -332,8 +346,10 @@ function injectRemoteShellIntegration(write: (data: string) => void) {
     "if [ -z \"${__OMNIPANEL_SHELL_INT-}\" ]; then",
     "export __OMNIPANEL_SHELL_INT=1;",
     "__omnipanel_prompt_start() { printf \"\\033]133;A\\007\"; printf \"\\033]1337;CurrentDir=%s\\007\" \"$PWD\"; };",
-    "__omnipanel_cmd_start() { printf \"\\033]133;C\\007\"; };",
-    "__omnipanel_cmd_end() { printf \"\\033]133;D;%s\\007\" \"$?\"; };",
+    "__omnipanel_cmd_start() { case \"${BASH_COMMAND:-}\" in __omnipanel_history_sync__|__omnipanel_emit_history*|*__OMNIPANEL_HIST_*|*HISTFILE*base64*) return;; esac; printf \"\\033]133;C\\007\"; };",
+    "__omnipanel_cmd_end() { case \"${BASH_COMMAND:-}\" in __omnipanel_history_sync__|__omnipanel_emit_history*|*__OMNIPANEL_HIST_*|*HISTFILE*base64*) return;; esac; printf \"\\033]133;D;%s\\007\" \"$?\"; };",
+    "__omnipanel_emit_history() { local max=5000; export HISTCONTROL=\"${HISTCONTROL:+${HISTCONTROL}:}ignorespace\"; local f=\"${HISTFILE:-$HOME/.bash_history}\"; if [ -f \"$f\" ]; then blob=$(tail -n $max \"$f\" | base64 -w0 2>/dev/null || tail -n $max \"$f\" | base64 | tr -d '\\n'); pos=0; cs=8192; len=${#blob}; while [ $pos -lt $len ]; do printf '\\033]1337;HistoryPart;%s\\007' \"${blob:$pos:$cs}\"; pos=$((pos+cs)); done; fi; printf '\\033]1337;HistoryBlobEnd\\007'; };",
+    "alias __omnipanel_history_sync__='__omnipanel_emit_history';",
     "if [ -n \"${BASH_VERSION:-}\" ]; then",
     "__omnipanel_in_prompt=0;",
     "__omnipanel_pc() { __omnipanel_in_prompt=1; __omnipanel_cmd_end; __omnipanel_prompt_start; __omnipanel_in_prompt=0; };",
@@ -506,6 +522,7 @@ export function useTerminal(
     }
 
     sendCommandRef.current = sendCommand;
+    registerShellHistoryPtySender(sessionId, sendCommand);
 
     function setupShellIntegration(t: Terminal) {
       const addBlock = useBlocksStore.getState().addBlock;
@@ -536,6 +553,16 @@ export function useTerminal(
             case "C": {
               const y = t.buffer.active.cursorY + t.buffer.active.baseY;
               const commandText = readLine(y);
+              const normalizedCmd = normalizeBlockCommand(commandText);
+              if (isSilentHistorySyncCommand(normalizedCmd || commandText)) {
+                pendingBlock = null;
+                break;
+              }
+              if (isSilentHistorySync(sessionId)) {
+                pendingBlock = null;
+                break;
+              }
+
               if (!pendingBlock) {
                 pendingBlock = { startLine: y, command: commandText, cwd: currentCwd };
               } else {
@@ -561,7 +588,7 @@ export function useTerminal(
                 break;
               }
               const effectiveCmd = (pendingBlock.command || commandText).trim();
-              if (!effectiveCmd) {
+              if (!effectiveCmd || isSilentHistorySyncCommand(effectiveCmd)) {
                 pendingBlock = null;
                 break;
               }
@@ -622,6 +649,7 @@ export function useTerminal(
               currentCwd = next;
               useTerminalStore.getState().setSessionCwd(sessionId, next);
             }
+            return true;
           }
           return true;
         })
@@ -643,6 +671,7 @@ export function useTerminal(
 
     function shouldWriteToXterm(): boolean {
       if (suspendedRef.current) return false;
+      if (isSilentHistorySync(sessionId)) return false;
       if (!isWarpDisplay(sessionId)) return true;
       return Boolean(pendingBlock?.blockId) || hasActiveFeedCapture(sessionId);
     }
@@ -650,7 +679,12 @@ export function useTerminal(
     async function attachOutputListener() {
       outputBatcher = createTerminalOutputBatcher((merged) => {
         trackTerminalOutputForAutoReturn(sessionId, merged);
-        const text = decodeTerminalBytes(merged);
+        const rawText = decodeTerminalBytesRaw(merged);
+        let text = ingestTerminalHistoryOutput(sessionId, rawText);
+        if (!text) return;
+        text = stripTerminalControlSequences(text);
+        if (!text) return;
+
         feedTerminalOutputForWatch(sessionId, text);
         const outputBlockId =
           pendingBlock?.blockId ?? claimFeedCaptureBlockId(sessionId);
@@ -743,6 +777,7 @@ export function useTerminal(
 
       if (existingSid) {
         backendSid = existingSid;
+        registerRuntimeBackendSession(sessionId, existingSid);
         useTerminalStore.getState().setStatus(sessionId, "connected");
         void restoreSnapshot();
         flushPendingInput();
@@ -758,12 +793,17 @@ export function useTerminal(
               }, 10000);
             }
             window.setTimeout(() => {
-              if (!destroyed) injectRemoteShellIntegration(writeToBackend);
+              if (!destroyed) {
+                injectRemoteShellIntegration(writeToBackend);
+                window.setTimeout(() => requestShellHistorySync(sessionId), 600);
+              }
             }, 300);
           } else if (remoteInitEchoFilter) {
             remoteInitEchoFilter.releasePending();
             remoteInitEchoFilter = null;
           }
+        } else {
+          window.setTimeout(() => requestShellHistorySync(sessionId), 800);
         }
         return;
       }
@@ -773,6 +813,7 @@ export function useTerminal(
         const sid = await acquireBackendSession(sessionId, cols, rows);
         if (destroyed) return;
         backendSid = sid;
+        registerRuntimeBackendSession(sessionId, sid);
         useTerminalStore.getState().setStatus(sessionId, "connected");
         flushPendingInput();
         if (remote) {
@@ -787,12 +828,17 @@ export function useTerminal(
               }, 10000);
             }
             window.setTimeout(() => {
-              if (!destroyed) injectRemoteShellIntegration(writeToBackend);
+              if (!destroyed) {
+                injectRemoteShellIntegration(writeToBackend);
+                window.setTimeout(() => requestShellHistorySync(sessionId), 600);
+              }
             }, 300);
           } else if (remoteInitEchoFilter) {
             remoteInitEchoFilter.releasePending();
             remoteInitEchoFilter = null;
           }
+        } else {
+          window.setTimeout(() => requestShellHistorySync(sessionId), 800);
         }
       } catch (err) {
         if (destroyed) return;
@@ -975,6 +1021,8 @@ export function useTerminal(
         container.removeEventListener("contextmenu", contextmenuHandler);
       }
       sendCommandRef.current = null;
+      registerShellHistoryPtySender(sessionId, null);
+      registerRuntimeBackendSession(sessionId, null);
       inputBindingRef.current?.dispose();
       inputBindingRef.current = null;
       for (const disposable of disposables) {
@@ -1056,12 +1104,14 @@ export function useTerminal(
 
   useEffect(() => {
     if (!sendRef) return;
-    if (active && !suspended) {
+    if (active && !suspended && sendCommandRef.current) {
       sendRef.current = sendCommandRef.current;
+      registerShellHistoryPtySender(sessionId, sendCommandRef.current);
     } else if (sendRef.current === sendCommandRef.current) {
       sendRef.current = null;
+      registerShellHistoryPtySender(sessionId, null);
     }
-  }, [active, sendRef, suspended]);
+  }, [active, sendRef, sessionId, suspended]);
 
   return { termRef, searchAddonRef };
 }

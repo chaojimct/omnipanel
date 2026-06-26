@@ -69,3 +69,40 @@ function global:OmniPanel-Prompt {
 
     $promptText
 }
+
+function global:__omnipanel_emit_history {
+    param([int]$Max = 5000)
+    $lines = @()
+    if (Get-Command Get-PSReadLineOption -ErrorAction SilentlyContinue) {
+        try {
+            $path = (Get-PSReadLineOption).HistorySavePath
+            if ($path -and (Test-Path -LiteralPath $path)) {
+                $lines = @(Get-Content -LiteralPath $path -ErrorAction SilentlyContinue | Select-Object -Last $Max)
+            }
+        } catch { }
+    }
+    if (-not $lines -or $lines.Count -eq 0) {
+        $lines = @(Get-History -Count $Max -ErrorAction SilentlyContinue | ForEach-Object { $_.CommandLine })
+    }
+    if ($lines -and $lines.Count -gt 0) {
+        $filtered = [System.Collections.Generic.List[string]]::new()
+        foreach ($cmd in $lines) {
+            if ([string]::IsNullOrWhiteSpace($cmd)) { continue }
+            if ($cmd -match '^__omnipanel_' -or $cmd -match '__OMNIPANEL_SHELL_INT') { continue }
+            $filtered.Add([string]$cmd)
+        }
+        if ($filtered.Count -gt 0) {
+            $text = [string]::Join("`n", $filtered)
+            $blob = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($text))
+            $chunkSize = 8192
+            for ($pos = 0; $pos -lt $blob.Length; $pos += $chunkSize) {
+                $len = [Math]::Min($chunkSize, $blob.Length - $pos)
+                $chunk = $blob.Substring($pos, $len)
+                OmniPanel-EmitOsc "1337;HistoryPart=$chunk"
+            }
+        }
+    }
+    OmniPanel-EmitOsc "1337;HistoryBlobEnd"
+}
+
+Set-Alias -Name __omnipanel_history_sync__ -Value __omnipanel_emit_history -Scope Global -Force

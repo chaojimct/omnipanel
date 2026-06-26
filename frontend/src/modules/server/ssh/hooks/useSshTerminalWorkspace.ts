@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { WorkspaceResource } from "../../../../lib/resourceRegistry";
 import {
   sshEmbeddedWorkspaceId,
@@ -6,6 +6,10 @@ import {
 } from "../../../../stores/terminalStore";
 import { disposePaneBackendSession } from "../../../../hooks/useTerminal";
 import { listSshEmbeddedPanes } from "../terminal/sshEmbeddedPanes";
+import {
+  setTerminalPaneSender,
+  terminalPaneSenders,
+} from "../../../terminal/terminalPaneSenders";
 
 function disposeWorkspacePanes(workspaceId: string, resourceId: string) {
   const removeEmbeddedPane = useTerminalStore.getState().removeEmbeddedPane;
@@ -28,7 +32,6 @@ export function useSshTerminalWorkspace(
   );
 
   const [activePaneId, setActivePaneId] = useState<string | null>(null);
-  const paneSendersRef = useRef<Record<string, (cmd: string) => void>>({});
 
   const workspacePanes = useMemo(() => {
     if (!workspaceId || !resource) return [];
@@ -75,11 +78,7 @@ export function useSshTerminalWorkspace(
 
   const handleSenderChange = useCallback(
     (sessionId: string, sender: ((cmd: string) => void) | null) => {
-      if (sender) {
-        paneSendersRef.current[sessionId] = sender;
-      } else {
-        delete paneSendersRef.current[sessionId];
-      }
+      setTerminalPaneSender(sessionId, sender);
     },
     [],
   );
@@ -87,13 +86,13 @@ export function useSshTerminalWorkspace(
   const handleCommand = useCallback(
     (command: string) => {
       if (!activePane) return;
-      paneSendersRef.current[activePane.id]?.(command);
+      terminalPaneSenders[activePane.id]?.(command);
     },
     [activePane],
   );
 
   const hasPaneSender = useCallback(
-    (paneId: string) => Boolean(paneSendersRef.current[paneId]),
+    (paneId: string) => Boolean(terminalPaneSenders[paneId]),
     [],
   );
 
