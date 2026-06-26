@@ -37,6 +37,7 @@ import { useI18n } from "../../i18n";
 import { quickInput } from "../../lib/quickInput";
 import { useModuleSuspended } from "../../lib/moduleVisibility";
 import { isSqlMonacoEditorFocused, sqlAtOffset } from "./lsp/sqlStatement";
+import { makeQueryRunId, isQueryCancelledError } from "./queryRun";
 import type { DbSqlFileNode } from "../../stores/dbSqlFileStore";
 import { resolveSqlTabStateFromFile, useDbSqlFileStore } from "../../stores/dbSqlFileStore";
 import {
@@ -1262,7 +1263,10 @@ export function DatabasePanel() {
       if (!dbEntry) {
         continue;
       }
-      const tables = introspectToTableSchemas(dbEntry.tables);
+      const tables = [
+        ...introspectToTableSchemas(dbEntry.tables, "table"),
+        ...introspectToTableSchemas(dbEntry.views ?? [], "view"),
+      ];
       setSchemaByKey((prev) => ({
         ...prev,
         [key]: buildDatabaseSchema(database, tables),
@@ -1658,7 +1662,11 @@ export function DatabasePanel() {
       setCommittingTabs((prev) => new Set(prev).add(tabId));
       try {
         for (const sql of sqls) {
-          await invoke("db_execute_query", { connection: connForSchema, sql });
+          await invoke("db_execute_query", {
+            connection: connForSchema,
+            sql,
+            runId: makeQueryRunId(),
+          });
         }
         clearTabDirty(tabId);
         refreshTabPreviewNow(tabId);
@@ -2273,6 +2281,7 @@ export function DatabasePanel() {
           const queryResult = await invoke<QueryResult>("db_execute_query", {
             connection: conn,
             sql: tabState.sql.trim(),
+            runId: makeQueryRunId(),
           });
           if (queryResult.columns.length > 0) {
             const rows = rowsToRecord(queryResult.columns, queryResult.rows);
@@ -3185,10 +3194,12 @@ export function DatabasePanel() {
 
       updateSqlResultSession(resolvedTabId, session.id, { running: true, error: null });
       const started = performance.now();
+      const runId = makeQueryRunId();
       try {
         const res = await invoke<QueryResult>("db_execute_query", {
           connection: conn,
           sql,
+          runId,
           limit: pageSize,
           offset: resultPage * pageSize,
         });
@@ -3203,7 +3214,11 @@ export function DatabasePanel() {
       } catch (e) {
         updateSqlResultSession(resolvedTabId, session.id, {
           result: null,
-          error: typeof e === "string" ? e : JSON.stringify(e),
+          error: isQueryCancelledError(e)
+            ? t("database.queryCancelled")
+            : typeof e === "string"
+              ? e
+              : JSON.stringify(e),
           running: false,
         });
       }
@@ -3225,9 +3240,11 @@ export function DatabasePanel() {
       return;
     }
 
+    const runId = makeQueryRunId();
     const session = createSqlResultSession(sql);
     updateSqlTabState(resolvedTabId, {
       running: true,
+      activeQueryRunId: runId,
       error: null,
       resultSessions: [...sessions, session],
       activeResultSessionId: session.id,
@@ -3247,6 +3264,7 @@ export function DatabasePanel() {
       const res = await invoke<QueryResult>("db_execute_query", {
         connection: conn,
         sql,
+        runId,
         limit: pageSize,
         offset: 0,
       });
@@ -3258,14 +3276,18 @@ export function DatabasePanel() {
         elapsed: Math.round(performance.now() - started),
         running: false,
       });
-      updateSqlTabState(resolvedTabId, { running: false });
+      updateSqlTabState(resolvedTabId, { running: false, activeQueryRunId: null });
     } catch (e) {
       updateSqlResultSession(resolvedTabId, session.id, {
         result: null,
-        error: typeof e === "string" ? e : JSON.stringify(e),
+        error: isQueryCancelledError(e)
+          ? t("database.queryCancelled")
+          : typeof e === "string"
+            ? e
+            : JSON.stringify(e),
         running: false,
       });
-      updateSqlTabState(resolvedTabId, { running: false });
+      updateSqlTabState(resolvedTabId, { running: false, activeQueryRunId: null });
     }
   }, [
     connectionForSqlTab,
@@ -3275,6 +3297,30 @@ export function DatabasePanel() {
     updateSqlTabState,
     updateSqlResultSession,
   ]);
+
+  const cancelQuery = useCallback(async (tabIdOverride?: string) => {
+    const tabId = tabIdOverride ?? activeWorkspaceTab?.id;
+    if (!tabId) return;
+
+    const tabState = useDbWorkspaceTabStore.getState().sqlTabStates[tabId];
+    const runId = tabState?.activeQueryRunId;
+    if (!runId) return;
+
+    try {
+      await invoke("db_cancel_query", { runId });
+    } catch {
+      // 查询可能已结束
+    }
+
+    const activeSessionId = tabState.activeResultSessionId;
+    if (activeSessionId) {
+      updateSqlResultSession(tabId, activeSessionId, {
+        running: false,
+        error: t("database.queryCancelled"),
+      });
+    }
+    updateSqlTabState(tabId, { running: false, activeQueryRunId: null });
+  }, [activeWorkspaceTab, t, updateSqlResultSession, updateSqlTabState]);
 
   const goToQueryResultPage = useCallback(
     async (tabId: string, page: number, sessionId?: string) => {
@@ -3403,6 +3449,7 @@ export function DatabasePanel() {
         tabs: workspaceTabs,
         closeTab: (tabId: string) => requestTabAction({ kind: "close", tabId }),
         runQuery,
+        cancelQuery,
         goToQueryResultPage,
         updateSqlTabState,
         closeSqlResultSession,
@@ -3443,6 +3490,7 @@ export function DatabasePanel() {
     workspaceTabs,
     requestTabAction,
     runQuery,
+    cancelQuery,
     updateSqlTabState,
     closeSqlResultSession,
     refreshTablePreview,

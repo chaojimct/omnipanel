@@ -993,6 +993,11 @@ export const enUS: TranslationDict = {
       hint: "Write operations and production DB actions go through unified risk confirmation.",
     },
     runSql: "Run SQL",
+    cancelSql: "Cancel",
+    formatSql: "Format SQL",
+    formatSqlAll: "Format all",
+    formatSqlCurrent: "Format current statement",
+    queryCancelled: "Query cancelled",
     running: "Running…",
     toolbox: {
       open: "Data Transfer",
@@ -2097,6 +2102,7 @@ export const enUS: TranslationDict = {
         openSettings: "Open Settings",
         switchNthTab: "Switch to Nth Tab",
         formatSql: "Format SQL",
+        formatSqlStatement: "Format current SQL statement",
       },
     },
     aiDisplay: {

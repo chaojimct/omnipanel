@@ -26,8 +26,9 @@ export interface DbWorkspaceSharedContextValue {
   runQuery: (
     sqlOverride?: string,
     tabIdOverride?: string,
-    options?: { resultPage?: number },
+    options?: { resultPage?: number; sessionId?: string },
   ) => Promise<void>;
+  cancelQuery: (tabIdOverride?: string) => Promise<void>;
   goToQueryResultPage: (tabId: string, page: number, sessionId?: string) => Promise<void>;
   updateSqlTabState: (id: string, patch: Partial<SqlTabState>) => void;
   closeSqlResultSession: (sqlTabId: string, sessionId: string) => void;

@@ -1192,10 +1192,13 @@ pub async fn db_count_tables(
 
 /// 执行任意 SQL（SELECT 返回行集，DML 返回影响行数）。高风险写操作由前端经执行引擎确认后调用。
 /// `limit` / `offset` 非零时，SELECT/WITH 语句会被包裹为 `SELECT * FROM (...) LIMIT n OFFSET m`，防止超大结果集卡死前端。
+/// `run_id` 供前端中断长时间查询（`db_cancel_query`）。
 #[tauri::command]
 pub async fn db_execute_query(
+    state: tauri::State<'_, crate::state::AppState>,
     connection: DbConnectionConfig,
     sql: String,
+    run_id: String,
     limit: Option<u32>,
     offset: Option<u32>,
 ) -> Result<QueryResult, String> {
@@ -1207,10 +1210,43 @@ pub async fn db_execute_query(
         ),
         _ => sql,
     };
-    let driver = omnipanel_db::connect(&to_params(&connection))
+    let params = to_params(&connection);
+    let handle = tokio::spawn(async move {
+        let driver = omnipanel_db::connect(&params).await.map_err(err_msg)?;
+        driver.execute(&wrapped).await.map_err(err_msg)
+    });
+    let abort_handle = handle.abort_handle();
+    state
+        .running_db_queries
+        .lock()
         .await
-        .map_err(err_msg)?;
-    driver.execute(&wrapped).await.map_err(err_msg)
+        .insert(run_id.clone(), abort_handle);
+
+    let result = match handle.await {
+        Ok(inner) => inner,
+        Err(join_err) if join_err.is_cancelled() => Err("查询已中断".to_string()),
+        Err(join_err) => Err(format!("查询任务失败: {join_err}")),
+    };
+
+    state.running_db_queries.lock().await.remove(&run_id);
+    result
+}
+
+/// 中断正在执行的 SQL 查询（按 run_id，与 db_execute_query 配对）。
+#[tauri::command]
+#[specta::specta]
+pub async fn db_cancel_query(
+    state: tauri::State<'_, crate::state::AppState>,
+    run_id: String,
+) -> Result<(), String> {
+    let abort_handle = state.running_db_queries.lock().await.remove(&run_id);
+    match abort_handle {
+        Some(handle) => {
+            handle.abort();
+            Ok(())
+        }
+        None => Err("无运行中的查询".to_string()),
+    }
 }
 
 #[derive(Debug, Deserialize, specta::Type)]

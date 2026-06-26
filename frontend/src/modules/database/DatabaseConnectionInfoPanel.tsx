@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { useI18n } from "../../i18n";
 import { Button } from "../../components/ui/Button";
 import { isMysqlConnectionInfoCapable, type DbConnectionConfig } from "./api";
+import { makeQueryRunId } from "./queryRun";
 import { rowsToRecord, type QueryResult } from "./dbWorkspaceState";
 import { TableDataGrid } from "./TableDataGrid";
 
@@ -38,6 +39,7 @@ export function DatabaseConnectionInfoPanel({
       const queryResult = await invoke<QueryResult>("db_execute_query", {
         connection,
         sql: PROCESSLIST_SQL,
+        runId: makeQueryRunId(),
       });
       setResult(queryResult);
     } catch (e) {

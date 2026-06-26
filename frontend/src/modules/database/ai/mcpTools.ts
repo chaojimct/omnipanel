@@ -11,6 +11,7 @@ import {
   type DbConnectionConfig,
 } from "../api";
 import { connectionWithDatabase } from "../toolbox/types";
+import { makeQueryRunId } from "../queryRun";
 import type { QueryResult } from "../dbWorkspaceState";
 
 function requireString(args: Record<string, unknown>, key: string): string {
@@ -120,6 +121,7 @@ async function getTableInfo(args: Record<string, unknown>): Promise<string> {
     const result = await invoke<QueryResult>("db_execute_query", {
       connection: conn,
       sql,
+      runId: makeQueryRunId(),
     });
     return formatQueryResult(result);
   }
@@ -139,6 +141,7 @@ async function executeSql(args: Record<string, unknown>): Promise<string> {
   const result = await invoke<QueryResult>("db_execute_query", {
     connection: conn,
     sql,
+    runId: makeQueryRunId(),
     limit: 500,
     offset: 0,
   });

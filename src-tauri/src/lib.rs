@@ -468,6 +468,7 @@ pub fn run() {
             commands::database::db_count_table,
             commands::database::db_count_tables,
             commands::database::db_execute_query,
+            commands::database::db_cancel_query,
             commands::database::db_redis_search_keys,
             commands::database::db_refresh_schema_node,
             // Connections（统一连接模型）

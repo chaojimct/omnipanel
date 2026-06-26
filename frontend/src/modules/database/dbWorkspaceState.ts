@@ -67,6 +67,8 @@ export type SqlTabState = {
   error: string | null;
   /** 是否有查询正在执行 */
   running: boolean;
+  /** 当前可中断的查询 runId（与后端 db_cancel_query 配对） */
+  activeQueryRunId: string | null;
   /** 每次执行对应一个结果会话 */
   resultSessions: SqlResultSession[];
   activeResultSessionId: string | null;
@@ -169,6 +171,7 @@ export function createDefaultSqlTabState(database = "", connId = ""): SqlTabStat
     cursorOffset: 0,
     error: null,
     running: false,
+    activeQueryRunId: null,
     resultSessions: [],
     activeResultSessionId: null,
   };

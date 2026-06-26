@@ -81,6 +81,8 @@ pub struct AppState {
     pub running_workflows: Arc<Mutex<HashMap<String, Arc<std::sync::atomic::AtomicBool>>>>,
     /// 正在运行的任务后台句柄（按 taskId 索引），用于 task_stop 取消。
     pub running_tasks: Arc<Mutex<HashMap<String, tokio::task::JoinHandle<()>>>>,
+    /// 正在运行的 SQL 查询 abort 句柄（按 runId 索引），用于 db_cancel_query。
+    pub running_db_queries: Arc<Mutex<HashMap<String, tokio::task::AbortHandle>>>,
     /// 文件管理器独立 SFTP 会话（按 file 连接 id 索引）。
     pub file_sftp_sessions: Arc<Mutex<HashMap<String, Arc<SshSession>>>>,
     /// 文件索引独立 SQLite 存储（目录可在设置中配置）。
@@ -142,6 +144,7 @@ impl AppState {
             ssh_tunnels: Arc::new(Mutex::new(HashMap::new())),
             running_workflows: Arc::new(Mutex::new(HashMap::new())),
             running_tasks: Arc::new(Mutex::new(HashMap::new())),
+            running_db_queries: Arc::new(Mutex::new(HashMap::new())),
             file_sftp_sessions: Arc::new(Mutex::new(HashMap::new())),
             file_index_storage,
             file_index_storage_dir: Arc::new(Mutex::new(file_index_storage_dir)),

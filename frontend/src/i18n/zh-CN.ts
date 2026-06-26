@@ -989,6 +989,11 @@ export const zhCN = {
       hint: "SQL 编辑器会把写操作和生产库操作送入统一风险确认流。",
     },
     runSql: "执行 SQL",
+    cancelSql: "中断",
+    formatSql: "格式化 SQL",
+    formatSqlAll: "格式化全部",
+    formatSqlCurrent: "格式化当前语句",
+    queryCancelled: "查询已中断",
     running: "执行中…",
     toolbox: {
       open: "数据传输",
@@ -2056,6 +2061,7 @@ export const zhCN = {
         openSettings: "打开设置",
         switchNthTab: "切换到第 N 个标签",
         formatSql: "格式化 SQL 语句",
+        formatSqlStatement: "格式化当前 SQL 语句",
       },
     },
     aiDisplay: {

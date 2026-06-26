@@ -1,4 +1,4 @@
-import { memo, useCallback } from "react";
+import { memo, useCallback, useRef } from "react";
 import { useModuleSuspended } from "../../lib/moduleVisibility";
 import {
   useDbWorkspace,
@@ -7,9 +7,10 @@ import {
 } from "../../contexts/DbWorkspaceContext";
 import type { SqlWorkspaceTab } from "./workspaceTabs";
 import { DockLayout, DockHandle, DockPanel } from "../../components/dock";
+import { ToolbarMenuButton } from "../../components/ui/ToolbarMenuButton";
 import { Button } from "../../components/ui/Button";
 import { Select } from "../../components/ui/Select";
-import { SqlEditor, type SqlEditorOpenMode } from "./SqlEditor";
+import { SqlEditor, type SqlEditorHandle, type SqlEditorOpenMode } from "./SqlEditor";
 import { SqlResultSessionsDock } from "./SqlResultSessionsDock";
 import { useI18n } from "../../i18n";
 import { createDefaultSqlTabState, type SqlTabState } from "./dbWorkspaceState";
@@ -24,7 +25,9 @@ interface DbPanelSqlEditorProps {
   tabId: string;
   tabState: SqlTabState;
   openMode: SqlEditorOpenMode;
+  dbType?: string;
   scopedSchemas: DatabaseSchema[];
+  editorRef: React.RefObject<SqlEditorHandle | null>;
   onChange: (value: string) => void;
   onCursorOffsetChange: (cursorOffset: number) => void;
   onRun: (sql: string) => void;
@@ -36,7 +39,9 @@ const DbPanelSqlEditor = memo(function DbPanelSqlEditor({
   tabId,
   tabState,
   openMode,
+  dbType,
   scopedSchemas,
+  editorRef,
   onChange,
   onCursorOffsetChange,
   onRun,
@@ -48,9 +53,11 @@ const DbPanelSqlEditor = memo(function DbPanelSqlEditor({
 
   return (
     <SqlEditor
+      ref={editorRef}
       key={tabId}
       editorActive={editorActive}
       openMode={openMode}
+      dbType={dbType}
       value={tabState.sql}
       onChange={onChange}
       onCursorOffsetChange={onCursorOffsetChange}
@@ -108,6 +115,7 @@ export const DbPanelSurface = memo(function DbPanelSurface({ tab }: DbPanelSurfa
     [ws.saveSqlTab, tab.id],
   );
   const sqlEditorOpenMode = ws.tabModeToEditorOpenMode(_mode);
+  const sqlEditorRef = useRef<SqlEditorHandle>(null);
 
   const handleActiveSessionChange = useCallback(
     (sessionId: string) => {
@@ -163,16 +171,39 @@ export const DbPanelSurface = memo(function DbPanelSurface({ tab }: DbPanelSurfa
         {schemaLoading && (
           <span className="sql-toolbar-meta">{t("common.loading")}</span>
         )}
+        <ToolbarMenuButton
+          label={t("database.formatSql")}
+          title={t("database.formatSql")}
+          disabled={tabState.running}
+          items={[
+            {
+              id: "format-current",
+              label: t("database.formatSqlCurrent"),
+              onSelect: () => sqlEditorRef.current?.formatCurrentStatement(),
+            },
+            {
+              id: "format-all",
+              label: t("database.formatSqlAll"),
+              onSelect: () => sqlEditorRef.current?.formatAll(),
+            },
+          ]}
+        />
         <Button
-          variant="primary"
+          variant={tabState.running ? "destructive" : "primary"}
           size="sm"
           style={{ marginLeft: "auto" }}
-          onClick={() => void ws.runQuery(undefined, tab.id)}
+          onClick={() =>
+            tabState.running
+              ? void ws.cancelQuery(tab.id)
+              : void ws.runQuery(undefined, tab.id)
+          }
           disabled={
-            tabState.running || !connectionForRun || !tabState.database.trim()
+            tabState.running
+              ? false
+              : !connectionForRun || !tabState.database.trim()
           }
         >
-          {tabState.running ? t("database.running") : t("database.runSql")}
+          {tabState.running ? t("database.cancelSql") : t("database.runSql")}
         </Button>
       </div>
       {tabState.error && !tabState.running ? (
@@ -182,7 +213,9 @@ export const DbPanelSurface = memo(function DbPanelSurface({ tab }: DbPanelSurfa
         tabId={tab.id}
         tabState={tabState}
         openMode={sqlEditorOpenMode}
+        dbType={tabConn?.db_type}
         scopedSchemas={completionSchemas}
+        editorRef={sqlEditorRef}
         onChange={handleSqlChange}
         onCursorOffsetChange={handleSqlCursorChange}
         onRun={handleSqlRun}

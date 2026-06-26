@@ -370,9 +370,11 @@ function dedupeCompletions(items: Completion[]): Completion[] {
 /** 根据当前库表元数据为 CodeMirror SQL 编辑器提供补全。 */
 export function createSqlCompletionSource(
   getSchemas: () => DatabaseSchema[],
+  getDbType?: () => string | undefined,
 ): (context: CompletionContext) => CompletionResult | null {
   return (context) => {
     const schemas = getSchemas();
+    const dbType = getDbType?.();
     const line = context.state.doc.lineAt(context.pos);
     const linePrefix = line.text.slice(0, context.pos - line.from);
 
@@ -407,16 +409,18 @@ export function createSqlCompletionSource(
     }
 
     const from = word ? word.from : context.pos;
-    const items = getCompletionItems(docText, context.pos, schemas);
+    const items = getCompletionItems(docText, context.pos, schemas, dbType);
     const options: Completion[] = items.map((item) => {
       const insertText = item.insertText ?? item.label;
       const boost = item.boost;
+      const info = item.info;
       if (item.snippet) {
         return snippetCompletion(insertText, {
           label: item.label,
           detail: item.detail,
           type: completionKindToType(item.kind),
           boost,
+          info,
         });
       }
       return {
@@ -425,6 +429,7 @@ export function createSqlCompletionSource(
         detail: item.detail,
         apply: insertText,
         boost,
+        info,
       };
     });
 
