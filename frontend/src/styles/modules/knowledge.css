@@ -789,25 +789,27 @@
         overflow: hidden;
     }
 
-    .knowledge-sidebar-header {
+    .knowledge-sidebar-sections {
+        flex: 1;
+        min-height: 0;
+        background: var(--bg-deeper);
+    }
+
+    .knowledge-sidebar-sections .vsplit-sidebar-section__body {
+        flex: 1;
+        min-height: 0;
         display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: var(--sp-2);
-        padding: var(--sp-2) var(--sp-3);
-        border-bottom: 1px solid var(--border);
-        flex-shrink: 0;
+        flex-direction: column;
+        overflow: hidden;
     }
 
-    .knowledge-sidebar-header h3 {
-        margin: 0;
-        font-size: 13px;
-        font-weight: 600;
-    }
-
-    .knowledge-sidebar-header-actions {
+    .knowledge-sidebar-section-actions {
         position: relative;
-        flex-shrink: 0;
+    }
+
+    .knowledge-sidebar-section-actions .knowledge-new-menu {
+        top: calc(100% + 4px);
+        right: 0;
     }
 
     .knowledge-new-menu {
@@ -994,6 +996,118 @@
         font-size: 18px;
         font-weight: 600;
         outline: none;
+    }
+
+    .knowledge-workspace-title--readonly {
+        margin: 0;
+        padding: 0;
+    }
+
+    .knowledge-workspace--imported {
+        background: var(--bg-deeper);
+    }
+
+    .knowledge-import-badge {
+        font-size: 11px;
+        color: var(--meta);
+        padding: 2px 8px;
+        border: 1px solid var(--border);
+        border-radius: var(--r-sm);
+        white-space: nowrap;
+    }
+
+    .knowledge-workspace-dock {
+        flex: 1;
+        min-height: 0;
+        min-width: 0;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+    }
+
+    .knowledge-module-dock .dock-panel-main,
+    .knowledge-module-dock .knowledge-panel {
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        height: 100%;
+    }
+
+    .knowledge-pdf-preview {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        background: var(--bg-deeper);
+    }
+
+    .knowledge-pdf-preview__status {
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: var(--sp-2) var(--sp-3);
+        border-bottom: 1px solid var(--border);
+        background: var(--bg);
+        font-size: 12px;
+        color: var(--fg-2);
+        user-select: none;
+    }
+
+    .knowledge-pdf-preview__viewport {
+        position: relative;
+        flex: 1;
+        min-height: 0;
+        overflow: auto;
+        padding: var(--sp-4);
+    }
+
+    .knowledge-pdf-preview__overlay {
+        position: absolute;
+        inset: 0;
+        z-index: 2;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: color-mix(in srgb, var(--bg-deeper) 88%, transparent);
+        pointer-events: none;
+    }
+
+    .knowledge-pdf-preview__overlay-text {
+        font-size: 12px;
+        color: var(--fg-2);
+    }
+
+    .knowledge-pdf-preview__document {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        width: 100%;
+    }
+
+    .knowledge-pdf-preview__pages {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: var(--sp-4);
+        width: 100%;
+    }
+
+    .knowledge-pdf-preview__page-host {
+        width: 100%;
+        display: flex;
+        justify-content: center;
+    }
+
+    .knowledge-pdf-preview__page {
+        box-shadow: 0 2px 12px rgb(0 0 0 / 0.18);
+        background: #fff;
+    }
+
+    .knowledge-pdf-preview__page canvas {
+        display: block;
     }
 
     .knowledge-embedding-model-select {

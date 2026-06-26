@@ -4,6 +4,8 @@ import { useI18n } from "../../i18n";
 import {
   fetchProviderModelList,
   mergeModelCatalog,
+  buildApiModelMeta,
+  type ApiModelMeta,
 } from "../../lib/fetchProviderModels";
 import {
   defaultBaseUrlFor,
@@ -51,7 +53,13 @@ async function resolveModelCatalog(
   manualInput: string,
   t: (key: string, params?: Record<string, string | number>) => string,
 ): Promise<
-  | { ok: true; modelNames: string[]; fetchNote: string | null }
+  | {
+      ok: true;
+      modelNames: string[];
+      manualModelNames: string[];
+      apiModelMeta: Record<string, ApiModelMeta>;
+      fetchNote: string | null;
+    }
   | { ok: false; error: string }
 > {
   const parsed = parseModelNames(manualInput);
@@ -59,23 +67,27 @@ async function resolveModelCatalog(
     return { ok: false, error: t("settings.aiModels.errors.nameDuplicateInInput", { name: parsed.duplicate }) };
   }
 
+  const manualModelNames = parsed.names;
   const fetchResult = await fetchProviderModelList(baseUrl, apiKey);
   if (fetchResult.ok) {
-    const modelNames = mergeModelCatalog(parsed.names, fetchResult.models);
+    const modelNames = mergeModelCatalog(manualModelNames, fetchResult.models);
     if (modelNames.length === 0) {
       return { ok: false, error: t("settings.aiModels.errors.modelNamesRequired") };
     }
+    const apiModelMeta = buildApiModelMeta(modelNames, manualModelNames, fetchResult.models);
     const note =
-      parsed.names.length > 0
+      manualModelNames.length > 0
         ? t("settings.aiModels.fetch.merged", { count: modelNames.length })
         : t("settings.aiModels.fetch.success", { count: modelNames.length });
-    return { ok: true, modelNames, fetchNote: note };
+    return { ok: true, modelNames, manualModelNames, apiModelMeta, fetchNote: note };
   }
 
-  if (parsed.names.length > 0) {
+  if (manualModelNames.length > 0) {
     return {
       ok: true,
-      modelNames: parsed.names,
+      modelNames: manualModelNames,
+      manualModelNames,
+      apiModelMeta: {},
       fetchNote: t("settings.aiModels.fetch.fallbackManual"),
     };
   }
@@ -99,7 +111,7 @@ export function AddModelDialog({ open, onClose, editProvider, onSaved }: AddMode
     if (editProvider) {
       setForm({
         providerName: editProvider.providerName,
-        modelNames: editProvider.modelNames.join(", "),
+        modelNames: (editProvider.manualModelNames ?? []).join(", "),
         apiStandard: editProvider.apiStandard,
         baseUrl: editProvider.baseUrl,
         apiKey: "",
@@ -167,6 +179,8 @@ export function AddModelDialog({ open, onClose, editProvider, onSaved }: AddMode
       updateProvider(editProvider.id, {
         providerName,
         modelNames: catalog.modelNames,
+        manualModelNames: catalog.manualModelNames,
+        apiModelMeta: catalog.apiModelMeta,
         apiStandard: form.apiStandard,
         baseUrl,
         ...(apiKey ? { apiKey } : {}),
@@ -198,6 +212,8 @@ export function AddModelDialog({ open, onClose, editProvider, onSaved }: AddMode
     const created = addProvider({
       providerName,
       modelNames: catalog.modelNames,
+      manualModelNames: catalog.manualModelNames,
+      apiModelMeta: catalog.apiModelMeta,
       apiStandard: form.apiStandard,
       baseUrl,
       apiKey,

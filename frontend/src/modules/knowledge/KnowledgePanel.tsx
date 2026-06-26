@@ -1,45 +1,13 @@
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import { useLocation } from "react-router-dom";
 import { useI18n } from "../../i18n";
-import { SidebarWorkspace } from "../../components/ui/SidebarWorkspace";
 import { ModuleSegmentDock } from "../../components/dock";
 import { usePersistedModuleTab } from "../../hooks/usePersistedModuleTab";
-import { useKnowledgeStore } from "../../stores/knowledgeStore";
-import { KnowledgeSidebar } from "./KnowledgeSidebar";
-import { KnowledgeMarkdownWorkspace } from "./KnowledgeMarkdownWorkspace";
+import { KnowledgeLibraryView } from "./KnowledgeLibraryView";
 import { KnowledgeTodosView } from "./KnowledgeTodosView";
 
 type KnowledgeModuleTab = "library" | "todos";
 const KNOWLEDGE_TABS: KnowledgeModuleTab[] = ["library", "todos"];
-
-function KnowledgeLibraryView() {
-  const loadEntries = useKnowledgeStore((s) => s.loadEntries);
-  const error = useKnowledgeStore((s) => s.error);
-  const clearError = useKnowledgeStore((s) => s.clearError);
-
-  useEffect(() => {
-    void loadEntries();
-  }, [loadEntries]);
-
-  return (
-    <div className="knowledge-panel">
-      {error && (
-        <div className="knowledge-error knowledge-error--floating">
-          <span>{error}</span>
-          <button type="button" onClick={clearError}>×</button>
-        </div>
-      )}
-      <SidebarWorkspace
-        preset="schema"
-        sidebarMinPx={240}
-        sidebarMaxPx={420}
-        sidebar={<KnowledgeSidebar />}
-      >
-        <KnowledgeMarkdownWorkspace />
-      </SidebarWorkspace>
-    </div>
-  );
-}
 
 export function KnowledgePanel() {
   const { t } = useI18n();

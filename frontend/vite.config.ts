@@ -41,6 +41,8 @@ export default defineConfig({
       "@stablelib/base64",
       "fast-sha256",
       "dockview-react",
+      "react-pdf",
+      "pdfjs-dist",
       "@assistant-ui/react",
       "@assistant-ui/react-markdown",
       "@assistant-ui/core",
