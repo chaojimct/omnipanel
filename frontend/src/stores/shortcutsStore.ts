@@ -62,6 +62,7 @@ export const SHORTCUT_DEFS: ShortcutDef[] = [
   { id: "toggle-ai", category: "ai", labelKey: "settings.keybindings.items.toggleAi", defaultKeys: ["Alt", "`"] },
   { id: "toggle-bottom-workspace", category: "workspace", labelKey: "settings.keybindings.items.toggleBottomWorkspace", defaultKeys: ["Alt", "KeyW"] },
   { id: "format-sql", category: "sqlEditor", labelKey: "settings.keybindings.items.formatSql", defaultKeys: ["Alt", "KeyF"] },
+  { id: "format-sql-statement", category: "sqlEditor", labelKey: "settings.keybindings.items.formatSqlStatement", defaultKeys: ["Alt", "Shift", "KeyF"] },
 ];
 
 const SHORTCUT_DEFS_BY_ID: Record<string, ShortcutDef> = Object.fromEntries(

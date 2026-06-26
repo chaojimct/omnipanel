@@ -284,7 +284,7 @@ export const commands = {
 	fileTestConnection: (connectionId: string) => typedError<string, OmniError_Serialize>(__TAURI_INVOKE("file_test_connection", { connectionId })),
 	/**  列出目录内容。 */
 	fileListDir: (connectionId: string, path: string, search: string | null, continuationToken: string | null) => typedError<FileListDirResult, OmniError_Serialize>(__TAURI_INVOKE("file_list_dir", { connectionId, path, search, continuationToken })),
-	/**  在 S3 连接存储桶内按文件名搜索（递归 ListObjectsV2）。 */
+	/**  在 S3 连接存储桶内搜索：含 `/` 时按 key 前缀，否则按文件名子串。 */
 	fileS3Search: (connectionId: string, query: string, continuationToken: string | null) => typedError<FileListDirResult, OmniError_Serialize>(__TAURI_INVOKE("file_s3_search", { connectionId, query, continuationToken })),
 	/**  读取文件内容（字节）。 */
 	fileReadFile: (connectionId: string, path: string, maxBytes: number | null) => typedError<number[], OmniError_Serialize>(__TAURI_INVOKE("file_read_file", { connectionId, path, maxBytes })),

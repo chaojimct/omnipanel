@@ -22,6 +22,7 @@ import {
   isConnectionEnabled,
   connectionHasTableSchemaChildren,
 } from "./api";
+import { makeQueryRunId } from "./queryRun";
 import { useDbSchemaFilterStore } from "../../stores/dbSchemaFilterStore";
 import { useDbSchemaTreeExpandedStore } from "../../stores/dbSchemaTreeExpandedStore";
 import { useDbSchemaCacheStore } from "../../stores/dbSchemaCacheStore";
@@ -760,6 +761,7 @@ export function SchemaBrowser({
         await invoke("db_execute_query", {
           connection,
           sql,
+          runId: makeQueryRunId(),
           limit: 1,
           offset: 0,
         });

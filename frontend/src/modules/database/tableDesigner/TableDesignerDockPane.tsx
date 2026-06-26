@@ -4,7 +4,7 @@ import { useI18n } from "../../../i18n";
 import { useActionStore } from "../../../stores/actionStore";
 import { introspectTable, type DbConnectionConfig } from "../api";
 import type { TableDesignerTabState } from "../dbWorkspaceState";
-import { resolveTableDesignerDriver } from "./resolveTableDesignerDriver";
+import { makeQueryRunId } from "../queryRun";
 import { TableDesignerPanel } from "./TableDesignerPanel";
 import type { TableDesignerModel } from "./types";
 
@@ -153,7 +153,11 @@ export function TableDesignerDockPane({
           resourceId: connection.id,
           source: "用户",
         });
-        await invoke("db_execute_query", { connection: connForSchema, sql });
+        await invoke("db_execute_query", {
+          connection: connForSchema,
+          sql,
+          runId: makeQueryRunId(),
+        });
       }
       const nextBaseline = cloneModel(model);
       setBaseline(nextBaseline);

@@ -1,4 +1,5 @@
 import type { DatabaseSchema, TableSchema } from "../types";
+import { buildFunctionCompletionItems, type SqlFunctionCompletionContext } from "../sqlIntel/sqlFunctionCatalog";
 
 interface CompletionItem {
   label: string;
@@ -7,6 +8,7 @@ interface CompletionItem {
   detail?: string;
   snippet?: boolean;
   boost?: number;
+  info?: string;
 }
 
 const KEYWORD_KIND = 14;
@@ -329,24 +331,6 @@ function buildAllColumnsCompletionItem(
   };
 }
 
-const SQL_FUNCTIONS: CompletionItem[] = [
-  "COUNT",
-  "SUM",
-  "AVG",
-  "MIN",
-  "MAX",
-  "COALESCE",
-  "NOW",
-  "CAST",
-  "CONCAT",
-].map((label) => ({
-  label,
-  kind: FUNCTION_KIND,
-  insertText: `${label}($1)`,
-  snippet: true,
-  detail: "SQL 函数",
-}));
-
 function currentPrefix(text: string, offset: number) {
   const before = text.slice(0, offset);
   const line = before.split("\n").pop() ?? "";
@@ -478,9 +462,11 @@ export function buildTableActionSnippets(
 
 export function introspectToTableSchemas(
   tables: { name: string; columns: { name: string; type: string; isPk?: boolean; isFk?: boolean }[] }[],
+  kind: TableSchema["kind"] = "table",
 ): TableSchema[] {
   return tables.map((table) => ({
     name: table.name,
+    kind,
     columns: table.columns.map((col) => ({
       name: col.name,
       type: col.type,
@@ -506,6 +492,7 @@ export function getCompletionItems(
   text: string,
   offset: number,
   schemas: DatabaseSchema[],
+  dbType?: string | null,
 ): CompletionItem[] {
   const prefix = currentPrefix(text, offset);
   const isNotTail = resolveIsNotCompletionTail(text, offset);
@@ -535,13 +522,13 @@ export function getCompletionItems(
         tables.push({
           label: table.name,
           kind: TABLE_KIND,
-          detail: `表 · ${database.name}`,
+          detail: `${table.kind === "view" ? "视图" : "表"} · ${database.name}`,
           insertText: table.name,
         });
         tables.push({
           label: `${database.name}.${table.name}`,
           kind: TABLE_KIND,
-          detail: `表 · ${database.name}`,
+          detail: `${table.kind === "view" ? "视图" : "表"} · ${database.name}`,
           insertText: `${database.name}.${table.name}`,
         });
       }
@@ -576,7 +563,9 @@ export function getCompletionItems(
   }
 
   const keywords = filterKeywordsByContext(SQL_KEYWORDS, context);
-  const functions = includeFunctions(context) ? SQL_FUNCTIONS : [];
+  const functions = includeFunctions(context)
+    ? buildFunctionCompletionItems(dbType, context as SqlFunctionCompletionContext)
+    : [];
   const allColumnsItem =
     fromTable && !prefix
       ? buildAllColumnsCompletionItem(fromTable.table, fromTable.qualifiedTable)

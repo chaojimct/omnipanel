@@ -1,4 +1,10 @@
-import { useRef, useEffect, useCallback } from "react";
+import {
+  forwardRef,
+  useRef,
+  useEffect,
+  useCallback,
+  useImperativeHandle,
+} from "react";
 import { EditorState, Compartment, type Extension } from "@codemirror/state";
 import {
   EditorView,
@@ -25,21 +31,35 @@ import { sql } from "@codemirror/lang-sql";
 import { autocompletion, completionKeymap, closeBrackets } from "@codemirror/autocomplete";
 import type { DatabaseSchema } from "./types";
 import { createSqlCompletionSource } from "./lsp/codemirrorSqlCompletion";
-import { positionToOffset, sqlAtOffset, isSqlEditorFocused } from "./lsp/sqlStatement";
+import {
+  positionToOffset,
+  sqlAtOffset,
+  isSqlEditorFocused,
+  findStatementRangeAtOffset,
+} from "./lsp/sqlStatement";
 import { getSqlEditorThemeExtensions, isLightTheme } from "./sqlEditorTheme";
 import { getSearchHighlightExtension, updateSearchHighlight } from "./sqlSearchHighlight";
-import { formatSql } from "./formatSql";
+import { formatSql, formatSqlRange } from "./sqlIntel/sqlFormat";
+import { resolveSqlDialect } from "./sqlIntel/sqlDialect";
+import { createSqlIntelExtensions } from "./sqlIntel/cm/extensions";
 import { getShortcutKeys, matchesShortcut } from "../../stores/shortcutsStore";
 import { useSettingsStore } from "../../stores/settingsStore";
 
 /** 打开方式：独立查询页（sql）或侧栏点表后的表数据预览（data）。 */
 export type SqlEditorOpenMode = "query" | "table";
 
+export interface SqlEditorHandle {
+  formatAll: () => void;
+  formatCurrentStatement: () => void;
+}
+
 interface SqlEditorProps {
   value: string;
   onChange: (value: string) => void;
   /** 与 DatabasePanel `tabModes` 对应：`sql` → query，`data` → table。 */
   openMode?: SqlEditorOpenMode;
+  /** 连接 db_type，驱动语法高亮与格式化方言。 */
+  dbType?: string;
   /** Cmd/Ctrl+Enter：执行光标所在的一条 SQL（由调用方传入已提取的语句）。 */
   onRun?: (sqlAtCursor: string) => void;
   /** Cmd/Ctrl+S：保存查询文件（阻止浏览器默认保存页行为）。 */
@@ -64,32 +84,52 @@ function runStatementAtCursor(
   onRun(sqlAtOffset(text, offset));
 }
 
-function formatSqlInView(view: EditorView): boolean {
+function applyFormatToView(
+  view: EditorView,
+  dbType: string | undefined,
+  range?: { from: number; to: number },
+): void {
   const current = view.state.doc.toString();
-  const formatted = formatSql(current);
-  if (formatted === current) {
-    return true;
-  }
   const head = view.state.selection.main.head;
+
+  if (range) {
+    const { text, cursor } = formatSqlRange(current, range.from, range.to, head, dbType);
+    if (text === current) {
+      return;
+    }
+    view.dispatch({
+      changes: { from: 0, to: current.length, insert: text },
+      selection: { anchor: cursor },
+    });
+    return;
+  }
+
+  const formatted = formatSql(current, dbType);
+  if (formatted === current) {
+    return;
+  }
   view.dispatch({
     changes: { from: 0, to: current.length, insert: formatted },
     selection: { anchor: Math.min(head, formatted.length) },
   });
-  return true;
 }
 
-export function SqlEditor({
-  value,
-  onChange,
-  openMode = "query",
-  onRun,
-  onSave,
-  onCursorOffsetChange,
-  schemas = [],
-  readOnly = false,
-  highlightQuery = "",
-  editorActive = true,
-}: SqlEditorProps) {
+export const SqlEditor = forwardRef<SqlEditorHandle, SqlEditorProps>(function SqlEditor(
+  {
+    value,
+    onChange,
+    openMode = "query",
+    dbType,
+    onRun,
+    onSave,
+    onCursorOffsetChange,
+    schemas = [],
+    readOnly = false,
+    highlightQuery = "",
+    editorActive = true,
+  },
+  ref,
+) {
   const sqlEditorFontFamily = useSettingsStore((s) => s.sqlEditorFontFamily);
   const sqlEditorFontSize = useSettingsStore((s) => s.sqlEditorFontSize);
   const sqlEditorLineHeight = useSettingsStore((s) => s.sqlEditorLineHeight);
@@ -102,9 +142,11 @@ export function SqlEditor({
   const onCursorOffsetChangeRef = useRef(onCursorOffsetChange);
   const readOnlyRef = useRef(readOnly);
   const schemasRef = useRef(schemas);
+  const dbTypeRef = useRef(dbType);
   const valueRef = useRef(value);
   const themeCompartment = useRef(new Compartment());
   const readOnlyCompartment = useRef(new Compartment());
+  const languageCompartment = useRef(new Compartment());
 
   onChangeRef.current = onChange;
   onRunRef.current = onRun;
@@ -112,6 +154,7 @@ export function SqlEditor({
   onCursorOffsetChangeRef.current = onCursorOffsetChange;
   readOnlyRef.current = readOnly;
   schemasRef.current = schemas;
+  dbTypeRef.current = dbType;
   valueRef.current = value;
 
   const syncCursorOffset = useCallback((view: EditorView) => {
@@ -123,8 +166,33 @@ export function SqlEditor({
     onCursorOffsetChangeRef.current(positionToOffset(text, line.number, column));
   }, []);
 
+  const formatAllInView = useCallback(() => {
+    const view = viewRef.current;
+    if (!view || readOnlyRef.current) return;
+    applyFormatToView(view, dbTypeRef.current);
+  }, []);
+
+  const formatCurrentStatementInView = useCallback(() => {
+    const view = viewRef.current;
+    if (!view || readOnlyRef.current) return;
+    const text = view.state.doc.toString();
+    const head = view.state.selection.main.head;
+    applyFormatToView(view, dbTypeRef.current, findStatementRangeAtOffset(text, head));
+  }, []);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      formatAll: formatAllInView,
+      formatCurrentStatement: formatCurrentStatementInView,
+    }),
+    [formatAllInView, formatCurrentStatementInView],
+  );
+
   useEffect(() => {
     if (!containerRef.current) return;
+
+    const dialectProfile = resolveSqlDialect(dbTypeRef.current);
 
     const extensions: Extension[] = [
       lineNumbers(),
@@ -138,16 +206,24 @@ export function SqlEditor({
       bracketMatching(),
       foldGutter(),
       closeBrackets(),
-      sql(),
+      languageCompartment.current.of(
+        sql({ dialect: dialectProfile.cmDialect, upperCaseKeywords: true }),
+      ),
       EditorView.lineWrapping,
       getSearchHighlightExtension(),
+      ...createSqlIntelExtensions({
+        highlightActiveStatement: true,
+        getDbType: () => dbTypeRef.current,
+      }),
       autocompletion({
         activateOnTyping: true,
         maxRenderedOptions: 80,
         icons: true,
         optionClass: (completion) =>
           `cm-sql-completion cm-sql-completion--${completion.type ?? "text"}`,
-        override: [createSqlCompletionSource(() => schemasRef.current)],
+        override: [
+          createSqlCompletionSource(() => schemasRef.current, () => dbTypeRef.current),
+        ],
       }),
       keymap.of([
         {
@@ -185,6 +261,9 @@ export function SqlEditor({
             valueRef.current = next;
             onChangeRef.current(next);
           }
+        }
+        if (update.selectionSet) {
+          syncCursorOffset(update.view);
         }
         if (update.focusChanged && !update.view.hasFocus) {
           syncCursorOffset(update.view);
@@ -249,6 +328,17 @@ export function SqlEditor({
   useEffect(() => {
     const view = viewRef.current;
     if (!view) return;
+    const profile = resolveSqlDialect(dbType);
+    view.dispatch({
+      effects: languageCompartment.current.reconfigure(
+        sql({ dialect: profile.cmDialect, upperCaseKeywords: true }),
+      ),
+    });
+  }, [dbType]);
+
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view) return;
     view.dispatch({
       effects: themeCompartment.current.reconfigure(
         getSqlEditorThemeExtensions(isLightTheme()),
@@ -291,7 +381,6 @@ export function SqlEditor({
     });
   }, [sqlEditorFontFamily, sqlEditorFontSize, sqlEditorLineHeight]);
 
-  // macOS Tauri WebView 下 CodeMirror keymap 对 Cmd+Enter 可能不可靠；仅编辑器有焦点时在此处理。
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.isComposing) return;
@@ -333,6 +422,23 @@ export function SqlEditor({
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.isComposing) return;
+      if (!matchesShortcut(e, getShortcutKeys("format-sql-statement"))) {
+        return;
+      }
+      if (!isSqlEditorFocused()) return;
+      const view = viewRef.current;
+      if (!view?.hasFocus || readOnlyRef.current) return;
+      e.preventDefault();
+      e.stopPropagation();
+      formatCurrentStatementInView();
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [formatCurrentStatementInView]);
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.isComposing) return;
       if (!matchesShortcut(e, getShortcutKeys("format-sql"))) {
         return;
       }
@@ -341,11 +447,11 @@ export function SqlEditor({
       if (!view?.hasFocus || readOnlyRef.current) return;
       e.preventDefault();
       e.stopPropagation();
-      formatSqlInView(view);
+      formatAllInView();
     };
     window.addEventListener("keydown", onKeyDown, true);
     return () => window.removeEventListener("keydown", onKeyDown, true);
-  }, []);
+  }, [formatAllInView]);
 
   useEffect(() => {
     if (!editorActive) return;
@@ -365,4 +471,4 @@ export function SqlEditor({
       <div ref={containerRef} className="sql-codemirror-editor__host" />
     </div>
   );
-}
+});

@@ -8,6 +8,8 @@ export interface ColumnSchema {
 export interface TableSchema {
   name: string;
   columns: ColumnSchema[];
+  /** 表或视图，默认 table。 */
+  kind?: "table" | "view";
 }
 
 export interface DatabaseSchema {
