@@ -4,7 +4,7 @@ import {
   type ToolCallMessagePartComponent,
   useExternalStoreRuntime,
 } from "@assistant-ui/react";
-import { useMemo, useRef, useLayoutEffect, useEffect, useCallback } from "react";
+import { useMemo, useRef, useCallback } from "react";
 import { ToolFallback } from "../../components/assistant-ui/tool-fallback";
 import { ThreadMessagesOnly } from "../../components/assistant-ui/thread";
 import {
@@ -13,6 +13,7 @@ import {
 } from "../../stores/blocksStore";
 import { aiThreadToThreadMessages, getResolvedAiThread } from "./aiThreadBridge";
 import { cancelAiGeneration } from "../../lib/ai/cancelAiGeneration";
+import { useFollowOutputScroll } from "./useFollowOutputScroll";
 
 const EMPTY_MESSAGES: ReturnType<typeof aiThreadToThreadMessages> = [];
 
@@ -68,11 +69,6 @@ function TerminalAiThreadRuntime({ block }: TerminalAiThreadRuntimeProps) {
   );
 }
 
-function scrollContainerToEnd(container: HTMLElement | null) {
-  if (!container) return;
-  container.scrollTop = container.scrollHeight;
-}
-
 type TerminalAiThreadViewProps = {
   blockId: string;
   /** 吸顶展开态：内容在卡片内滚动，需跟随最新输出 */
@@ -85,8 +81,6 @@ export function TerminalAiThreadView({
   dockedAutoScroll = false,
 }: TerminalAiThreadViewProps) {
   const threadRef = useRef<HTMLDivElement>(null);
-  const wasDockedRef = useRef(false);
-  const dockScrollReadyRef = useRef(false);
   const block = useBlocksStore((state) => state.findBlockById(blockId));
 
   const threadSignature = useMemo(() => {
@@ -102,57 +96,11 @@ export function TerminalAiThreadView({
       .join("|");
   }, [block]);
 
-  const scrollToLatest = useCallback(() => {
-    scrollContainerToEnd(threadRef.current);
-  }, []);
-
-  useLayoutEffect(() => {
-    const justDocked = dockedAutoScroll && !wasDockedRef.current;
-    wasDockedRef.current = dockedAutoScroll;
-    if (!dockedAutoScroll) {
-      dockScrollReadyRef.current = false;
-      return;
-    }
-    if (justDocked) {
-      dockScrollReadyRef.current = false;
-      requestAnimationFrame(() => {
-        dockScrollReadyRef.current = true;
-      });
-      return;
-    }
-    scrollToLatest();
-    requestAnimationFrame(scrollToLatest);
-  }, [dockedAutoScroll, threadSignature, scrollToLatest]);
-
-  useEffect(() => {
-    if (!dockedAutoScroll) return;
-    const el = threadRef.current;
-    if (!el) return;
-
-    const observer = new ResizeObserver(() => {
-      if (!dockScrollReadyRef.current) return;
-      scrollToLatest();
-    });
-
-    const attach = () => {
-      observer.disconnect();
-      const inner =
-        el.querySelector(".term-warp-ai-thread-root") ??
-        el.querySelector(".aui_message-group") ??
-        el;
-      observer.observe(inner);
-      scrollToLatest();
-    };
-
-    attach();
-    const mutationObserver = new MutationObserver(() => attach());
-    mutationObserver.observe(el, { childList: true, subtree: true });
-
-    return () => {
-      observer.disconnect();
-      mutationObserver.disconnect();
-    };
-  }, [blockId, dockedAutoScroll, scrollToLatest]);
+  useFollowOutputScroll(threadRef, {
+    enabled: dockedAutoScroll,
+    contentSignature: threadSignature,
+    settleFrames: 1,
+  });
 
   if (!block || block.kind !== "ai") return null;
 

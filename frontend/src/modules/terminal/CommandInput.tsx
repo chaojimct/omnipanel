@@ -37,7 +37,9 @@ import {
 import { useCommandBarDraftStore } from "./commandBarDraftStore";
 import { submitInlineFollowUp, submitInlineNaturalLanguage } from "./warpInlineAi";
 import { useTerminalUiStore } from "./terminalUiStore";
+import { shouldRouteInputToAi } from "./commandInputRouting";
 import { TerminalToolCallDock } from "./TerminalToolCallDock";
+import { TerminalCommandBarControls } from "./TerminalCommandBarControls";
 
 const CMD_INPUT_LINE_HEIGHT_PX = 24;
 const CMD_INPUT_MAX_HEIGHT_PX = 100;
@@ -256,6 +258,19 @@ export const CommandInput = forwardRef<CommandInputHandle, CommandInputProps>(
           openAiWithPrompt(buildCommandPlanPrompt(goal, cwd));
         }
         setValue("");
+        return;
+      }
+
+      if (shouldRouteInputToAi(trimmed)) {
+        if (followUpBlockId) {
+          void submitInlineFollowUp(sessionId, followUpBlockId, trimmed, cwd);
+        } else {
+          void submitInlineNaturalLanguage(sessionId, trimmed, cwd);
+        }
+        setValue("");
+        closeCompletion();
+        closeHistory();
+        resetBrowse();
         return;
       }
 
@@ -561,6 +576,7 @@ export const CommandInput = forwardRef<CommandInputHandle, CommandInputProps>(
             />
           </div>
           <div className="term-cmd-actions">
+            <TerminalCommandBarControls disabled={disabled} />
             {lastError ? (
               <>
                 <Button

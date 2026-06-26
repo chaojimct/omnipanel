@@ -10,7 +10,10 @@ type TerminalToolCallDockProps = {
 /** 底部 Command Bar 上方的 AI 命令确认条 */
 export function TerminalToolCallDock({ sessionId }: TerminalToolCallDockProps) {
   const blocks = useBlocksStore((state) => state.blocks[sessionId] ?? EMPTY_TERMINAL_BLOCKS);
-  const active = useMemo(() => findActiveInlineTerminalTool(blocks), [blocks]);
+  const active = useMemo(
+    () => findActiveInlineTerminalTool(blocks, sessionId),
+    [blocks, sessionId],
+  );
 
   if (!active) return null;
 

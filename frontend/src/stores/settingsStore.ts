@@ -189,6 +189,10 @@ interface SettingsState {
   aiScenarioFormFillModelSelectionId: string | null;
   /** AI 助手场景默认模型（aiModelsStore selection id） */
   aiScenarioAssistantModelSelectionId: string | null;
+  /** 终端内联 AI 默认模型 */
+  aiScenarioTerminalModelSelectionId: string | null;
+  /** 终端命令审批档位：严格 / 查看 / 宽松 */
+  terminalApprovalMode: import("../modules/terminal/terminalApprovalPolicy").TerminalApprovalMode;
   databaseQueryPageSize: DatabaseQueryPageSize;
   sqlEditorFontFamily: string;
   sqlEditorFontSize: SqlEditorFontSize;
@@ -215,8 +219,11 @@ interface SettingsState {
     "knowledgeChunkSize" | "knowledgeChunkOverlap" | "knowledgeTopN" | "knowledgeEmbeddingModelSelectionId"
   >>) => void;
   setAiScenarioSettings: (patch: Partial<Pick<SettingsState,
-    "aiScenarioFormFillModelSelectionId" | "aiScenarioAssistantModelSelectionId"
+    "aiScenarioFormFillModelSelectionId" | "aiScenarioAssistantModelSelectionId" | "aiScenarioTerminalModelSelectionId"
   >>) => void;
+  setTerminalApprovalMode: (
+    mode: import("../modules/terminal/terminalApprovalPolicy").TerminalApprovalMode,
+  ) => void;
   setDatabaseSettings: (patch: Partial<Pick<SettingsState,
     "databaseQueryPageSize" | "sqlEditorFontFamily" | "sqlEditorFontSize" | "sqlEditorLineHeight"
   >>) => void;
@@ -294,6 +301,8 @@ export const useSettingsStore = create<SettingsState>()(
       knowledgeEmbeddingModelSelectionId: null,
       aiScenarioFormFillModelSelectionId: null,
       aiScenarioAssistantModelSelectionId: null,
+      aiScenarioTerminalModelSelectionId: null,
+      terminalApprovalMode: "view",
       databaseQueryPageSize: DEFAULT_DATABASE_QUERY_PAGE_SIZE,
       sqlEditorFontFamily: DEFAULT_SQL_EDITOR_FONT_FAMILY,
       sqlEditorFontSize: DEFAULT_SQL_EDITOR_FONT_SIZE,
@@ -343,6 +352,7 @@ export const useSettingsStore = create<SettingsState>()(
           };
         }),
       setAiScenarioSettings: (patch) => set(patch),
+      setTerminalApprovalMode: (terminalApprovalMode) => set({ terminalApprovalMode }),
       setDatabaseSettings: (patch) =>
         set((state) => ({
           databaseQueryPageSize:
@@ -401,6 +411,8 @@ export const useSettingsStore = create<SettingsState>()(
         knowledgeEmbeddingModelSelectionId: state.knowledgeEmbeddingModelSelectionId,
         aiScenarioFormFillModelSelectionId: state.aiScenarioFormFillModelSelectionId,
         aiScenarioAssistantModelSelectionId: state.aiScenarioAssistantModelSelectionId,
+        aiScenarioTerminalModelSelectionId: state.aiScenarioTerminalModelSelectionId,
+        terminalApprovalMode: state.terminalApprovalMode,
         databaseQueryPageSize: state.databaseQueryPageSize,
         sqlEditorFontFamily: state.sqlEditorFontFamily,
         sqlEditorFontSize: state.sqlEditorFontSize,

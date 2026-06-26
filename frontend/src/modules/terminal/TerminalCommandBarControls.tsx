@@ -1,0 +1,97 @@
+import { useMemo } from "react";
+
+import { useI18n } from "../../i18n";
+import {
+  listModelSelections,
+  parseModelSelectionId,
+  useAiModelsStore,
+} from "../../stores/aiModelsStore";
+import { useSettingsStore } from "../../stores/settingsStore";
+import { useTerminalModelSelectionId } from "../../lib/terminalScenarioModels";
+import { Select } from "../../components/ui/Select";
+import type { TerminalApprovalMode } from "./terminalApprovalPolicy";
+import { useTerminalApprovalMode } from "./terminalApprovalSettings";
+
+type TerminalCommandBarControlsProps = {
+  disabled?: boolean;
+};
+
+const APPROVAL_MODES: TerminalApprovalMode[] = ["strict", "view", "loose"];
+
+export function TerminalCommandBarControls({
+  disabled = false,
+}: TerminalCommandBarControlsProps) {
+  const { t } = useI18n();
+  const providers = useAiModelsStore((s) => s.providers);
+  const approvalMode = useTerminalApprovalMode();
+  const setGlobalApprovalMode = useSettingsStore((s) => s.setTerminalApprovalMode);
+  const setGlobalTerminalModel = useSettingsStore((s) => s.setAiScenarioSettings);
+  const modelSelectionId = useTerminalModelSelectionId();
+
+  const approvalOptions = useMemo(
+    () =>
+      APPROVAL_MODES.map((value) => ({
+        value,
+        label: t(`terminal.command.approval.${value}`),
+        title: t(`terminal.command.approval.${value}Desc`),
+      })),
+    [t],
+  );
+
+  const modelOptions = useMemo(
+    () =>
+      listModelSelections(providers).map(({ id }) => {
+        const parsed = parseModelSelectionId(id);
+        const provider = providers.find((p) => p.id === parsed?.providerId);
+        const modelName = parsed?.modelName ?? id;
+        return {
+          value: id,
+          label: modelName,
+          title: provider ? `${modelName} · ${provider.providerName}` : modelName,
+        };
+      }),
+    [providers],
+  );
+
+  const modelValue =
+    modelSelectionId && modelOptions.some((o) => o.value === modelSelectionId)
+      ? modelSelectionId
+      : modelOptions[0]?.value ?? "";
+
+  return (
+    <div className="term-cmd-toolbar">
+      <Select
+        value={approvalMode}
+        onChange={(next) => setGlobalApprovalMode(next as TerminalApprovalMode)}
+        options={approvalOptions}
+        size="sm"
+        borderless
+        searchable={false}
+        disabled={disabled}
+        panelMinWidth={168}
+        aria-label={t("terminal.command.approval.label")}
+        title={t("terminal.command.approval.label")}
+        className="term-cmd-toolbar__approval"
+      />
+      {modelOptions.length > 0 ? (
+        <Select
+          value={modelValue}
+          onChange={(next) =>
+            setGlobalTerminalModel({ aiScenarioTerminalModelSelectionId: next })
+          }
+          options={modelOptions}
+          size="sm"
+          borderless
+          searchable={modelOptions.length > 8}
+          disabled={disabled}
+          panelMinWidth={280}
+          aria-label={t("terminal.command.model.label")}
+          title={t("terminal.command.model.label")}
+          className="term-cmd-toolbar__model"
+        />
+      ) : (
+        <span className="term-cmd-toolbar__model-empty">{t("ai.modelSelect.empty")}</span>
+      )}
+    </div>
+  );
+}

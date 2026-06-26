@@ -5,6 +5,7 @@ import {
 import { useTerminalStore } from "../../stores/terminalStore";
 import { useI18n } from "../../i18n";
 import { requestTerminalExecution } from "./executeTerminalCommand";
+import { registerUserShellCommand } from "./postShellAiTrigger";
 import { LOCAL_TERMINAL_RESOURCE_ID } from "./paneResource";
 import {
   setTerminalPaneSender,
@@ -37,6 +38,7 @@ export function useTerminalTabDockPane(
   const handleSendCommand = useCallback(
     (command: string) => {
       if (!tab) return;
+      registerUserShellCommand(tabId, command);
       const targetResource =
         resolveResourceById(tab.session.resourceId) ??
         resolveResourceById(LOCAL_TERMINAL_RESOURCE_ID);

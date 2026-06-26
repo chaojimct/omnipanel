@@ -20,6 +20,10 @@ import { EnrichedLsListingView } from "./lsListing/EnrichedLsListingView";
 import { TerminalPathBreadcrumb } from "./TerminalPathBreadcrumb";
 import type { TerminalSessionType } from "../../stores/terminalStore";
 import { groupFeedBlocksIntoSegments, type FeedAiRunSegment } from "./terminalFeedSegments";
+import {
+  FOLLOW_OUTPUT_PIN_THRESHOLD_PX,
+  isScrollPinnedToBottom,
+} from "./useFollowOutputScroll";
 
 type TerminalBlockFeedProps = {
   sessionId: string;
@@ -80,25 +84,23 @@ function buildFeedActivitySignature(blocks: TerminalBlock[]): string {
     .join(";");
 }
 
+/** 不含 AI 线程文本增量，用于区分「仅流式输出」与「结构变化」 */
+function buildFeedShellSignature(blocks: TerminalBlock[]): string {
+  return blocks
+    .map((block) => {
+      if (block.kind === "ai") {
+        return `ai:${block.id}:${block.status}`;
+      }
+      return `sh:${block.id}:${block.status}:${block.output.length}:${shellOutput(block).length}`;
+    })
+    .join(";");
+}
+
 function scrollFeedToLatest(container: HTMLElement) {
   container.scrollTop = container.scrollHeight;
 }
 
-/** 吸顶导致列表高度骤降时，避免误判为「已贴底」从而触发自动滚到底 */
-function isFeedPinnedToBottom(
-  container: HTMLElement,
-  lastScrollHeight: number,
-): boolean {
-  const scrollHeight = container.scrollHeight;
-  const distance = scrollHeight - container.scrollTop - container.clientHeight;
-  if (distance > FEED_SCROLL_PIN_THRESHOLD_PX) return false;
-  if (lastScrollHeight - scrollHeight > 120 && distance < FEED_SCROLL_PIN_THRESHOLD_PX) {
-    return false;
-  }
-  return true;
-}
-
-const FEED_SCROLL_PIN_THRESHOLD_PX = 80;
+const FEED_SCROLL_PIN_THRESHOLD_PX = FOLLOW_OUTPUT_PIN_THRESHOLD_PX;
 
 function scrollFeedToLatestIfFollowing(
   container: HTMLElement,
@@ -227,11 +229,6 @@ function AiBlockCard({
     feed.scrollTop = savedScrollTop;
   }, [isStickyActive, expanded, feedScrollRef, naturalHeight]);
 
-  const stickyFlowSpacerHeight =
-    isStickyActive && expanded && naturalHeight > dockMaxHeight
-      ? naturalHeight - dockMaxHeight
-      : 0;
-
   if (!isStickyCandidate) {
     if (!expanded) {
       return (
@@ -359,13 +356,6 @@ function AiBlockCard({
         {article}
         {isStickyActive ? <AiDockResizeHandle sessionId={sessionId} /> : null}
       </div>
-      {stickyFlowSpacerHeight > 0 ? (
-        <div
-          className="term-warp-ai-sticky-flow-spacer"
-          style={{ height: stickyFlowSpacerHeight }}
-          aria-hidden
-        />
-      ) : null}
     </>
   );
 }
@@ -546,6 +536,9 @@ export function TerminalBlockFeed({
   const followOutputRef = useRef(true);
   const [feedPinnedToBottom, setFeedPinnedToBottom] = useState(true);
   const lastFeedScrollHeightRef = useRef(0);
+  const prevActivitySignatureRef = useRef("");
+  const prevShellSignatureRef = useRef("");
+  const feedScrollRafRef = useRef(0);
 
   const visibleBlocks = blocks.filter(shouldRenderBlock);
   const feedSegments = useMemo(
@@ -556,6 +549,10 @@ export function TerminalBlockFeed({
     () => buildFeedActivitySignature(visibleBlocks),
     [visibleBlocks],
   );
+  const shellSignature = useMemo(
+    () => buildFeedShellSignature(visibleBlocks),
+    [visibleBlocks],
+  );
   const stickyAiBlockId = useStickyAiBlockId(scrollRef, listRef, visibleBlocks, activitySignature);
 
   useEffect(() => {
@@ -564,7 +561,11 @@ export function TerminalBlockFeed({
 
     const syncPinned = () => {
       const scrollHeight = el.scrollHeight;
-      const pinned = isFeedPinnedToBottom(el, lastFeedScrollHeightRef.current);
+      const pinned = isScrollPinnedToBottom(
+        el,
+        FEED_SCROLL_PIN_THRESHOLD_PX,
+        lastFeedScrollHeightRef.current,
+      );
       lastFeedScrollHeightRef.current = scrollHeight;
       followOutputRef.current = pinned;
       setFeedPinnedToBottom((prev) => (prev === pinned ? prev : pinned));
@@ -586,19 +587,32 @@ export function TerminalBlockFeed({
     const blockCountGrew = visibleBlocks.length > prevBlockCountRef.current;
     prevBlockCountRef.current = visibleBlocks.length;
 
-    if (!blockCountGrew && !followOutputRef.current) return;
+    const onlyAiThreadStream =
+      activitySignature !== prevActivitySignatureRef.current &&
+      shellSignature === prevShellSignatureRef.current;
+    prevActivitySignatureRef.current = activitySignature;
+    prevShellSignatureRef.current = shellSignature;
 
-    scrollFeedToLatest(el);
+    const stickyDockedStreaming = Boolean(
+      onlyAiThreadStream &&
+        el.querySelector(".term-warp-ai-sticky-host--active"),
+    );
+
+    if (!blockCountGrew && !followOutputRef.current) return;
+    if (stickyDockedStreaming && !blockCountGrew) return;
+
     if (blockCountGrew) {
       followOutputRef.current = true;
       setFeedPinnedToBottom(true);
     }
 
-    requestAnimationFrame(() => {
+    cancelAnimationFrame(feedScrollRafRef.current);
+    feedScrollRafRef.current = requestAnimationFrame(() => {
+      feedScrollRafRef.current = 0;
       if (!blockCountGrew && !followOutputRef.current) return;
       scrollFeedToLatest(el);
     });
-  }, [activitySignature, visibleBlocks.length]);
+  }, [activitySignature, shellSignature, visibleBlocks.length]);
 
   useEffect(() => {
     const list = listRef.current;
@@ -608,6 +622,7 @@ export function TerminalBlockFeed({
     let resizeRaf = 0;
     const observer = new ResizeObserver(() => {
       if (!followOutputRef.current) return;
+      if (container.querySelector(".term-warp-ai-sticky-host--active")) return;
       cancelAnimationFrame(resizeRaf);
       resizeRaf = requestAnimationFrame(() => {
         if (!followOutputRef.current) return;
@@ -620,6 +635,13 @@ export function TerminalBlockFeed({
       observer.disconnect();
     };
   }, [visibleBlocks.length]);
+
+  useEffect(
+    () => () => {
+      cancelAnimationFrame(feedScrollRafRef.current);
+    },
+    [],
+  );
 
   if (visibleBlocks.length === 0) return null;
 

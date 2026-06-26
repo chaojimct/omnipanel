@@ -42,7 +42,7 @@ interface ActionState {
   pendingRiskActionId: string | null;
   /** 每个动作的实时输出行（来自 action-progress 事件）。 */
   logs: Record<string, string[]>;
-  enqueueAction: (input: Omit<WorkspaceAction, "id" | "createdAt" | "risk" | "environment" | "status" | "resourceName">, options?: { deferRun?: boolean }) => WorkspaceAction;
+  enqueueAction: (input: Omit<WorkspaceAction, "id" | "createdAt" | "risk" | "environment" | "status" | "resourceName">, options?: { deferRun?: boolean; requireApproval?: boolean }) => WorkspaceAction;
   confirmAction: (id: string) => void;
   cancelAction: (id: string) => void;
   completeAction: (id: string) => void;
@@ -69,13 +69,16 @@ export const useActionStore = create<ActionState>((set, get) => ({
   pendingRiskActionId: null,
   logs: {},
 
-  enqueueAction: (input: Omit<WorkspaceAction, "id" | "createdAt" | "risk" | "environment" | "status" | "resourceName">, options?: { deferRun?: boolean }) => {
+  enqueueAction: (input: Omit<WorkspaceAction, "id" | "createdAt" | "risk" | "environment" | "status" | "resourceName">, options?: { deferRun?: boolean; requireApproval?: boolean }) => {
     const resource = getResourceById(input.resourceId);
     const environment = resource?.environment ?? "unknown";
     const riskCheck = input.command ? checkCommand(input.command, environment) : undefined;
     const envRisk: DangerLevel = environment === "prod" ? "high" : environment === "staging" ? "medium" : "low";
     const risk = maxDangerLevel(riskCheck?.level ?? "low", envRisk);
-    const blocked = risk !== "low";
+    const blocked =
+      options?.requireApproval !== undefined
+        ? options.requireApproval
+        : risk !== "low";
 
     const action: WorkspaceAction = {
       ...input,

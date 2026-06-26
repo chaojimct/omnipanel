@@ -10,6 +10,8 @@ import { resolveResourceById } from "../../stores/connectionStore";
 import { cancelTerminalExecution, requestTerminalExecution } from "./executeTerminalCommand";
 import { LOCAL_TERMINAL_RESOURCE_ID } from "./paneResource";
 import { useTerminalUiStore } from "./terminalUiStore";
+import { resolveTerminalApprovalMode } from "./terminalApprovalSettings";
+import { shouldRequireTerminalApproval } from "./terminalApprovalPolicy";
 
 export interface InlineToolDecision {
   approved: boolean;
@@ -100,6 +102,13 @@ export function waitForInlineToolDecision(
       command,
       resolve,
     });
+
+    const mode = resolveTerminalApprovalMode(sessionId);
+    if (!shouldRequireTerminalApproval(command, mode)) {
+      queueMicrotask(() => {
+        void approveInlineTerminalTool(blockId, toolCallId);
+      });
+    }
   });
 }
 

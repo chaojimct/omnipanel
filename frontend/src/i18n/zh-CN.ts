@@ -1265,7 +1265,7 @@ export const zhCN = {
     localTab: "local",
     sidebar: { title: "终端资源", collapse: "收起侧栏", expand: "展开侧栏" },
     command: {
-      placeholder: "Enter 发送，Shift+Enter 换行；# 自然语言；Tab 补全；Ctrl+R 历史",
+      placeholder: "Enter 发送；中文/英文问句自动走 AI；# 自然语言；Tab 补全",
       followUpHint: "Enter 追问当前 AI 卡片；# 开头；Shift+Enter 换行",
       send: "发送",
       naturalHint: "# 输入自然语言需求…",
@@ -1284,6 +1284,24 @@ export const zhCN = {
       historyKindReadline: "Shell",
       completionSearch: "检索补全项…",
       completionEmpty: "没有匹配的补全项",
+      approval: {
+        label: "命令审批",
+        strict: "严格",
+        strictDesc: "所有命令需确认",
+        view: "查看",
+        viewDesc: "查看类免审批",
+        loose: "宽松",
+        looseDesc: "全部免审批",
+      },
+      model: {
+        label: "终端 AI 模型",
+      },
+      scope: {
+        global: "全局设置（点击切换为仅本会话）",
+        session: "仅当前会话（点击切换为全局）",
+        globalShort: "全局",
+        sessionShort: "会话",
+      },
     },
     inputMode: {
       commandBar: "命令栏",

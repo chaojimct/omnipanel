@@ -44,6 +44,8 @@ export interface SelectProps {
   searchPlaceholder?: string;
   /** 下拉面板 z-index，默认 10000；嵌套在更高层级弹层内需传入更大值 */
   panelZIndex?: number;
+  /** 下拉面板最小宽度（px），默认与触发器同宽 */
+  panelMinWidth?: number;
   "aria-label"?: string;
   title?: string;
 }
@@ -89,6 +91,7 @@ export function Select({
   emptyText,
   searchPlaceholder,
   panelZIndex = 10000,
+  panelMinWidth,
   "aria-label": ariaLabel,
   title,
 }: SelectProps) {
@@ -157,14 +160,14 @@ export function Select({
     setPanelStyle({
       position: "fixed",
       left: rect.left,
-      width: rect.width,
+      width: Math.max(rect.width, panelMinWidth ?? 0),
       zIndex: panelZIndex,
       visibility: "visible",
       ...(shouldDropUp
         ? { bottom: window.innerHeight - rect.top + 2, top: "auto" }
         : { top: rect.bottom + 2, bottom: "auto" }),
     });
-  }, [panelZIndex]);
+  }, [panelMinWidth, panelZIndex]);
 
   useLayoutEffect(() => {
     if (!open) return;

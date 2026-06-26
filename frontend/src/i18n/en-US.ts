@@ -1269,7 +1269,7 @@ export const enUS: TranslationDict = {
     localTab: "local",
     sidebar: { title: "Terminal Resources", collapse: "Collapse sidebar", expand: "Expand sidebar" },
     command: {
-      placeholder: "Enter to send, Shift+Enter for newline; # natural language; Tab; Ctrl+R history",
+      placeholder: "Enter to send; Chinese/English questions route to AI; # natural language; Tab",
       followUpHint: "Enter to follow up in the open AI card; prefix with #",
       send: "Send",
       naturalHint: "# Describe what you want…",
@@ -1288,6 +1288,24 @@ export const enUS: TranslationDict = {
       historyKindReadline: "Shell",
       completionSearch: "Filter suggestions…",
       completionEmpty: "No matching suggestions",
+      approval: {
+        label: "Command approval",
+        strict: "Strict",
+        strictDesc: "Confirm every command",
+        view: "View",
+        viewDesc: "Read-only skips approval",
+        loose: "Loose",
+        looseDesc: "No approval required",
+      },
+      model: {
+        label: "Terminal AI model",
+      },
+      scope: {
+        global: "Global settings (click for this session only)",
+        session: "This session only (click for global)",
+        globalShort: "Global",
+        sessionShort: "Session",
+      },
     },
     inputMode: {
       commandBar: "Command Bar",

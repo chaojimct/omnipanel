@@ -14,6 +14,7 @@ import {
 } from "../../../stores/aiModelsStore";
 import { useSettingsStore } from "../../../stores/settingsStore";
 import { resolveScenarioModelSelectionId } from "../../../lib/aiScenarioModels";
+import { resolveTerminalModelSelectionId } from "../../../lib/terminalScenarioModels";
 import { useAiStore } from "../../../stores/aiStore";
 import { getModuleAiContextText, getModuleMcpTools, executeModuleMcpTool } from "../../../lib/ai/context";
 import { registerAiPromptSubmit, type InlineTerminalAiTarget } from "../../../lib/ai/submitAiPrompt";
@@ -223,12 +224,25 @@ export function AiRuntimeProvider({ children }: { children: ReactNode }) {
   }, [activeConversation]);
 
   const getModelConfig = useCallback((): ModelConfig | null => {
-    const selectionId = currentModelSelectionId;
+    const inlineSessionId = currentInlineRef.current?.sessionId;
+    let selectionId = currentModelSelectionId;
+
+    if (inlineSessionId) {
+      const terminalSelection = resolveTerminalModelSelectionId(providers, inlineSessionId);
+      if (terminalSelection) {
+        selectionId = terminalSelection;
+      }
+    }
+
     if (!selectionId || !resolveModelSelection(providers, selectionId)) {
-      const configured = useSettingsStore.getState().aiScenarioAssistantModelSelectionId;
+      const configured = inlineSessionId
+        ? resolveTerminalModelSelectionId(providers, inlineSessionId)
+        : useSettingsStore.getState().aiScenarioAssistantModelSelectionId;
       const fallback = resolveScenarioModelSelectionId(providers, configured);
       if (!fallback) return null;
-      setCurrentModelSelectionId(fallback);
+      if (!inlineSessionId) {
+        setCurrentModelSelectionId(fallback);
+      }
       const resolved = resolveModelSelection(providers, fallback);
       if (!resolved) return null;
       return resolved;

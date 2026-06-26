@@ -4,6 +4,22 @@ import {
   type TerminalBlock,
 } from "../../stores/blocksStore";
 import { getResolvedAiThread } from "./aiThreadBridge";
+import { shouldRequireTerminalApproval } from "./terminalApprovalPolicy";
+import { resolveTerminalApprovalMode } from "./terminalApprovalSettings";
+
+function resolveToolCallCommand(item: AiThreadToolCall): string {
+  const direct = item.command?.trim();
+  if (direct) return direct;
+  try {
+    const parsed = JSON.parse(item.args) as { command?: string };
+    if (typeof parsed.command === "string" && parsed.command.trim()) {
+      return parsed.command.trim();
+    }
+  } catch {
+    // ignore
+  }
+  return "";
+}
 
 export function isInlineTerminalToolName(toolName: string): boolean {
   return (
@@ -16,10 +32,13 @@ export type ActiveInlineTerminalTool = {
   item: AiThreadToolCall;
 };
 
-/** 当前会话中待确认或执行中的内联终端工具调用（取最新一条） */
+/** 当前会话中待确认或执行中的内联终端工具调用（取最新一条，免审批命令不展示） */
 export function findActiveInlineTerminalTool(
   blocks: TerminalBlock[],
+  sessionId: string,
 ): ActiveInlineTerminalTool | null {
+  const mode = resolveTerminalApprovalMode(sessionId);
+
   for (let i = blocks.length - 1; i >= 0; i--) {
     const block = blocks[i];
     if (block.kind !== "ai") continue;
@@ -31,6 +50,10 @@ export function findActiveInlineTerminalTool(
         isInlineTerminalToolName(entry.toolName) &&
         (entry.status === "pending" || entry.status === "running")
       ) {
+        const command = resolveToolCallCommand(entry);
+        if (!shouldRequireTerminalApproval(command, mode)) {
+          continue;
+        }
         return { blockId: block.id, item: entry };
       }
     }

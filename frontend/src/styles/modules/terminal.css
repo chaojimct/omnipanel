@@ -212,6 +212,62 @@
         flex-shrink: 0;
     }
 
+    .term-cmd-toolbar {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex-shrink: 0;
+    }
+
+    .term-cmd-toolbar__approval {
+        flex: 0 0 auto;
+        min-width: 72px;
+    }
+
+    .term-cmd-toolbar__approval .omni-select-trigger {
+        min-width: 72px;
+        max-width: 96px;
+    }
+
+    .term-cmd-toolbar__approval .omni-select-value {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .term-cmd-toolbar__model {
+        flex: 0 1 auto;
+        min-width: 0;
+        max-width: 200px;
+    }
+
+    .term-cmd-toolbar__model .omni-select-trigger {
+        max-width: 200px;
+    }
+
+    .term-cmd-toolbar__model .omni-select-value {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .term-cmd-toolbar__model-empty {
+        font-size: 11px;
+        color: var(--text-muted);
+        white-space: nowrap;
+        padding: 0 4px;
+    }
+
+    .term-cmd-toolbar .omni-select-option {
+        min-height: 32px;
+    }
+
+    .term-cmd-toolbar .omni-select-option-label {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
     .term-cmd-completion {
         position: absolute;
         left: 0;
@@ -1176,7 +1232,8 @@
         flex: 1 1 auto;
         min-height: 120px;
         overflow-y: auto;
-        overflow-anchor: auto;
+        overflow-anchor: none;
+        scroll-behavior: auto;
         padding: var(--sp-3) var(--sp-4);
         background: #141210;
         font-family: var(--font-mono);
@@ -1257,6 +1314,8 @@
         min-height: 0;
         overflow-y: auto;
         overflow-x: auto;
+        overflow-anchor: none;
+        scroll-behavior: auto;
         padding: 0 4px 8px;
     }
 

@@ -5,22 +5,13 @@ import type { TerminalInputMode } from "../../hooks/useTerminal";
 import { clearAutoReturnTracking, armAutoReturn } from "./terminalAutoReturn";
 import { clampAiDockHeight, DEFAULT_AI_DOCK_HEIGHT } from "./terminalAiDock";
 
-
-
 interface SetInputModeOptions {
-
   /** 交互程序结束后自动回到 Command Bar */
-
   autoReturn?: boolean;
-
 }
 
-
-
 interface TerminalUiState {
-
   inputModes: Record<string, TerminalInputMode>;
-
   autoReturnToCommandBar: Record<string, boolean>;
   /** 当前展开的 AI 卡片（Warp 式详情） */
   expandedAiBlockIds: Record<string, string | null>;
@@ -28,13 +19,9 @@ interface TerminalUiState {
   aiDockHeights: Record<string, number>;
 
   setInputMode: (
-
     sessionId: string,
-
     mode: TerminalInputMode,
-
     options?: SetInputModeOptions,
-
   ) => void;
 
   getInputMode: (sessionId: string) => TerminalInputMode;
@@ -49,18 +36,11 @@ interface TerminalUiState {
   getAiDockHeight: (sessionId: string) => number;
 }
 
-
-
 export const useTerminalUiStore = create<TerminalUiState>((set, get) => ({
-
   inputModes: {},
-
   autoReturnToCommandBar: {},
-
   expandedAiBlockIds: {},
-
   aiDockHeights: {},
-
 
   setInputMode: (sessionId, mode, options) => {
     if (mode === "external") {
@@ -69,67 +49,38 @@ export const useTerminalUiStore = create<TerminalUiState>((set, get) => ({
       armAutoReturn(sessionId);
     }
     set((state) => {
-
       const autoReturnToCommandBar = { ...state.autoReturnToCommandBar };
 
       if (mode === "external") {
-
         delete autoReturnToCommandBar[sessionId];
-
       } else if (options?.autoReturn) {
-
         autoReturnToCommandBar[sessionId] = true;
-
       } else if (mode === "interactive") {
-
         delete autoReturnToCommandBar[sessionId];
-
       }
 
       return {
-
         inputModes: { ...state.inputModes, [sessionId]: mode },
-
         autoReturnToCommandBar,
-
       };
-
     });
-
   },
-
-
 
   getInputMode: (sessionId) => get().inputModes[sessionId] ?? "external",
 
-
-
   shouldAutoReturnToCommandBar: (sessionId) =>
-
     get().autoReturnToCommandBar[sessionId] === true,
 
-
-
   returnToCommandBar: (sessionId) => {
-
     clearAutoReturnTracking(sessionId);
-
     set((state) => {
-
       const autoReturnToCommandBar = { ...state.autoReturnToCommandBar };
-
       delete autoReturnToCommandBar[sessionId];
-
       return {
-
         inputModes: { ...state.inputModes, [sessionId]: "external" },
-
         autoReturnToCommandBar,
-
       };
-
     });
-
   },
 
   setExpandedAiBlock: (sessionId, blockId) =>
@@ -149,4 +100,3 @@ export const useTerminalUiStore = create<TerminalUiState>((set, get) => ({
 
   getAiDockHeight: (sessionId) => get().aiDockHeights[sessionId] ?? DEFAULT_AI_DOCK_HEIGHT,
 }));
-

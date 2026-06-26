@@ -45,6 +45,7 @@ import {
   trackTerminalOutputForAutoReturn,
   tryAutoReturnAfterBlockEnd,
 } from "../modules/terminal/terminalAutoReturn";
+import { tryPostShellAiTrigger } from "../modules/terminal/postShellAiTrigger";
 import { isWarpDisplay } from "../modules/terminal/terminalDisplayMode";
 import { triggerAiDrawerToggle } from "./useAiDrawerShortcut";
 import { useModuleVisibility } from "../lib/moduleVisibility";
@@ -628,6 +629,10 @@ export function useTerminal(
                   status: resolveBlockStatus(exitCode),
                   ...(cleaned ? { output: cleaned } : {}),
                 });
+                const finishedBlock = useBlocksStore.getState().findBlockById(blockId);
+                if (finishedBlock) {
+                  tryPostShellAiTrigger(sessionId, finishedBlock);
+                }
                 tryAutoReturnAfterBlockEnd(sessionId, blockId);
                 trimXtermAfterBlockEnd(t);
                 clearOutputWatch(sessionId);

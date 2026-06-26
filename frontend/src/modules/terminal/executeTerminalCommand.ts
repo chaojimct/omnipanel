@@ -4,6 +4,8 @@ import { useTerminalStore } from "../../stores/terminalStore";
 import { extractCommandOutput, isMeaningfulTerminalBlock, normalizeBlockCommand } from "./terminalOutputText";
 import { terminalPaneSenders } from "./terminalPaneSenders";
 import { isWarpDisplay } from "./terminalDisplayMode";
+import { resolveTerminalApprovalMode } from "./terminalApprovalSettings";
+import { shouldRequireTerminalApproval } from "./terminalApprovalPolicy";
 
 const BLOCK_WAIT_TIMEOUT_MS = 60_000;
 const OUTPUT_IDLE_MS = 600;
@@ -304,6 +306,12 @@ async function waitForCommandResult(
 export function requestTerminalExecution(
   request: TerminalExecutionRequest,
 ): TerminalExecutionResult | Promise<TerminalExecutionResult> {
+  const approvalMode = resolveTerminalApprovalMode(request.tabId);
+  const requireApproval =
+    request.source === "用户"
+      ? shouldRequireTerminalApproval(request.command, approvalMode)
+      : false;
+
   const action = useActionStore.getState().enqueueAction(
     {
       type: "terminal",
@@ -313,7 +321,7 @@ export function requestTerminalExecution(
       resourceId: request.resourceId,
       source: request.source,
     },
-    { deferRun: true },
+    { deferRun: true, requireApproval },
   );
 
   pendingExecutions.set(action.id, {
