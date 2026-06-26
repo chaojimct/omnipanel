@@ -2,6 +2,25 @@ import { useEffect, useState, type RefObject } from "react";
 import type { TerminalBlock } from "../../stores/blocksStore";
 import { findLastAiBlockId } from "./terminalAiDock";
 
+type ListBlockEntry = {
+  blockId: string;
+  rect: DOMRect;
+};
+
+/** 列表子节点可能是 Fragment 展开的 sentinel + outer，block id 在嵌套层 */
+function collectListBlockEntries(list: HTMLElement): ListBlockEntry[] {
+  const entries: ListBlockEntry[] = [];
+  for (const child of list.children) {
+    if (!(child instanceof HTMLElement)) continue;
+    const blockId =
+      child.dataset.blockId ??
+      child.querySelector<HTMLElement>("[data-block-id]")?.dataset.blockId;
+    if (!blockId) continue;
+    entries.push({ blockId, rect: child.getBoundingClientRect() });
+  }
+  return entries;
+}
+
 /**
  * 根据 Feed 滚动视口，解析「当前展示内容上方」的最后一条 AI 块。
  *
@@ -18,27 +37,24 @@ export function resolveStickyAiBlockId(
   const viewportTop = containerRect.top;
   const viewportBottom = containerRect.bottom;
 
-  const children = Array.from(list.children).filter(
-    (child): child is HTMLElement =>
-      child instanceof HTMLElement && Boolean(child.dataset.blockId),
-  );
-  if (children.length === 0) return null;
+  const entries = collectListBlockEntries(list);
+  if (entries.length === 0) return null;
 
   let anchorIndex = -1;
-  for (let i = children.length - 1; i >= 0; i--) {
-    const rect = children[i].getBoundingClientRect();
+  for (let i = entries.length - 1; i >= 0; i--) {
+    const { rect } = entries[i];
     if (rect.top < viewportBottom && rect.bottom > viewportTop) {
       anchorIndex = i;
       break;
     }
   }
   if (anchorIndex < 0) {
-    anchorIndex = children.length - 1;
+    anchorIndex = entries.length - 1;
   }
 
   let stickyAiBlockId: string | null = null;
   for (let i = 0; i <= anchorIndex; i++) {
-    const id = children[i]?.dataset.blockId;
+    const id = entries[i]?.blockId;
     if (!id) continue;
     const block = visibleBlocks.find((entry) => entry.id === id);
     if (block?.kind === "ai") stickyAiBlockId = id;
@@ -64,8 +80,8 @@ export function useStickyAiBlockId(
     }
 
     const update = () => {
-      const next = resolveStickyAiBlockId(container, list, visibleBlocks);
-      setStickyAiBlockId(next ?? fallbackId);
+      const next = resolveStickyAiBlockId(container, list, visibleBlocks) ?? fallbackId;
+      setStickyAiBlockId((prev) => (prev === next ? prev : next));
     };
 
     update();

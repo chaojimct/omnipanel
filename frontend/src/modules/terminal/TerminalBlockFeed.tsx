@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from "react";
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from "react";
 import {
   EMPTY_TERMINAL_BLOCKS,
   useBlocksStore,
@@ -15,10 +15,18 @@ import { useStickyAiBlockId } from "./useStickyAiBlockId";
 import { useStickyActive } from "./useStickyActive";
 import { cancelInlineAiBlock } from "./warpInlineAi";
 import { useI18n } from "../../i18n";
+import { tryParseLsListing } from "./lsListing/parseLsListing";
+import { EnrichedLsListingView } from "./lsListing/EnrichedLsListingView";
+import { TerminalPathBreadcrumb } from "./TerminalPathBreadcrumb";
+import type { TerminalSessionType } from "../../stores/terminalStore";
+import { groupFeedBlocksIntoSegments, type FeedAiRunSegment } from "./terminalFeedSegments";
 
 type TerminalBlockFeedProps = {
   sessionId: string;
   promptSymbol?: string;
+  onRunCommand?: (command: string) => void;
+  sessionType?: TerminalSessionType;
+  sessionUser?: string | null;
 };
 
 function blockTitle(block: TerminalBlock): string {
@@ -31,16 +39,6 @@ function blockTitle(block: TerminalBlock): string {
 function shellOutput(block: TerminalBlock): string {
   const cleaned = extractCommandOutput(block.output, block.command);
   return cleaned || block.output.trim();
-}
-
-function cwdLabel(cwd: string): string {
-  const trimmed = cwd.trim();
-  if (!trimmed) return "~";
-  if (trimmed === "/") return "/";
-  const parts = trimmed.replace(/\\/g, "/").split("/").filter(Boolean);
-  if (parts.length === 0) return "/";
-  const last = parts[parts.length - 1];
-  return parts.length > 1 && last ? `…/${last}` : `/${last}`;
 }
 
 function formatDuration(block: TerminalBlock): string | null {
@@ -84,21 +82,23 @@ function buildFeedActivitySignature(blocks: TerminalBlock[]): string {
 
 function scrollFeedToLatest(container: HTMLElement) {
   container.scrollTop = container.scrollHeight;
-  container
-    .querySelectorAll<HTMLElement>(
-      ".term-warp-ai-sticky-host--active .term-warp-ai-thread",
-    )
-    .forEach((thread) => {
-      thread.scrollTop = thread.scrollHeight;
-    });
+}
+
+/** 吸顶导致列表高度骤降时，避免误判为「已贴底」从而触发自动滚到底 */
+function isFeedPinnedToBottom(
+  container: HTMLElement,
+  lastScrollHeight: number,
+): boolean {
+  const scrollHeight = container.scrollHeight;
+  const distance = scrollHeight - container.scrollTop - container.clientHeight;
+  if (distance > FEED_SCROLL_PIN_THRESHOLD_PX) return false;
+  if (lastScrollHeight - scrollHeight > 120 && distance < FEED_SCROLL_PIN_THRESHOLD_PX) {
+    return false;
+  }
+  return true;
 }
 
 const FEED_SCROLL_PIN_THRESHOLD_PX = 80;
-
-function isFeedPinnedToBottom(container: HTMLElement): boolean {
-  const distance = container.scrollHeight - container.scrollTop - container.clientHeight;
-  return distance <= FEED_SCROLL_PIN_THRESHOLD_PX;
-}
 
 function scrollFeedToLatestIfFollowing(
   container: HTMLElement,
@@ -144,6 +144,7 @@ function AiStatusIcon({ block }: { block: TerminalBlock }) {
   return <span className="term-warp-block__status term-warp-block__status--ok">✓</span>;
 }
 
+
 function AiBlockCard({
   block,
   sessionId,
@@ -171,6 +172,65 @@ function AiBlockCard({
   const dockMaxHeight = useTerminalUiStore(
     (state) => state.aiDockHeights[sessionId] ?? DEFAULT_AI_DOCK_HEIGHT,
   );
+  const stickyHostRef = useRef<HTMLDivElement>(null);
+  const [naturalHeight, setNaturalHeight] = useState(0);
+  const prevStickyActiveRef = useRef(false);
+  const threadSignature = useMemo(() => {
+    const thread = getResolvedAiThread(block);
+    return thread
+      .map((item) => {
+        if (item.kind === "message") {
+          return `m:${item.id}:${item.content.length}:${item.reasoning?.length ?? 0}`;
+        }
+        return `t:${item.id}:${item.status}:${item.result?.length ?? 0}`;
+      })
+      .join("|");
+  }, [block]);
+
+  useLayoutEffect(() => {
+    const host = stickyHostRef.current;
+    if (!host || !expanded) return;
+
+    const measure = () => {
+      if (isStickyActive) return;
+      const next = host.offsetHeight;
+      setNaturalHeight((prev) => (next > prev ? next : prev));
+    };
+
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(host);
+    return () => observer.disconnect();
+  }, [isStickyActive, threadSignature, dockMaxHeight, expanded]);
+
+  useLayoutEffect(() => {
+    const feed = feedScrollRef.current;
+    const host = stickyHostRef.current;
+    const justActivated = isStickyActive && !prevStickyActiveRef.current;
+    prevStickyActiveRef.current = isStickyActive;
+
+    if (!justActivated || !expanded || !feed || !host) return;
+
+    const measured = Math.max(naturalHeight, host.scrollHeight);
+    if (measured > naturalHeight) {
+      setNaturalHeight(measured);
+    }
+
+    const savedScrollTop = feed.scrollTop;
+    const thread = host.querySelector<HTMLElement>(".term-warp-ai-thread");
+    if (thread) {
+      const feedTop = feed.getBoundingClientRect().top;
+      const contentTop = thread.getBoundingClientRect().top;
+      thread.scrollTop = Math.max(0, feedTop - contentTop);
+    }
+
+    feed.scrollTop = savedScrollTop;
+  }, [isStickyActive, expanded, feedScrollRef, naturalHeight]);
+
+  const stickyFlowSpacerHeight =
+    isStickyActive && expanded && naturalHeight > dockMaxHeight
+      ? naturalHeight - dockMaxHeight
+      : 0;
 
   if (!isStickyCandidate) {
     if (!expanded) {
@@ -238,7 +298,6 @@ function AiBlockCard({
         {stickySentinel}
         <article
           className={`term-warp-block term-warp-block--ai term-warp-block--collapsed${stickyCollapsedClass}`}
-          data-block-id={block.id}
         >
           <button type="button" className="term-warp-block__summary" onClick={onToggle}>
             <span className="term-warp-ai-mark" aria-hidden>
@@ -291,25 +350,40 @@ function AiBlockCard({
     <>
       {stickySentinel}
       <div
+        ref={stickyHostRef}
         className={`term-warp-ai-sticky-host${
           isStickyActive ? " term-warp-ai-sticky-host--active" : ""
         }`}
         style={isStickyActive ? { maxHeight: dockMaxHeight } : undefined}
-        data-block-id={block.id}
       >
         {article}
         {isStickyActive ? <AiDockResizeHandle sessionId={sessionId} /> : null}
       </div>
+      {stickyFlowSpacerHeight > 0 ? (
+        <div
+          className="term-warp-ai-sticky-flow-spacer"
+          style={{ height: stickyFlowSpacerHeight }}
+          aria-hidden
+        />
+      ) : null}
     </>
   );
 }
 
 function ShellBlockCard({
   block,
+  sessionId,
   promptSymbol = "$",
+  onRunCommand,
+  sessionType = "remote",
+  sessionUser,
 }: {
   block: TerminalBlock;
+  sessionId: string;
   promptSymbol?: string;
+  onRunCommand?: (command: string) => void;
+  sessionType?: TerminalSessionType;
+  sessionUser?: string | null;
 }) {
   const output = shellOutput(block);
   const duration = formatDuration(block);
@@ -318,10 +392,21 @@ function ShellBlockCard({
   const isError =
     block.status === "failed" || (block.exitCode !== null && block.exitCode !== 0);
 
+  const lsListing = useMemo(() => {
+    if (running || !output || isError) return null;
+    return tryParseLsListing(cmd, output);
+  }, [running, output, isError, cmd]);
+
   return (
     <article className="term-warp-block term-warp-block--shell" data-block-id={block.id}>
       <div className="term-warp-prompt-line">
-        <span className="term-warp-prompt-line__path">{cwdLabel(block.cwd)}</span>
+        <TerminalPathBreadcrumb
+          cwd={block.cwd}
+          user={sessionUser}
+          sessionType={sessionType}
+          onRunCommand={onRunCommand}
+          variant="block"
+        />
         <span className="term-warp-prompt-line__symbol">{promptSymbol}</span>
         <span className="term-warp-prompt-line__cmd">{cmd}</span>
         {duration ? <span className="term-warp-prompt-line__dur">{duration}</span> : null}
@@ -330,15 +415,31 @@ function ShellBlockCard({
         ) : null}
       </div>
       {output ? (
-        <pre
-          className={`term-warp-output${isError ? " term-warp-output--error" : ""}`}
-        >
-          {output}
-        </pre>
+        lsListing ? (
+          <EnrichedLsListingView
+            listing={lsListing}
+            command={cmd}
+            cwd={block.cwd}
+            sessionId={sessionId}
+            sessionType={sessionType}
+            sessionUser={sessionUser}
+            fallbackOutput={output}
+            isError={isError}
+            onRunCommand={onRunCommand}
+          />
+        ) : (
+          <pre
+            className={`term-warp-output${isError ? " term-warp-output--error" : ""}`}
+          >
+            {output}
+          </pre>
+        )
       ) : null}
     </article>
   );
 }
+
+const MemoShellBlockCard = memo(ShellBlockCard);
 
 function resolveAiExpanded(
   block: TerminalBlock,
@@ -357,8 +458,8 @@ function resolveAiExpanded(
   );
 }
 
-function WarpBlockCard({
-  block,
+function FeedAiRunSegmentView({
+  segment,
   sessionId,
   promptSymbol,
   expandedAiBlockId,
@@ -366,8 +467,11 @@ function WarpBlockCard({
   stickyAiBlockId,
   feedScrollRef,
   feedPinnedToBottom,
+  onRunCommand,
+  sessionType,
+  sessionUser,
 }: {
-  block: TerminalBlock;
+  segment: FeedAiRunSegment;
   sessionId: string;
   promptSymbol?: string;
   expandedAiBlockId: string | null;
@@ -375,30 +479,33 @@ function WarpBlockCard({
   stickyAiBlockId: string | null;
   feedScrollRef: RefObject<HTMLElement | null>;
   feedPinnedToBottom: boolean;
+  onRunCommand?: (command: string) => void;
+  sessionType?: TerminalSessionType;
+  sessionUser?: string | null;
 }) {
-  const isAi = block.kind === "ai";
-  const thread = isAi ? getResolvedAiThread(block) : [];
+  const { ai, shells } = segment;
+  const thread = getResolvedAiThread(ai);
   const hasActiveTool = thread.some(
     (item) =>
       isAiThreadToolCall(item) &&
       (item.status === "pending" || item.status === "running"),
   );
-  const expanded = isAi && resolveAiExpanded(block, expandedAiBlockId);
-  const isStickyCandidate = isAi && block.id === stickyAiBlockId;
+  const expanded = resolveAiExpanded(ai, expandedAiBlockId);
+  const isStickyCandidate = ai.id === stickyAiBlockId;
 
   const onToggle = () => {
-    if (!isAi || block.status === "running" || hasActiveTool) return;
+    if (ai.status === "running" || hasActiveTool) return;
     if (expanded) {
       setExpandedAiBlock(sessionId, null);
     } else {
-      setExpandedAiBlock(sessionId, block.id);
+      setExpandedAiBlock(sessionId, ai.id);
     }
   };
 
-  if (isAi) {
-    return (
+  return (
+    <div className="term-warp-sticky-segment" data-block-id={ai.id}>
       <AiBlockCard
-        block={block}
+        block={ai}
         sessionId={sessionId}
         expanded={expanded}
         onToggle={onToggle}
@@ -406,14 +513,29 @@ function WarpBlockCard({
         feedScrollRef={feedScrollRef}
         feedPinnedToBottom={feedPinnedToBottom}
       />
-    );
-  }
-
-  return <ShellBlockCard block={block} promptSymbol={promptSymbol} />;
+      {shells.map((shell) => (
+        <MemoShellBlockCard
+          key={shell.id}
+          block={shell}
+          sessionId={sessionId}
+          promptSymbol={promptSymbol}
+          onRunCommand={onRunCommand}
+          sessionType={sessionType}
+          sessionUser={sessionUser}
+        />
+      ))}
+    </div>
+  );
 }
 
 /** Warp 式 Block 流：shell 与 AI 卡片按时间交错排列 */
-export function TerminalBlockFeed({ sessionId, promptSymbol }: TerminalBlockFeedProps) {
+export function TerminalBlockFeed({
+  sessionId,
+  promptSymbol,
+  onRunCommand,
+  sessionType = "remote",
+  sessionUser,
+}: TerminalBlockFeedProps) {
   const blocks = useBlocksStore((state) => state.blocks[sessionId] ?? EMPTY_TERMINAL_BLOCKS);
   const expandedAiBlockId = useTerminalUiStore((state) => state.expandedAiBlockIds[sessionId] ?? null);
   const setExpandedAiBlock = useTerminalUiStore((state) => state.setExpandedAiBlock);
@@ -423,8 +545,13 @@ export function TerminalBlockFeed({ sessionId, promptSymbol }: TerminalBlockFeed
   /** 用户未主动上滚时持续跟随输出；内容增高后不能用即时 isFeedPinnedToBottom 判断 */
   const followOutputRef = useRef(true);
   const [feedPinnedToBottom, setFeedPinnedToBottom] = useState(true);
+  const lastFeedScrollHeightRef = useRef(0);
 
   const visibleBlocks = blocks.filter(shouldRenderBlock);
+  const feedSegments = useMemo(
+    () => groupFeedBlocksIntoSegments(visibleBlocks),
+    [visibleBlocks],
+  );
   const activitySignature = useMemo(
     () => buildFeedActivitySignature(visibleBlocks),
     [visibleBlocks],
@@ -436,9 +563,11 @@ export function TerminalBlockFeed({ sessionId, promptSymbol }: TerminalBlockFeed
     if (!el) return;
 
     const syncPinned = () => {
-      const pinned = isFeedPinnedToBottom(el);
+      const scrollHeight = el.scrollHeight;
+      const pinned = isFeedPinnedToBottom(el, lastFeedScrollHeightRef.current);
+      lastFeedScrollHeightRef.current = scrollHeight;
       followOutputRef.current = pinned;
-      setFeedPinnedToBottom(pinned);
+      setFeedPinnedToBottom((prev) => (prev === pinned ? prev : pinned));
     };
 
     syncPinned();
@@ -457,12 +586,13 @@ export function TerminalBlockFeed({ sessionId, promptSymbol }: TerminalBlockFeed
     const blockCountGrew = visibleBlocks.length > prevBlockCountRef.current;
     prevBlockCountRef.current = visibleBlocks.length;
 
-    const shouldFollow = blockCountGrew || followOutputRef.current;
-    if (!shouldFollow) return;
+    if (!blockCountGrew && !followOutputRef.current) return;
 
     scrollFeedToLatest(el);
-    followOutputRef.current = true;
-    setFeedPinnedToBottom(true);
+    if (blockCountGrew) {
+      followOutputRef.current = true;
+      setFeedPinnedToBottom(true);
+    }
 
     requestAnimationFrame(() => {
       if (!blockCountGrew && !followOutputRef.current) return;
@@ -475,11 +605,20 @@ export function TerminalBlockFeed({ sessionId, promptSymbol }: TerminalBlockFeed
     const container = scrollRef.current;
     if (!list || !container) return;
 
+    let resizeRaf = 0;
     const observer = new ResizeObserver(() => {
-      scrollFeedToLatestIfFollowing(container, followOutputRef.current);
+      if (!followOutputRef.current) return;
+      cancelAnimationFrame(resizeRaf);
+      resizeRaf = requestAnimationFrame(() => {
+        if (!followOutputRef.current) return;
+        scrollFeedToLatestIfFollowing(container, true);
+      });
     });
     observer.observe(list);
-    return () => observer.disconnect();
+    return () => {
+      cancelAnimationFrame(resizeRaf);
+      observer.disconnect();
+    };
   }, [visibleBlocks.length]);
 
   if (visibleBlocks.length === 0) return null;
@@ -487,19 +626,38 @@ export function TerminalBlockFeed({ sessionId, promptSymbol }: TerminalBlockFeed
   return (
     <div className="term-warp-feed" ref={scrollRef}>
       <div className="term-warp-feed__list" ref={listRef}>
-        {visibleBlocks.map((block) => (
-          <WarpBlockCard
-            key={block.id}
-            block={block}
-            sessionId={sessionId}
-            promptSymbol={promptSymbol}
-            expandedAiBlockId={expandedAiBlockId}
-            setExpandedAiBlock={setExpandedAiBlock}
-            stickyAiBlockId={stickyAiBlockId}
-            feedScrollRef={scrollRef}
-            feedPinnedToBottom={feedPinnedToBottom}
-          />
-        ))}
+        {feedSegments.map((segment) => {
+          if (segment.kind === "orphan-shells") {
+            return segment.blocks.map((block) => (
+              <MemoShellBlockCard
+                key={block.id}
+                block={block}
+                sessionId={sessionId}
+                promptSymbol={promptSymbol}
+                onRunCommand={onRunCommand}
+                sessionType={sessionType}
+                sessionUser={sessionUser}
+              />
+            ));
+          }
+
+          return (
+            <FeedAiRunSegmentView
+              key={segment.ai.id}
+              segment={segment}
+              sessionId={sessionId}
+              promptSymbol={promptSymbol}
+              expandedAiBlockId={expandedAiBlockId}
+              setExpandedAiBlock={setExpandedAiBlock}
+              stickyAiBlockId={stickyAiBlockId}
+              feedScrollRef={scrollRef}
+              feedPinnedToBottom={feedPinnedToBottom}
+              onRunCommand={onRunCommand}
+              sessionType={sessionType}
+              sessionUser={sessionUser}
+            />
+          );
+        })}
       </div>
     </div>
   );

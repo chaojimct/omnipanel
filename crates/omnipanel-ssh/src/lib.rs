@@ -169,8 +169,57 @@ async fn authenticate_private_key(
 pub struct SftpEntry {
     pub name: String,
     pub is_dir: bool,
+    pub is_symlink: bool,
+    pub link_target: Option<String>,
     #[specta(type = f64)]
     pub size: u64,
+}
+
+fn sftp_join_path(dir: &str, name: &str) -> String {
+    if dir == "/" {
+        format!("/{name}")
+    } else if dir.is_empty() {
+        name.to_string()
+    } else {
+        format!("{dir}/{name}")
+    }
+}
+
+fn normalize_sftp_path(path: &str) -> String {
+    let mut parts: Vec<&str> = Vec::new();
+    for part in path.split('/') {
+        if part.is_empty() || part == "." {
+            continue;
+        }
+        if part == ".." {
+            parts.pop();
+            continue;
+        }
+        parts.push(part);
+    }
+    if parts.is_empty() {
+        "/".to_string()
+    } else {
+        format!("/{}", parts.join("/"))
+    }
+}
+
+fn resolve_sftp_link_target(link_path: &str, target: &str) -> String {
+    if target.starts_with('/') {
+        normalize_sftp_path(target)
+    } else {
+        let parent = match link_path.rfind('/') {
+            Some(0) => "/",
+            Some(index) => &link_path[..index],
+            None => "/",
+        };
+        let joined = if parent == "/" {
+            format!("/{target}")
+        } else {
+            format!("{parent}/{target}")
+        };
+        normalize_sftp_path(&joined)
+    }
 }
 
 /// 非交互命令执行结果（exec channel，独立于交互 shell）。
@@ -845,9 +894,29 @@ impl SshSession {
         let mut entries = Vec::new();
         for entry in dir {
             let meta = entry.metadata();
+            let file_type = meta.file_type();
+            let is_symlink = file_type.is_symlink();
+            let mut is_dir = file_type.is_dir();
+            let mut link_target = None;
+
+            if is_symlink {
+                let entry_path = sftp_join_path(path, &entry.file_name());
+                if let Ok(target) = sftp.read_link(&entry_path).await {
+                    link_target = Some(target.clone());
+                    let resolved = resolve_sftp_link_target(&entry_path, &target);
+                    if let Ok(target_meta) = sftp.metadata(&resolved).await {
+                        is_dir = target_meta.file_type().is_dir();
+                    } else if target.ends_with('/') {
+                        is_dir = true;
+                    }
+                }
+            }
+
             entries.push(SftpEntry {
                 name: entry.file_name(),
-                is_dir: meta.is_dir(),
+                is_dir,
+                is_symlink,
+                link_target,
                 size: meta.size.unwrap_or(0),
             });
         }

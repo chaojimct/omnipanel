@@ -353,7 +353,9 @@ pub(crate) fn sftp_entry_to_file(entry: &omnipanel_ssh::SftpEntry, base: &str) -
     FileEntry {
         name: entry.name.clone(),
         path: join_posix(base, &entry.name),
-        kind: if entry.is_dir {
+        kind: if entry.is_symlink {
+            "symlink".into()
+        } else if entry.is_dir {
             "dir".into()
         } else {
             "file".into()

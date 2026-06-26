@@ -11,10 +11,10 @@ import { TerminalBlockFeed } from "./TerminalBlockFeed";
 import { type BlueprintSource } from "./sessionBlueprints";
 import {
   buildSessionMetaLine,
-  formatTerminalCwdDisplay,
   parseSshSubtitle,
   resolveCommandPromptSymbol,
 } from "./terminalSessionDisplay";
+import { TerminalPathBreadcrumb } from "./TerminalPathBreadcrumb";
 import { useTerminalSessionStats } from "./useTerminalSessionStats";
 import { useTerminalUiStore } from "./terminalUiStore";
 import type { TerminalInputMode } from "../../hooks/useTerminal";
@@ -54,21 +54,32 @@ function TerminalSessionHeader({
   connected,
   inputMode,
   onToggleInputMode,
+  onRunCommand,
 }: {
   resource: WorkspaceResource | null;
   session: TerminalSessionInfo;
   connected: boolean;
   inputMode: TerminalInputMode;
   onToggleInputMode: () => void;
+  onRunCommand?: (command: string) => void;
 }) {
   const { t } = useI18n();
   const stats = useTerminalSessionStats(session.resourceId, connected);
   const parsed = parseSshSubtitle(resource?.subtitle);
   const user = parsed.user ?? (session.type === "local" ? null : "root");
-  const path = formatTerminalCwdDisplay(session.cwd, user);
   const meta = buildSessionMetaLine(session, resource, stats);
   const hostAddress =
     parsed.host && parsed.port ? `${parsed.host}:${parsed.port}` : parsed.host;
+
+  const pathNav = (
+    <TerminalPathBreadcrumb
+      cwd={session.cwd}
+      user={user}
+      sessionType={session.type}
+      onRunCommand={onRunCommand}
+      variant="header"
+    />
+  );
 
   const modeToggle = (
     <Button
@@ -96,7 +107,7 @@ function TerminalSessionHeader({
         </span>
         <span className="term-session-host">{hostLabel}</span>
         <span className="term-session-muted">:</span>
-        <span className="term-session-path">{path}</span>
+        {pathNav}
         <span className="term-session-spacer" />
         {modeToggle}
         {meta ? <span className="term-session-meta">{meta}</span> : null}
@@ -115,7 +126,7 @@ function TerminalSessionHeader({
         {user ?? "root"}@{resource.name}
       </span>
       <span className="term-session-muted">:</span>
-      <span className="term-session-path">{path}</span>
+      {pathNav}
       {hostAddress ? (
         <span className="term-session-muted">· {hostAddress}</span>
       ) : null}
@@ -154,6 +165,7 @@ function PaneViewBody(
   const lastError = useBlocksStore((state) => state.getLastError(paneId));
   const parsed = parseSshSubtitle(resource?.subtitle);
   const promptSymbol = resolveCommandPromptSymbol(session, parsed.user, resource);
+  const sessionUser = parsed.user ?? (session.type === "local" ? null : "root");
 
   useImperativeHandle(ref, () => ({
     focusInput: () => {
@@ -197,6 +209,7 @@ function PaneViewBody(
         connected={connected}
         inputMode={inputMode}
         onToggleInputMode={toggleInputMode}
+        onRunCommand={onSendCommand}
       />
       <div
         className={`terminal-area term-terminal-shell${inputMode === "external" ? " term-terminal-shell--warp" : ""}`}
@@ -215,7 +228,13 @@ function PaneViewBody(
         }}
       >
         {inputMode === "external" ? (
-          <TerminalBlockFeed sessionId={paneId} promptSymbol={promptSymbol} />
+          <TerminalBlockFeed
+            sessionId={paneId}
+            promptSymbol={promptSymbol}
+            onRunCommand={onSendCommand}
+            sessionType={session.type}
+            sessionUser={sessionUser}
+          />
         ) : null}
         <TerminalView
           key={`${paneId}:${blueprintSource.type ?? "local"}:${currentResourceId}`}

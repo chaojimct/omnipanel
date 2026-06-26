@@ -1,4 +1,10 @@
-export type SftpEntry = { name: string; isDir: boolean; size: number };
+export type SftpEntry = {
+  name: string;
+  isDir: boolean;
+  isSymlink: boolean;
+  linkTarget: string | null;
+  size: number;
+};
 
 export function formatSftpSize(bytes: number): string {
   if (bytes === 0) return "—";

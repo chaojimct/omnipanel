@@ -1127,6 +1127,27 @@
         cursor: pointer;
     }
 
+    .sftp-row-link td {
+        background: color-mix(in srgb, var(--accent) 4%, var(--surface));
+    }
+
+    .sftp-row-link td:hover {
+        background: color-mix(in srgb, var(--accent) 10%, var(--surface-hover));
+    }
+
+    .sftp-row-link.sftp-row-dir .sftp-col-name {
+        cursor: pointer;
+    }
+
+    .sftp-name-link {
+        color: var(--accent);
+        font-weight: 500;
+    }
+
+    .sftp-icon-symlink {
+        color: var(--accent);
+    }
+
     .sftp-name-dir {
         font-weight: 600;
         color: var(--fg);

@@ -1833,6 +1833,8 @@ export type SchemaTreeExpandedSnapshot = {
 export type SftpEntry = {
 	name: string,
 	isDir: boolean,
+	isSymlink: boolean,
+	linkTarget: string | null,
 	size: number | null,
 };
 

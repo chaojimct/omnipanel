@@ -85,6 +85,8 @@ export function TerminalAiThreadView({
   dockedAutoScroll = false,
 }: TerminalAiThreadViewProps) {
   const threadRef = useRef<HTMLDivElement>(null);
+  const wasDockedRef = useRef(false);
+  const dockScrollReadyRef = useRef(false);
   const block = useBlocksStore((state) => state.findBlockById(blockId));
 
   const threadSignature = useMemo(() => {
@@ -105,7 +107,19 @@ export function TerminalAiThreadView({
   }, []);
 
   useLayoutEffect(() => {
-    if (!dockedAutoScroll) return;
+    const justDocked = dockedAutoScroll && !wasDockedRef.current;
+    wasDockedRef.current = dockedAutoScroll;
+    if (!dockedAutoScroll) {
+      dockScrollReadyRef.current = false;
+      return;
+    }
+    if (justDocked) {
+      dockScrollReadyRef.current = false;
+      requestAnimationFrame(() => {
+        dockScrollReadyRef.current = true;
+      });
+      return;
+    }
     scrollToLatest();
     requestAnimationFrame(scrollToLatest);
   }, [dockedAutoScroll, threadSignature, scrollToLatest]);
@@ -115,7 +129,10 @@ export function TerminalAiThreadView({
     const el = threadRef.current;
     if (!el) return;
 
-    const observer = new ResizeObserver(() => scrollToLatest());
+    const observer = new ResizeObserver(() => {
+      if (!dockScrollReadyRef.current) return;
+      scrollToLatest();
+    });
 
     const attach = () => {
       observer.disconnect();

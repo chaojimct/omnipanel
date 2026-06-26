@@ -7,6 +7,12 @@ import { useSshDetailNavigationStore } from "../../stores/sshDetailNavigationSto
 import { useI18n } from "../../i18n";
 import { pathToRemoteDir } from "../../modules/server/ssh/utils/parseCommandPaths";
 import { fmtSftpError, formatSftpSize, type SftpEntry } from "./sftpUtils";
+import {
+  sftpEntryDisplayName,
+  sftpEntryIconType,
+  sftpEntryNameClass,
+  sftpEntryRowClass,
+} from "./sftpEntryDisplay";
 
 export type SftpPanelProps = {
   resourceId: string | null;
@@ -78,17 +84,24 @@ export function SftpPanel({ resourceId }: SftpPanelProps) {
         id: resourceIdRef.current,
         path: dir,
       });
-      list.sort((a, b) => {
+      if (seq !== loadSeqRef.current) return;
+      const normalized = list.map((entry) => ({
+        name: entry.name,
+        isDir: entry.isDir ?? false,
+        isSymlink: entry.isSymlink ?? false,
+        linkTarget: entry.linkTarget ?? null,
+        size: entry.size ?? 0,
+      }));
+      normalized.sort((a, b) => {
         if (a.isDir !== b.isDir) return a.isDir ? -1 : 1;
         return a.name.localeCompare(b.name);
       });
-      if (seq !== loadSeqRef.current) return;
-      setEntries(list);
+      setEntries(normalized);
       setPath(dir);
       setSelectedName(null);
       useSshDetailNavigationStore.getState().setSftpCache(resourceIdRef.current, {
         path: dir,
-        entries: list,
+        entries: normalized,
       });
     } catch (e) {
       if (seq !== loadSeqRef.current) return;
@@ -386,7 +399,7 @@ export function SftpPanel({ resourceId }: SftpPanelProps) {
                     <tr
                       key={entry.name}
                       className={[
-                        entry.isDir ? "sftp-row-dir" : "sftp-row-file",
+                        sftpEntryRowClass(entry),
                         selected ? "sftp-row-selected" : "",
                       ].filter(Boolean).join(" ")}
                       onClick={() => setSelectedName(entry.name)}
@@ -394,12 +407,16 @@ export function SftpPanel({ resourceId }: SftpPanelProps) {
                       onContextMenu={(e) => handleContextMenu(e, entry)}
                     >
                       <td className="sftp-col-name">
-                        <span className={`sftp-icon ${entry.isDir ? "sftp-icon-dir" : "sftp-icon-file"}`}>
-                          <FileEntryIcon type={entry.isDir ? "dir" : "file"} size={14} />
+                        <span className={`sftp-icon sftp-icon-${sftpEntryIconType(entry)}`}>
+                          <FileEntryIcon type={sftpEntryIconType(entry)} fileName={entry.name} size={14} />
                         </span>
-                        <span className={entry.isDir ? "sftp-name-dir" : "sftp-name-file"}>{entry.name}</span>
+                        <span className={sftpEntryNameClass(entry)} title={sftpEntryDisplayName(entry)}>
+                          {sftpEntryDisplayName(entry)}
+                        </span>
                       </td>
-                      <td className="sftp-col-size text-muted">{entry.isDir ? "—" : formatSftpSize(entry.size)}</td>
+                      <td className="sftp-col-size text-muted">
+                        {entry.isDir && !entry.isSymlink ? "—" : entry.isSymlink ? "link" : formatSftpSize(entry.size)}
+                      </td>
                       <td className="sftp-col-actions">
                         <button type="button" className="sftp-action-btn" onClick={(e) => { e.stopPropagation(); void handleDelete(entry); }} title={t("ssh.sftp.delete")}>
                           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" /></svg>
@@ -416,7 +433,11 @@ export function SftpPanel({ resourceId }: SftpPanelProps) {
 
       {selectedEntry && (
         <div className="sftp-status-bar">
-          {t("ssh.sftp.selected", { name: selectedEntry.name })}
+          {t("ssh.sftp.selected", {
+            name: selectedEntry.isSymlink && selectedEntry.linkTarget
+              ? `${selectedEntry.name} → ${selectedEntry.linkTarget}`
+              : selectedEntry.name,
+          })}
         </div>
       )}
 

@@ -3244,7 +3244,7 @@
     display: inline-flex;
     align-items: center;
     gap: var(--sp-2);
-    padding: 0 var(--sp-4);
+    padding: 0 0 0 var(--sp-4);
     height: 100%;
     min-height: 0;
     font-size: var(--dv-tabs-and-actions-container-font-size);
