@@ -1,8 +1,21 @@
+use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager};
+
+/// 接口 /models 返回的单条模型元数据。
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct ApiModelMeta {
+    /// Unix 秒级时间戳；Specta 导出为 number。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(type = Option<f64>)]
+    pub created: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub owned_by: Option<String>,
+}
 
 /// AI 提供商配置。前端 camelCase 字段名（providerName / baseUrl / ...），
 /// 通过 `#[serde(rename_all = "camelCase")]` 与之对齐。
@@ -16,7 +29,13 @@ pub struct AiModelProvider {
     pub api_key: String,
     pub model_names: Vec<String>,
     #[serde(default)]
+    pub manual_model_names: Vec<String>,
+    #[serde(default)]
+    pub excluded_model_names: Vec<String>,
+    #[serde(default)]
     pub disabled_model_names: Vec<String>,
+    #[serde(default)]
+    pub api_model_meta: HashMap<String, ApiModelMeta>,
     // 毫秒级时间戳：i64 存储，但 specta 导出为 number（远小于 2^53，无精度损失）
     #[specta(type = f64)]
     pub created_at: i64,

@@ -443,9 +443,9 @@ export const commands = {
 	/**  Get the current proxy configuration (for backend use). */
 	getProxyConfig: () => typedError<ProxyConfig, string>(__TAURI_INVOKE("get_proxy_config")),
 	/**  读取 AI 模型配置 JSON 文件。文件不存在时返回默认空配置。 */
-	aiModelsLoad: () => typedError<AiModelsFile, string>(__TAURI_INVOKE("ai_models_load")),
+	aiModelsLoad: () => typedError<AiModelsFile_Serialize, string>(__TAURI_INVOKE("ai_models_load")),
 	/**  原子写入 AI 模型配置 JSON 文件:先写临时文件再 rename,防止崩溃时半写。 */
-	aiModelsSave: (file: AiModelsFile) => typedError<null, string>(__TAURI_INVOKE("ai_models_save", { file })),
+	aiModelsSave: (file: AiModelsFile_Deserialize) => typedError<null, string>(__TAURI_INVOKE("ai_models_save", { file })),
 	dbSqlFilesLoad: () => typedError<DbSqlFilesFile, string>(__TAURI_INVOKE("db_sql_files_load")),
 	dbSqlFilesSave: (file: DbSqlFilesFile) => typedError<null, string>(__TAURI_INVOKE("db_sql_files_save", { file })),
 	mcpListServices: () => typedError<McpServiceView[], string>(__TAURI_INVOKE("mcp_list_services")),
@@ -474,21 +474,74 @@ export type ActionRequest = {
  *  AI 提供商配置。前端 camelCase 字段名（providerName / baseUrl / ...），
  *  通过 `#[serde(rename_all = "camelCase")]` 与之对齐。
  */
-export type AiModelProvider = {
+export type AiModelProvider = AiModelProvider_Serialize | AiModelProvider_Deserialize;
+
+/**
+ *  AI 提供商配置。前端 camelCase 字段名（providerName / baseUrl / ...），
+ *  通过 `#[serde(rename_all = "camelCase")]` 与之对齐。
+ */
+export type AiModelProvider_Deserialize = {
 	id: string,
 	providerName: string,
 	apiStandard: string,
 	baseUrl: string,
 	apiKey: string,
 	modelNames: string[],
+	manualModelNames?: string[],
+	excludedModelNames?: string[],
 	disabledModelNames?: string[],
+	apiModelMeta?: { [key in string]: ApiModelMeta_Deserialize },
+	createdAt: number | null,
+};
+
+/**
+ *  AI 提供商配置。前端 camelCase 字段名（providerName / baseUrl / ...），
+ *  通过 `#[serde(rename_all = "camelCase")]` 与之对齐。
+ */
+export type AiModelProvider_Serialize = {
+	id: string,
+	providerName: string,
+	apiStandard: string,
+	baseUrl: string,
+	apiKey: string,
+	modelNames: string[],
+	manualModelNames: string[],
+	excludedModelNames: string[],
+	disabledModelNames: string[],
+	apiModelMeta: { [key in string]: ApiModelMeta_Serialize },
 	createdAt: number | null,
 };
 
 /**  持久化文件结构。版本号用于前端迁移。 */
-export type AiModelsFile = {
+export type AiModelsFile = AiModelsFile_Serialize | AiModelsFile_Deserialize;
+
+/**  持久化文件结构。版本号用于前端迁移。 */
+export type AiModelsFile_Deserialize = {
 	version?: number,
-	providers?: AiModelProvider[],
+	providers?: AiModelProvider_Deserialize[],
+};
+
+/**  持久化文件结构。版本号用于前端迁移。 */
+export type AiModelsFile_Serialize = {
+	version: number,
+	providers: AiModelProvider_Serialize[],
+};
+
+/**  接口 /models 返回的单条模型元数据。 */
+export type ApiModelMeta = ApiModelMeta_Serialize | ApiModelMeta_Deserialize;
+
+/**  接口 /models 返回的单条模型元数据。 */
+export type ApiModelMeta_Deserialize = {
+	/**  Unix 秒级时间戳；Specta 导出为 number。 */
+	created?: number | null,
+	ownedBy?: string | null,
+};
+
+/**  接口 /models 返回的单条模型元数据。 */
+export type ApiModelMeta_Serialize = {
+	/**  Unix 秒级时间戳；Specta 导出为 number。 */
+	created?: number | null,
+	ownedBy?: string | null,
 };
 
 /**  抓包统计信息。 */

@@ -11,6 +11,37 @@ export function isKnowledgeFolder(entry: Pick<KnowledgeEntry, "nodeType">): bool
   return entry.nodeType === "folder";
 }
 
+export type KnowledgeLibrarySection = "selfBuilt" | "imported";
+
+export function isKnowledgeImported(entry: Pick<KnowledgeEntry, "source">): boolean {
+  return entry.source.startsWith("import:");
+}
+
+export function knowledgeLibrarySectionForEntry(
+  entry: Pick<KnowledgeEntry, "source">,
+): KnowledgeLibrarySection {
+  return isKnowledgeImported(entry) ? "imported" : "selfBuilt";
+}
+
+/** 按侧栏分区过滤条目；跨区父节点会被提升为根级展示。 */
+export function filterEntriesForLibrarySection(
+  entries: KnowledgeEntry[],
+  section: KnowledgeLibrarySection,
+): KnowledgeEntry[] {
+  const inSection = (entry: KnowledgeEntry) =>
+    section === "imported" ? isKnowledgeImported(entry) : !isKnowledgeImported(entry);
+  const filtered = entries.filter(inSection);
+  const allowedIds = new Set(filtered.map((entry) => entry.id));
+
+  return filtered.map((entry) => {
+    const parent = normalizeParentId(entry.parentId);
+    if (!parent || allowedIds.has(parent)) {
+      return entry;
+    }
+    return { ...entry, parentId: "" };
+  });
+}
+
 export function normalizeParentId(parentId: string | null | undefined): string {
   return parentId?.trim() ?? "";
 }

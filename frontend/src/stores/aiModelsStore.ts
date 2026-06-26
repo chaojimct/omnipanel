@@ -2,7 +2,8 @@ import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 
 import { commands } from "../ipc/bindings";
-import { fetchProviderModelList, mergeModelCatalog } from "../lib/fetchProviderModels";
+import { fetchProviderModelList, mergeModelCatalog, buildApiModelMeta } from "../lib/fetchProviderModels";
+import type { ApiModelMeta } from "../lib/fetchProviderModels";
 
 /** 用户自定义的 AI 模型接入方式 */
 export type ApiStandard = "openai" | "anthropic";
@@ -18,10 +19,16 @@ export interface AiModelProvider {
   baseUrl: string;
   /** API Key（在 UI 中掩码显示） */
   apiKey: string;
-  /** 该提供商下的模型名称列表 */
+  /** 该提供商下的模型名称列表（手动 + 接口拉取合并） */
   modelNames: string[];
+  /** 用户手动添加的模型名称（modelNames 的子集） */
+  manualModelNames?: string[];
+  /** 用户从列表中移除的接口模型（刷新时不再自动加入） */
+  excludedModelNames?: string[];
   /** 已关闭的模型（未列出或空数组表示全部启用） */
   disabledModelNames?: string[];
+  /** 接口模型的元数据（键与 modelNames 中名称一致） */
+  apiModelMeta?: Record<string, ApiModelMeta>;
   /** 创建时间（毫秒） */
   createdAt: number;
 }
@@ -46,6 +53,21 @@ interface AiModelsState {
   ) => void;
   setModelEnabled: (providerId: string, modelName: string, enabled: boolean) => void;
   setAllModelsEnabled: (providerId: string, enabled: boolean) => void;
+  addManualModel: (
+    providerId: string,
+    modelName: string,
+  ) => { ok: true } | { ok: false; error: "not_found" | "empty" | "duplicate" };
+  removeModel: (
+    providerId: string,
+    modelName: string,
+  ) => { ok: true } | { ok: false; error: "not_found" | "model_not_found" };
+  renameManualModel: (
+    providerId: string,
+    oldName: string,
+    newName: string,
+  ) =>
+    | { ok: true }
+    | { ok: false; error: "not_found" | "model_not_found" | "empty" | "duplicate" | "not_manual" };
   refreshProviderModelsFromApi: (
     providerId: string,
   ) => Promise<{ ok: true; count: number } | { ok: false; error: string }>;
@@ -89,6 +111,68 @@ function pruneDisabledModelNames(
   return normalizeDisabledModelNames(disabledModelNames).filter((name) =>
     allowed.has(name.toLowerCase()),
   );
+}
+
+function normalizeManualModelNames(names: string[] | undefined): string[] {
+  return normalizeDisabledModelNames(names);
+}
+
+function pruneManualModelNames(
+  modelNames: string[],
+  manualModelNames: string[] | undefined,
+): string[] {
+  const allowed = new Set(modelNames.map((n) => n.toLowerCase()));
+  return normalizeManualModelNames(manualModelNames).filter((name) =>
+    allowed.has(name.toLowerCase()),
+  );
+}
+
+function normalizeExcludedModelNames(names: string[] | undefined): string[] {
+  return normalizeDisabledModelNames(names);
+}
+
+function findModelName(modelNames: string[], name: string): string | undefined {
+  const key = name.toLowerCase();
+  return modelNames.find((n) => n.toLowerCase() === key);
+}
+
+/** 模型是否为用户手动添加 */
+export function isManualModel(provider: AiModelProvider, modelName: string): boolean {
+  const manual = provider.manualModelNames ?? [];
+  const key = modelName.toLowerCase();
+  return manual.some((name) => name.toLowerCase() === key);
+}
+
+/** 读取接口模型的元数据 */
+export function getApiModelMeta(
+  provider: AiModelProvider,
+  modelName: string,
+): ApiModelMeta | null {
+  if (isManualModel(provider, modelName)) return null;
+  const meta = provider.apiModelMeta ?? {};
+  if (meta[modelName]) return meta[modelName];
+  const key = modelName.toLowerCase();
+  const matched = Object.entries(meta).find(([name]) => name.toLowerCase() === key);
+  return matched?.[1] ?? null;
+}
+
+function pruneApiModelMeta(
+  modelNames: string[],
+  apiModelMeta: Record<string, ApiModelMeta> | undefined,
+): Record<string, ApiModelMeta> {
+  if (!apiModelMeta) return {};
+  const pruned: Record<string, ApiModelMeta> = {};
+  for (const name of modelNames) {
+    const key = name.toLowerCase();
+    const direct = apiModelMeta[name];
+    if (direct) {
+      pruned[name] = direct;
+      continue;
+    }
+    const matched = Object.entries(apiModelMeta).find(([n]) => n.toLowerCase() === key);
+    if (matched) pruned[name] = matched[1];
+  }
+  return Object.keys(pruned).length > 0 ? pruned : {};
 }
 
 function normalizeProviderName(name: string): string {
@@ -199,7 +283,10 @@ interface LooseProvider {
   baseUrl: string;
   apiKey: string;
   modelNames: string[];
+  manualModelNames?: string[];
+  excludedModelNames?: string[];
   disabledModelNames?: string[];
+  apiModelMeta?: Record<string, ApiModelMeta>;
   createdAt: number | null;
 }
 
@@ -216,9 +303,17 @@ function toStrictProvider(p: LooseProvider): AiModelProvider {
     baseUrl: p.baseUrl,
     apiKey: p.apiKey,
     modelNames: Array.isArray(p.modelNames) ? p.modelNames : [],
+    manualModelNames: normalizeManualModelNames(
+      Array.isArray(p.manualModelNames) ? p.manualModelNames : undefined,
+    ),
+    excludedModelNames: normalizeExcludedModelNames(
+      Array.isArray(p.excludedModelNames) ? p.excludedModelNames : undefined,
+    ),
     disabledModelNames: normalizeDisabledModelNames(
       Array.isArray(p.disabledModelNames) ? p.disabledModelNames : undefined,
     ),
+    apiModelMeta:
+      p.apiModelMeta && typeof p.apiModelMeta === "object" ? p.apiModelMeta : undefined,
     createdAt: p.createdAt ?? Date.now(),
   };
 }
@@ -241,7 +336,10 @@ function serializeProviderForDisk(provider: AiModelProvider) {
     baseUrl: provider.baseUrl,
     apiKey: provider.apiKey,
     modelNames: provider.modelNames,
+    manualModelNames: provider.manualModelNames ?? [],
+    excludedModelNames: provider.excludedModelNames ?? [],
     disabledModelNames: provider.disabledModelNames ?? [],
+    apiModelMeta: provider.apiModelMeta ?? {},
     createdAt: provider.createdAt,
   };
 }
@@ -281,6 +379,7 @@ export const useAiModelsStore = create<AiModelsState>()(
       baseUrl: normalizeBaseUrl(input.baseUrl),
       apiKey: input.apiKey.trim(),
       modelNames: normalizeModelNames(input.modelNames),
+      manualModelNames: normalizeManualModelNames(input.manualModelNames),
       disabledModelNames: normalizeDisabledModelNames(input.disabledModelNames),
       createdAt: Date.now(),
     };
@@ -299,6 +398,16 @@ export const useAiModelsStore = create<AiModelsState>()(
       if (p.id !== id) return p;
       const modelNames =
         patch.modelNames !== undefined ? normalizeModelNames(patch.modelNames) : p.modelNames;
+      const manualModelNames =
+        patch.manualModelNames !== undefined
+          ? normalizeManualModelNames(patch.manualModelNames)
+          : p.manualModelNames;
+      const excludedModelNames =
+        patch.excludedModelNames !== undefined
+          ? normalizeExcludedModelNames(patch.excludedModelNames)
+          : p.excludedModelNames;
+      const apiModelMeta =
+        patch.apiModelMeta !== undefined ? patch.apiModelMeta : p.apiModelMeta;
       const disabledModelNames =
         patch.disabledModelNames !== undefined
           ? normalizeDisabledModelNames(patch.disabledModelNames)
@@ -312,6 +421,9 @@ export const useAiModelsStore = create<AiModelsState>()(
         ...(patch.baseUrl !== undefined ? { baseUrl: normalizeBaseUrl(patch.baseUrl) } : {}),
         ...(patch.apiKey !== undefined ? { apiKey: patch.apiKey.trim() } : {}),
         modelNames,
+        manualModelNames: pruneManualModelNames(modelNames, manualModelNames),
+        excludedModelNames: normalizeExcludedModelNames(excludedModelNames),
+        apiModelMeta: pruneApiModelMeta(modelNames, apiModelMeta),
         disabledModelNames: pruneDisabledModelNames(modelNames, disabledModelNames),
       };
     });
@@ -341,6 +453,109 @@ export const useAiModelsStore = create<AiModelsState>()(
     set({ providers: next });
     void persistProviders(next);
   },
+  addManualModel: (providerId, modelName) => {
+    const trimmed = modelName.trim();
+    if (!trimmed) {
+      return { ok: false, error: "empty" };
+    }
+    const provider = get().providers.find((p) => p.id === providerId);
+    if (!provider) {
+      return { ok: false, error: "not_found" };
+    }
+    const key = trimmed.toLowerCase();
+    if (provider.modelNames.some((name) => name.toLowerCase() === key)) {
+      return { ok: false, error: "duplicate" };
+    }
+    const manualModelNames = [...(provider.manualModelNames ?? []), trimmed];
+    const modelNames = [...provider.modelNames, trimmed];
+    const next = get().providers.map((p) =>
+      p.id === providerId ? { ...p, modelNames, manualModelNames } : p,
+    );
+    set({ providers: next });
+    void persistProviders(next);
+    return { ok: true };
+  },
+  removeModel: (providerId, modelName) => {
+    const provider = get().providers.find((p) => p.id === providerId);
+    if (!provider) {
+      return { ok: false, error: "not_found" };
+    }
+    const actualName = findModelName(provider.modelNames, modelName);
+    if (!actualName) {
+      return { ok: false, error: "model_not_found" };
+    }
+    const key = actualName.toLowerCase();
+    const manual = isManualModel(provider, actualName);
+    const modelNames = provider.modelNames.filter((n) => n.toLowerCase() !== key);
+    const manualModelNames = (provider.manualModelNames ?? []).filter(
+      (n) => n.toLowerCase() !== key,
+    );
+    const disabledModelNames = (provider.disabledModelNames ?? []).filter(
+      (n) => n.toLowerCase() !== key,
+    );
+    const excludedModelNames = manual
+      ? provider.excludedModelNames
+      : normalizeExcludedModelNames([...(provider.excludedModelNames ?? []), actualName]);
+    const apiModelMeta = { ...(provider.apiModelMeta ?? {}) };
+    delete apiModelMeta[actualName];
+    for (const key of Object.keys(apiModelMeta)) {
+      if (key.toLowerCase() === actualName.toLowerCase()) delete apiModelMeta[key];
+    }
+    const next = get().providers.map((p) =>
+      p.id === providerId
+        ? {
+            ...p,
+            modelNames,
+            manualModelNames,
+            disabledModelNames,
+            excludedModelNames,
+            apiModelMeta: pruneApiModelMeta(modelNames, apiModelMeta),
+          }
+        : p,
+    );
+    set({ providers: next });
+    void persistProviders(next);
+    return { ok: true };
+  },
+  renameManualModel: (providerId, oldName, newName) => {
+    const trimmed = newName.trim();
+    if (!trimmed) {
+      return { ok: false, error: "empty" };
+    }
+    const provider = get().providers.find((p) => p.id === providerId);
+    if (!provider) {
+      return { ok: false, error: "not_found" };
+    }
+    const actualOld = findModelName(provider.modelNames, oldName);
+    if (!actualOld) {
+      return { ok: false, error: "model_not_found" };
+    }
+    if (!isManualModel(provider, actualOld)) {
+      return { ok: false, error: "not_manual" };
+    }
+    const newKey = trimmed.toLowerCase();
+    if (provider.modelNames.some((n) => n.toLowerCase() === newKey && n !== actualOld)) {
+      return { ok: false, error: "duplicate" };
+    }
+    const oldKey = actualOld.toLowerCase();
+    const modelNames = provider.modelNames.map((n) =>
+      n.toLowerCase() === oldKey ? trimmed : n,
+    );
+    const manualModelNames = (provider.manualModelNames ?? []).map((n) =>
+      n.toLowerCase() === oldKey ? trimmed : n,
+    );
+    const disabledModelNames = (provider.disabledModelNames ?? []).map((n) =>
+      n.toLowerCase() === oldKey ? trimmed : n,
+    );
+    const next = get().providers.map((p) =>
+      p.id === providerId
+        ? { ...p, modelNames, manualModelNames, disabledModelNames }
+        : p,
+    );
+    set({ providers: next });
+    void persistProviders(next);
+    return { ok: true };
+  },
   refreshProviderModelsFromApi: async (providerId) => {
     const provider = get().providers.find((p) => p.id === providerId);
     if (!provider) {
@@ -355,11 +570,22 @@ export const useAiModelsStore = create<AiModelsState>()(
       return { ok: false, error: fetched.error };
     }
 
-    const modelNames = mergeModelCatalog(provider.modelNames, fetched.models);
+    const manualModelNames = normalizeManualModelNames(provider.manualModelNames);
+    const excludedKeys = new Set(
+      (provider.excludedModelNames ?? []).map((name) => name.toLowerCase()),
+    );
+    const apiModels = fetched.models.filter(
+      (item) => !excludedKeys.has(item.id.toLowerCase()),
+    );
+    const modelNames = mergeModelCatalog(manualModelNames, apiModels);
+    const prunedManual = pruneManualModelNames(modelNames, manualModelNames);
+    const apiModelMeta = buildApiModelMeta(modelNames, prunedManual, apiModels);
     const disabledModelNames = pruneDisabledModelNames(modelNames, provider.disabledModelNames);
 
     const next = get().providers.map((p) =>
-      p.id === providerId ? { ...p, modelNames, disabledModelNames } : p,
+      p.id === providerId
+        ? { ...p, modelNames, manualModelNames: prunedManual, apiModelMeta, disabledModelNames }
+        : p,
     );
     set({ providers: next });
     await persistProviders(next);
