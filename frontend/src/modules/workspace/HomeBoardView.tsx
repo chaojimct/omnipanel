@@ -1,7 +1,7 @@
 import { useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { navigateToFeature, switchEmbeddedWorkspace } from "../../lib/workspaceNavigation";
-import { MODULE_PATHS, WORKSPACE_PATHS } from "../../lib/paths";
+import { MODULE_PATHS, WORKSPACE_PATHS, isModuleNavVisible } from "../../lib/paths";
 import { useI18n } from "../../i18n";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { DashboardIcon } from "./DashboardIcon";
@@ -166,14 +166,16 @@ export function HomeBoardView() {
                   <path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11" />
                 </svg>
                 {t("dashboard.activeTasks")}
-                <button
-                  type="button"
-                  className="qa-btn home-board-qa-end"
-                  onClick={() => go(MODULE_PATHS.workflow)}
-                >
-                  <SectionChevron />
-                  {t("dashboard.viewAll")}
-                </button>
+                {isModuleNavVisible("workflow") && (
+                  <button
+                    type="button"
+                    className="qa-btn home-board-qa-end"
+                    onClick={() => go(MODULE_PATHS.workflow)}
+                  >
+                    <SectionChevron />
+                    {t("dashboard.viewAll")}
+                  </button>
+                )}
               </div>
               <div className="home-board-task-list">
                 {activeTasks.length === 0 ? (
