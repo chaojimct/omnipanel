@@ -2,6 +2,7 @@ import { useCallback, useMemo } from "react";
 import { ContextMenu, type ContextMenuItem } from "../ui/ContextMenu";
 import { useAiStore } from "../../stores/aiStore";
 import type { TerminalBlock } from "../../stores/blocksStore";
+import { getAiBlockTextForContext, getResolvedAiThread } from "../../modules/terminal/aiThreadBridge";
 
 interface Props {
   block: TerminalBlock;
@@ -28,13 +29,15 @@ export function BlockContextMenu({ block, position, onClose, onRunCommand }: Pro
   );
 
   const hasError = block.exitCode !== null && block.exitCode !== 0;
-  const hasOutput = block.output.trim().length > 0;
+  const isAiBlock = block.kind === "ai";
+  const aiContext = isAiBlock ? getAiBlockTextForContext(block) : "";
+  const hasOutput = isAiBlock ? aiContext.trim().length > 0 : block.output.trim().length > 0;
 
   const items = useMemo((): ContextMenuItem[] => {
     const menu: ContextMenuItem[] = [
       {
         id: "explain-command",
-        label: "Explain command",
+        label: "解释命令",
         icon: (
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <circle cx="12" cy="12" r="10" />
@@ -47,11 +50,38 @@ export function BlockContextMenu({ block, position, onClose, onRunCommand }: Pro
       },
     ];
 
-    if (hasError && hasOutput) {
+    if (isAiBlock) {
+      menu.push({
+        id: "continue-in-sidebar",
+        label: "在侧栏继续",
+        icon: (
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
+          </svg>
+        ),
+        onClick: () => {
+          const convId = createConversation();
+          addContext(convId, { type: "terminal", label: "终端 AI 卡片" });
+          const thread = getResolvedAiThread(block);
+          for (const item of thread) {
+            if (item.kind === "message") {
+              addMessage(convId, {
+                role: item.role,
+                content: item.content,
+              });
+            }
+          }
+          openDrawer();
+          onClose();
+        },
+      });
+    }
+
+    if (hasError && hasOutput && !isAiBlock) {
       menu.push(
         {
           id: "explain-error",
-          label: "Explain error",
+          label: "解释错误",
           icon: (
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <circle cx="12" cy="12" r="10" />
@@ -66,7 +96,7 @@ export function BlockContextMenu({ block, position, onClose, onRunCommand }: Pro
         },
         {
           id: "fix-error",
-          label: "Fix error",
+          label: "修复错误",
           icon: (
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z" />
@@ -84,7 +114,7 @@ export function BlockContextMenu({ block, position, onClose, onRunCommand }: Pro
       { id: "sep-ai", separator: true, label: "" },
       {
         id: "send-to-ai",
-        label: "Send to AI",
+        label: "发送给 AI",
         icon: (
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M12 2a4 4 0 014 4v1a4 4 0 01-8 0V6a4 4 0 014-4z" />
@@ -96,7 +126,9 @@ export function BlockContextMenu({ block, position, onClose, onRunCommand }: Pro
         ),
         onClick: () =>
           sendToAI(
-            `Analyze this terminal block:\n\nCommand: \`${block.command}\`\n${block.exitCode !== null ? `Exit code: ${block.exitCode}` : "Status: running"}\n${block.cwd ? `Directory: ${block.cwd}` : ""}\n${hasOutput ? `\nOutput:\n\`\`\`\n${block.output.slice(-1500)}\n\`\`\`` : ""}`,
+            isAiBlock
+              ? `分析以下终端 AI 对话：\n\n${aiContext}`
+              : `Analyze this terminal block:\n\nCommand: \`${block.command}\`\n${block.exitCode !== null ? `Exit code: ${block.exitCode}` : "Status: running"}\n${block.cwd ? `Directory: ${block.cwd}` : ""}\n${hasOutput ? `\nOutput:\n\`\`\`\n${(isAiBlock ? aiContext : block.output).slice(-1500)}\n\`\`\`` : ""}`,
           ),
       },
     );
@@ -106,7 +138,7 @@ export function BlockContextMenu({ block, position, onClose, onRunCommand }: Pro
         { id: "sep-run", separator: true, label: "" },
         {
           id: "run-again",
-          label: "Run again",
+          label: "重新执行",
           icon: (
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M4 17l6-6-6-6" />
@@ -123,7 +155,7 @@ export function BlockContextMenu({ block, position, onClose, onRunCommand }: Pro
 
     menu.push({
       id: "copy-command",
-      label: "Copy command",
+      label: "复制命令",
       icon: (
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
           <rect x="9" y="9" width="13" height="13" rx="2" />
@@ -137,7 +169,7 @@ export function BlockContextMenu({ block, position, onClose, onRunCommand }: Pro
     });
 
     return menu;
-  }, [block, hasError, hasOutput, onClose, onRunCommand, sendToAI]);
+  }, [block, hasError, hasOutput, isAiBlock, aiContext, onClose, onRunCommand, sendToAI]);
 
   return (
     <ContextMenu

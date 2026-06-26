@@ -1225,8 +1225,22 @@ export const zhCN = {
     localTab: "local",
     sidebar: { title: "终端资源", collapse: "收起侧栏", expand: "展开侧栏" },
     command: {
-      placeholder: "Enter 发送，Shift+Enter 换行",
+      placeholder: "Enter 发送，Shift+Enter 换行；# 自然语言；Tab 补全",
+      followUpHint: "Enter 追问当前 AI 卡片；# 开头；Shift+Enter 换行",
       send: "发送",
+      naturalHint: "# 输入自然语言需求…",
+      explainHint: "Ctrl+Shift+E 解释上次错误",
+      explainError: "解释错误",
+      fixError: "修复错误",
+      planTitle: "命令计划",
+      runStep: "执行",
+      saveWorkflow: "保存为工作流",
+    },
+    inputMode: {
+      commandBar: "命令栏",
+      native: "直通",
+      switchToNative: "切换到原生直通模式（vim/top/ssh）",
+      switchToCommandBar: "切换回 Command Bar",
     },
     newSession: {
       local: "本地终端",

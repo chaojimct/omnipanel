@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { Terminal } from "@xterm/xterm";
-import { useTerminal } from "../../hooks/useTerminal";
+import { useTerminal, type TerminalInputMode } from "../../hooks/useTerminal";
 import { useModuleSuspended } from "../../lib/moduleVisibility";
 import {
   findTerminalPane,
@@ -8,6 +8,7 @@ import {
 } from "../../stores/terminalStore";
 import { useSettingsStore } from "../../stores/settingsStore";
 import type { WorkspaceResource } from "../../lib/resourceRegistry";
+import type { TerminalBlock } from "../../stores/blocksStore";
 import {
   getMockCommandOutput,
   getPromptPrefix,
@@ -23,10 +24,12 @@ export type TerminalViewProps = {
   resource: WorkspaceResource | null;
   startup: string[];
   active: boolean;
+  inputMode?: TerminalInputMode;
   onSenderChange: (
     sessionId: string,
     sender: ((cmd: string) => void) | null,
   ) => void;
+  onBlockRightClick?: (block: TerminalBlock, position: { x: number; y: number }) => void;
   /** 自增时强制 useTerminal 重新初始化（用于刷新按钮） */
   reconnectKey?: number;
 };
@@ -36,7 +39,9 @@ export function TerminalView({
   resource,
   startup,
   active,
+  inputMode = "external",
   onSenderChange,
+  onBlockRightClick,
   reconnectKey,
 }: TerminalViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -51,10 +56,10 @@ export function TerminalView({
     containerRef,
     undefined,
     undefined,
-    undefined,
+    onBlockRightClick,
     terminalSuspended,
     {
-      inputMode: "external",
+      inputMode,
       sendRef,
       active: active && !moduleSuspended,
       reconnectKey,
@@ -126,5 +131,10 @@ export function TerminalView({
     };
   }, [onSenderChange, resource, sessionId, setStatus, startup]);
 
-  return <div ref={containerRef} className="term-xterm-wrap term-xterm-wrap--external-input" />;
+  return (
+    <div
+      ref={containerRef}
+      className={`term-xterm-wrap${inputMode === "external" ? " term-xterm-wrap--live" : ""}`}
+    />
+  );
 }

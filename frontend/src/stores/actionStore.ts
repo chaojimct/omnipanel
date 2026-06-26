@@ -42,7 +42,7 @@ interface ActionState {
   pendingRiskActionId: string | null;
   /** 每个动作的实时输出行（来自 action-progress 事件）。 */
   logs: Record<string, string[]>;
-  enqueueAction: (input: Omit<WorkspaceAction, "id" | "createdAt" | "risk" | "environment" | "status" | "resourceName">) => WorkspaceAction;
+  enqueueAction: (input: Omit<WorkspaceAction, "id" | "createdAt" | "risk" | "environment" | "status" | "resourceName">, options?: { deferRun?: boolean }) => WorkspaceAction;
   confirmAction: (id: string) => void;
   cancelAction: (id: string) => void;
   completeAction: (id: string) => void;
@@ -69,7 +69,7 @@ export const useActionStore = create<ActionState>((set, get) => ({
   pendingRiskActionId: null,
   logs: {},
 
-  enqueueAction: (input) => {
+  enqueueAction: (input: Omit<WorkspaceAction, "id" | "createdAt" | "risk" | "environment" | "status" | "resourceName">, options?: { deferRun?: boolean }) => {
     const resource = getResourceById(input.resourceId);
     const environment = resource?.environment ?? "unknown";
     const riskCheck = input.command ? checkCommand(input.command, environment) : undefined;
@@ -94,7 +94,7 @@ export const useActionStore = create<ActionState>((set, get) => ({
     }));
 
     // 低风险动作无需确认，直接进入执行。
-    if (!blocked) {
+    if (!blocked && !options?.deferRun) {
       get().runAction(action.id);
     }
 
@@ -111,13 +111,17 @@ export const useActionStore = create<ActionState>((set, get) => ({
     get().runAction(id);
   },
 
-  cancelAction: (id) =>
+  cancelAction: (id) => {
+    void import("../modules/terminal/executeTerminalCommand").then(({ cancelTerminalExecution }) => {
+      cancelTerminalExecution(id);
+    });
     set((state) => ({
       pendingRiskActionId: state.pendingRiskActionId === id ? null : state.pendingRiskActionId,
       actions: state.actions.map((action) =>
         action.id === id ? { ...action, status: "cancelled" } : action
       ),
-    })),
+    }));
+  },
 
   completeAction: (id) =>
     set((state) => ({
@@ -141,6 +145,18 @@ export const useActionStore = create<ActionState>((set, get) => ({
   runAction: (id) => {
     const action = get().actions.find((a) => a.id === id);
     if (!action) return;
+
+    // 终端命令在 PTY/SSH 会话中执行，不走后端 executeAction。
+    if (action.type === "terminal" && action.command) {
+      void import("../modules/terminal/executeTerminalCommand").then(({ executeTerminalAction }) => {
+        if (executeTerminalAction(action)) {
+          get().completeAction(id);
+        } else {
+          get().failAction(id);
+        }
+      });
+      return;
+    }
 
     // 记录型动作（无命令或非可执行类型，如 workflow/ai/sql/ssh 占位）即时完成。
     if (!action.command || !EXECUTABLE_TYPES.has(action.type)) {

@@ -1229,8 +1229,22 @@ export const enUS: TranslationDict = {
     localTab: "local",
     sidebar: { title: "Terminal Resources", collapse: "Collapse sidebar", expand: "Expand sidebar" },
     command: {
-      placeholder: "Type command... (Enter to send, Shift+Enter for newline)",
+      placeholder: "Enter to send, Shift+Enter for newline; # natural language; Tab completion",
+      followUpHint: "Enter to follow up in the open AI card; prefix with #",
       send: "Send",
+      naturalHint: "# Describe what you want…",
+      explainHint: "Ctrl+Shift+E explain last error",
+      explainError: "Explain error",
+      fixError: "Fix error",
+      planTitle: "Command plan",
+      runStep: "Run",
+      saveWorkflow: "Save as workflow",
+    },
+    inputMode: {
+      commandBar: "Command Bar",
+      native: "Native",
+      switchToNative: "Switch to native passthrough (vim/top/ssh)",
+      switchToCommandBar: "Switch back to Command Bar",
     },
     newSession: {
       local: "Local Terminal",

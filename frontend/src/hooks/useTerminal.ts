@@ -19,6 +19,19 @@ import { useSettingsStore } from "../stores/settingsStore";
 import { isOpenSshHostId, openSshHostAlias } from "../lib/sshConfigHosts";
 import { createBlockId, useBlocksStore, type TerminalBlock } from "../stores/blocksStore";
 import { createTerminalOutputBatcher } from "../lib/terminalOutputBatcher";
+import { decodeTerminalBytes, extractCommandOutput, normalizeBlockCommand, resolveBlockStatus } from "../modules/terminal/terminalOutputText";
+import {
+  claimFeedCaptureBlockId,
+  clearOutputWatch,
+  feedTerminalOutputForWatch,
+  hasActiveFeedCapture,
+  releaseFeedCapture,
+} from "../modules/terminal/executeTerminalCommand";
+import {
+  trackTerminalOutputForAutoReturn,
+  tryAutoReturnAfterBlockEnd,
+} from "../modules/terminal/terminalAutoReturn";
+import { isWarpDisplay } from "../modules/terminal/terminalDisplayMode";
 import { triggerAiDrawerToggle } from "./useAiDrawerShortcut";
 import { useModuleVisibility } from "../lib/moduleVisibility";
 
@@ -44,6 +57,39 @@ const TERMINAL_THEME: ITheme = {
   brightCyan: "#99e9f2",
   brightWhite: "#fff9f0",
 };
+
+type TerminalInputBinding = { dispose: () => void };
+
+function bindTerminalInputMode(
+  term: Terminal,
+  mode: TerminalInputMode,
+  writeToBackend: (data: string) => void,
+  previous?: TerminalInputBinding | null,
+): TerminalInputBinding {
+  previous?.dispose();
+
+  let inputDisposable: IDisposable | undefined;
+
+  if (mode === "external") {
+    // 外部 Command Bar 模式：吞掉 xterm 键盘输入，仅保留 AI 快捷键
+    term.attachCustomKeyEventHandler((e) => {
+      triggerAiDrawerToggle(e);
+      return false;
+    });
+  } else {
+    // 直通模式：仅拦截 AI 快捷键，其余按键交给 xterm → onData → PTY
+    term.attachCustomKeyEventHandler((e) => {
+      if (triggerAiDrawerToggle(e)) return false;
+      return true;
+    });
+    inputDisposable = term.onData(writeToBackend);
+    requestAnimationFrame(() => term.focus());
+  }
+
+  return {
+    dispose: () => inputDisposable?.dispose(),
+  };
+}
 
 export type TerminalInputMode = "interactive" | "external";
 
@@ -280,18 +326,26 @@ function createRemoteInitEchoFilter(emit: (bytes: Uint8Array) => void) {
   };
 }
 
-/** 远端 shell 无本地 init-file 注入时，通过 PROMPT_COMMAND / precmd 上报 cwd。 */
-function injectRemoteShellCwdReporting(write: (data: string) => void) {
+/** 远端 shell 注入 OSC 133 block 边界 + cwd 上报 */
+function injectRemoteShellIntegration(write: (data: string) => void) {
   const script = [
-    "if [ -z \"${__OMNIPANEL_CWD_HOOK-}\" ]; then",
-    "export __OMNIPANEL_CWD_HOOK=1;",
-    "__omnipanel_cwd_hook() { printf \"\\033]1337;CurrentDir=%s\\007\" \"$PWD\"; };",
+    "if [ -z \"${__OMNIPANEL_SHELL_INT-}\" ]; then",
+    "export __OMNIPANEL_SHELL_INT=1;",
+    "__omnipanel_prompt_start() { printf \"\\033]133;A\\007\"; printf \"\\033]1337;CurrentDir=%s\\007\" \"$PWD\"; };",
+    "__omnipanel_cmd_start() { printf \"\\033]133;C\\007\"; };",
+    "__omnipanel_cmd_end() { printf \"\\033]133;D;%s\\007\" \"$?\"; };",
     "if [ -n \"${BASH_VERSION:-}\" ]; then",
-    "PROMPT_COMMAND=\"__omnipanel_cwd_hook${PROMPT_COMMAND:+;$PROMPT_COMMAND}\";",
+    "__omnipanel_in_prompt=0;",
+    "__omnipanel_pc() { __omnipanel_in_prompt=1; __omnipanel_cmd_end; __omnipanel_prompt_start; __omnipanel_in_prompt=0; };",
+    "PROMPT_COMMAND=\"__omnipanel_pc${PROMPT_COMMAND:+;$PROMPT_COMMAND}\";",
+    "trap '(( __omnipanel_in_prompt == 0 )) && __omnipanel_cmd_start' DEBUG;",
     "elif [ -n \"${ZSH_VERSION:-}\" ]; then",
-    "autoload -Uz add-zsh-hook 2>/dev/null; add-zsh-hook precmd __omnipanel_cwd_hook;",
+    "autoload -Uz add-zsh-hook 2>/dev/null;",
+    "add-zsh-hook precmd __omnipanel_prompt_start;",
+    "add-zsh-hook precmd __omnipanel_cmd_end;",
+    "add-zsh-hook preexec __omnipanel_cmd_start;",
     "fi;",
-    "__omnipanel_cwd_hook;",
+    "__omnipanel_prompt_start;",
     "fi;",
     "printf \"\\033]1337;%s\\007\\n\" \"OmniPanelInit___OMNIPANEL_CWD_HOOK\"",
   ].join(" ");
@@ -351,6 +405,10 @@ export function useTerminal(
   options: UseTerminalOptions = {},
 ) {
   const { inputMode = "interactive", sendRef, active = true, reconnectKey = 0 } = options;
+  const inputModeRef = useRef(inputMode);
+  inputModeRef.current = inputMode;
+  const writeToBackendRef = useRef<(data: string) => void>(() => {});
+  const inputBindingRef = useRef<TerminalInputBinding | null>(null);
   const { active: moduleActive } = useModuleVisibility();
   const termRef = useRef<Terminal | null>(null);
   const searchAddonRef = useRef<SearchAddon | null>(null);
@@ -441,6 +499,8 @@ export function useTerminal(
       });
     }
 
+    writeToBackendRef.current = writeToBackend;
+
     function sendCommand(cmd: string) {
       writeToBackend(`${cmd}\r`);
     }
@@ -479,14 +539,39 @@ export function useTerminal(
               if (!pendingBlock) {
                 pendingBlock = { startLine: y, command: commandText, cwd: currentCwd };
               } else {
-                pendingBlock.command = commandText;
+                pendingBlock.command = commandText || pendingBlock.command;
+              }
+
+              const existingBlockId = pendingBlock.blockId;
+              if (existingBlockId) {
+                const cmd = normalizeBlockCommand(commandText);
+                if (cmd) {
+                  useBlocksStore.getState().updateBlock(existingBlockId, { command: cmd });
+                }
+                break;
+              }
+
+              const captureBlockId = claimFeedCaptureBlockId(sessionId);
+              if (captureBlockId) {
+                const cmd = normalizeBlockCommand(commandText);
+                if (cmd) {
+                  useBlocksStore.getState().updateBlock(captureBlockId, { command: cmd });
+                }
+                pendingBlock = { ...pendingBlock, blockId: captureBlockId };
+                break;
+              }
+              const effectiveCmd = (pendingBlock.command || commandText).trim();
+              if (!effectiveCmd) {
+                pendingBlock = null;
+                break;
               }
               const marker = t.registerMarker(0);
               const blockId = createBlockId();
               addBlock(sessionId, {
                 id: blockId,
                 sessionId,
-                command: pendingBlock.command,
+                kind: "shell",
+                command: effectiveCmd,
                 output: "",
                 exitCode: null,
                 startLine: pendingBlock.startLine,
@@ -502,12 +587,24 @@ export function useTerminal(
             case "D": {
               const exitCode = parseInt(parts[1] || "0", 10);
               if (pendingBlock?.blockId) {
+                const blockId = pendingBlock.blockId;
                 const endLine = t.buffer.active.cursorY + t.buffer.active.baseY;
-                updateBlock(pendingBlock.blockId, {
+                const existing = useBlocksStore.getState().findBlockById(blockId);
+                const cmd = normalizeBlockCommand(existing?.command ?? pendingBlock.command);
+                const cleaned =
+                  existing && cmd
+                    ? extractCommandOutput(existing.output, cmd)
+                    : "";
+                updateBlock(blockId, {
                   exitCode,
                   endLine,
-                  status: exitCode === 0 ? "completed" : "failed",
+                  status: resolveBlockStatus(exitCode),
+                  ...(cleaned ? { output: cleaned } : {}),
                 });
+                tryAutoReturnAfterBlockEnd(sessionId, blockId);
+                trimXtermAfterBlockEnd(t);
+                clearOutputWatch(sessionId);
+                releaseFeedCapture(sessionId);
               }
               pendingBlock = null;
               break;
@@ -539,13 +636,34 @@ export function useTerminal(
       outputBatcher?.push(bytes);
     }
 
+    function trimXtermAfterBlockEnd(t: Terminal) {
+      if (!isWarpDisplay(sessionId)) return;
+      t.clear();
+    }
+
+    function shouldWriteToXterm(): boolean {
+      if (suspendedRef.current) return false;
+      if (!isWarpDisplay(sessionId)) return true;
+      return Boolean(pendingBlock?.blockId) || hasActiveFeedCapture(sessionId);
+    }
+
     async function attachOutputListener() {
       outputBatcher = createTerminalOutputBatcher((merged) => {
+        trackTerminalOutputForAutoReturn(sessionId, merged);
+        const text = decodeTerminalBytes(merged);
+        feedTerminalOutputForWatch(sessionId, text);
+        const outputBlockId =
+          pendingBlock?.blockId ?? claimFeedCaptureBlockId(sessionId);
+        if (outputBlockId) {
+          useBlocksStore.getState().appendBlockOutput(outputBlockId, text);
+        }
         if (suspendedRef.current) {
           runtimeRef.current.outputBuffer.push(merged);
           return;
         }
-        term?.write(merged);
+        if (shouldWriteToXterm()) {
+          term?.write(merged);
+        }
       });
       if (remote) {
         remoteInitEchoFilter = createRemoteInitEchoFilter(queueOutput);
@@ -602,6 +720,9 @@ export function useTerminal(
         const bytes = decodeOutput(b64);
         term.reset();
         if (bytes && bytes.length > 0) term.write(bytes);
+        if (isWarpDisplay(sessionId)) {
+          term.clear();
+        }
       } catch (err) {
         if (isSessionNotFoundError(err)) {
           useTerminalStore.getState().setBackendSessionId(sessionId, null);
@@ -637,7 +758,7 @@ export function useTerminal(
               }, 10000);
             }
             window.setTimeout(() => {
-              if (!destroyed) injectRemoteShellCwdReporting(writeToBackend);
+              if (!destroyed) injectRemoteShellIntegration(writeToBackend);
             }, 300);
           } else if (remoteInitEchoFilter) {
             remoteInitEchoFilter.releasePending();
@@ -666,7 +787,7 @@ export function useTerminal(
               }, 10000);
             }
             window.setTimeout(() => {
-              if (!destroyed) injectRemoteShellCwdReporting(writeToBackend);
+              if (!destroyed) injectRemoteShellIntegration(writeToBackend);
             }, 300);
           } else if (remoteInitEchoFilter) {
             remoteInitEchoFilter.releasePending();
@@ -731,16 +852,12 @@ export function useTerminal(
         void attachEventListener();
         void ensureBackendSession(term.cols, term.rows);
 
-        if (inputMode === "external") {
-          term.attachCustomKeyEventHandler((e) => triggerAiDrawerToggle(e));
-        } else {
-          disposables.push(
-            term.onData((data) => {
-              if (destroyed) return;
-              writeToBackend(data);
-            })
-          );
-        }
+        inputBindingRef.current = bindTerminalInputMode(
+          term,
+          inputModeRef.current,
+          writeToBackend,
+          inputBindingRef.current,
+        );
 
         resizeObserver = new ResizeObserver(() => {
           if (suspendedRef.current || !fitAddon || !term) return;
@@ -806,10 +923,6 @@ export function useTerminal(
           container!.addEventListener("contextmenu", contextmenuHandler);
         }
 
-        if (inputMode !== "external") {
-          term.focus();
-        }
-
         if (sendRef) {
           sendRef.current = sendCommandRef.current;
         }
@@ -862,6 +975,8 @@ export function useTerminal(
         container.removeEventListener("contextmenu", contextmenuHandler);
       }
       sendCommandRef.current = null;
+      inputBindingRef.current?.dispose();
+      inputBindingRef.current = null;
       for (const disposable of disposables) {
         disposable.dispose();
       }
@@ -876,7 +991,18 @@ export function useTerminal(
       searchAddonRef.current = null;
       runtimeRef.current.initTerminal = null;
     };
-  }, [sessionId, inputMode, reconnectKey]);
+  }, [sessionId, reconnectKey]);
+
+  useEffect(() => {
+    const term = termRef.current;
+    if (!term) return;
+    inputBindingRef.current = bindTerminalInputMode(
+      term,
+      inputMode,
+      (data) => writeToBackendRef.current(data),
+      inputBindingRef.current,
+    );
+  }, [inputMode]);
 
   useEffect(() => {
     const rt = runtimeRef.current;

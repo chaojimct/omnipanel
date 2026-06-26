@@ -177,7 +177,7 @@ function FilesBrowserView() {
           status: status === "building" ? "building" : status === "done" ? "ready" : "failed",
           rootPath: prev[connectionId]?.rootPath ?? "",
           indexedCount,
-          error,
+          error: error ?? "",
           startedAt: prev[connectionId]?.startedAt ?? 0,
           finishedAt: status === "building" ? 0 : Date.now(),
         },

@@ -1,9 +1,24 @@
-import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
-import type { TerminalPane, TerminalTab } from "../../stores/terminalStore";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
+import type { TerminalPane, TerminalSessionInfo, TerminalTab } from "../../stores/terminalStore";
 import type { EnvironmentTag, WorkspaceResource } from "../../lib/resourceRegistry";
+import { useBlocksStore } from "../../stores/blocksStore";
+import { BlockContextMenu } from "../../components/terminal/BlockContextMenu";
+import type { TerminalBlock } from "../../stores/blocksStore";
+import { useI18n } from "../../i18n";
 import { CommandInput, type CommandInputHandle } from "./CommandInput";
 import { TerminalView } from "./TerminalView";
+import { TerminalBlockFeed } from "./TerminalBlockFeed";
 import { type BlueprintSource } from "./sessionBlueprints";
+import {
+  buildSessionMetaLine,
+  formatTerminalCwdDisplay,
+  parseSshSubtitle,
+  resolveCommandPromptSymbol,
+} from "./terminalSessionDisplay";
+import { useTerminalSessionStats } from "./useTerminalSessionStats";
+import { useTerminalUiStore } from "./terminalUiStore";
+import type { TerminalInputMode } from "../../hooks/useTerminal";
+import { Button } from "../../components/ui/Button";
 
 export type TerminalPaneViewHandle = {
   focusInput: () => void;
@@ -11,9 +26,11 @@ export type TerminalPaneViewHandle = {
 
 type CommonProps = {
   paneId: string;
+  session: TerminalSessionInfo;
   resource: WorkspaceResource | null;
   blueprintSource: BlueprintSource;
   isActive: boolean;
+  connected: boolean;
   startup?: string[];
   onActivate: () => void;
   onSendCommand: (command: string) => void;
@@ -31,52 +48,80 @@ const ENV_BADGE_LABELS: Record<EnvironmentTag, string> = {
   unknown: "SSH",
 };
 
-function parseSshSubtitle(subtitle?: string) {
-  const match = subtitle?.match(/^([^@\s]+)@([^:\s]+)(?::(\d+))?/);
-  return {
-    user: match?.[1],
-    host: match?.[2],
-    port: match?.[3],
-  };
-}
-
 function TerminalSessionHeader({
   resource,
-  blueprintSource,
+  session,
+  connected,
+  inputMode,
+  onToggleInputMode,
 }: {
   resource: WorkspaceResource | null;
-  blueprintSource: BlueprintSource;
+  session: TerminalSessionInfo;
+  connected: boolean;
+  inputMode: TerminalInputMode;
+  onToggleInputMode: () => void;
 }) {
-  if (resource?.type !== "ssh") return null;
+  const { t } = useI18n();
+  const stats = useTerminalSessionStats(session.resourceId, connected);
+  const parsed = parseSshSubtitle(resource?.subtitle);
+  const user = parsed.user ?? (session.type === "local" ? null : "root");
+  const path = formatTerminalCwdDisplay(session.cwd, user);
+  const meta = buildSessionMetaLine(session, resource, stats);
+  const hostAddress =
+    parsed.host && parsed.port ? `${parsed.host}:${parsed.port}` : parsed.host;
 
-  const parsed = parseSshSubtitle(resource.subtitle);
-  const user = parsed.user ?? "root";
-  const host = parsed.host ?? resource.name;
-  const path = "~";
-  const shellLabel = resource.tags?.find((tag) => /bash|zsh|fish|powershell/i.test(tag)) ?? "bash";
-  const osLabel =
-    resource.tags?.find((tag) => /ubuntu|debian|centos|linux|windows|macos/i.test(tag)) ??
-    resource.metrics?.OS ??
-    "Ubuntu 22.04";
-  const hardwareLabel =
-    resource.metrics?.配置 ??
-    resource.metrics?.Hardware ??
-    resource.metrics?.硬件 ??
-    "32C/128G";
+  const modeToggle = (
+    <Button
+      variant="ghost"
+      size="xs"
+      className="term-input-mode-toggle"
+      onClick={onToggleInputMode}
+      title={
+        inputMode === "external"
+          ? t("terminal.inputMode.switchToNative")
+          : t("terminal.inputMode.switchToCommandBar")
+      }
+      type="button"
+    >
+      {inputMode === "external" ? t("terminal.inputMode.commandBar") : t("terminal.inputMode.native")}
+    </Button>
+  );
+
+  if (session.type === "local") {
+    const hostLabel = stats?.hostName?.trim() || resource?.name || "本地终端";
+    return (
+      <div className="term-session-header">
+        <span className="term-session-env term-session-env--local">
+          {ENV_BADGE_LABELS.local}
+        </span>
+        <span className="term-session-host">{hostLabel}</span>
+        <span className="term-session-muted">:</span>
+        <span className="term-session-path">{path}</span>
+        <span className="term-session-spacer" />
+        {modeToggle}
+        {meta ? <span className="term-session-meta">{meta}</span> : null}
+      </div>
+    );
+  }
+
+  if (resource?.type !== "ssh") return null;
 
   return (
     <div className="term-session-header">
       <span className={`term-session-env term-session-env--${resource.environment}`}>
         {ENV_BADGE_LABELS[resource.environment] ?? "SSH"}
       </span>
-      <span className="term-session-host">{user}@{resource.name}</span>
+      <span className="term-session-host">
+        {user ?? "root"}@{resource.name}
+      </span>
       <span className="term-session-muted">:</span>
       <span className="term-session-path">{path}</span>
-      {parsed.port ? <span className="term-session-muted">· {host}:{parsed.port}</span> : null}
+      {hostAddress ? (
+        <span className="term-session-muted">· {hostAddress}</span>
+      ) : null}
       <span className="term-session-spacer" />
-      <span className="term-session-meta">
-        {shellLabel} · {osLabel} · {blueprintSource.type === "remote" ? hardwareLabel : "本地"}
-      </span>
+      {modeToggle}
+      {meta ? <span className="term-session-meta">{meta}</span> : null}
     </div>
   );
 }
@@ -84,9 +129,11 @@ function TerminalSessionHeader({
 function PaneViewBody(
   {
     paneId,
+    session,
     resource,
     blueprintSource,
     isActive,
+    connected,
     startup = [],
     onActivate,
     onSendCommand,
@@ -96,6 +143,17 @@ function PaneViewBody(
   ref: React.ForwardedRef<TerminalPaneViewHandle>,
 ) {
   const cmdRef = useRef<CommandInputHandle>(null);
+  const [blockMenu, setBlockMenu] = useState<{
+    block: TerminalBlock;
+    position: { x: number; y: number };
+  } | null>(null);
+  const inputMode = useTerminalUiStore(
+    (state) => state.inputModes[paneId] ?? "external",
+  );
+  const setInputMode = useTerminalUiStore((state) => state.setInputMode);
+  const lastError = useBlocksStore((state) => state.getLastError(paneId));
+  const parsed = parseSshSubtitle(resource?.subtitle);
+  const promptSymbol = resolveCommandPromptSymbol(session, parsed.user, resource);
 
   useImperativeHandle(ref, () => ({
     focusInput: () => {
@@ -104,16 +162,28 @@ function PaneViewBody(
   }));
 
   useEffect(() => {
-    if (isActive) {
+    if (isActive && inputMode === "external") {
       cmdRef.current?.focus();
     }
-  }, [isActive]);
+  }, [isActive, inputMode]);
 
   const focusCommandInput = () => {
+    if (inputMode !== "external") return;
     requestAnimationFrame(() => {
       cmdRef.current?.focus();
     });
   };
+
+  const handleBlockRightClick = useCallback(
+    (block: TerminalBlock, position: { x: number; y: number }) => {
+      setBlockMenu({ block, position });
+    },
+    [],
+  );
+
+  const toggleInputMode = useCallback(() => {
+    setInputMode(paneId, inputMode === "external" ? "interactive" : "external");
+  }, [inputMode, paneId, setInputMode]);
 
   return (
     <div
@@ -121,36 +191,79 @@ function PaneViewBody(
       data-pane-id={paneId}
       onMouseDown={onActivate}
     >
-      <TerminalSessionHeader resource={resource} blueprintSource={blueprintSource} />
+      <TerminalSessionHeader
+        resource={resource}
+        session={session}
+        connected={connected}
+        inputMode={inputMode}
+        onToggleInputMode={toggleInputMode}
+      />
       <div
-        className="terminal-area term-terminal-shell"
+        className={`terminal-area term-terminal-shell${inputMode === "external" ? " term-terminal-shell--warp" : ""}`}
         tabIndex={-1}
         onMouseDownCapture={(event) => {
           onActivate();
-          event.preventDefault();
-          focusCommandInput();
+          if (inputMode === "external") {
+            event.preventDefault();
+            focusCommandInput();
+          }
         }}
-        onClick={focusCommandInput}
+        onClick={() => {
+          if (inputMode === "external") {
+            focusCommandInput();
+          }
+        }}
       >
+        {inputMode === "external" ? (
+          <TerminalBlockFeed sessionId={paneId} promptSymbol={promptSymbol} />
+        ) : null}
         <TerminalView
           key={`${paneId}:${blueprintSource.type ?? "local"}:${currentResourceId}`}
           sessionId={paneId}
           resource={resource}
           startup={startup}
           active={isActive}
+          inputMode={inputMode}
           onSenderChange={onSenderChange}
+          onBlockRightClick={handleBlockRightClick}
         />
       </div>
-      <CommandInput ref={cmdRef} onSend={onSendCommand} />
+      {inputMode === "external" ? (
+        <CommandInput
+          ref={cmdRef}
+          promptSymbol={promptSymbol}
+          onSend={onSendCommand}
+          sessionId={paneId}
+          cwd={session.cwd}
+          resourceId={session.resourceId}
+          sessionType={session.type}
+          lastError={lastError}
+          onRequestNativeMode={() =>
+            setInputMode(paneId, "interactive", { autoReturn: true })
+          }
+        />
+      ) : null}
+      {blockMenu ? (
+        <BlockContextMenu
+          block={blockMenu.block}
+          position={blockMenu.position}
+          onClose={() => setBlockMenu(null)}
+          onRunCommand={onSendCommand}
+        />
+      ) : null}
     </div>
   );
 }
 
-const ForwardedBody = forwardRef<TerminalPaneViewHandle, CommonProps & { currentResourceId: string }>(
-  PaneViewBody,
-);
+const ForwardedBody = forwardRef<
+  TerminalPaneViewHandle,
+  CommonProps & { currentResourceId: string }
+>(PaneViewBody);
 
-export type TerminalTabPaneViewProps = Omit<CommonProps, "blueprintSource"> & {
+export type TerminalTabPaneViewProps = Omit<
+  CommonProps,
+  "blueprintSource" | "session" | "connected"
+> & {
   tab: TerminalTab;
 };
 
@@ -162,7 +275,9 @@ export const TerminalTabPaneView = forwardRef<TerminalPaneViewHandle, TerminalTa
       <ForwardedBody
         ref={ref}
         {...rest}
+        session={tab.session}
         resource={resource}
+        connected={tab.status === "connected"}
         blueprintSource={tab.session}
         currentResourceId={tab.session.resourceId}
       />
@@ -170,7 +285,10 @@ export const TerminalTabPaneView = forwardRef<TerminalPaneViewHandle, TerminalTa
   },
 );
 
-export type TerminalPaneViewProps = Omit<CommonProps, "blueprintSource" | "currentResourceId"> & {
+export type TerminalPaneViewProps = Omit<
+  CommonProps,
+  "blueprintSource" | "currentResourceId" | "session" | "connected"
+> & {
   pane: TerminalPane;
 };
 
@@ -178,11 +296,21 @@ export type TerminalPaneViewProps = Omit<CommonProps, "blueprintSource" | "curre
 export const TerminalPaneView = forwardRef<TerminalPaneViewHandle, TerminalPaneViewProps>(
   function TerminalPaneView(props, ref) {
     const { pane, resource, ...rest } = props;
+    const session: TerminalSessionInfo = {
+      type: pane.type,
+      resourceId: pane.resourceId,
+      shellLabel: pane.shellLabel,
+      cwd: pane.cwd,
+      purpose: pane.purpose,
+      commandPack: pane.commandPack,
+    };
     return (
       <ForwardedBody
         ref={ref}
         {...rest}
+        session={session}
         resource={resource}
+        connected={pane.status === "connected"}
         blueprintSource={pane}
         currentResourceId={pane.resourceId}
       />
