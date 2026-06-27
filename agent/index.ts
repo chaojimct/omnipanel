@@ -18,7 +18,7 @@ import {
   type SessionId,
   type ToolCallId,
 } from "@agentclientprotocol/sdk";
-import { AIMessageChunk, HumanMessage, type BaseMessage } from "@langchain/core/messages";
+import { AIMessage, AIMessageChunk, HumanMessage, type BaseMessage } from "@langchain/core/messages";
 import {
   createSessionRuntime,
   disposeSessionRuntime,
@@ -161,6 +161,7 @@ async function runDeepAgentTurn(
   const messageId = randomUUID();
   record.messages.push(new HumanMessage(userText));
   const pendingTools = new Map<string, ToolCallTracker>();
+  let assistantReply = "";
 
   const stream = record.graph.streamEvents(
     { messages: record.messages },
@@ -187,6 +188,7 @@ async function runDeepAgentTurn(
                   .join("")
               : "";
         if (text) {
+          assistantReply += text;
           await notifyAgentChunk(client, record.sessionId, text, messageId);
         }
       }
@@ -219,15 +221,20 @@ async function runDeepAgentTurn(
     }
   }
 
-  type GraphCheckpoint = { values?: { messages?: BaseMessage[] } };
-  const getState = (
-    record.graph as {
-      getState: (config: { configurable: { thread_id: string } }) => Promise<GraphCheckpoint>;
+  try {
+    const state = (await record.graph.getState({
+      configurable: { thread_id: record.sessionId },
+    })) as { values?: { messages?: BaseMessage[] } };
+    if (state.values?.messages) {
+      record.messages = state.values.messages;
+      return;
     }
-  ).getState;
-  const state = await getState({ configurable: { thread_id: record.sessionId } });
-  if (state.values?.messages) {
-    record.messages = state.values.messages;
+  } catch (error) {
+    log("同步会话消息失败，使用流式结果回退:", error);
+  }
+
+  if (assistantReply.trim()) {
+    record.messages.push(new AIMessage(assistantReply));
   }
 }
 

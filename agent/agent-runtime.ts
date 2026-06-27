@@ -2,8 +2,14 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { McpServer } from "@agentclientprotocol/sdk";
 import type { DynamicStructuredTool } from "@langchain/core/tools";
+import { MemorySaver } from "@langchain/langgraph";
 import { MultiServerMCPClient, type Connection } from "@langchain/mcp-adapters";
 import { createDeepAgent, FilesystemBackend, type DeepAgent } from "deepagents";
+import {
+  applyAgentConfigToEnv,
+  loadAgentConfigFile,
+  resolveLangChainModelId,
+} from "./config.js";
 
 const agentRoot = path.dirname(fileURLToPath(import.meta.url));
 
@@ -80,17 +86,32 @@ export async function createSessionRuntime(
 
   const connections = acpMcpServersToConnections(mcpServers);
   if (Object.keys(connections).length > 0) {
-    mcpClient = new MultiServerMCPClient(connections);
-    mcpTools = await mcpClient.getTools();
+    try {
+      mcpClient = new MultiServerMCPClient(connections);
+      mcpTools = await mcpClient.getTools();
+    } catch (error) {
+      console.error("[omniagent:runtime] MCP 工具加载失败，继续无 MCP 运行:", error);
+      await mcpClient?.close().catch(() => {});
+      mcpClient = null;
+      mcpTools = [];
+    }
   }
 
-  const model =
-    process.env.OMNIAGENT_MODEL ?? `openai:${process.env.OPENAI_MODEL ?? "gpt-4o-mini"}`;
+  const fileConfig = loadAgentConfigFile();
+  if (!fileConfig) {
+    throw new Error(
+      "未找到 OmniPanel agent 配置。请在 OmniPanel「设置 → Agent」中配置模型与 API，并连接 Agent。",
+    );
+  }
+
+  applyAgentConfigToEnv(fileConfig);
+  const model = resolveLangChainModelId(fileConfig);
 
   const graph = createDeepAgent({
     model,
     tools: mcpTools,
     skills,
+    checkpointer: new MemorySaver(),
     systemPrompt:
       process.env.OMNIAGENT_SYSTEM_PROMPT ??
       "你是 OmniPanel 本地编码助手。按需读取 Skills、调用 MCP 工具与文件系统工具完成任务。回答简洁、可执行。",

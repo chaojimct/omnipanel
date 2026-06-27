@@ -268,6 +268,16 @@ fn export_ipc_bindings() {
         commands::mcp::mcp_set_service_running,
         commands::mcp::mcp_list_service_tools,
         commands::mcp::mcp_call_tool,
+        // ACP agent
+        commands::acp::acp_connect,
+        commands::acp::acp_connect_default,
+        commands::acp::acp_disconnect,
+        commands::acp::acp_get_status,
+        commands::acp::acp_prompt,
+        commands::acp::acp_cancel,
+        commands::acp::acp_respond_permission,
+        commands::acp::acp_save_agent_config,
+        commands::acp::acp_get_default_command,
         
     ]);
 
@@ -391,10 +401,19 @@ pub fn run() {
             commands::ai::ai_list_models,
             commands::ai::ai_set_provider,
             commands::ai::ai_list_providers,
-            commands::ai::ai_add_acp_agent,
             commands::ai::ai_get_active,
             commands::ai::ai_add_custom_provider,
             commands::ai::ai_http_stream_post,
+            // ACP agent
+            commands::acp::acp_connect,
+            commands::acp::acp_connect_default,
+            commands::acp::acp_disconnect,
+            commands::acp::acp_get_status,
+            commands::acp::acp_prompt,
+            commands::acp::acp_cancel,
+            commands::acp::acp_respond_permission,
+            commands::acp::acp_save_agent_config,
+            commands::acp::acp_get_default_command,
             // Protocol Lab — Serial
             commands::protocol::serial_scan_ports,
             commands::protocol::serial_open,
@@ -676,7 +695,17 @@ pub fn run() {
             commands::mcp::mcp_set_service_enabled,
             commands::mcp::mcp_set_service_running,
             commands::mcp::mcp_list_service_tools,
-        commands::mcp::mcp_call_tool,
+            commands::mcp::mcp_call_tool,
+            // ACP agent
+            commands::acp::acp_connect,
+            commands::acp::acp_connect_default,
+            commands::acp::acp_disconnect,
+            commands::acp::acp_get_status,
+            commands::acp::acp_prompt,
+            commands::acp::acp_cancel,
+            commands::acp::acp_respond_permission,
+            commands::acp::acp_save_agent_config,
+            commands::acp::acp_get_default_command,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

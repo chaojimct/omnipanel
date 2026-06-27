@@ -5,7 +5,7 @@ import { LOCAL_CONNECTION_ID } from "../modules/files/utils";
 import { useConnectionStore } from "../stores/connectionStore";
 import { useAiStore } from "../stores/aiStore";
 import { useAiModelsStore } from "../stores/aiModelsStore";
-import { useAcpServicesStore } from "../stores/acpServicesStore";
+import { useAcpServicesStore, initAcpServicesStore } from "../stores/acpServicesStore";
 import { useDbDockLayoutStore } from "../stores/dbDockLayoutStore";
 import { useFileManagerStore } from "../stores/fileManagerStore";
 import { useKnowledgeStore } from "../stores/knowledgeStore";
@@ -64,6 +64,7 @@ export async function clearAppUserData(): Promise<void> {
   useAiStore.setState({ conversations: [], activeConversationId: null });
   useAiModelsStore.getState().resetProviders();
   useAcpServicesStore.getState().resetServices();
+  initAcpServicesStore();
 
   const taskRes = await commands.taskList(null, 500);
   if (taskRes.status === "ok") {
