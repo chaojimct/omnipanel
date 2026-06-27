@@ -263,8 +263,9 @@ function startAcpServer(): void {
     .onRequest(methods.agent.session.new, async ({ params }) => {
       const sessionId = randomUUID();
       const cwd = params.cwd;
+      const mcpServers = params.mcpServers ?? [];
 
-      const runtime = await createSessionRuntime(sessionId, cwd);
+      const runtime = await createSessionRuntime(sessionId, cwd, mcpServers);
       sessions.set(sessionId, {
         ...runtime,
         messages: [],

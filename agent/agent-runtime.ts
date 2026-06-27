@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import type { McpServer } from "@agentclientprotocol/sdk";
 import type { DynamicStructuredTool } from "@langchain/core/tools";
 import { MemorySaver } from "@langchain/langgraph";
-import { MultiServerMCPClient, type Connection } from "@langchain/mcp-adapters";
+import { MultiServerMCPClient, type ClientConfig, type Connection } from "@langchain/mcp-adapters";
 import { createDeepAgent, type DeepAgent } from "deepagents";
 import {
   applyAgentConfigToEnv,
@@ -41,13 +41,16 @@ export function resolveSkillsDirs(): string[] {
   return [path.join(agentRoot, "skills")];
 }
 
-/** 将 ACP session/new 中的 MCP 配置转为 @langchain/mcp-adapters 连接。 */
-export function acpMcpServersToConnections(servers: McpServer[]): Record<string, Connection> {
-  const connections: Record<string, Connection> = {};
+/**
+ * 将 OmniPanel / ACP 的 MCP 列表转为 @langchain/mcp-adapters 标准 ClientConfig。
+ * @see https://docs.langchain.com/oss/javascript/deepagents/tools#mcp-tools
+ */
+export function buildMcpClientConfig(servers: McpServer[]): ClientConfig | null {
+  const mcpServers: Record<string, Connection> = {};
 
   for (const server of servers) {
     if ("command" in server && typeof server.command === "string") {
-      connections[server.name] = {
+      mcpServers[server.name] = {
         transport: "stdio",
         command: server.command,
         args: server.args ?? [],
@@ -56,46 +59,71 @@ export function acpMcpServersToConnections(servers: McpServer[]): Record<string,
       continue;
     }
 
-    if ("type" in server && server.type === "http" && "url" in server) {
-      connections[server.name] = {
+    if (!("url" in server) || typeof server.url !== "string" || !server.url.trim()) {
+      continue;
+    }
+
+    const headers = headersToRecord("headers" in server ? (server.headers ?? []) : []);
+    const serverType = "type" in server ? server.type : undefined;
+
+    if (serverType === "sse") {
+      mcpServers[server.name] = {
+        transport: "sse",
         url: server.url,
-        headers: headersToRecord(server.headers ?? []),
+        headers,
       };
       continue;
     }
 
-    if ("type" in server && server.type === "sse" && "url" in server) {
-      connections[server.name] = {
-        url: server.url,
-        headers: headersToRecord(server.headers ?? []),
-        transport: "sse",
-      };
-    }
+    // Streamable HTTP（ACP type=http 或未标注 type 的 URL 服务）
+    mcpServers[server.name] = {
+      transport: "http",
+      url: server.url,
+      headers,
+    };
   }
 
-  return connections;
+  if (Object.keys(mcpServers).length === 0) {
+    return null;
+  }
+
+  return {
+    onConnectionError: "ignore",
+    mcpServers,
+  };
 }
 
 export async function createSessionRuntime(
   sessionId: string,
   cwd: string,
+  mcpServersFromSession: McpServer[] = [],
 ): Promise<SessionRuntime> {
   const skills = resolveSkillsDirs();
   let mcpClient: MultiServerMCPClient | null = null;
   let mcpTools: DynamicStructuredTool[] = [];
 
-  const mcpServers = resolveMcpServersFromConfig();
-  const connections = acpMcpServersToConnections(mcpServers);
-  if (Object.keys(connections).length > 0) {
+  const configMcpServers = resolveMcpServersFromConfig();
+  const mcpServers =
+    mcpServersFromSession.length > 0 ? mcpServersFromSession : configMcpServers;
+  const mcpClientConfig = buildMcpClientConfig(mcpServers);
+  if (mcpClientConfig) {
     try {
-      mcpClient = new MultiServerMCPClient(connections);
+      mcpClient = new MultiServerMCPClient(mcpClientConfig);
       mcpTools = await mcpClient.getTools();
+      console.error(
+        "[omniagent:runtime] MCP 已连接:",
+        Object.keys(mcpClientConfig.mcpServers ?? {}).join(", "),
+        "tools=",
+        mcpTools.length,
+      );
     } catch (error) {
       console.error("[omniagent:runtime] MCP 工具加载失败，继续无 MCP 运行:", error);
       await mcpClient?.close().catch(() => {});
       mcpClient = null;
       mcpTools = [];
     }
+  } else {
+    console.error("[omniagent:runtime] 未配置 MCP 服务（session 与配置文件均为空）");
   }
 
   const fileConfig = loadAgentConfigFile();

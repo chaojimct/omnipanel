@@ -8,7 +8,7 @@ use std::sync::Mutex;
 
 use omnipanel_ai::ir::{StopReason, StreamEvent, ToolStatus};
 use omnipanel_ai::providers::acp::AcpManager;
-use omnipanel_mcp::McpTransport;
+use omnipanel_mcp::{McpServiceRuntimeStatus, McpTransport};
 use serde::{Deserialize, Serialize};
 use specta::Type;
 use tauri::ipc::Channel;
@@ -250,16 +250,24 @@ async fn build_mcp_servers(state: &AppState) -> Vec<serde_json::Value> {
                 }));
             }
             McpTransport::Sse { config } => {
+                if service.builtin && service.status != McpServiceRuntimeStatus::Running {
+                    continue;
+                }
                 let url = service
                     .endpoint
                     .as_deref()
                     .filter(|s| !s.is_empty())
-                    .unwrap_or(config.url.as_str());
-                if url.trim().is_empty() {
-                    continue;
-                }
+                    .or_else(|| {
+                        if config.url.trim().is_empty() {
+                            None
+                        } else {
+                            Some(config.url.as_str())
+                        }
+                    });
+                let Some(url) = url else { continue };
+                // OmniMCP 与 rmcp StreamableHttp 均走 HTTP 传输，非 legacy SSE。
                 servers.push(serde_json::json!({
-                    "type": "sse",
+                    "type": "http",
                     "name": service.name,
                     "url": url,
                     "headers": [],
