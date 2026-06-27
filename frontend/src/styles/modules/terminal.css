@@ -493,6 +493,26 @@
         overflow: hidden;
     }
 
+    .term-workspace__empty {
+        flex-direction: column;
+        gap: 6px;
+        text-align: center;
+        padding: 24px;
+        line-height: 1.5;
+    }
+
+    .term-workspace__empty-title {
+        margin: 0;
+        font-size: 14px;
+        color: var(--text);
+    }
+
+    .term-workspace__empty-hint {
+        margin: 0;
+        font-size: 12px;
+        color: var(--meta);
+    }
+
     .term-panes {
         flex: 1 1 0;
         display: flex;
@@ -2084,4 +2104,351 @@
     }
 
     /* ─── Tab context menu ─────────────────────────────────────────── */
+
+    /* ─── Session sidebar (Cursor-style tree) ─────────────────────── */
+    .term-sessions-workspace {
+        flex: 1;
+        min-height: 0;
+        min-width: 0;
+        height: 100%;
+    }
+
+    /* 侧栏展开/折叠与顶栏对齐：见文件末尾 unlayered 规则（须覆盖 global dock-handle） */
+
+    .term-sessions-workspace .dock-panel-left .dock-rail-shell {
+        height: 100%;
+        min-height: 0;
+    }
+
+    .term-sessions-workspace .dock-panel-main {
+        min-width: 0;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .term-sessions-workspace .dock-panel-main > .terminal-module-dock {
+        flex: 1;
+        min-height: 0;
+        min-width: 0;
+    }
+
+    .term-session-tree {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        min-height: 0;
+        background: var(--bg);
+    }
+
+    .term-session-tree__module-header {
+        flex-shrink: 0;
+        display: flex;
+        align-items: stretch;
+        height: var(--shell-dv-tab-bar-h);
+        min-height: var(--shell-dv-tab-bar-h);
+        max-height: var(--shell-dv-tab-bar-h);
+        padding: 0;
+        background: var(--bg);
+        border-bottom: 1px solid var(--border);
+        box-sizing: border-box;
+    }
+
+    .term-session-tree__module-header .module-dock-title {
+        display: inline-flex;
+        align-items: center;
+        padding: 0 var(--sp-4);
+        flex-shrink: 0;
+    }
+
+    .term-session-tree__body {
+        flex: 1;
+        min-height: 0;
+        overflow-y: auto;
+        padding: 6px 0 10px;
+    }
+
+    .term-session-tree__empty {
+        padding: 10px 14px;
+        font-size: 12px;
+        color: var(--meta);
+        line-height: 1.5;
+    }
+
+    .term-session-tree__group + .term-session-tree__group {
+        margin-top: 2px;
+    }
+
+    .term-session-tree__group.is-drop-before::before,
+    .term-session-tree__group.is-drop-after::after {
+        content: "";
+        display: block;
+        height: 2px;
+        margin: 0 8px;
+        border-radius: 1px;
+        background: var(--accent);
+    }
+
+    .term-session-tree__group.is-drop-before::before {
+        margin-bottom: 2px;
+    }
+
+    .term-session-tree__group.is-drop-after::after {
+        margin-top: 2px;
+    }
+
+    .term-session-tree__connection {
+        display: flex;
+        align-items: center;
+        gap: 2px;
+        min-height: 28px;
+        padding-right: 4px;
+    }
+
+    .term-session-tree__drag-handle {
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 16px;
+        height: 28px;
+        color: var(--meta);
+        cursor: grab;
+        opacity: 0.45;
+        transition: opacity 0.12s;
+        touch-action: none;
+        -webkit-user-drag: element;
+        user-select: none;
+    }
+
+    .term-session-tree__connection:hover .term-session-tree__drag-handle {
+        opacity: 1;
+    }
+
+    .term-session-tree__drag-handle:active {
+        cursor: grabbing;
+    }
+
+    .term-session-tree__connection:hover {
+        background: var(--surface-hover, rgba(255, 255, 255, 0.04));
+    }
+
+    .term-session-tree__connection-toggle {
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 20px;
+        height: 28px;
+        border: none;
+        background: transparent;
+        color: var(--meta);
+        cursor: pointer;
+        padding: 0;
+    }
+
+    .term-session-tree__chevron {
+        transition: transform 0.12s ease;
+    }
+
+    .term-session-tree__chevron.is-expanded {
+        transform: rotate(90deg);
+    }
+
+    .term-session-tree__connection-main {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        min-width: 0;
+        height: 28px;
+        padding: 0 2px;
+        border: none;
+        background: transparent;
+        color: var(--fg);
+        font-size: 12px;
+        font-weight: 600;
+        text-align: left;
+        cursor: pointer;
+    }
+
+    .term-session-tree__folder {
+        flex-shrink: 0;
+        display: flex;
+        color: var(--meta);
+    }
+
+    .term-session-tree__connection-name {
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .term-session-tree__connection-add {
+        flex-shrink: 0;
+        opacity: 0;
+        transition: opacity 0.12s;
+    }
+
+    .term-session-tree__connection:hover .term-session-tree__connection-add {
+        opacity: 1;
+    }
+
+    .term-session-tree__sessions {
+        display: flex;
+        flex-direction: column;
+        gap: 1px;
+        padding-left: 20px;
+    }
+
+    .term-session-tree__session {
+        display: flex;
+        align-items: stretch;
+        border-radius: var(--r-sm);
+        margin: 0 6px 0 8px;
+    }
+
+    .term-session-tree__session:hover {
+        background: var(--surface-hover, rgba(255, 255, 255, 0.04));
+    }
+
+    .term-session-tree__session.is-active {
+        background: var(--accent-muted, rgba(99, 102, 241, 0.12));
+    }
+
+    .term-session-tree__session-btn {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        min-width: 0;
+        padding: 5px 6px 5px 4px;
+        border: none;
+        background: transparent;
+        color: var(--fg);
+        font-size: 12px;
+        text-align: left;
+        cursor: pointer;
+    }
+
+    .term-session-tree .topbar-tab-dot {
+        flex-shrink: 0;
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--meta);
+    }
+
+    .term-session-tree .topbar-tab-dot.online,
+    .term-session-tree .topbar-tab-dot.connected {
+        background: var(--success);
+    }
+
+    .term-session-tree .topbar-tab-dot.connecting {
+        background: var(--warn);
+    }
+
+    .term-session-tree .topbar-tab-dot.offline {
+        background: var(--danger);
+    }
+
+    .term-session-tree__session-title {
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .term-session-tree__session.is-active .term-session-tree__session-title {
+        font-weight: 600;
+    }
+
+    .term-session-tree__session-time {
+        flex-shrink: 0;
+        font-size: 10px;
+        color: var(--meta);
+    }
+
+    .term-session-tree__session-end {
+        flex-shrink: 0;
+        width: 22px;
+        border: none;
+        background: transparent;
+        color: var(--meta);
+        cursor: pointer;
+        font-size: 14px;
+        opacity: 0;
+        transition: opacity 0.12s;
+    }
+
+    .term-session-tree__session:hover .term-session-tree__session-end,
+    .term-session-tree__session.is-active .term-session-tree__session-end {
+        opacity: 1;
+    }
+
+    .term-session-tree__session-end:hover {
+        color: var(--danger, #ff6b6b);
+    }
+
+    .terminal-module-dock {
+        flex: 1;
+        min-height: 0;
+        min-width: 0;
+    }
+}
+
+/*
+ * 终端侧栏顶栏对齐 & 分隔条：必须在 @layer 外。
+ * global.css 中 dock-handle / dockview tab 栏为 unlayered，@layer components 无法覆盖。
+ */
+.dock-workspace.term-sessions-workspace--sidebar-open .dock-panel-left .dock-rail-shell {
+    border-right: none;
+}
+
+.dock-workspace.term-sessions-workspace--sidebar-open .terminal-module-dock .dv-pre-actions-container .module-dock-title {
+    display: none !important;
+}
+
+.dock-workspace.term-sessions-workspace--sidebar-open .terminal-module-dock .dv-tabs-and-actions-container {
+    border-left: none;
+}
+
+.dock-workspace.term-sessions-workspace--sidebar-open .terminal-module-dock .dv-pre-actions-container:empty {
+    display: none;
+    width: 0;
+    min-width: 0;
+    padding: 0;
+    margin: 0;
+}
+
+.dock-workspace.term-sessions-workspace--sidebar-open .term-session-tree__body {
+    border-right: 1px solid var(--border);
+}
+
+/* 分隔条：class 直接挂在 handle 元素上，避免复杂祖先选择器失效 */
+.dock-handle.term-sessions-sidebar-handle--open {
+    align-self: flex-start;
+    margin-top: var(--shell-dv-tab-bar-h);
+    margin-left: -3px;
+    margin-right: -3px;
+    width: 5px;
+    height: calc(100% - var(--shell-dv-tab-bar-h));
+    max-height: calc(100% - var(--shell-dv-tab-bar-h));
+}
+
+.dock-handle.term-sessions-sidebar-handle--collapsed {
+    align-self: stretch;
+    margin: 0 -2px;
+    width: 5px;
+    min-width: 5px;
+    height: 100%;
+    max-height: none;
+    z-index: 15;
+}
+
+.dock-handle.term-sessions-sidebar-handle--collapsed .dock-handle-inner {
+    height: 48px;
 }

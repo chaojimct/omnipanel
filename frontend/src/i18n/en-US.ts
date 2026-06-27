@@ -1355,6 +1355,18 @@ export const enUS: TranslationDict = {
       manageHosts: "Manage Hosts…",
       manageHostsDesc: "Go to Host module to add connections",
     },
+    sessions: {
+      title: "Sessions",
+      localSection: "Local",
+      sshSection: "SSH Hosts",
+      empty: "No sessions",
+      noHosts: "No SSH hosts",
+      end: "End session",
+      newUnderConnection: "New session under this connection",
+      reorderConnection: "Drag to reorder connection",
+      workspaceEmpty: "No terminal view open",
+      workspaceEmptyHint: "Open a session from the sidebar or click + to create one",
+    },
     pane: {
       server: "Target server",
     },
