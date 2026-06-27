@@ -15,7 +15,7 @@ import { connectionWithDatabase } from "../toolbox/types";
 import { makeQueryRunId } from "../queryRun";
 import type { QueryResult } from "../dbWorkspaceState";
 
-async function resolveConnectionByName(connectionName: string): Promise<DbConnectionConfig> {
+function assertSqlIdentifier(name: string, label: string): string {
   const trimmed = name.trim();
   if (!/^[A-Za-z0-9_$]+$/.test(trimmed)) {
     throw new Error(`${label} 含非法字符：${name}`);
