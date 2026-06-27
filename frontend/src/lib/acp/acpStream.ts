@@ -85,7 +85,7 @@ export async function getAcpStatus() {
   return result.data;
 }
 
-/** 启动时连接当前激活的 Agent。 */
+/** 连接当前激活的 Agent（由设置页手动触发）。 */
 let connectInFlight: Promise<void> | null = null;
 
 export async function connectActiveAcpAgent(): Promise<void> {

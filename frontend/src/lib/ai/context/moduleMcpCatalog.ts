@@ -6,6 +6,9 @@ import type { McpToolRegistration } from "./types";
 
 /** 与 Rust `BUILTIN_SERVICE_ID` 保持一致 */
 export const OMNIMCP_BUILTIN_SERVICE_ID = "omnimcp-builtin";
+/** 内置 OmniMCP HTTP 固定端口，与 Rust `BUILTIN_MCP_PORT` 一致 */
+export const OMNIMCP_BUILTIN_MCP_PORT = 12756;
+export const OMNIMCP_BUILTIN_MCP_URL = `http://127.0.0.1:${OMNIMCP_BUILTIN_MCP_PORT}/mcp`;
 
 const MODULE_MCP_CATALOG: Partial<Record<ModuleKey, McpToolRegistration[]>> = {
   database: DATABASE_MODULE_MCP_TOOLS,
@@ -19,16 +22,12 @@ export function getModuleMcpToolsFromCatalog(moduleKey: ModuleKey): McpToolRegis
 /** 供设置页 OmniMCP 工具列表合并展示 */
 export function getAllModuleMcpToolInfos(): McpToolInfo[] {
   const items: McpToolInfo[] = [];
-  for (const [moduleKey, tools] of Object.entries(MODULE_MCP_CATALOG) as [
-    ModuleKey,
-    McpToolRegistration[],
-  ][]) {
+  for (const tools of Object.values(MODULE_MCP_CATALOG)) {
+    if (!tools) continue;
     for (const tool of tools) {
       items.push({
         name: tool.name,
-        description: tool.description
-          ? `[${moduleKey}] ${tool.description}`
-          : `[${moduleKey}]`,
+        description: tool.description,
       });
     }
   }

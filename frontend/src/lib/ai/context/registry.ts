@@ -56,10 +56,6 @@ export function getModuleAiContextText(moduleKey: ModuleKey): string | null {
 }
 
 export function getModuleMcpTools(moduleKey: ModuleKey): McpToolRegistration[] {
-  const fromProvider = getModuleContextProvider(moduleKey)?.getMcpTools();
-  if (fromProvider && fromProvider.length > 0) {
-    return fromProvider;
-  }
   return getModuleMcpToolsFromCatalog(moduleKey);
 }
 

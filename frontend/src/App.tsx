@@ -183,12 +183,6 @@ function AppShell() {
   useBottomWorkspaceShortcut();
   useSettingsShortcut();
 
-  useEffect(() => {
-    void import("./lib/acp/acpStream").then(({ connectActiveAcpAgent }) =>
-      connectActiveAcpAgent(),
-    );
-  }, []);
-
   const location = useLocation();
   const navigate = useNavigate();
   const title = getRouteTitle(location.pathname);

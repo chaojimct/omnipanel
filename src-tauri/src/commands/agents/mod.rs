@@ -1,7 +1,8 @@
 mod detect_common;
 
 use detect_common::{
-    detect_from_candidates, home_dir, push_candidate, resolve_in_path, where_all,
+    command_output, detect_from_candidates, home_dir, push_candidate, resolve_in_path,
+    where_all,
 };
 use omnipanel_error::OmniError;
 use serde::Serialize;
@@ -203,17 +204,7 @@ fn resolve_repo_agent_dir() -> Option<PathBuf> {
 
 fn detect_node_version() -> Option<String> {
     let node = resolve_in_path("node")?;
-    std::process::Command::new(node)
-        .arg("--version")
-        .output()
-        .ok()
-        .and_then(|output| {
-            if output.status.success() {
-                Some(String::from_utf8_lossy(&output.stdout).trim().to_string())
-            } else {
-                None
-            }
-        })
+    command_output(node.to_str()?, &["--version"])
 }
 
 fn detect_omniagent_sync() -> AgentInstallStatus {

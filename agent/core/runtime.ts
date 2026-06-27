@@ -5,14 +5,17 @@ import type { DynamicStructuredTool } from "@langchain/core/tools";
 import { MemorySaver } from "@langchain/langgraph";
 import { MultiServerMCPClient, type ClientConfig, type Connection } from "@langchain/mcp-adapters";
 import { createDeepAgent, type DeepAgent } from "deepagents";
+
 import {
   applyAgentConfigToEnv,
+  createChatModelFromConfig,
   loadAgentConfigFile,
   resolveLangChainModelId,
   resolveMcpServersFromConfig,
 } from "./config.js";
 
-const agentRoot = path.dirname(fileURLToPath(import.meta.url));
+const coreRoot = path.dirname(fileURLToPath(import.meta.url));
+const agentRoot = path.join(coreRoot, "..");
 
 export type SessionRuntime = {
   sessionId: string;
@@ -75,7 +78,6 @@ export function buildMcpClientConfig(servers: McpServer[]): ClientConfig | null 
       continue;
     }
 
-    // Streamable HTTP（ACP type=http 或未标注 type 的 URL 服务）
     mcpServers[server.name] = {
       transport: "http",
       url: server.url,
@@ -134,7 +136,10 @@ export async function createSessionRuntime(
   }
 
   applyAgentConfigToEnv(fileConfig);
-  const model = resolveLangChainModelId(fileConfig);
+  const model =
+    fileConfig.apiStandard === "openai"
+      ? await createChatModelFromConfig(fileConfig)
+      : resolveLangChainModelId(fileConfig);
 
   const graph = createDeepAgent({
     model,
