@@ -420,6 +420,8 @@ export const commands = {
 	httpAddHistory: (entry: HttpHistoryEntry) => typedError<null, string>(__TAURI_INVOKE("http_add_history", { entry })),
 	httpListHistory: (limit: number | null) => typedError<HttpHistoryEntry[], string>(__TAURI_INVOKE("http_list_history", { limit })),
 	httpClearHistory: () => typedError<null, string>(__TAURI_INVOKE("http_clear_history")),
+	httpDeleteHistory: (id: string) => typedError<null, string>(__TAURI_INVOKE("http_delete_history", { id })),
+	httpClearHistoryForRequest: (requestId: string) => typedError<null, string>(__TAURI_INVOKE("http_clear_history_for_request", { requestId })),
 	httpSaveCollection: (col: HttpCollection) => typedError<null, string>(__TAURI_INVOKE("http_save_collection", { col })),
 	httpListCollections: () => typedError<HttpCollection[], string>(__TAURI_INVOKE("http_list_collections")),
 	httpDeleteCollection: (id: string) => typedError<null, string>(__TAURI_INVOKE("http_delete_collection", { id })),
@@ -1536,6 +1538,10 @@ export type HttpHistoryEntry = {
 	responseSize: number | null,
 	createdAt: number | null,
 	requestId: string | null,
+	responseStatusText: string,
+	responseContentType: string,
+	responseHeaders: string,
+	responseBody: string,
 };
 
 /**  知识条目模型。 */

@@ -133,5 +133,13 @@ export function methodColor(method: string): string {
   if (m === "PUT") return "var(--info, #2196f3)";
   if (m === "PATCH") return "var(--info, #9c27b0)";
   if (m === "DELETE") return "var(--danger, #f44336)";
+  if (m === "WEBSOCKET") return "var(--accent)";
   return "var(--text-dim)";
+}
+
+export function formatMethodBadge(method: string): string {
+  const m = method.toUpperCase();
+  if (m === "DELETE") return "DEL";
+  if (m === "WEBSOCKET") return "WS";
+  return m;
 }

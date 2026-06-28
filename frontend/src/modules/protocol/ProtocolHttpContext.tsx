@@ -10,10 +10,48 @@ import {
 import { commands, type HttpCollection, type HttpHistoryEntry, type SavedHttpRequest } from "../../ipc/bindings";
 import { useProtocolHttpDockStore } from "../../stores/protocolHttpDockStore";
 import { useProtocolHttpLayoutStore } from "../../stores/protocolHttpLayoutStore";
+import { formatHttpJsonBody } from "./httpJsonBody";
+import {
+  buildSessionsFromHistory,
+  historyEntryToSession,
+  hasStoredResponse,
+  makeHttpResponseSessionId,
+  makeHttpResponseSessionLabel,
+  resolveResponseRequestKey,
+  responseDataToHistoryFields,
+  type HttpResponseData,
+  type HttpResponseSession,
+} from "./httpResponseState";
+import { filterHistoryForRequest } from "./protocolLayoutTree";
 
-export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE" | "HEAD" | "OPTIONS";
+export type { HttpResponseData, HttpResponseSession };
+
+export type HttpMethod =
+  | "GET"
+  | "POST"
+  | "PUT"
+  | "PATCH"
+  | "DELETE"
+  | "HEAD"
+  | "OPTIONS"
+  | "WEBSOCKET";
+
+export const HTTP_METHOD_OPTIONS: HttpMethod[] = [
+  "GET",
+  "POST",
+  "PUT",
+  "PATCH",
+  "DELETE",
+  "HEAD",
+  "OPTIONS",
+  "WEBSOCKET",
+];
+
+export function isWebSocketMethod(method: string): boolean {
+  return method.toUpperCase() === "WEBSOCKET";
+}
 export type BodyType = "JSON" | "Form" | "Multipart" | "Raw" | "Binary";
-export type AuthType = "Bearer Token" | "Basic Auth" | "API Key" | "OAuth 2.0";
+export type AuthType = "Bearer Token" | "Basic Auth" | "API Key" | "OAuth 2.0" | "Authorization";
 
 export interface HttpKvPair {
   key: string;
@@ -29,6 +67,7 @@ export interface HttpEditorState {
   body: string;
   bodyType: BodyType;
   authType: AuthType;
+  authValue: string;
 }
 
 interface ProtocolHttpContextValue {
@@ -46,6 +85,8 @@ interface ProtocolHttpContextValue {
   createCollection: (name: string) => Promise<void>;
   deleteCollection: (id: string) => Promise<void>;
   deleteSavedRequest: (id: string) => Promise<void>;
+  deleteHistoryEntry: (id: string) => Promise<void>;
+  clearRequestHistory: (requestId: string) => Promise<void>;
   applyHistoryEntry: (entry: HttpHistoryEntry) => void;
   applySavedRequest: (req: SavedHttpRequest) => void;
   selectRequest: (req: SavedHttpRequest) => void;
@@ -53,7 +94,14 @@ interface ProtocolHttpContextValue {
   clearSelectedRequest: () => void;
   createRequest: (name: string, parentFolderId: string | null) => Promise<void>;
   saveCurrentRequest: (name: string, collectionId: string | null) => Promise<void>;
+  persistCurrentRequest: () => Promise<boolean>;
+  renameSavedRequest: (requestId: string, name: string) => Promise<void>;
   updateRequestCollection: (requestId: string, collectionId: string | null) => Promise<void>;
+  responseSessions: HttpResponseSession[];
+  activeResponseSessionId: string | null;
+  setActiveResponseSession: (sessionId: string) => void;
+  closeResponseSession: (sessionId: string) => void;
+  addResponseSession: (response: HttpResponseData, historyId: string | null) => void;
   recordSendHistory: (data: {
     method: string;
     url: string;
@@ -61,6 +109,7 @@ interface ProtocolHttpContextValue {
     responseTimeMs: number | null;
     requestSize: number | null;
     responseSize: number | null;
+    response: HttpResponseData;
   }) => Promise<void>;
 }
 
@@ -86,7 +135,62 @@ const DEFAULT_EDITOR: HttpEditorState = {
   body: '{\n  "name": "John Doe",\n  "email": "john@example.com",\n  "role": "admin"\n}',
   bodyType: "JSON",
   authType: "Bearer Token",
+  authValue: "eyJhbG...token",
 };
+
+function authTypeToStorage(authType: AuthType): string {
+  switch (authType) {
+    case "Basic Auth":
+      return "basic";
+    case "API Key":
+      return "api_key";
+    case "OAuth 2.0":
+      return "oauth2";
+    case "Authorization":
+      return "authorization";
+    default:
+      return "bearer";
+  }
+}
+
+function editorToSavedRequest(
+  editor: HttpEditorState,
+  meta: {
+    id: string;
+    name: string;
+    collectionId: string | null;
+    createdAt: number;
+    updatedAt: number;
+  },
+): SavedHttpRequest {
+  const enabledHeaders = editor.headers.filter((h) => h.enabled && h.key);
+  const headerMap: Record<string, string> = {};
+  for (const h of enabledHeaders) {
+    headerMap[h.key] = h.value;
+  }
+  const body =
+    editor.bodyType === "JSON" ? formatHttpJsonBody(editor.body) : editor.body;
+  return {
+    id: meta.id,
+    name: meta.name.trim(),
+    method: editor.method,
+    url: editor.url,
+    headers: JSON.stringify(headerMap),
+    body,
+    authType: authTypeToStorage(editor.authType),
+    authValue: editor.authValue,
+    collectionId: meta.collectionId,
+    createdAt: meta.createdAt,
+    updatedAt: meta.updatedAt,
+  };
+}
+
+function editorWithFormattedJsonBody(editor: HttpEditorState): HttpEditorState {
+  if (editor.bodyType !== "JSON") return editor;
+  const body = formatHttpJsonBody(editor.body);
+  if (body === editor.body) return editor;
+  return { ...editor, body };
+}
 
 export function ProtocolHttpProvider({ children }: { children: ReactNode }) {
   const [history, setHistory] = useState<HttpHistoryEntry[]>([]);
@@ -95,6 +199,91 @@ export function ProtocolHttpProvider({ children }: { children: ReactNode }) {
   const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null);
   const [activeCollectionId, setActiveCollectionId] = useState<string | null>(null);
   const [editor, setEditorState] = useState<HttpEditorState>(DEFAULT_EDITOR);
+  const [responseSessionsByRequest, setResponseSessionsByRequest] = useState<
+    Record<string, HttpResponseSession[]>
+  >({});
+  const [activeResponseSessionByRequest, setActiveResponseSessionByRequest] = useState<
+    Record<string, string | null>
+  >({});
+
+  const responseRequestKey = resolveResponseRequestKey(selectedRequestId);
+
+  const responseSessions = useMemo(
+    () => responseSessionsByRequest[responseRequestKey] ?? [],
+    [responseSessionsByRequest, responseRequestKey],
+  );
+
+  const activeResponseSessionId = useMemo(
+    () => activeResponseSessionByRequest[responseRequestKey] ?? null,
+    [activeResponseSessionByRequest, responseRequestKey],
+  );
+
+  const syncResponseSessionsForRequest = useCallback(
+    (requestId: string, req?: SavedHttpRequest | null) => {
+      const request = req ?? savedRequests.find((item) => item.id === requestId) ?? null;
+      const entries = filterHistoryForRequest(history, request);
+      const sessions = buildSessionsFromHistory(entries);
+      setResponseSessionsByRequest((prev) => ({ ...prev, [requestId]: sessions }));
+      setActiveResponseSessionByRequest((prev) => ({
+        ...prev,
+        [requestId]: sessions[sessions.length - 1]?.id ?? null,
+      }));
+    },
+    [history, savedRequests],
+  );
+
+  const setActiveResponseSession = useCallback(
+    (sessionId: string) => {
+      const requestKey = resolveResponseRequestKey(selectedRequestId);
+      setActiveResponseSessionByRequest((prev) => ({
+        ...prev,
+        [requestKey]: sessionId,
+      }));
+    },
+    [selectedRequestId],
+  );
+
+  const addResponseSession = useCallback(
+    (response: HttpResponseData, historyId: string | null) => {
+      const requestKey = resolveResponseRequestKey(selectedRequestId);
+      const sessionId = historyId ?? makeHttpResponseSessionId();
+      setResponseSessionsByRequest((prev) => {
+        const existing = prev[requestKey] ?? [];
+        if (historyId && existing.some((item) => item.historyId === historyId)) {
+          return prev;
+        }
+        const session: HttpResponseSession = {
+          id: sessionId,
+          historyId,
+          label: makeHttpResponseSessionLabel(existing.length + 1, response.status),
+          response,
+          createdAt: Date.now(),
+        };
+        return { ...prev, [requestKey]: [...existing, session] };
+      });
+      setActiveResponseSessionByRequest((prev) => ({
+        ...prev,
+        [requestKey]: sessionId,
+      }));
+    },
+    [selectedRequestId],
+  );
+
+  const closeResponseSession = useCallback(
+    (sessionId: string) => {
+      const requestKey = resolveResponseRequestKey(selectedRequestId);
+      setResponseSessionsByRequest((prev) => {
+        const existing = prev[requestKey] ?? [];
+        const next = existing.filter((item) => item.id !== sessionId);
+        setActiveResponseSessionByRequest((activePrev) => {
+          if (activePrev[requestKey] !== sessionId) return activePrev;
+          return { ...activePrev, [requestKey]: next[next.length - 1]?.id ?? null };
+        });
+        return { ...prev, [requestKey]: next };
+      });
+    },
+    [selectedRequestId],
+  );
 
   const setEditor = useCallback((patch: Partial<HttpEditorState>) => {
     setEditorState((prev) => ({ ...prev, ...patch }));
@@ -173,13 +362,71 @@ export function ProtocolHttpProvider({ children }: { children: ReactNode }) {
     [loadSavedRequests, selectedRequestId],
   );
 
-  const applyHistoryEntry = useCallback((entry: HttpHistoryEntry) => {
-    setEditorState((prev) => ({
-      ...prev,
-      method: entry.method as HttpMethod,
-      url: entry.url,
-    }));
-  }, []);
+  const deleteHistoryEntry = useCallback(
+    async (id: string) => {
+      const res = await commands.httpDeleteHistory(id);
+      if (res.status === "ok") {
+        setResponseSessionsByRequest((prev) => {
+          const next: Record<string, HttpResponseSession[]> = {};
+          for (const [requestId, sessions] of Object.entries(prev)) {
+            next[requestId] = sessions.filter((item) => item.historyId !== id);
+          }
+          setActiveResponseSessionByRequest((activePrev) => {
+            const activeNext = { ...activePrev };
+            for (const [requestId, activeId] of Object.entries(activePrev)) {
+              if (activeId === id) {
+                const remaining = next[requestId] ?? [];
+                activeNext[requestId] = remaining[remaining.length - 1]?.id ?? null;
+              }
+            }
+            return activeNext;
+          });
+          return next;
+        });
+        await loadHistory();
+      }
+    },
+    [loadHistory],
+  );
+
+  const clearRequestHistory = useCallback(
+    async (requestId: string) => {
+      const res = await commands.httpClearHistoryForRequest(requestId);
+      if (res.status === "ok") {
+        setResponseSessionsByRequest((prev) => ({ ...prev, [requestId]: [] }));
+        setActiveResponseSessionByRequest((prev) => ({ ...prev, [requestId]: null }));
+        await loadHistory();
+      }
+    },
+    [loadHistory],
+  );
+
+  const applyHistoryEntry = useCallback(
+    (entry: HttpHistoryEntry) => {
+      setEditorState((prev) => ({
+        ...prev,
+        method: entry.method as HttpMethod,
+        url: entry.url,
+      }));
+      const requestId = entry.requestId ?? selectedRequestId;
+      if (!requestId || !hasStoredResponse(entry)) return;
+
+      setResponseSessionsByRequest((prev) => {
+        const existing = prev[requestId] ?? [];
+        if (existing.some((item) => item.historyId === entry.id)) {
+          return prev;
+        }
+        const index = existing.length + 1;
+        const session = historyEntryToSession(entry, index);
+        return {
+          ...prev,
+          [requestId]: [...existing, session].sort((a, b) => a.createdAt - b.createdAt),
+        };
+      });
+      setActiveResponseSessionByRequest((prev) => ({ ...prev, [requestId]: entry.id }));
+    },
+    [selectedRequestId],
+  );
 
   const parseHeaders = useCallback((raw: string): HttpKvPair[] => {
     if (!raw.trim()) {
@@ -207,7 +454,9 @@ export function ProtocolHttpProvider({ children }: { children: ReactNode }) {
             ? "API Key"
             : req.authType === "oauth2"
               ? "OAuth 2.0"
-              : "Bearer Token";
+              : req.authType === "authorization"
+                ? "Authorization"
+                : "Bearer Token";
 
       setEditorState({
         method: req.method as HttpMethod,
@@ -215,6 +464,7 @@ export function ProtocolHttpProvider({ children }: { children: ReactNode }) {
         body: req.body ?? "",
         bodyType: "JSON",
         authType,
+        authValue: req.authValue ?? "",
         params: [{ key: "", value: "", enabled: true }],
         headers: parseHeaders(req.headers),
       });
@@ -226,8 +476,9 @@ export function ProtocolHttpProvider({ children }: { children: ReactNode }) {
     (req: SavedHttpRequest) => {
       applySavedRequest(req);
       setSelectedRequestId(req.id);
+      syncResponseSessionsForRequest(req.id, req);
     },
-    [applySavedRequest],
+    [applySavedRequest, syncResponseSessionsForRequest],
   );
 
   const openRequestTab = useCallback(
@@ -278,31 +529,70 @@ export function ProtocolHttpProvider({ children }: { children: ReactNode }) {
   const saveCurrentRequest = useCallback(
     async (name: string, collectionId: string | null) => {
       const now = Date.now();
-      const enabledHeaders = editor.headers.filter((h) => h.enabled && h.key);
-      const headerMap: Record<string, string> = {};
-      for (const h of enabledHeaders) {
-        headerMap[h.key] = h.value;
+      const prepared = editorWithFormattedJsonBody(editor);
+      if (prepared.body !== editor.body) {
+        setEditorState(prepared);
       }
-      const req: SavedHttpRequest = {
+      const req = editorToSavedRequest(prepared, {
         id: generateId(),
-        name: name.trim(),
-        method: editor.method,
-        url: editor.url,
-        headers: JSON.stringify(headerMap),
-        body: editor.body,
-        authType: editor.authType === "Bearer Token" ? "bearer" : "",
-        authValue: "",
+        name,
         collectionId,
         createdAt: now,
         updatedAt: now,
-      };
+      });
       const res = await commands.httpSaveRequest(req);
       if (res.status === "ok") {
         await loadSavedRequests();
         setSelectedRequestId(req.id);
+        useProtocolHttpDockStore.getState().openTab(req.id);
       }
     },
     [editor, loadSavedRequests],
+  );
+
+  const persistCurrentRequest = useCallback(async () => {
+    const now = Date.now();
+    if (selectedRequestId) {
+      const existing = savedRequests.find((r) => r.id === selectedRequestId);
+      if (!existing) return false;
+      const prepared = editorWithFormattedJsonBody(editor);
+      if (prepared.body !== editor.body) {
+        setEditorState(prepared);
+      }
+      const req = editorToSavedRequest(prepared, {
+        id: existing.id,
+        name: existing.name,
+        collectionId: existing.collectionId,
+        createdAt: existing.createdAt ?? now,
+        updatedAt: now,
+      });
+      const res = await commands.httpSaveRequest(req);
+      if (res.status === "ok") {
+        await loadSavedRequests();
+        return true;
+      }
+      return false;
+    }
+    return false;
+  }, [editor, loadSavedRequests, savedRequests, selectedRequestId]);
+
+  const renameSavedRequest = useCallback(
+    async (requestId: string, name: string) => {
+      const trimmed = name.trim();
+      if (!trimmed) return;
+      const existing = savedRequests.find((r) => r.id === requestId);
+      if (!existing) return;
+      const req: SavedHttpRequest = {
+        ...existing,
+        name: trimmed,
+        updatedAt: Date.now(),
+      };
+      const res = await commands.httpSaveRequest(req);
+      if (res.status === "ok") {
+        await loadSavedRequests();
+      }
+    },
+    [loadSavedRequests, savedRequests],
   );
 
   const updateRequestCollection = useCallback(
@@ -330,9 +620,12 @@ export function ProtocolHttpProvider({ children }: { children: ReactNode }) {
       responseTimeMs: number | null;
       requestSize: number | null;
       responseSize: number | null;
+      response: HttpResponseData;
     }) => {
+      const historyId = generateId();
+      const responseFields = responseDataToHistoryFields(data.response);
       const entry: HttpHistoryEntry = {
-        id: generateId(),
+        id: historyId,
         method: data.method,
         url: data.url,
         statusCode: data.statusCode,
@@ -341,13 +634,18 @@ export function ProtocolHttpProvider({ children }: { children: ReactNode }) {
         responseSize: data.responseSize,
         createdAt: Date.now(),
         requestId: selectedRequestId,
+        responseStatusText: responseFields.responseStatusText,
+        responseContentType: responseFields.responseContentType,
+        responseHeaders: responseFields.responseHeaders,
+        responseBody: responseFields.responseBody,
       };
       const res = await commands.httpAddHistory(entry);
       if (res.status === "ok") {
+        addResponseSession(data.response, historyId);
         await loadHistory();
       }
     },
-    [loadHistory, selectedRequestId],
+    [addResponseSession, loadHistory, selectedRequestId],
   );
 
   const value = useMemo<ProtocolHttpContextValue>(
@@ -366,6 +664,8 @@ export function ProtocolHttpProvider({ children }: { children: ReactNode }) {
       createCollection,
       deleteCollection,
       deleteSavedRequest,
+      deleteHistoryEntry,
+      clearRequestHistory,
       applyHistoryEntry,
       applySavedRequest,
       selectRequest,
@@ -373,7 +673,14 @@ export function ProtocolHttpProvider({ children }: { children: ReactNode }) {
       clearSelectedRequest,
       createRequest,
       saveCurrentRequest,
+      persistCurrentRequest,
+      renameSavedRequest,
       updateRequestCollection,
+      responseSessions,
+      activeResponseSessionId,
+      setActiveResponseSession,
+      closeResponseSession,
+      addResponseSession,
       recordSendHistory,
     }),
     [
@@ -390,6 +697,8 @@ export function ProtocolHttpProvider({ children }: { children: ReactNode }) {
       createCollection,
       deleteCollection,
       deleteSavedRequest,
+      deleteHistoryEntry,
+      clearRequestHistory,
       applyHistoryEntry,
       applySavedRequest,
       selectRequest,
@@ -397,7 +706,14 @@ export function ProtocolHttpProvider({ children }: { children: ReactNode }) {
       clearSelectedRequest,
       createRequest,
       saveCurrentRequest,
+      persistCurrentRequest,
+      renameSavedRequest,
       updateRequestCollection,
+      responseSessions,
+      activeResponseSessionId,
+      setActiveResponseSession,
+      closeResponseSession,
+      addResponseSession,
       recordSendHistory,
     ],
   );

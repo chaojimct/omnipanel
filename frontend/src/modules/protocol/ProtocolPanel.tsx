@@ -3,9 +3,7 @@ import { useLocation } from "react-router-dom";
 import { useI18n } from "../../i18n";
 import { SidebarWorkspace } from "../../components/ui/SidebarWorkspace";
 import { ModuleSegmentDock } from "../../components/dock";
-import { HttpPanel } from "./HttpPanel";
 import { ProtocolHttpWorkspace } from "./ProtocolHttpWorkspace";
-import { WsPanel } from "./WsPanel";
 import { MqttPanel } from "./MqttPanel";
 import { SerialPanel } from "./SerialPanel";
 import { GrpcPanel } from "./GrpcPanel";
@@ -13,7 +11,7 @@ import { SnifferPanel } from "./SnifferPanel";
 import { ModbusPanel } from "./ModbusPanel";
 import { ProtocolContextSidebar, type ProtocolKind } from "./ProtocolContextSidebar";
 import { ProtocolHttpProvider } from "./ProtocolHttpContext";
-const PROTOCOLS: ProtocolKind[] = ["http", "ws", "mqtt", "serial", "grpc", "sniffer", "modbus"];
+const PROTOCOLS: ProtocolKind[] = ["http", "mqtt", "serial", "grpc", "sniffer", "modbus"];
 
 export function ProtocolPanel() {
   const { t } = useI18n();
@@ -32,14 +30,22 @@ export function ProtocolPanel() {
 
   const renderPanel = useCallback((tabId: string) => {
     const protocol = tabId as ProtocolKind;
-    const content = (
+
+    // HTTP 工作区自带 SidebarWorkspace + ProtocolHttpSidebar，避免与外层重复嵌套
+    if (protocol === "http") {
+      return (
+        <ProtocolHttpProvider>
+          <ProtocolHttpWorkspace />
+        </ProtocolHttpProvider>
+      );
+    }
+
+    return (
       <SidebarWorkspace
         layoutPersistKey="protocol"
         className="protocol-workspace"
         sidebar={<ProtocolContextSidebar protocol={protocol} />}
       >
-        {protocol === "http" && <ProtocolHttpWorkspace />}
-        {protocol === "ws" && <WsPanel />}
         {protocol === "mqtt" && <MqttPanel />}
         {protocol === "serial" && <SerialPanel />}
         {protocol === "grpc" && <GrpcPanel />}
@@ -47,11 +53,6 @@ export function ProtocolPanel() {
         {protocol === "modbus" && <ModbusPanel />}
       </SidebarWorkspace>
     );
-
-    if (protocol === "http") {
-      return <ProtocolHttpProvider>{content}</ProtocolHttpProvider>;
-    }
-    return content;
   }, []);
 
 

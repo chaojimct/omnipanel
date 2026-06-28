@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { MouseEvent, ReactNode } from "react";
 import type { SerializedDockview } from "dockview-core";
 import { DockableWorkspace, type DockableTab } from "../../components/dock";
 import { WorkspaceEmptyPage } from "../../components/ui/WorkspaceEmptyPage";
@@ -13,6 +13,8 @@ export interface ProtocolHttpWorkspaceDockProps {
   onDockLayoutChange: (layout: SerializedDockview | null) => void;
   renderPanel: (tabId: string) => ReactNode;
   recentClosedActionItems: Array<{ id: string; label: string; meta: string; onClick: () => void }>;
+  onTabContextMenu?: (event: MouseEvent, tabId: string, index: number) => void;
+  onTabDoubleClick?: (tabId: string) => void;
 }
 
 /** HTTP 协议实验室右侧 Dock：每个已保存请求一个可关闭 Tab（Postman 风格）。 */
@@ -25,6 +27,8 @@ export function ProtocolHttpWorkspaceDock({
   onDockLayoutChange,
   renderPanel,
   recentClosedActionItems,
+  onTabContextMenu,
+  onTabDoubleClick,
 }: ProtocolHttpWorkspaceDockProps) {
   const { t } = useI18n();
 
@@ -41,6 +45,8 @@ export function ProtocolHttpWorkspaceDock({
       savedLayout={dockLayout}
       onSavedLayoutChange={onDockLayoutChange}
       renderPanel={renderPanel}
+      onTabContextMenu={onTabContextMenu}
+      onTabDoubleClick={onTabDoubleClick}
       windowControl={false}
       emptyContent={
         <WorkspaceEmptyPage

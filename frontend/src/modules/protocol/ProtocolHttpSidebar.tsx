@@ -23,6 +23,7 @@ import {
 } from "../../stores/protocolHttpLayoutStore";
 import {
   filterHistoryForRequest,
+  formatMethodBadge,
   listProtocolTreeChildren,
   methodColor,
   type ProtocolTreeEntry,
@@ -34,7 +35,9 @@ const SECTION_STORAGE_KEY = "omnipanel-protocol-http-sidebar-sections.v2";
 type ContextTarget =
   | { kind: "root" }
   | { kind: "folder"; folderId: string }
-  | { kind: "request"; requestId: string };
+  | { kind: "request"; requestId: string }
+  | { kind: "history"; historyId: string; requestId: string | null }
+  | { kind: "history-section"; requestId: string };
 
 function parseDragKey(data: string): ProtocolTreeNodeKey | null {
   if (data.startsWith("folder:") || data.startsWith("collection:") || data.startsWith("request:")) {
@@ -253,10 +256,51 @@ export function ProtocolHttpSidebar() {
 
     if (target.kind === "request" && http) {
       items.push({
+        id: "rename-request",
+        label: t("protocol.sidebar.renameRequest"),
+        onClick: () => {
+          const req = savedRequests.find((entry) => entry.id === target.requestId);
+          if (!req) return;
+          void quickInput({
+            title: t("protocol.sidebar.renameRequestTitle"),
+            defaultValue: req.name,
+            validate: (value) => (value.trim() ? null : t("protocol.sidebar.folderNameRequired")),
+          }).then((name) => {
+            if (!name) return;
+            void http.renameSavedRequest(target.requestId, name.trim());
+          });
+        },
+      });
+      items.push({
         id: "delete-request",
         label: t("protocol.sidebar.deleteRequest"),
         danger: true,
         onClick: () => void http.deleteSavedRequest(target.requestId),
+      });
+    }
+
+    if (target.kind === "history" && http) {
+      items.push({
+        id: "delete-history",
+        label: t("protocol.sidebar.deleteHistory"),
+        danger: true,
+        onClick: () => void http.deleteHistoryEntry(target.historyId),
+      });
+    }
+
+    if (target.kind === "history-section" && http) {
+      items.push({
+        id: "clear-request-history",
+        label: t("protocol.sidebar.clearRequestHistory"),
+        danger: true,
+        onClick: () => {
+          void appConfirm(
+            t("protocol.sidebar.clearRequestHistoryConfirm"),
+            t("protocol.sidebar.clearRequestHistoryTitle"),
+          ).then((ok) => {
+            if (ok) void http.clearRequestHistory(target.requestId);
+          });
+        },
       });
     }
 
@@ -270,6 +314,7 @@ export function ProtocolHttpSidebar() {
     renameFolder,
     deleteFolder,
     http,
+    savedRequests,
   ]);
 
   const renderTree = useCallback(
@@ -348,7 +393,7 @@ export function ProtocolHttpSidebar() {
               <span className="tree-dot" />
             </span>
             <span className="h-method" style={{ color: methodColor(req.method) }}>
-              {req.method === "DELETE" ? "DEL" : req.method}
+              {formatMethodBadge(req.method)}
             </span>
             <span className="proto-tree-node__label">{req.name}</span>
           </div>
@@ -427,6 +472,14 @@ export function ProtocolHttpSidebar() {
           expanded={sections.history}
           onToggle={() => toggleSection("history")}
         >
+          <div
+            className="proto-sidebar-history-wrap"
+            onContextMenu={(e) => {
+              if (!selectedRequest) return;
+              if ((e.target as HTMLElement).closest(".history-item")) return;
+              openContextMenu(e, { kind: "history-section", requestId: selectedRequest.id });
+            }}
+          >
           {!selectedRequest ? (
             <div className="proto-empty">{t("protocol.sidebar.selectRequestForHistory")}</div>
           ) : requestHistory.length === 0 ? (
@@ -438,10 +491,17 @@ export function ProtocolHttpSidebar() {
                   key={entry.id}
                   className="history-item"
                   onClick={() => http?.applyHistoryEntry(entry)}
+                  onContextMenu={(e) => {
+                    openContextMenu(e, {
+                      kind: "history",
+                      historyId: entry.id,
+                      requestId: entry.requestId,
+                    });
+                  }}
                 >
                   <div className="history-item-main">
                     <span className="h-method" style={{ color: methodColor(entry.method) }}>
-                      {entry.method}
+                      {formatMethodBadge(entry.method)}
                     </span>
                     <span className="h-url">{entry.url}</span>
                   </div>
@@ -461,6 +521,7 @@ export function ProtocolHttpSidebar() {
               ))}
             </div>
           )}
+          </div>
         </VerticalSplitSidebarSection>
       </VerticalSplitSidebar>
 

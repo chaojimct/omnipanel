@@ -5,12 +5,6 @@ import type { McpServer } from "@agentclientprotocol/sdk";
 import type { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { initChatModel } from "langchain";
 
-/** 阿里云 MaaS 工作空间专属域名（返回非 OpenAI 标准 JSON，LangChain 无法解析）。 */
-const ALIYUN_MAAS_COMPATIBLE_MODE =
-  /^https:\/\/[^/]+\.maas\.aliyuncs\.com\/compatible-mode\/v1\/?$/i;
-
-const DASHSCOPE_OPENAI_BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1";
-
 /** OmniPanel 写入的 agent 配置文件结构（app_data_dir/acp-agent-config.json）。 */
 export type OmniAgentConfigFile = {
   version?: number;
@@ -55,7 +49,7 @@ export function loadAgentConfigFile(forceReload = false): OmniAgentConfigFile | 
       return null;
     }
     const rawBaseUrl = parsed.baseUrl.trim().replace(/\/+$/, "");
-    const baseUrl = normalizeAgentBaseUrl(rawBaseUrl);
+    const baseUrl = rawBaseUrl;
     if (baseUrl !== rawBaseUrl) {
       log(
         "阿里云 MaaS 工作空间域名与 LangChain 不兼容，已改用 dashscope OpenAI 端点:",
@@ -109,19 +103,6 @@ export function applyAgentConfigToEnv(config: OmniAgentConfigFile): void {
 export function resolveLangChainModelId(config: OmniAgentConfigFile): string {
   const provider = config.apiStandard === "anthropic" ? "anthropic" : "openai";
   return `${provider}:${config.model}`;
-}
-
-/**
- * 规范化模型 API baseUrl。
- * 阿里云 `{WorkspaceId}.maas.aliyuncs.com/compatible-mode/v1` 实际返回 `{ text, finish_reason }`
- * 而非 OpenAI `choices` 格式，会导致 LangChain 报 "Received empty response from chat model call"。
- */
-export function normalizeAgentBaseUrl(baseUrl: string): string {
-  const trimmed = baseUrl.trim().replace(/\/+$/, "");
-  if (ALIYUN_MAAS_COMPATIBLE_MODE.test(trimmed)) {
-    return DASHSCOPE_OPENAI_BASE_URL;
-  }
-  return trimmed;
 }
 
 /** 根据 OmniPanel 配置创建 LangChain ChatModel（OpenAI 兼容协议显式传入 baseURL / apiKey）。 */

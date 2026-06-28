@@ -1,5 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { SidebarWorkspace } from "../../components/ui/SidebarWorkspace";
+import { ContextMenu, type ContextMenuItem } from "../../components/ui/ContextMenu";
+import { quickInput } from "../../lib/quickInput";
 import { useI18n } from "../../i18n";
 import { useProtocolHttpDockStore } from "../../stores/protocolHttpDockStore";
 import { useProtocolTopbarStore } from "../../stores/protocolTopbarStore";
@@ -23,7 +25,7 @@ function ProtocolHttpTopbarBridge() {
   return null;
 }
 
-/** HTTP 协议工作区：左侧接口树 + 右侧 Postman 风格 Dock 请求面板。 */
+/** HTTP 协议工作区：左侧接口树 + 右侧请求 Dock 面板。 */
 export function ProtocolHttpWorkspace() {
   const { t } = useI18n();
   const http = useProtocolHttp();
@@ -34,6 +36,48 @@ export function ProtocolHttpWorkspace() {
   const setActiveTabId = useProtocolHttpDockStore((state) => state.setActiveTabId);
   const closeTab = useProtocolHttpDockStore((state) => state.closeTab);
   const setDockLayout = useProtocolHttpDockStore((state) => state.setDockLayout);
+
+  const [tabCtxMenu, setTabCtxMenu] = useState<{ x: number; y: number; tabId: string } | null>(
+    null,
+  );
+
+  const handleRenameTab = useCallback(
+    async (tabId: string) => {
+      const req = http.savedRequests.find((entry) => entry.id === tabId);
+      if (!req) return;
+      const name = await quickInput({
+        title: t("protocol.sidebar.renameRequestTitle"),
+        defaultValue: req.name,
+        validate: (value) => (value.trim() ? null : t("protocol.sidebar.folderNameRequired")),
+      });
+      if (!name) return;
+      await http.renameSavedRequest(tabId, name.trim());
+    },
+    [http, t],
+  );
+
+  const tabCtxItems = useMemo((): ContextMenuItem[] => {
+    if (!tabCtxMenu) return [];
+    return [
+      {
+        id: "rename",
+        label: t("protocol.sidebar.renameRequest"),
+        onClick: () => void handleRenameTab(tabCtxMenu.tabId),
+      },
+    ];
+  }, [handleRenameTab, tabCtxMenu, t]);
+
+  const handleTabContextMenu = useCallback((event: MouseEvent, tabId: string) => {
+    event.preventDefault();
+    setTabCtxMenu({ x: event.clientX, y: event.clientY, tabId });
+  }, []);
+
+  const handleTabDoubleClick = useCallback(
+    (tabId: string) => {
+      void handleRenameTab(tabId);
+    },
+    [handleRenameTab],
+  );
 
   const dockTabs = useMemo(
     () =>
@@ -131,8 +175,18 @@ export function ProtocolHttpWorkspace() {
           onDockLayoutChange={setDockLayout}
           renderPanel={renderDockPanel}
           recentClosedActionItems={recentClosedActionItems}
+          onTabContextMenu={handleTabContextMenu}
+          onTabDoubleClick={handleTabDoubleClick}
         />
       </SidebarWorkspace>
+
+      {tabCtxMenu ? (
+        <ContextMenu
+          items={tabCtxItems}
+          position={{ x: tabCtxMenu.x, y: tabCtxMenu.y }}
+          onClose={() => setTabCtxMenu(null)}
+        />
+      ) : null}
     </>
   );
 }
