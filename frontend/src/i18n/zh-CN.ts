@@ -1351,6 +1351,18 @@ export const zhCN = {
       manageHosts: "管理主机…",
       manageHostsDesc: "跳转到主机模块添加连接",
     },
+    sessions: {
+      title: "会话",
+      localSection: "本地",
+      sshSection: "SSH 主机",
+      empty: "暂无会话",
+      noHosts: "暂无 SSH 主机",
+      end: "结束会话",
+      newUnderConnection: "在此连接下新建会话",
+      reorderConnection: "拖拽调整连接顺序",
+      workspaceEmpty: "暂无打开的终端视图",
+      workspaceEmptyHint: "从左侧会话列表打开会话，或点击 + 新建",
+    },
     pane: {
       server: "目标服务器",
     },

@@ -56,10 +56,22 @@ export async function clearAppUserData(): Promise<void> {
   await useConnectionStore.getState().refresh();
 
   const tabs = useTerminalStore.getState().tabs;
+  const sessions = useTerminalStore.getState().sessions;
   for (const tab of tabs) {
-    disposeTabBackendSessions(tab.id);
+    disposeTabBackendSessions(tab.sessionId);
   }
-  useTerminalStore.setState({ tabs: [], activeTabId: null });
+  for (const session of sessions) {
+    if (session.lifecycle !== "ended") {
+      disposeTabBackendSessions(session.id);
+    }
+  }
+  useTerminalStore.setState({
+    sessions: [],
+    tabs: [],
+    activeTabId: null,
+    activeSessionId: null,
+    detachedRuntime: {},
+  });
 
   useAiStore.setState({ conversations: [], activeConversationId: null });
   useAiModelsStore.getState().resetProviders();

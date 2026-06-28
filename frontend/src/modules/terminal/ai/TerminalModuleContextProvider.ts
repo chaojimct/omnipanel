@@ -9,7 +9,7 @@ export class TerminalModuleContextProvider extends ModuleContextProvider<Termina
   }
 
   formatContextForAi(context: TerminalModuleContext): string {
-    if (isTerminalModuleContextEmpty(context) || !context.activeTabId) {
+    if (isTerminalModuleContextEmpty(context) || !context.activeSessionId) {
       return "";
     }
 
@@ -25,7 +25,7 @@ export class TerminalModuleContextProvider extends ModuleContextProvider<Termina
     }
 
     const terminalCtx = collectTerminalContext(
-      context.activeTabId,
+      context.activeSessionId,
       context.recentBlocks,
       8,
     );
