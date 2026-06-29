@@ -34,6 +34,7 @@ import {
   type AiDisplayMode,
   type DetailPanelMode,
 } from "../../stores/settingsStore";
+import { ProtocolLabSettingsSection } from "../../components/settings/ProtocolLabSettingsSection";
 import { KnowledgeEmbeddingModelSelect } from "../../components/knowledge/KnowledgeEmbeddingModelSelect";
 import {
   SHORTCUT_DEFS,
@@ -61,7 +62,7 @@ import type { FileIndexStorageInfo, UpdateInfo } from "../../ipc/bindings";
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import { formatFileSize } from "../files/utils";
 
-type Section = "general" | "system" | "appearance" | "keybindings" | "ai" | "agent" | "security" | "terminal" | "database" | "files" | "knowledge" | "data";
+type Section = "general" | "system" | "appearance" | "keybindings" | "ai" | "agent" | "security" | "terminal" | "database" | "files" | "protocol" | "knowledge" | "data";
 
 interface NavItem {
   id: Section;
@@ -169,6 +170,15 @@ const NAV_ITEMS: NavItem[] = [
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
         <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
         <path d="M14 2v6h6M16 13H8M16 17H8M10 9H8" />
+      </svg>
+    ),
+  },
+  {
+    id: "protocol",
+    label: "协议实验室",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path d="M4 12h2l2-7 4 14 2-7h8" />
       </svg>
     ),
   },
@@ -1779,13 +1789,24 @@ export function SettingsPanel() {
                   options={knowledgeTopNOptions}
                 />
               </div>
-              <div className="setting-row">
+              <div className="setting-row setting-row--knowledge-embedding">
                 <div className="setting-label">
                   <h4>{t("settings.knowledge.embeddingModel")}</h4>
                   <p>{t("settings.knowledge.embeddingModelDesc")}</p>
                 </div>
-                <KnowledgeEmbeddingModelSelect className="settings-knowledge-model-select" />
+                <KnowledgeEmbeddingModelSelect className="settings-knowledge-embedding" />
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Protocol Lab */}
+        {activeSection === "protocol" && (
+          <div className="settings-panel active">
+            <div className="settings-section">
+              <h2>{t("settings.protocolLab.label")}</h2>
+              <p className="section-desc">{t("settings.protocolLab.desc")}</p>
+              <ProtocolLabSettingsSection />
             </div>
           </div>
         )}

@@ -1,5 +1,11 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { DEFAULT_KNOWLEDGE_EMBEDDING_CUSTOM_MODEL } from "../lib/knowledgeEmbeddingModel";
+import {
+  DEFAULT_CONTROLLABLE_PROTOCOL_STATUS,
+  normalizeControllableProtocolStatus,
+  type ControllableProtocolTabKey,
+} from "../lib/protocolLabConfig";
 
 export type Locale = "zh-CN" | "en-US";
 export type UiDensity = "compact" | "standard" | "comfortable";
@@ -186,7 +192,9 @@ interface SettingsState {
   knowledgeChunkSize: number;
   knowledgeChunkOverlap: number;
   knowledgeTopN: number;
+  knowledgeEmbeddingModelMode: import("../lib/knowledgeEmbeddingModel").KnowledgeEmbeddingModelMode;
   knowledgeEmbeddingModelSelectionId: string | null;
+  knowledgeEmbeddingCustomModel: import("../lib/knowledgeEmbeddingModel").KnowledgeEmbeddingCustomModel;
   /** 表单填充场景默认模型（aiModelsStore selection id） */
   aiScenarioFormFillModelSelectionId: string | null;
   /** AI 助手场景默认模型（aiModelsStore selection id） */
@@ -202,6 +210,8 @@ interface SettingsState {
   filePreviewThresholdBytes: FilePreviewThresholdBytes;
   /** 文件索引存储目录，空字符串表示默认 ~/.omnipd/files/index */
   fileIndexStorageDir: string;
+  /** 协议实验室可配置 Tab 的开关状态 */
+  protocolLabTabs: Record<ControllableProtocolTabKey, "open" | "closed">;
   resolved: "light" | "dark";
   setLocale: (locale: Locale) => void;
   setUiDensity: (density: UiDensity) => void;
@@ -219,7 +229,8 @@ interface SettingsState {
     "terminalHistoryMaxBlocks"
   >>) => void;
   setKnowledgeSettings: (patch: Partial<Pick<SettingsState,
-    "knowledgeChunkSize" | "knowledgeChunkOverlap" | "knowledgeTopN" | "knowledgeEmbeddingModelSelectionId"
+    "knowledgeChunkSize" | "knowledgeChunkOverlap" | "knowledgeTopN" |
+    "knowledgeEmbeddingModelMode" | "knowledgeEmbeddingModelSelectionId" | "knowledgeEmbeddingCustomModel"
   >>) => void;
   setAiScenarioSettings: (patch: Partial<Pick<SettingsState,
     "aiScenarioFormFillModelSelectionId" | "aiScenarioAssistantModelSelectionId" | "aiScenarioTerminalModelSelectionId"
@@ -231,6 +242,9 @@ interface SettingsState {
     "databaseQueryPageSize" | "sqlEditorFontFamily" | "sqlEditorFontSize" | "sqlEditorLineHeight"
   >>) => void;
   setFileSettings: (patch: Partial<Pick<SettingsState, "filePreviewThresholdBytes" | "fileIndexStorageDir">>) => void;
+  setProtocolLabSettings: (
+    patch: Partial<Pick<SettingsState, "protocolLabTabs">>,
+  ) => void;
 }
 
 export function clampUiScale(percent: number): number {
@@ -303,7 +317,9 @@ export const useSettingsStore = create<SettingsState>()(
       knowledgeChunkSize: KNOWLEDGE_CHUNK_SIZE.default,
       knowledgeChunkOverlap: KNOWLEDGE_CHUNK_OVERLAP.default,
       knowledgeTopN: KNOWLEDGE_TOP_N.default,
+      knowledgeEmbeddingModelMode: "configured",
       knowledgeEmbeddingModelSelectionId: null,
+      knowledgeEmbeddingCustomModel: { ...DEFAULT_KNOWLEDGE_EMBEDDING_CUSTOM_MODEL },
       aiScenarioFormFillModelSelectionId: null,
       aiScenarioAssistantModelSelectionId: null,
       aiScenarioTerminalModelSelectionId: null,
@@ -314,6 +330,7 @@ export const useSettingsStore = create<SettingsState>()(
       sqlEditorLineHeight: DEFAULT_SQL_EDITOR_LINE_HEIGHT,
       filePreviewThresholdBytes: DEFAULT_FILE_PREVIEW_THRESHOLD_BYTES,
       fileIndexStorageDir: "",
+      protocolLabTabs: { ...DEFAULT_CONTROLLABLE_PROTOCOL_STATUS },
       resolved: resolveTheme("system"),
       setLocale: (locale) => {
         applyDocumentLocale(locale);
@@ -388,6 +405,15 @@ export const useSettingsStore = create<SettingsState>()(
               ? patch.fileIndexStorageDir.trim()
               : state.fileIndexStorageDir,
         })),
+      setProtocolLabSettings: (patch) =>
+        set((state) => ({
+          protocolLabTabs: patch.protocolLabTabs
+            ? normalizeControllableProtocolStatus({
+                ...state.protocolLabTabs,
+                ...patch.protocolLabTabs,
+              })
+            : state.protocolLabTabs,
+        })),
     }),
     {
       name: "omnipanel-settings",
@@ -415,7 +441,9 @@ export const useSettingsStore = create<SettingsState>()(
         knowledgeChunkSize: state.knowledgeChunkSize,
         knowledgeChunkOverlap: state.knowledgeChunkOverlap,
         knowledgeTopN: state.knowledgeTopN,
+        knowledgeEmbeddingModelMode: state.knowledgeEmbeddingModelMode,
         knowledgeEmbeddingModelSelectionId: state.knowledgeEmbeddingModelSelectionId,
+        knowledgeEmbeddingCustomModel: state.knowledgeEmbeddingCustomModel,
         aiScenarioFormFillModelSelectionId: state.aiScenarioFormFillModelSelectionId,
         aiScenarioAssistantModelSelectionId: state.aiScenarioAssistantModelSelectionId,
         aiScenarioTerminalModelSelectionId: state.aiScenarioTerminalModelSelectionId,
@@ -426,6 +454,7 @@ export const useSettingsStore = create<SettingsState>()(
         sqlEditorLineHeight: state.sqlEditorLineHeight,
         filePreviewThresholdBytes: state.filePreviewThresholdBytes,
         fileIndexStorageDir: state.fileIndexStorageDir,
+        protocolLabTabs: state.protocolLabTabs,
       }),
       onRehydrateStorage: () => (state) => {
         applyDocumentLocale(state?.locale ?? "zh-CN");
@@ -439,6 +468,7 @@ export const useSettingsStore = create<SettingsState>()(
           filePreviewThresholdBytes:
             state?.filePreviewThresholdBytes ?? DEFAULT_FILE_PREVIEW_THRESHOLD_BYTES,
           fileIndexStorageDir: state?.fileIndexStorageDir ?? "",
+          protocolLabTabs: normalizeControllableProtocolStatus(state?.protocolLabTabs),
         });
       },
     }

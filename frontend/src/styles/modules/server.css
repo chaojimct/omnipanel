@@ -32,6 +32,19 @@
 
     .ssh-host-sidebar .host-list-panel {
         background: transparent;
+        flex: 1;
+        min-height: 0;
+    }
+
+    .ssh-host-sidebar .host-list-panel .scoped-search-host {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .ssh-host-sidebar .vsplit-sidebar-section__toolbar.host-list-actions {
+        margin-left: 0;
     }
 
     .ssh-host-sidebar .vsplit-sidebar-section__body .host-list {

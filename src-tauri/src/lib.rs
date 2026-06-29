@@ -455,6 +455,12 @@ pub fn run() {
             commands::protocol::mqtt_unsubscribe,
             commands::protocol::mqtt_publish,
             commands::protocol::mqtt_disconnect,
+            // Protocol Lab — Redis Pub/Sub
+            commands::protocol::redis_pubsub_connect,
+            commands::protocol::redis_pubsub_subscribe,
+            commands::protocol::redis_pubsub_unsubscribe,
+            commands::protocol::redis_pubsub_publish,
+            commands::protocol::redis_pubsub_disconnect,
             // Protocol Lab — Sniffer
             commands::protocol::sniffer_list_interfaces,
             commands::protocol::sniffer_start_capture,

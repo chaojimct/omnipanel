@@ -1110,15 +1110,36 @@
         display: block;
     }
 
+    .knowledge-embedding-settings {
+        display: flex;
+        flex-direction: column;
+        gap: var(--sp-3);
+        min-width: 280px;
+        max-width: 360px;
+    }
+
+    .knowledge-embedding-mode-group {
+        flex-wrap: wrap;
+    }
+
+    .knowledge-embedding-custom-form {
+        display: flex;
+        flex-direction: column;
+        gap: var(--sp-2);
+    }
+
+    .knowledge-embedding-custom-form .form-field {
+        margin: 0;
+    }
+
     .knowledge-embedding-model-select {
-        min-width: 320px;
-        max-width: 480px;
+        width: 100%;
+        min-width: 0;
     }
 
     .knowledge-embedding-model-empty {
         font-size: 11px;
         color: var(--meta);
-        white-space: nowrap;
     }
 
     .knowledge-vector-status {
@@ -1149,6 +1170,18 @@
     .knowledge-vector-message--err {
         color: var(--danger);
         background: var(--danger-soft);
+    }
+
+    .settings-knowledge-embedding {
+        align-self: stretch;
+    }
+
+    .setting-row--knowledge-embedding {
+        align-items: flex-start;
+    }
+
+    .setting-row--knowledge-embedding .setting-label {
+        padding-top: var(--sp-1);
     }
 
     .settings-knowledge-model-select {

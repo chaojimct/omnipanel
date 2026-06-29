@@ -1,9 +1,5 @@
 import { commands } from "../../ipc/bindings";
-import {
-  parseModelSelectionId,
-  resolveModelSelection,
-  type AiModelProvider,
-} from "../../stores/aiModelsStore";
+import type { EmbeddingProviderConfig } from "../../ipc/bindings";
 import {
   clampKnowledgeChunkOverlap,
   clampKnowledgeChunkSize,
@@ -16,20 +12,17 @@ type KnowledgeVectorizeSettings = {
 
 export async function vectorizeKnowledgeEntry(
   entryId: string,
-  modelSelectionId: string,
-  providers: AiModelProvider[],
+  provider: EmbeddingProviderConfig,
   knowledgeSettings: KnowledgeVectorizeSettings,
 ): Promise<{ ok: true; chunkCount: number } | { ok: false; error: string }> {
-  const resolved = resolveModelSelection(providers, modelSelectionId);
-  if (!resolved) {
-    return { ok: false, error: "未找到可用的 embedding 模型，请先在设置中配置 AI 模型" };
-  }
-  const parsed = parseModelSelectionId(modelSelectionId);
-  if (!parsed) {
-    return { ok: false, error: "模型选择无效" };
-  }
-  if (resolved.apiStandard === "anthropic") {
+  if (provider.apiStandard.toLowerCase() === "anthropic") {
     return { ok: false, error: "Anthropic 模型暂不支持 embedding，请选用 OpenAI 兼容模型" };
+  }
+  if (!provider.modelName.trim()) {
+    return { ok: false, error: "未配置 Embedding 模型名称" };
+  }
+  if (!provider.baseUrl.trim()) {
+    return { ok: false, error: "未配置 Embedding API Base URL" };
   }
 
   const chunkSize = clampKnowledgeChunkSize(knowledgeSettings.knowledgeChunkSize);
@@ -41,11 +34,11 @@ export async function vectorizeKnowledgeEntry(
   const res = await commands.knowledgeVectorize({
     entryId,
     provider: {
-      providerId: parsed.providerId,
-      modelName: resolved.name,
-      baseUrl: resolved.baseUrl,
-      apiKey: resolved.apiKey,
-      apiStandard: resolved.apiStandard,
+      providerId: provider.providerId,
+      modelName: provider.modelName.trim(),
+      baseUrl: provider.baseUrl.trim(),
+      apiKey: provider.apiKey.trim(),
+      apiStandard: provider.apiStandard,
     },
     chunkSize,
     chunkOverlap,

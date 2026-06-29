@@ -126,7 +126,7 @@ export function buildDatabasePanelContentKeysByTab(params: {
   return keys;
 }
 
-/** ModuleSegmentDock 外层使用稳定 key，避免 query/transfer 切换时重挂载侧栏布局。 */
+/** ModuleSegmentDock 外层使用稳定 key，避免 query/dataSync/schemaSync 切换时重挂载侧栏布局。 */
 export function buildDatabaseModulePanelContentKey(): string {
   return "database-module";
 }

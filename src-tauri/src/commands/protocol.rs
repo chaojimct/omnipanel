@@ -6,6 +6,9 @@ use tauri::{Emitter, State};
 use crate::protocol::http::{self, HttpRequestConfig, HttpResponse};
 use crate::protocol::modbus::{self, ModbusConfig};
 use crate::protocol::mqtt::{self, MqttConfig, MqttMessage, MqttPublish, MqttSubscription};
+use crate::protocol::redis_pubsub::{
+    self, RedisPubSubConfig, RedisPubSubMessage, RedisPubSubPublish,
+};
 use crate::protocol::serial::{self, PortInfo, SerialConfig};
 use crate::protocol::sniffer::{self, CaptureStats, NetworkInterface, SnifferPacket};
 use crate::protocol::ws::{self, WsConfig, WsMessage};
@@ -15,6 +18,7 @@ use omnipanel_store::{HttpCollection, HttpHistoryEntry, SavedHttpRequest};
 static SERIAL_COUNTER: AtomicU64 = AtomicU64::new(1);
 static WS_COUNTER: AtomicU64 = AtomicU64::new(1);
 static MQTT_COUNTER: AtomicU64 = AtomicU64::new(1);
+static REDIS_PUBSUB_COUNTER: AtomicU64 = AtomicU64::new(1);
 
 // ──────────────────────────────────────────────
 // Serial Port Commands
@@ -310,6 +314,103 @@ pub async fn mqtt_disconnect(state: State<'_, AppState>, id: String) -> Result<(
         Ok(())
     } else {
         Err(format!("MQTT session {id} not found"))
+    }
+}
+
+// ──────────────────────────────────────────────
+// Redis Pub/Sub Commands
+// ──────────────────────────────────────────────
+
+#[tauri::command]
+pub async fn redis_pubsub_connect(
+    state: State<'_, AppState>,
+    config: RedisPubSubConfig,
+    on_message: Channel<RedisPubSubMessage>,
+) -> Result<String, String> {
+    let id = format!(
+        "redis-pubsub-{}",
+        REDIS_PUBSUB_COUNTER.fetch_add(1, Ordering::Relaxed)
+    );
+
+    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<RedisPubSubMessage>();
+    let session_id = id.clone();
+    let app_handle = state.app_handle.clone();
+
+    tokio::spawn(async move {
+        while let Some(msg) = rx.recv().await {
+            if on_message.send(msg).is_err() {
+                break;
+            }
+        }
+        let _ = app_handle.emit(
+            "redis-pubsub-event",
+            serde_json::json!({
+                "session_id": session_id,
+                "event": "disconnected"
+            }),
+        );
+    });
+
+    let session = redis_pubsub::RedisPubSubSession::connect(config, tx).await?;
+
+    state
+        .redis_pubsub_sessions
+        .lock()
+        .await
+        .insert(id.clone(), session);
+
+    tracing::info!("Redis Pub/Sub connected: {id}");
+    Ok(id)
+}
+
+#[tauri::command]
+pub async fn redis_pubsub_subscribe(
+    state: State<'_, AppState>,
+    id: String,
+    channel: String,
+) -> Result<(), String> {
+    let sessions = state.redis_pubsub_sessions.lock().await;
+    let session = sessions
+        .get(&id)
+        .ok_or_else(|| format!("Redis Pub/Sub session {id} not found"))?;
+    session.subscribe(&channel)
+}
+
+#[tauri::command]
+pub async fn redis_pubsub_unsubscribe(
+    state: State<'_, AppState>,
+    id: String,
+    channel: String,
+) -> Result<(), String> {
+    let sessions = state.redis_pubsub_sessions.lock().await;
+    let session = sessions
+        .get(&id)
+        .ok_or_else(|| format!("Redis Pub/Sub session {id} not found"))?;
+    session.unsubscribe(&channel)
+}
+
+#[tauri::command]
+pub async fn redis_pubsub_publish(
+    state: State<'_, AppState>,
+    id: String,
+    message: RedisPubSubPublish,
+) -> Result<u64, String> {
+    let sessions = state.redis_pubsub_sessions.lock().await;
+    let session = sessions
+        .get(&id)
+        .ok_or_else(|| format!("Redis Pub/Sub session {id} not found"))?;
+    session.publish(message).await
+}
+
+#[tauri::command]
+pub async fn redis_pubsub_disconnect(state: State<'_, AppState>, id: String) -> Result<(), String> {
+    let mut sessions = state.redis_pubsub_sessions.lock().await;
+    if let Some(session) = sessions.remove(&id) {
+        session.disconnect();
+        tracing::info!("Redis Pub/Sub disconnected: {id}");
+        Ok(())
+    } else {
+        Err(format!("Redis Pub/Sub session {id} not found"))
     }
 }
 
