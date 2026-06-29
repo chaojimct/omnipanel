@@ -379,6 +379,12 @@ impl SshPool {
             .collect()
     }
 
+    /// 对所有已加载主机重新进行端口探测并推送状态。
+    pub async fn probe_all(&self, app_handle: &tauri::AppHandle) {
+        self.probe_all_hosts(app_handle).await;
+        self.emit_all_status(app_handle).await;
+    }
+
     /// 返回当前已建立 SSH 会话的主机 ID 列表。
     pub async fn active_session_ids(&self) -> Vec<String> {
         let pool = self.pool_sessions.lock().await;

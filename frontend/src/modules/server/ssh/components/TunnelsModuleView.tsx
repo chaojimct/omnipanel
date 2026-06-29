@@ -5,6 +5,7 @@ import type { WorkspaceResource } from "../../../../lib/resourceRegistry";
 import { useI18n } from "../../../../i18n";
 import { Button } from "../../../../components/ui/Button";
 import { Select } from "../../../../components/ui/Select";
+import { TunnelFlowList } from "./TunnelFlowList";
 
 type Props = {
   sshResources: WorkspaceResource[];
@@ -199,49 +200,11 @@ export function TunnelsModuleView({ sshResources }: Props) {
               <div className="text-muted text-sm" style={{ padding: 12 }}>{t("ssh.tunnels.empty")}</div>
             )}
             {!loading && tunnels.length > 0 && (
-              <table>
-                <thead>
-                  <tr>
-                    <th>{t("ssh.tunnels.type")}</th>
-                    <th>{t("ssh.tunnels.localPort")}</th>
-                    <th>{t("ssh.tunnels.remoteHost")}</th>
-                    <th>{t("ssh.tunnels.remotePort")}</th>
-                    <th>{t("ssh.tunnels.host")}</th>
-                    <th>{t("ssh.tunnels.status")}</th>
-                    <th />
-                  </tr>
-                </thead>
-                <tbody>
-                  {tunnels.map((tunnel) => (
-                    <tr key={tunnel.id}>
-                      <td>{tunnel.tunnelType}</td>
-                      <td>{tunnel.localPort}</td>
-                      <td>{tunnel.remoteHost}</td>
-                      <td>{tunnel.remotePort}</td>
-                      <td>{hostNameById.get(tunnel.connectionId) ?? tunnel.connectionId}</td>
-                      <td>
-                        <span
-                          className={`badge ${
-                            tunnel.status === "active" ? "badge-success" : "badge-muted"
-                          }`}
-                        >
-                          {tunnel.status === "active"
-                            ? t("ssh.tunnels.active")
-                            : t("ssh.tunnels.closed")}
-                        </span>
-                      </td>
-                      <td>
-                        <button
-                          className="btn btn-ghost btn-sm text-danger"
-                          onClick={() => handleClose(tunnel.id)}
-                        >
-                          {t("ssh.tunnels.delete")}
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <TunnelFlowList
+                tunnels={tunnels}
+                hostNameById={hostNameById}
+                onClose={(id) => void handleClose(id)}
+              />
             )}
           </div>
         </div>

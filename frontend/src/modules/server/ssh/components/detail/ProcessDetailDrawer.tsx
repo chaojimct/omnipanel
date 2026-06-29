@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/Button";
 import { DetailPanelModeToggle, DetailPanelShell } from "@/components/ui/DetailPanelShell";
 import { useI18n } from "@/i18n";
@@ -9,18 +10,14 @@ import {
   type SshProcessPort,
 } from "@/ipc/bindings";
 import { formatBytes } from "@/stores/sshStatsStore";
-import {
-  navigateToSftpPath,
-  navigateToTerminalPath,
-} from "@/stores/sshDetailNavigationStore";
+import { useSshDetailNavigationStore } from "@/stores/sshDetailNavigationStore";
+import { useTerminalStore } from "@/stores/terminalStore";
 import { isLocalTerminalResource } from "@/modules/terminal/paneResource";
-import type { DetailTab } from "@/modules/server/ssh/types";
 import { buildProcessDirectoryList } from "@/modules/server/ssh/utils/parseCommandPaths";
 
 type Props = {
   resourceId: string | null;
   process: SshProcessInfo | null;
-  setDetailTab: (tab: DetailTab) => void;
   onClose: () => void;
   onKilled: () => void;
   onPortClick?: (port: SshProcessPort) => void;
@@ -29,12 +26,14 @@ type Props = {
 export function ProcessDetailDrawer({
   resourceId,
   process,
-  setDetailTab,
   onClose,
   onKilled,
   onPortClick,
 }: Props) {
   const { t } = useI18n();
+  const navigate = useNavigate();
+  const addSshTerminalTab = useTerminalStore((s) => s.addSshTerminalTab);
+  const setActiveTab = useTerminalStore((s) => s.setActiveTab);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmKill, setConfirmKill] = useState(false);
@@ -121,13 +120,19 @@ export function ProcessDetailDrawer({
 
   function handleOpenSftp(path: string) {
     if (!resourceId) return;
-    navigateToSftpPath(resourceId, path, setDetailTab);
+    useSshDetailNavigationStore.getState().requestSftp(resourceId, path);
+    navigate("/module/files", {
+      state: { openSftpForSshId: resourceId },
+    });
     onClose();
   }
 
   function handleOpenTerminal(path: string) {
     if (!resourceId) return;
-    navigateToTerminalPath(resourceId, path, setDetailTab);
+    useSshDetailNavigationStore.getState().requestTerminal(resourceId, path);
+    const tabId = addSshTerminalTab(resourceId, resourceId);
+    setActiveTab(tabId);
+    navigate("/module/terminal");
     onClose();
   }
 

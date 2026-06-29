@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { ModuleSegmentDock } from "../../components/dock";
 import { ModuleWorkspaceLayout } from "../../components/workspace";
@@ -8,11 +8,14 @@ import { useI18n } from "../../i18n";
 import { KeysModuleView } from "./ssh/components/KeysModuleView";
 import { TunnelsModuleView } from "./ssh/components/TunnelsModuleView";
 import { HostDetailPanel } from "./ssh/components/HostDetailPanel";
+import { FleetSummaryBar } from "./ssh/components/FleetSummaryBar";
+import { BatchCommandPanel } from "./ssh/components/BatchCommandPanel";
 import { useSshHostWorkspace } from "./ssh/hooks/useSshHostWorkspace";
 import { SshHostSidebar } from "./ssh/SshHostSidebar";
 import { SshSidebarLinkageProvider } from "./ssh/SshSidebarLinkageContext";
 import { useSshManager } from "./ssh/hooks/useSshManager";
 import { useSshHostResources } from "../../stores/connectionStore";
+import { useSshSelectionStore } from "./ssh/stores/sshSelectionStore";
 
 type SshWorkspaceTab = "hosts" | "tunnels" | "keys";
 const SSH_WORKSPACE_TABS: SshWorkspaceTab[] = ["hosts", "tunnels", "keys"];
@@ -26,6 +29,9 @@ export function SshPanel() {
   const ctx = useSshManager();
   const isHostsTab = workspaceTab === "hosts";
   const { activeHostId, handleSelectHost } = useSshHostWorkspace(sshResources);
+  const selectionMode = useSshSelectionStore((s) => s.selectionMode);
+  const selectedIds = useSshSelectionStore((s) => s.selectedIds);
+  const [batchOpen, setBatchOpen] = useState(false);
 
   const segmentTabs = useMemo(
     () => [
@@ -43,6 +49,13 @@ export function SshPanel() {
     [activeHostId, isHostsTab],
   );
 
+  const panelContentKeysByTab = useMemo(
+    () => ({
+      hosts: activeHostId ?? "none",
+    }),
+    [activeHostId],
+  );
+
   return (
     <SshSidebarLinkageProvider value={sidebarLinkageValue}>
       <ModuleWorkspaceLayout
@@ -52,7 +65,12 @@ export function SshPanel() {
         leftPreset="host"
         leftSidebar={
           isHostsTab ? (
-            <SshHostSidebar resources={sshResources} onSelectHost={handleSelectHost} />
+            <SshHostSidebar
+              resources={sshResources}
+              onSelectHost={handleSelectHost}
+              selectionMode={selectionMode}
+              selectedIds={selectedIds}
+            />
           ) : undefined
         }
       >
@@ -63,6 +81,7 @@ export function SshPanel() {
           activeTabId={workspaceTab}
           onActiveTabChange={(id) => setWorkspaceTab(id as SshWorkspaceTab)}
           enabled={isActiveRoute}
+          panelContentKeysByTab={panelContentKeysByTab}
           renderPanel={(tabId) => {
             if (tabId === "tunnels") {
               return <TunnelsModuleView sshResources={ctx.sshResources} />;
@@ -70,13 +89,27 @@ export function SshPanel() {
             if (tabId === "keys") {
               return <KeysModuleView />;
             }
-            return activeHostId ? (
-              <HostDetailPanel hostId={activeHostId} />
-            ) : (
-              <WorkspaceEmptyPage
-                title={t("routes.ssh")}
-                prompt={t("ssh.empty.selectHost")}
-              />
+            const showBatch = batchOpen && selectedIds.length > 0;
+            return (
+              <div className="ssh-hosts-workspace">
+                <FleetSummaryBar
+                  resources={sshResources}
+                  onOpenBatch={() => setBatchOpen(true)}
+                />
+                {showBatch ? (
+                  <BatchCommandPanel
+                    resources={sshResources}
+                    onClose={() => setBatchOpen(false)}
+                  />
+                ) : activeHostId ? (
+                  <HostDetailPanel hostId={activeHostId} />
+                ) : (
+                  <WorkspaceEmptyPage
+                    title={t("routes.ssh")}
+                    prompt={t("ssh.empty.selectHost")}
+                  />
+                )}
+              </div>
             );
           }}
         />

@@ -155,6 +155,7 @@ export function ServerPanel() {
             activeTabId={tab}
             onActiveTabChange={(id) => setTab(id as ServerWorkspaceTab)}
             enabled={isActiveRoute}
+            panelContentKey={resolvedServerId ?? "none"}
             renderPanel={(segmentTabId) =>
               resolvedServerId ? (
                 renderServerSegmentContent(segmentTabId as ServerWorkspaceTab, resolvedServerId, true)

@@ -1,7 +1,5 @@
 export type DetailTab =
   | "overview"
-  | "terminal"
-  | "sftp"
   | "tunnels"
   | "monitoring";
 
