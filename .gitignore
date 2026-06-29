@@ -9,6 +9,9 @@ dist/
 # Tauri
 src-tauri/target/
 
+# Generated IPC bindings
+frontend/src/ipc/bindings.ts
+
 # IDE
 .idea/
 .vscode/
