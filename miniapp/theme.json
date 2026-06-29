@@ -1,0 +1,42 @@
+{
+  "light": {
+    "navigationBarTextStyle": "black",
+    "navigationBarBackgroundColor": "#f5f5f7",
+    "backgroundColorContent": "#f5f5f7",
+    "tabBarPagebackgroundColorContent": "#f5f5f7",
+    "backgroundColor": "#f5f5f7",
+    "backgroundTextStyle": "dark",
+
+    "tabBarColor": "#86868b",
+    "tabBarSelectedColor": "#007aff",
+    "tabBarBorderStyle": "black",
+    "tabBarBackgroundColor": "#ffffff",
+
+    "tabBarDashboardIconPath": "static/dashboard.png",
+    "tabBarDashboardSelectedIconPath": "static/dashboardHL.png",
+    "tabBarAIIconPath": "static/ai.png",
+    "tabBarAISelectedIconPath": "static/aiHL.png",
+    "tabBarProfileIconPath": "static/profile.png",
+    "tabBarProfileSelectedIconPath": "static/profileHL.png"
+  },
+  "dark": {
+    "navigationBarTextStyle": "white",
+    "navigationBarBackgroundColor": "#201d1d",
+    "backgroundColor": "#201d1d",
+    "backgroundColorContent": "#201d1d",
+    "tabBarPagebackgroundColorContent": "#201d1d",
+    "backgroundTextStyle": "light",
+
+    "tabBarColor": "#9a9898",
+    "tabBarSelectedColor": "#007aff",
+    "tabBarBorderStyle": "white",
+    "tabBarBackgroundColor": "#302c2c",
+
+    "tabBarDashboardIconPath": "static/dashboard.png",
+    "tabBarDashboardSelectedIconPath": "static/dashboardHL.png",
+    "tabBarAIIconPath": "static/ai.png",
+    "tabBarAISelectedIconPath": "static/aiHL.png",
+    "tabBarProfileIconPath": "static/profile.png",
+    "tabBarProfileSelectedIconPath": "static/profileHL.png"
+  }
+}

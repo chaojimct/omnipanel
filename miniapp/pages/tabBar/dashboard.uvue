@@ -1,0 +1,129 @@
+<template>
+  <view class="uni-container" :class="isDarkMode ? 'theme-dark' : 'theme-light'">
+    <scroll-view style="flex:1;" :bounces="false">
+      <view class="page-pad">
+        <text class="page-title">{{ t('dashboard.title') }}</text>
+        <text class="page-sub">{{ t('dashboard.subtitle') }}</text>
+
+        <view class="stat-grid">
+          <view class="stat-card" v-for="stat in stats" :key="stat.id">
+            <text class="stat-value">{{ stat.value }}</text>
+            <text class="stat-label">{{ stat.label }}</text>
+          </view>
+        </view>
+
+        <view class="section">
+          <text class="section-title">{{ t('dashboard.recentActivity') }}</text>
+          <view class="list-card" v-for="(item, index) in activities" :key="index">
+            <text class="list-title">{{ item.title }}</text>
+            <text class="list-time">{{ item.time }}</text>
+          </view>
+        </view>
+      </view>
+    </scroll-view>
+  </view>
+</template>
+
+<script setup lang="uts">
+  defineOptions({
+    styleIsolation: 'app'
+  })
+  import { state } from '@/store/index.uts'
+  import { t } from '@/locale/index.uts'
+
+  const isDarkMode = computed((): boolean => {
+    return state.isDarkMode
+  })
+
+  type Stat = {
+    id : string,
+    value : string,
+    label : string
+  }
+  type Activity = {
+    title : string,
+    time : string
+  }
+
+  const stats = computed<Stat[]>(() => {
+    return [
+      { id: '1', value: '128', label: t('dashboard.statSessions') } as Stat,
+      { id: '2', value: '24', label: t('dashboard.statToday') } as Stat,
+      { id: '3', value: '96%', label: t('dashboard.statSatisfaction') } as Stat,
+      { id: '4', value: '1.2k', label: t('dashboard.statMessages') } as Stat
+    ] as Stat[]
+  })
+
+  const activities = computed<Activity[]>(() => {
+    return [
+      { title: t('dashboard.actAiChat'), time: t('dashboard.timeJustNow') } as Activity,
+      { title: t('dashboard.actProfile'), time: t('dashboard.timeMinAgo') } as Activity,
+      { title: t('dashboard.actLogin'), time: t('dashboard.timeHourAgo') } as Activity
+    ] as Activity[]
+  })
+</script>
+
+<style>
+  .uni-container {
+    flex: 1;
+    background-color: var(--bg);
+  }
+  .page-pad {
+    padding: var(--sp-6) var(--sp-4);
+  }
+  .page-title {
+    font-size: 24px;
+    font-weight: bold;
+    color: var(--fg);
+  }
+  .page-sub {
+    font-size: 13px;
+    color: var(--muted);
+    margin-top: var(--sp-1);
+  }
+  .stat-grid {
+    flex-direction: row;
+    flex-wrap: wrap;
+    margin-top: var(--sp-5);
+  }
+  .stat-card {
+    width: 50%;
+    box-sizing: border-box;
+    padding: var(--sp-2) var(--sp-2) var(--sp-4) 0;
+  }
+  .stat-card .stat-value {
+    font-size: 28px;
+    font-weight: bold;
+    color: var(--accent);
+  }
+  .stat-card .stat-label {
+    font-size: 13px;
+    color: var(--muted);
+    margin-top: var(--sp-1);
+  }
+  .section {
+    margin-top: var(--sp-6);
+  }
+  .section-title {
+    font-size: 16px;
+    font-weight: bold;
+    color: var(--fg);
+    margin-bottom: var(--sp-3);
+  }
+  .list-card {
+    padding: var(--sp-4);
+    background-color: var(--surface);
+    border-radius: var(--r-lg);
+    margin-bottom: var(--sp-3);
+    border: 1px solid var(--border-soft);
+  }
+  .list-title {
+    font-size: 15px;
+    color: var(--fg);
+  }
+  .list-time {
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: var(--sp-1);
+  }
+</style>

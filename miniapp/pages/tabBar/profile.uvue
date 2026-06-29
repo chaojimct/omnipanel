@@ -1,0 +1,250 @@
+<template>
+  <view class="uni-container" :class="isDarkMode ? 'theme-dark' : 'theme-light'">
+    <scroll-view style="flex:1;" :bounces="false">
+      <view class="page-pad">
+        <view class="profile-header">
+          <image class="avatar" src="/static/test-image/logo.png" mode="aspectFill"></image>
+          <text class="nickname">{{ t('profile.guestName') }}</text>
+          <text class="username">{{ t('profile.guestHint') }}</text>
+        </view>
+
+        <view class="section">
+          <text class="section-title">{{ t('profile.sectionAccount') }}</text>
+          <view class="menu-card" v-for="(item, index) in accountMenus" :key="index" @click="onMenuTap(item)">
+            <text class="menu-label">{{ item.label }}</text>
+            <text class="menu-arrow">></text>
+          </view>
+        </view>
+
+        <view class="section">
+          <text class="section-title">{{ t('profile.sectionAppearance') }}</text>
+          <view class="theme-switcher">
+            <view
+              v-for="mode in themeModes"
+              :key="mode.id"
+              class="theme-option"
+              :class="currentThemeMode === mode.id ? 'theme-option-active' : ''"
+              @click="onThemeModeChange(mode.id)"
+            >
+              <text class="theme-option-text">{{ mode.label }}</text>
+            </view>
+          </view>
+        </view>
+
+        <view class="section">
+          <text class="section-title">{{ t('profile.sectionLanguage') }}</text>
+          <view class="lang-switcher">
+            <view
+              v-for="lang in languages"
+              :key="lang.id"
+              class="lang-option"
+              :class="currentLang === lang.id ? 'lang-option-active' : ''"
+              @click="onLanguageChange(lang.id)"
+            >
+              <text class="lang-option-text">{{ lang.label }}</text>
+            </view>
+          </view>
+        </view>
+
+        <view class="section">
+          <text class="section-title">{{ t('profile.sectionOther') }}</text>
+          <view class="menu-card" v-for="(item, index) in otherMenus" :key="index" @click="onMenuTap(item)">
+            <text class="menu-label">{{ item.label }}</text>
+            <text class="menu-arrow">></text>
+          </view>
+        </view>
+      </view>
+    </scroll-view>
+  </view>
+</template>
+
+<script setup lang="uts">
+  defineOptions({
+    styleIsolation: 'app'
+  })
+  import { state, setThemeMode } from '@/store/index.uts'
+  import { t, getLocale, setLocale } from '@/locale/index.uts'
+  import type { ThemeMode } from '@/store/index.uts'
+
+  const isDarkMode = computed((): boolean => {
+    return state.isDarkMode
+  })
+
+  const currentThemeMode = computed<string>(() => {
+    return state.themeMode
+  })
+
+  const currentLang = ref<string>(getLocale())
+
+  type MenuItem = {
+    label : string
+  }
+  type ThemeOption = {
+    id : string,
+    label : string
+  }
+  type LangOption = {
+    id : string,
+    label : string
+  }
+
+  const accountMenus = computed<MenuItem[]>(() => {
+    return [
+      { label: t('profile.menuProfile') } as MenuItem,
+      { label: t('profile.menuSecurity') } as MenuItem,
+      { label: t('profile.menuNotifications') } as MenuItem
+    ] as MenuItem[]
+  })
+
+  const otherMenus = computed<MenuItem[]>(() => {
+    return [
+      { label: t('profile.menuHelp') } as MenuItem,
+      { label: t('profile.menuAbout') } as MenuItem
+    ] as MenuItem[]
+  })
+
+  const themeModes = computed<ThemeOption[]>(() => {
+    return [
+      { id: 'system', label: t('profile.themeSystem') } as ThemeOption,
+      { id: 'light', label: t('profile.themeLight') } as ThemeOption,
+      { id: 'dark', label: t('profile.themeDark') } as ThemeOption
+    ] as ThemeOption[]
+  })
+
+  const languages = ref<LangOption[]>([
+    { id: 'zh-CN', label: t('profile.langZh') } as LangOption,
+    { id: 'en-US', label: t('profile.langEn') } as LangOption
+  ] as LangOption[])
+
+  const onMenuTap = (item : MenuItem) => {
+    uni.showToast({ title: item.label, icon: 'none' })
+  }
+
+  const onThemeModeChange = (mode : string) => {
+    setThemeMode(mode as ThemeMode)
+    uni.showToast({ title: t('profile.themeMode') + ': ' + mode, icon: 'none' })
+  }
+
+  const onLanguageChange = (lang : string) => {
+    setLocale(lang)
+    currentLang.value = lang
+    languages.value = [
+      { id: 'zh-CN', label: t('profile.langZh') } as LangOption,
+      { id: 'en-US', label: t('profile.langEn') } as LangOption
+    ] as LangOption[]
+    uni.showToast({ title: lang, icon: 'none' })
+  }
+</script>
+
+<style>
+  .uni-container {
+    flex: 1;
+    background-color: var(--bg);
+  }
+  .page-pad {
+    padding: var(--sp-6) var(--sp-4);
+  }
+  .profile-header {
+    align-items: center;
+    padding: var(--sp-5) 0;
+  }
+  .avatar {
+    width: 72px;
+    height: 72px;
+    border-radius: 36px;
+    background-color: var(--surface);
+  }
+  .nickname {
+    font-size: 18px;
+    font-weight: bold;
+    color: var(--fg);
+    margin-top: var(--sp-3);
+  }
+  .username {
+    font-size: 13px;
+    color: var(--muted);
+    margin-top: var(--sp-1);
+  }
+  .section {
+    margin-top: var(--sp-6);
+  }
+  .section-title {
+    font-size: 14px;
+    color: var(--muted);
+    margin-bottom: var(--sp-3);
+  }
+  .menu-card {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--sp-4);
+    background-color: var(--surface);
+    border-radius: var(--r-lg);
+    margin-bottom: var(--sp-2);
+    border: 1px solid var(--border-soft);
+  }
+  .menu-label {
+    font-size: 15px;
+    color: var(--fg);
+  }
+  .menu-arrow {
+    font-size: 15px;
+    color: var(--meta);
+  }
+
+  /* Theme switcher */
+  .theme-switcher {
+    flex-direction: row;
+    background-color: var(--bg-deeper);
+    border-radius: var(--r-lg);
+    padding: var(--sp-1);
+    border: 1px solid var(--border-soft);
+  }
+  .theme-option {
+    flex: 1;
+    padding: var(--sp-2) 0;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--r-md);
+  }
+  .theme-option-active {
+    background-color: var(--surface);
+    border: 1px solid var(--accent);
+  }
+  .theme-option-text {
+    font-size: 13px;
+    color: var(--fg-2);
+  }
+  .theme-option-active .theme-option-text {
+    color: var(--accent);
+    font-weight: bold;
+  }
+
+  /* Language switcher */
+  .lang-switcher {
+    flex-direction: row;
+    background-color: var(--bg-deeper);
+    border-radius: var(--r-lg);
+    padding: var(--sp-1);
+    border: 1px solid var(--border-soft);
+  }
+  .lang-option {
+    flex: 1;
+    padding: var(--sp-2) 0;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--r-md);
+  }
+  .lang-option-active {
+    background-color: var(--surface);
+    border: 1px solid var(--accent);
+  }
+  .lang-option-text {
+    font-size: 13px;
+    color: var(--fg-2);
+  }
+  .lang-option-active .lang-option-text {
+    color: var(--accent);
+    font-weight: bold;
+  }
+</style>

@@ -1,0 +1,104 @@
+<template>
+  <view class="top-window-header" :class="isDarkMode ? 'theme-dark' : 'theme-light'">
+    <view class="left-header">
+      <navigator class="left-header" open-type="reLaunch" url="/pages/tabBar/dashboard">
+        <image src="/static/test-image/logo.png" class="logo" mode="heightFix"></image>
+        <text class="app-name">{{ t('app.name') }}</text>
+      </navigator>
+    </view>
+    <custom-tab-bar class="tab-bar-flex" direction="horizontal" :show-icon="false" :selected="current"
+      @onTabItemTap="toSecondMenu" />
+  </view>
+</template>
+
+<script lang="uts">
+  import { state } from '@/store/index.uts'
+  import { t } from '@/locale/index.uts'
+  export default {
+    data() {
+      return {
+        selected: {
+          dashboard: 0,
+          'ai-assistant': 1,
+          profile: 2
+        },
+        current: 0
+      }
+    },
+    computed: {
+      isDarkMode() : boolean {
+        return state.isDarkMode
+      }
+    },
+    watch: {
+      $route: {
+        handler(newRoute) {
+          const width = uni.getSystemInfoSync().windowWidth
+          if (width <= 768) {
+            return
+          }
+          let path = newRoute.path
+          let category
+          if (path === '/') {
+            category = 'dashboard'
+            uni.redirectTo({
+              url: '/pages/tabBar/dashboard'
+            })
+            return
+          } else if (path.indexOf('/pages/tabBar') === 0) {
+            category = path.split('/')[3]
+          } else {
+            category = path.split('/')[2]
+          }
+          if (this.selected.hasOwnProperty(category)) {
+            this.current = this.selected[category]
+          }
+        }
+      }
+    },
+    methods: {
+      toSecondMenu(e : OnTabItemTapOption) {
+        const activeTabBar = '/' + e.pagePath
+        uni.redirectTo({
+          url: activeTabBar
+        })
+      }
+    }
+  }
+</script>
+
+<style>
+  .top-window-header {
+    height: 60px;
+    padding: 0 var(--sp-4);
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    box-sizing: border-box;
+    border-bottom: 1px solid var(--border);
+    color: var(--fg);
+    background-color: var(--surface);
+  }
+
+  .left-header {
+    flex-direction: row;
+    align-items: center;
+    flex: 1;
+  }
+
+  .app-name {
+    font-size: 15px;
+    font-weight: bold;
+    color: var(--fg);
+  }
+
+  .logo {
+    height: 30px;
+    width: 30px;
+    margin-right: var(--sp-2);
+  }
+
+  .tab-bar-flex {
+    width: 360px;
+  }
+</style>

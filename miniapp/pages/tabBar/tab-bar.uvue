@@ -1,0 +1,78 @@
+<template>
+	<uni-tab-bar style="flex: 1;height: 100%;" :active-index="activeIndex" @change="handleChange">
+		<!-- 内容区域 -->
+		<view style="width: 100%;height: 100%;position: absolute;" :style="{visibility:(activeIndex==0?'visible':'hidden'),height: (tabContentHeight + 'px')}"
+		 > <dashboardtab /> </view>
+		<view style="width: 100%;height: 100%;position: absolute;" :style="{visibility:(activeIndex==1?'visible':'hidden'),height: (tabContentHeight + 'px')}"
+		v-if="isTabInitArray[1]" > <aitab /> </view>
+		<view style="width: 100%;height: 100%;position: absolute;" :style="{visibility:(activeIndex==2?'visible':'hidden'),height: (tabContentHeight + 'px')}"
+		v-if="isTabInitArray[2]" > <profiletab /> </view>
+
+		<!-- 底部选项卡 -->
+		<tab-list @click="clickItem" :style="{height:(50+windowInfo.safeAreaInsets.bottom)+'px', paddingTop:(windowInfo.safeAreaInsets.bottom>0?5:0)+'px'}">
+			<tab-list-item>
+				<image :src="activeIndex == 0 ? '/static/dashboardHL.png' : '/static/dashboard.png'" class="tab-icon-image" flatten></image>
+				<text class="tab-label" :class="activeIndex == 0 ? 'tab-label-active' : ''" flatten>{{ t('tab.dashboard') }}</text>
+			</tab-list-item>
+			<tab-list-item>
+				<image :src="activeIndex == 1 ? '/static/aiHL.png' : '/static/ai.png'" class="tab-icon-image" flatten></image>
+				<text class="tab-label" :class="activeIndex == 1 ? 'tab-label-active' : ''" flatten>{{ t('tab.ai') }}</text>
+			</tab-list-item>
+			<tab-list-item>
+				<image :src="activeIndex == 2 ? '/static/profileHL.png' : '/static/profile.png'" class="tab-icon-image" flatten></image>
+				<text class="tab-label" :class="activeIndex == 2 ? 'tab-label-active' : ''" flatten>{{ t('tab.profile') }}</text>
+			</tab-list-item>
+		</tab-list>
+	</uni-tab-bar>
+</template>
+
+<script setup lang="uts">
+	import tabList from '@/uni_modules/uni-tab-bar/components/uni-tab-bar/tab-list.uvue'
+	import tabListItem from '@/uni_modules/uni-tab-bar/components/uni-tab-bar/tab-list-item.uvue'
+	import dashboardtab from './dashboard.uvue'
+	import aitab from './ai-assistant.uvue'
+	import profiletab from './profile.uvue'
+	import { t } from '@/locale/index.uts'
+
+	const windowInfo = uni.getWindowInfo()
+	const windowWidth = windowInfo.windowWidth
+	const tabContentHeight = ref<number>(windowInfo.windowHeight - 50 - (windowInfo.safeAreaInsets.bottom))
+	const activeIndex = ref<number>(0)
+	let isTabInitArray = ref<boolean[]>([true, false, false])
+
+	function clickItem(e:UniPointerEvent) : void {
+		const index = Math.floor(e.clientX / windowWidth * 3)
+		activeIndex.value = index
+		switch (index) {
+			case 0:
+				uni.setNavigationBarTitle({ title: t('tab.dashboard') })
+				break
+			case 1:
+				uni.setNavigationBarTitle({ title: t('tab.ai') })
+				isTabInitArray.value[1] = true
+				break
+			case 2:
+				uni.setNavigationBarTitle({ title: t('tab.profile') })
+				isTabInitArray.value[2] = true
+		}
+	}
+
+	function handleChange(index : number) : void {
+	}
+</script>
+
+<style>
+	.tab-icon-image {
+		height: 24px;
+		width: 24px;
+	}
+
+	.tab-label {
+		font-size: 10px;
+		color: rgb(122, 126, 131);
+	}
+
+	.tab-label-active {
+		color: #007aff;
+	}
+</style>

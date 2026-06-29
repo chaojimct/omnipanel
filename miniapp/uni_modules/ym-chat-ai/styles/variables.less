@@ -1,0 +1,197 @@
+// YM组件统一CSS变量
+page {
+  // ===== 基础主题色彩 =====
+  --ym-primary-color: #007bff;
+  --ym-primary-light: #66b3ff;
+  --ym-primary-dark: #0056b3;
+  --ym-secondary-color: #6c757d;
+  --ym-success-color: #28a745;
+  --ym-warning-color: #ffc107;
+  --ym-error-color: #dc3545;
+  --ym-info-color: #17a2b8;
+  
+  // ===== 背景色系 =====
+  --ym-bg-primary: #ffffff;
+  --ym-bg-secondary: #f8f9fa;
+  --ym-bg-tertiary: #f5f5f5;
+  --ym-bg-quaternary: #f7f7f7;
+  --ym-bg-overlay: rgba(0, 0, 0, 0.5);
+  --ym-bg-selected: #e3f2fd;
+  --ym-bg-hover: #f0f0f0;
+  
+  // ===== 文字颜色 =====
+  --ym-text-primary: #212529;
+  --ym-text-secondary: #6c757d;
+  --ym-text-tertiary: #999999;
+  --ym-text-light: #ffffff;
+  --ym-text-muted: #adb5bd;
+  --ym-text-dark: #333333;
+  --ym-text-placeholder: #a0aec0;
+  --ym-text-disabled: #c7c5c5;
+  
+  // ===== 边框和圆角 =====
+  --ym-border-color: #dee2e6;
+  --ym-border-light: #eee;
+  --ym-border-medium: #ddd;
+  --ym-border-dashed: #dee2e6;
+  --ym-radius-small: 4rpx;
+  --ym-radius-medium: 8rpx;
+  --ym-radius-large: 10rpx;
+  --ym-radius-xl: 12rpx;
+  --ym-radius-2xl: 16rpx;
+  --ym-radius-3xl: 20rpx;
+  --ym-radius-4xl: 25rpx;
+  --ym-radius-circle: 50%;
+  
+  // ===== 字体大小 =====
+  --ym-font-xs: 20rpx;
+  --ym-font-sm: 24rpx;
+  --ym-font-base: 28rpx;
+  --ym-font-lg: 30rpx;
+  --ym-font-xl: 32rpx;
+  --ym-font-2xl: 36rpx;
+  --ym-font-3xl: 40rpx;
+  --ym-font-4xl: 50rpx;
+  
+  // ===== 间距系统 =====
+  --ym-space-xs: 4rpx;
+  --ym-space-sm: 8rpx;
+  --ym-space-md: 10rpx;
+  --ym-space-lg: 15rpx;
+  --ym-space-xl: 20rpx;
+  --ym-space-2xl: 24rpx;
+  --ym-space-3xl: 30rpx;
+  --ym-space-4xl: 40rpx;
+  --ym-space-5xl: 48rpx;
+  --ym-space-6xl: 60rpx;
+  --ym-space-7xl: 80rpx;
+  --ym-space-8xl: 88rpx;
+  
+  // ===== 阴影系统 =====
+  --ym-shadow-sm: 0 2rpx 4rpx rgba(0, 0, 0, 0.1);
+  --ym-shadow-md: 0 4rpx 8rpx rgba(0, 0, 0, 0.12);
+  --ym-shadow-lg: 0 8rpx 16rpx rgba(0, 0, 0, 0.15);
+  --ym-shadow-xl: 0 16rpx 32rpx rgba(0, 0, 0, 0.2);
+  --ym-shadow-focus: 0 6px 16px 0 rgba(0, 0, 0, 0.08), 0 3px 6px -4px rgba(0, 0, 0, 0.12), 0 9px 28px 8px rgba(0, 0, 0, 0.05);
+  --ym-shadow-hover: 0 4rpx 12rpx rgba(0, 0, 0, 0.1);
+  --ym-shadow-selected: 0 4rpx 12rpx rgba(25, 118, 210, 0.2);
+  
+  // ===== 过渡动画 =====
+  --ym-transition-fast: 0.15s ease;
+  --ym-transition-base: 0.3s ease;
+  --ym-transition-slow: 0.5s ease;
+  --ym-transition-cubic: all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  --ym-transition-bounce: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  
+  // ===== YmBubble 组件变量 =====
+  --ym-bubble-padding: 20rpx 30rpx;
+  --ym-bubble-margin: var(--ym-space-xl) 0;
+  --ym-bubble-margin-bottom: 20rpx;
+  --ym-bubble-radius: 50rpx;
+  --ym-bubble-font-size: 30rpx;
+  --ym-bubble-line-height: 1.6;
+  --ym-bubble-user-color: #4999FF;
+  --ym-bubble-bot-color: #ffffff;
+  --ym-bubble-text-color: #333;
+  --ym-bubble-loading-bg: #f0f0f0;
+  --ym-bubble-loading-border: #e0e0e0;
+  --ym-bubble-animation-duration: 0.3s;
+  --ym-bubble-loading-duration: 1.4s;
+  --ym-bubble-loading-gap: 8rpx;
+  --ym-bubble-dot-size: 12rpx;
+  --ym-bubble-error-color: #ff4757;
+  
+  // ===== YmSender 组件变量 =====
+  --ym-sender-border-radius: 20rpx;
+  --ym-sender-border-width: 4rpx;
+  --ym-sender-border-color: #ffffff;
+  --ym-sender-border-color-focus: #165bbe;
+  --ym-sender-background: #fff;
+  --ym-sender-transition: all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  --ym-sender-shadow-focus: 0 6px 16px 0 rgba(0, 0, 0, 0.08), 0 3px 6px -4px rgba(0, 0, 0, 0.12), 0 9px 28px 8px rgba(0, 0, 0, 0.05);
+  --ym-sender-primary-color: #2476E3;
+  --ym-sender-text-color: #2d3748;
+  --ym-sender-placeholder-color: #a0aec0;
+  --ym-sender-disabled-color: #c7c5c5;
+  --ym-sender-input-container-padding: 24rpx 24rpx 0;
+  --ym-sender-input-height: 50rpx;
+  --ym-sender-input-font-size: 32rpx;
+  --ym-sender-input-max-height: 200rpx;
+  --ym-sender-controls-padding: 20rpx;
+  --ym-sender-controls-gap: 24rpx;
+  --ym-sender-control-btn-size: 70rpx;
+  --ym-sender-control-btn-radius: 20rpx;
+  --ym-sender-send-btn-size: 80rpx;
+  --ym-sender-attachments-max-height: 500rpx;
+  --ym-sender-attachments-transition: max-height 0.3s ease-out, opacity 0.3s ease-out;
+  
+  // ===== YmAttachments 组件变量 =====
+  --ym-attachments-padding-bottom: 20rpx;
+  --ym-attachments-border-bottom: 1rpx solid #f7f7f7;
+  --ym-attachments-scroll-gap: 20rpx;
+  --ym-attachments-max-height: 600rpx;
+  --ym-attachments-add-btn-size: 88rpx;
+  --ym-attachments-add-btn-bg: #f7f7f7;
+  --ym-attachments-add-btn-border: 2rpx dashed #dee2e6;
+  --ym-attachments-add-btn-radius: 12rpx;
+  --ym-attachments-add-icon-size: 30rpx;
+  
+  // ===== FileCard 组件变量 =====
+  --ym-file-card-width: 280rpx;
+  --ym-file-card-height: 60rpx;
+  --ym-file-card-bg: #f7f7f7;
+  --ym-file-card-radius: 12rpx;
+  --ym-file-card-padding: 15rpx 20rpx;
+  --ym-file-card-margin: 8rpx 8rpx 8rpx 0;
+  --ym-file-card-border: 2rpx solid #f7f7f7;
+  --ym-file-card-icon-size: 60rpx;
+  --ym-file-card-icon-font-size: 50rpx;
+  --ym-file-card-icon-margin: 10rpx;
+  --ym-file-card-name-font-size: 28rpx;
+  --ym-file-card-name-color: #333;
+  --ym-file-card-name-margin-bottom: 4rpx;
+  --ym-file-card-size-font-size: 24rpx;
+  --ym-file-card-size-color: #6c757d;
+  --ym-file-card-progress-height: 6rpx;
+  --ym-file-card-progress-radius: 3rpx;
+  --ym-file-card-progress-bg: rgba(255, 255, 255, 0.3);
+  --ym-file-card-actions-top: -6rpx;
+  --ym-file-card-actions-right: -6rpx;
+  --ym-file-card-action-btn-size: 28rpx;
+  --ym-file-card-action-btn-bg: #dc3545;
+  --ym-file-card-action-btn-font-size: 14rpx;
+  --ym-file-card-hover-bg: #f0f0f0;
+  --ym-file-card-hover-transform: translateY(-2rpx);
+  --ym-file-card-selected-bg: #e3f2fd;
+  --ym-file-card-selected-border: 2rpx solid #1976d2;
+  
+  // ===== 文件类型颜色 =====
+  --ym-file-audio-color: #9B59B6;
+  --ym-file-video-color: #E74C3C;
+  --ym-file-pdf-color: #E74C3C;
+  --ym-file-word-color: #3498DB;
+  --ym-file-excel-color: #27AE60;
+  --ym-file-powerpoint-color: #F39C12;
+  --ym-file-text-color: #7F8C8D;
+  --ym-file-markdown-color: #2980B9;
+  --ym-file-code-color: #16A085;
+  --ym-file-archive-color: #8B4513;
+  --ym-file-default-color: #34495E;
+  
+  // ===== 按钮相关变量 =====
+  --ym-button-padding: 20rpx 40rpx;
+  --ym-button-bg: var(--ym-primary-color);
+  --ym-button-color: var(--ym-text-light);
+  --ym-button-radius: 25rpx;
+  --ym-button-font-size: var(--ym-font-base);
+  --ym-button-disabled-bg: #ccc;
+  --ym-button-min-height: 80rpx;
+  --ym-button-border-width: 2rpx;
+  --ym-button-shadow-hover: var(--ym-shadow-md);
+  --ym-button-transition: var(--ym-transition-base);
+  
+  // ===== 动画关键帧 =====
+  --ym-animation-bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ym-animation-ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --ym-animation-cubic: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
