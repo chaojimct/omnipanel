@@ -4,7 +4,7 @@ import { useShallow } from "zustand/react/shallow";
 import { useLocation } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { save } from "@tauri-apps/plugin-dialog";
-import { SidebarWorkspace } from "../../components/ui/SidebarWorkspace";
+import { ModuleModeIconRail, ModuleWorkspaceLayout } from "../../components/workspace";
 import { Button } from "../../components/ui/Button";
 import { Modal } from "../../components/ui/Modal";
 import type { SchemaDatabaseSelection, SchemaTableSelection, SchemaContextMenuContext } from "./SchemaBrowser";
@@ -667,11 +667,11 @@ export function DatabasePanel() {
     activeConn?.db_type?.toLowerCase() === "redis" ? "redis" : "database";
   usePoolConnectionRegistration(dbPoolKind, moduleLive ? activeConn?.id ?? null : null);
 
-  const moduleSegmentTabs = useMemo(
+  const moduleModeIconItems = useMemo(
     () => [
-      { id: "query", label: t("database.tabs.query") },
-      { id: "dataSync", label: t("database.tabs.dataSync") },
-      { id: "schemaSync", label: t("database.tabs.schemaSync") },
+      { id: "query", label: t("database.tabs.query"), icon: "sql" as const },
+      { id: "dataSync", label: t("database.tabs.dataSync"), icon: "table" as const },
+      { id: "schemaSync", label: t("database.tabs.schemaSync"), icon: "database" as const },
     ],
     [t],
   );
@@ -3895,79 +3895,94 @@ export function DatabasePanel() {
     <DatabaseModuleContextBridge active={moduleLive} context={databaseModuleContext} />
     <DbSidebarLinkageProvider value={sidebarLinkageValue}>
     <DbWorkspaceProviders state={workspaceStateValue} activeTab={activeTabContextValue}>
-    <ModuleSegmentDock
-      className="db-module-dock"
-      moduleTitle={t("routes.database")}
-      enabled={moduleLive}
-      panelContentKey={modulePanelContentKey}
-      softRefreshKey={moduleSoftRefreshKey}
-      tabs={moduleSegmentTabs}
-      activeTabId={moduleTab}
-      onActiveTabChange={(id) => setModuleTab(id as DbModuleTab)}
-      renderPanel={(panelId) =>
-        panelId === "dataSync" || panelId === "schemaSync" ? (
-    <div className="db-module-transfer">
-      <DatabaseToolbox
-        active={moduleTab === panelId}
-        tab={panelId}
-        connections={toolboxConnections}
-        initialSourceConnectionId={
-          toolboxSeed.connId ??
-          (activeConn && isToolboxCapableConnection(activeConn) ? activeConn.id : null)
-        }
-        initialSourceDatabase={toolboxSeed.database}
-      />
-    </div>
-  ) : (
-    <>
-      <SidebarWorkspace
-        preset="schema"
-        layoutPersistKey="database-schema"
-        sidebarMinPx={280}
-        sidebar={
+    <ModuleWorkspaceLayout
+      layoutKey="database"
+      className="db-module-layout"
+      leftColumnTitle={t("routes.database")}
+      leftPreset="schema"
+      leftMinPx={280}
+      leftIconRail={
+        <ModuleModeIconRail
+          items={moduleModeIconItems}
+          activeId={moduleTab}
+          onChange={(id) => setModuleTab(id as DbModuleTab)}
+        />
+      }
+      leftSidebar={
+        moduleTab === "query" ? (
           <DbSchemaProvider value={schemaContextValue}>
             <DatabaseSchemaSidebar
-                onCreateConnection={() => {
-                  setEditingConnection(null);
-                  setDialogOpen(true);
-                }}
-                onSelectConnection={handleSelectConnection}
-                onOpenSqlFile={openSqlFile}
-                onSelectTable={handleSelectTable}
-                onSelectDatabase={handleSelectDatabase}
-                buildSchemaContextMenuItems={buildSchemaContextMenuItems}
-                onSchemaCacheConnectionPatched={handleSchemaCacheConnectionPatched}
-                refreshToken={schemaRefreshToken}
-                connectionConfigs={connections}
-                connectionsReady={!connectionsLoading || connections.length > 0}
+              onCreateConnection={() => {
+                setEditingConnection(null);
+                setDialogOpen(true);
+              }}
+              onSelectConnection={handleSelectConnection}
+              onOpenSqlFile={openSqlFile}
+              onSelectTable={handleSelectTable}
+              onSelectDatabase={handleSelectDatabase}
+              buildSchemaContextMenuItems={buildSchemaContextMenuItems}
+              onSchemaCacheConnectionPatched={handleSchemaCacheConnectionPatched}
+              refreshToken={schemaRefreshToken}
+              connectionConfigs={connections}
+              connectionsReady={!connectionsLoading || connections.length > 0}
             />
           </DbSchemaProvider>
-        }
-      >
-        <div className="db-workspace-drop-zone">
-        {!workspaceInitialized ? null : (
-          <DatabaseWorkspaceDock
-            workspaceInitialized={workspaceInitialized}
-            dockTabs={dockTabs}
-            onCloseTab={(tabId) => requestTabAction({ kind: "close", tabId })}
-            dockLayout={dockLayout}
-            onDockLayoutChange={setDockLayout}
-            renderDockPanel={renderDockPanel}
-            softRefreshKey={activeWorkspaceTabId}
-            panelContentKeysByTab={panelContentKeysByTab}
-            onTabContextMenu={handleDockTabContextMenu}
-            onTabDoubleClick={handleDockTabDoubleClick}
-            recentClosedActionItems={recentClosedActionItems}
-            emptyPrompt={t("database.workspace.emptyTabs")}
-            recentClosedTitle={t("database.workspace.recentClosed")}
-          />
-        )}
-        </div>
-      </SidebarWorkspace>
-    </>
-  )
+        ) : undefined
       }
-    />
+    >
+      {moduleTab === "dataSync" || moduleTab === "schemaSync" ? (
+        <ModuleSegmentDock
+          className="db-module-dock"
+          variant="function"
+          moduleTitle={t("routes.database")}
+          enabled={moduleLive}
+          windowControl
+          showTabBar={false}
+          panelContentKey={modulePanelContentKey}
+          softRefreshKey={moduleSoftRefreshKey}
+          tabs={[{ id: moduleTab, label: t(`database.tabs.${moduleTab}`) }]}
+          activeTabId={moduleTab}
+          onActiveTabChange={() => {}}
+          renderPanel={(panelId) => (
+            <div className="db-module-transfer">
+              <DatabaseToolbox
+                active={moduleTab === panelId}
+                tab={panelId as "dataSync" | "schemaSync"}
+                connections={toolboxConnections}
+                initialSourceConnectionId={
+                  toolboxSeed.connId ??
+                  (activeConn && isToolboxCapableConnection(activeConn) ? activeConn.id : null)
+                }
+                initialSourceDatabase={toolboxSeed.database}
+              />
+            </div>
+          )}
+        />
+      ) : (
+        <div className="db-workspace-drop-zone">
+          {!workspaceInitialized ? null : (
+            <DatabaseWorkspaceDock
+              workspaceInitialized={workspaceInitialized}
+              dockTabs={dockTabs}
+              moduleTitle={t("routes.database")}
+              enabled={moduleLive}
+              windowControl
+              onCloseTab={(tabId) => requestTabAction({ kind: "close", tabId })}
+              dockLayout={dockLayout}
+              onDockLayoutChange={setDockLayout}
+              renderDockPanel={renderDockPanel}
+              softRefreshKey={activeWorkspaceTabId}
+              panelContentKeysByTab={panelContentKeysByTab}
+              onTabContextMenu={handleDockTabContextMenu}
+              onTabDoubleClick={handleDockTabDoubleClick}
+              recentClosedActionItems={recentClosedActionItems}
+              emptyPrompt={t("database.workspace.emptyTabs")}
+              recentClosedTitle={t("database.workspace.recentClosed")}
+            />
+          )}
+        </div>
+      )}
+    </ModuleWorkspaceLayout>
     <CreateDatabaseDialog
       open={createDbDialog !== null}
       connection={

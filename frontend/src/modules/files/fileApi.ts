@@ -1,5 +1,12 @@
-import { commands, type Connection, type FileIndexProgress, type FileIndexSearchResult, type FileIndexStatus, type FileListDirResult, type FileManagerConnectionInfo, type OmniError_Serialize } from "../../ipc/bindings";
+import { commands, type Connection, type FileIndexSearchResult, type FileIndexStatus, type FileListDirResult, type FileManagerConnectionInfo, type OmniError_Serialize } from "../../ipc/bindings";
 import { fmtError } from "./utils";
+
+export type FileIndexProgress = {
+  connectionId: string;
+  status: "building" | "done" | "failed";
+  indexedCount?: number | null;
+  error?: string | null;
+};
 
 function ipcErrorToError(error: OmniError_Serialize): Error {
   const message = error.cause ? `${error.message}（${error.cause}）` : error.message;
@@ -132,6 +139,6 @@ export async function cancelFileIndex(connectionId: string): Promise<void> {
   await unwrap(await commands.fileIndexCancel(connectionId), { op: "fileIndexCancel", connectionId });
 }
 
-export type { FileIndexProgress, FileIndexStatus };
+export type { FileIndexStatus };
 
 export { fmtError };

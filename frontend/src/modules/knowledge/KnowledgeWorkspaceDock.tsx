@@ -15,7 +15,7 @@ export interface KnowledgeWorkspaceDockProps {
   onTabDoubleClick?: (tabId: string) => void;
 }
 
-/** 知识库模块右侧 Dock 工作区（文档 / PDF 预览 Tab）。 */
+/** @deprecated 已改用 ModuleSegmentDock */
 export function KnowledgeWorkspaceDock({
   dockTabs,
   activeTabId,

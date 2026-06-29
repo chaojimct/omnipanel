@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import type { SerializedDockview } from "dockview-core";
 import { useDbWorkspaceActiveTab } from "../../contexts/DbWorkspaceContext";
-import { DockableWorkspace, type DockableTab } from "../../components/dock";
+import { ModuleSegmentDock, type DockableTab } from "../../components/dock";
 import { WorkspaceEmptyPage } from "../../components/ui/WorkspaceEmptyPage";
 import { useI18n } from "../../i18n";
 
@@ -19,6 +19,9 @@ export interface DatabaseWorkspaceDockProps {
   recentClosedActionItems: Array<{ id: string; label: string; meta: string; onClick: () => void }>;
   emptyPrompt: string;
   recentClosedTitle: string;
+  moduleTitle?: ReactNode;
+  enabled?: boolean;
+  windowControl?: boolean;
 }
 
 /** 数据库模块右侧 Dock 工作区（表 / SQL / 设计器等 Tab）。 */
@@ -36,6 +39,9 @@ export function DatabaseWorkspaceDock({
   recentClosedActionItems,
   emptyPrompt,
   recentClosedTitle,
+  moduleTitle,
+  enabled = true,
+  windowControl = true,
 }: DatabaseWorkspaceDockProps) {
   const { t } = useI18n();
   const { activeTabId, setActiveTabId } = useDbWorkspaceActiveTab();
@@ -45,11 +51,13 @@ export function DatabaseWorkspaceDock({
   }
 
   return (
-    <DockableWorkspace
-      className="db-workspace"
+    <ModuleSegmentDock
+      className="db-workspace db-module-dock"
+      variant="workspace"
       dockScope="database"
-      defaultHeaderPosition="top"
-      enableTabGroups={false}
+      moduleTitle={moduleTitle}
+      enabled={enabled}
+      windowControl={windowControl}
       tabs={dockTabs}
       activeTabId={activeTabId}
       onActiveTabChange={setActiveTabId}
@@ -61,7 +69,6 @@ export function DatabaseWorkspaceDock({
       panelContentKeysByTab={panelContentKeysByTab}
       onTabContextMenu={onTabContextMenu}
       onTabDoubleClick={onTabDoubleClick}
-      windowControl={false}
       emptyContent={
         <WorkspaceEmptyPage
           title={t("routes.database")}

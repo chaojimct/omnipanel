@@ -15,7 +15,7 @@ export interface FilesWorkspaceDockProps {
   softRefreshKey?: string;
 }
 
-/** 文件模块右侧 Dock：每个连接一个可关闭 Tab（对齐数据库工作区）。 */
+/** @deprecated 已改用 ModuleSegmentDock；连接级多 Tab 已移除 */
 export function FilesWorkspaceDock({
   dockTabs,
   activePanelId,

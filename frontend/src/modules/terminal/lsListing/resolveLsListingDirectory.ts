@@ -2,7 +2,7 @@ import { normalizeTerminalCwdForSftp } from "@/modules/server/ssh/utils/parseCom
 import { expandTildePath, resolveAbsoluteTerminalCwd } from "../terminalPathCrumbs";
 
 import { isLsExtensionlessFileName, isLsListingCommand, lsListingCommandBase, resolveListingCommandForBlock } from "./parseLsListing";
-import { normalizeBlockCommand, stripTerminalControlSequences } from "../terminalOutputText";
+import { normalizeBlockCommand } from "../terminalOutputText";
 import { isCdOnlyCommand, stripAutoLsSuffix } from "../terminalAutoLsPolicy";
 
 function normalizeRemotePath(path: string): string {

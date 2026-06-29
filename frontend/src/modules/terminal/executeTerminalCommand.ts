@@ -9,7 +9,6 @@ import {
 } from "./terminalOutputText";
 import { terminalPaneSenders } from "./terminalPaneSenders";
 import { isWarpDisplay } from "./terminalDisplayMode";
-import { isCdOnlyCommand } from "./terminalAutoLsPolicy";
 import { maybeAppendAutoLsToCommand, scheduleCdBlockFallbackComplete, isCdNavigationCommand } from "./terminalAutoLs";
 import { resolveTerminalApprovalMode } from "./terminalApprovalSettings";
 import { shouldRequireTerminalApproval } from "./terminalApprovalPolicy";

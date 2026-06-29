@@ -2,19 +2,26 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { useLocation } from "react-router-dom";
 import { ContextMenu, type ContextMenuItem } from "../../components/ui/ContextMenu";
-import { SidebarWorkspace } from "../../components/ui/SidebarWorkspace";
-import { ModuleSegmentDock, type DockableTab } from "../../components/dock";
-import { usePersistedModuleTab } from "../../hooks/usePersistedModuleTab";
+import {
+  ModuleSegmentDock,
+  type DockableTab,
+} from "../../components/dock";
+import {
+  ModuleModeIconRail,
+  ModuleWorkspaceLayout,
+} from "../../components/workspace";
+import { WorkspaceEmptyPage } from "../../components/ui/WorkspaceEmptyPage";
 import { useI18n } from "../../i18n";
+import { migrateLayoutStorage } from "../../lib/layoutMigration";
 import { appConfirm } from "../../lib/appConfirm";
-import type { Connection, FileIndexProgress, FileIndexStatus, FileManagerConnectionInfo } from "../../ipc/bindings";
+import type { Connection, FileIndexStatus, FileManagerConnectionInfo } from "../../ipc/bindings";
+import type { FileIndexProgress } from "./fileApi";
 import { useConnectionStore } from "../../stores/connectionStore";
 import { useFileManagerStore } from "../../stores/fileManagerStore";
 import { useFilesWorkspaceSessionStore } from "../../stores/filesWorkspaceSessionStore";
 import { FileConnectionDialog, type FileProtocol } from "./FileConnectionDialog";
 import { FileConnectionPanel } from "./FileConnectionPanel";
 import { FilesSidebar } from "./FilesSidebar";
-import { FilesWorkspaceDock } from "./FilesWorkspaceDock";
 import {
   fileConnPanelId,
   fileProtocolDockIcon,
@@ -33,11 +40,10 @@ import { LOCAL_CONNECTION_ID } from "./utils";
 
 type ConnCtxState = { x: number; y: number; conn: FileManagerConnectionInfo } | null;
 
-type FilesModuleTab = "browser";
-const FILES_TABS: FilesModuleTab[] = ["browser"];
-
 function FilesBrowserView() {
   const { t } = useI18n();
+  const location = useLocation();
+  const isActiveRoute = location.pathname === "/module/files";
   const refreshConnections = useConnectionStore((s) => s.refresh);
   const removeConnection = useConnectionStore((s) => s.remove);
   const storedConnections = useConnectionStore((s) => s.connections);
@@ -72,6 +78,15 @@ function FilesBrowserView() {
   const [indexStatuses, setIndexStatuses] = useState<Record<string, FileIndexStatus>>({});
   const activeNavigateRef = useRef<((path: string) => void) | null>(null);
   const bootstrappedDefaultRef = useRef(false);
+
+  useEffect(() => {
+    migrateLayoutStorage("files", ["omnipanel.filesDockLayout.v3"]);
+  }, []);
+
+  const modeIconItems = useMemo(
+    () => [{ id: "browser", label: t("files.tabs.browser"), icon: "file-local" as const }],
+    [t],
+  );
 
   useEffect(() => {
     if (useFilesWorkspaceSessionStore.persist.hasHydrated()) {
@@ -167,7 +182,7 @@ function FilesBrowserView() {
           connectionId,
           status: status === "building" ? "building" : status === "done" ? "ready" : "failed",
           rootPath: prev[connectionId]?.rootPath ?? "",
-          indexedCount,
+          indexedCount: indexedCount ?? null,
           error: error ?? "",
           startedAt: prev[connectionId]?.startedAt ?? 0,
           finishedAt: status === "building" ? 0 : Date.now(),
@@ -361,12 +376,20 @@ function FilesBrowserView() {
 
   return (
     <>
-      <SidebarWorkspace
-        preset="schema"
-        layoutPersistKey="files-sidebar"
-        sidebarMinPx={280}
-        className="files-workspace dock-workspace"
-        sidebar={
+      <ModuleWorkspaceLayout
+        layoutKey="files"
+        className="files-workspace"
+        leftColumnTitle={t("routes.files")}
+        leftPreset="schema"
+        leftMinPx={280}
+        leftIconRail={
+          <ModuleModeIconRail
+            items={modeIconItems}
+            activeId="browser"
+            onChange={() => {}}
+          />
+        }
+        leftSidebar={
           <FilesSidebar
             connections={connections}
             activeId={sidebarActiveId}
@@ -377,27 +400,8 @@ function FilesBrowserView() {
             onQuickNavigate={(path) => activeNavigateRef.current?.(path)}
           />
         }
-      >
-        <div className="fm-main">
-          {connBanner && (
-            <div className={connBanner.kind === "error" ? "fm-error-banner" : "fm-info-banner"}>
-              {connBanner.text}
-            </div>
-          )}
-          <div className="fm-workspace-drop-zone">
-            <FilesWorkspaceDock
-              dockTabs={dockTabs}
-              activePanelId={activePanelId}
-              onActivePanelChange={setActivePanelId}
-              onCloseTab={handleCloseTab}
-              dockLayout={savedLayout}
-              onDockLayoutChange={setSavedLayout}
-              renderPanel={renderDockPanel}
-              softRefreshKey={openConnIds.join("|")}
-            />
-          </div>
-
-          {transfers.length > 0 && (
+        footer={
+          transfers.length > 0 ? (
             <div className="fm-transfers">
               <span className="transfer-label">{t("files.transfers.title")}</span>
               {transfers.map((item) => (
@@ -414,9 +418,41 @@ function FilesBrowserView() {
                 {t("files.transfers.clear")}
               </button>
             </div>
+          ) : undefined
+        }
+      >
+        <div className="fm-main">
+          {connBanner && (
+            <div className={connBanner.kind === "error" ? "fm-error-banner" : "fm-info-banner"}>
+              {connBanner.text}
+            </div>
           )}
+          <div className="fm-workspace-drop-zone">
+            <ModuleSegmentDock
+              className="files-module-dock fm-dock-workspace fm-workspace"
+              variant="workspace"
+              dockScope="files-browser"
+              moduleTitle={t("routes.files")}
+              enabled={isActiveRoute}
+              windowControl
+              tabs={dockTabs}
+              activeTabId={activePanelId ?? ""}
+              onActiveTabChange={setActivePanelId}
+              onCloseTab={handleCloseTab}
+              savedLayout={savedLayout}
+              onSavedLayoutChange={setSavedLayout}
+              renderPanel={renderDockPanel}
+              softRefreshKey={openConnIds.join("|")}
+              emptyContent={
+                <WorkspaceEmptyPage
+                  title={t("routes.files")}
+                  prompt={t("files.workspace.emptyTabs")}
+                />
+              }
+            />
+          </div>
         </div>
-      </SidebarWorkspace>
+      </ModuleWorkspaceLayout>
 
       <FileConnectionDialog
         open={dialogOpen}
@@ -443,33 +479,6 @@ function FilesBrowserView() {
 }
 
 export function FilesPanel() {
-  const { t } = useI18n();
-  const location = useLocation();
-  const isActiveRoute = location.pathname === "/module/files";
-  const [tab, setTab] = usePersistedModuleTab("files", "browser", FILES_TABS);
-
-  const segmentTabs = useMemo(
-    () => [{ id: "browser", label: t("files.tabs.browser") }],
-    [t],
-  );
-
-  const renderPanel = useCallback((tabId: string) => {
-    if (tabId === "browser") {
-      return <FilesBrowserView />;
-    }
-    return null;
-  }, []);
-
-  return (
-    <ModuleSegmentDock
-      className="files-module-dock"
-      moduleTitle={t("routes.files")}
-      tabs={segmentTabs}
-      activeTabId={tab}
-      onActiveTabChange={(id) => setTab(id as FilesModuleTab)}
-      enabled={isActiveRoute}
-      renderPanel={renderPanel}
-    />
-  );
+  return <FilesBrowserView />;
 }
 

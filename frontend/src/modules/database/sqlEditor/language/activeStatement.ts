@@ -74,7 +74,7 @@ export const activeStatementPlugin = ViewPlugin.fromClass(
     outlineEl: HTMLDivElement;
     private readonly measureReq = {
       read: (view: EditorView) => measureActiveStatementOutline(view),
-      write: (measure: OutlineMeasure, view: EditorView) => {
+      write: (measure: OutlineMeasure, _view: EditorView) => {
         applyActiveStatementOutline(this.outlineEl, measure);
       },
     };

@@ -6,7 +6,8 @@ import { FileEntryIcon } from "../../components/ui/FileEntryIcon";
 import { ModuleEmptyState } from "../../components/ui/ModuleEmptyState";
 import { useI18n } from "../../i18n";
 import { appConfirm } from "../../lib/appConfirm";
-import type { FileEntry, FileIndexProgress, FileIndexStatus, FileManagerConnectionInfo } from "../../ipc/bindings";
+import type { FileEntry, FileIndexStatus, FileManagerConnectionInfo } from "../../ipc/bindings";
+import type { FileIndexProgress } from "./fileApi";
 import { useFileManagerStore } from "../../stores/fileManagerStore";
 import { quickInput } from "../../stores/quickInputStore";
 import { VirtualFileList, VirtualFileGrid } from "./VirtualFileList";
@@ -374,7 +375,7 @@ export function FileConnectionPanel({
           connectionId: connId,
           status: "building",
           rootPath: prev?.rootPath ?? "",
-          indexedCount: event.payload.indexedCount,
+          indexedCount: event.payload.indexedCount ?? null,
           error: "",
           startedAt: prev?.startedAt ?? 0,
           finishedAt: 0,

@@ -1,0 +1,210 @@
+.module-workspace-layout {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  height: 100%;
+}
+
+.module-workspace-layout__main {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+}
+
+.module-workspace-layout__body {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.module-workspace-layout__footer {
+  flex-shrink: 0;
+}
+
+.module-left-column {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--bg);
+}
+
+/* 与终端 .term-session-tree__module-header 一致 */
+.module-sidebar-module-header {
+  flex-shrink: 0;
+  display: flex;
+  align-items: stretch;
+  height: var(--shell-dv-tab-bar-h);
+  min-height: var(--shell-dv-tab-bar-h);
+  max-height: var(--shell-dv-tab-bar-h);
+  padding: 0;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  box-sizing: border-box;
+}
+
+.module-left-column__header--with-modes {
+  align-items: center;
+  justify-content: space-between;
+}
+
+.module-sidebar-module-header .module-dock-title {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 var(--sp-4);
+  flex-shrink: 0;
+}
+
+.module-sidebar-module-header__actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding-right: var(--sp-2);
+  flex-shrink: 0;
+  height: 100%;
+}
+
+.module-left-column__sidebar {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.module-mode-icon-rail {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 2px;
+  height: 100%;
+}
+
+.module-mode-icon-rail__btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--meta);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.module-mode-icon-rail__btn:hover:not(:disabled) {
+  background: var(--surface-hover);
+  color: var(--fg);
+}
+
+.module-mode-icon-rail__btn--active {
+  background: var(--accent-muted, rgba(116, 192, 252, 0.15));
+  color: var(--accent);
+}
+
+.module-mode-icon-rail__btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.module-segment-dock--variant-workspace .dv-tab {
+  max-width: 220px;
+}
+
+.module-segment-dock--variant-function .dv-tab {
+  font-weight: 500;
+}
+
+.module-segment-dock--no-tab-bar > .dockable-workspace__dockview .dv-tabs-and-actions-container {
+  display: none;
+}
+
+.module-mode-icon-rail__text-icon {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+
+/*
+ * 侧栏顶栏与右侧 dock tab 栏对齐（须在 @layer 外，覆盖 global dock-handle / dockview）
+ */
+.dock-workspace.module-workspace-layout--sidebar-open .dock-panel-left .dock-rail-shell {
+  border-right: none;
+}
+
+.dock-workspace.module-workspace-layout--sidebar-open .module-root-dock .dv-pre-actions-container .module-dock-title,
+.dock-workspace.module-workspace-layout--sidebar-open .module-segment-dock .dv-pre-actions-container .module-dock-title {
+  display: none !important;
+}
+
+.dock-workspace.module-workspace-layout--sidebar-open .module-root-dock .dv-tabs-and-actions-container,
+.dock-workspace.module-workspace-layout--sidebar-open .module-segment-dock .dv-tabs-and-actions-container {
+  border-left: none;
+}
+
+.dock-workspace.module-workspace-layout--sidebar-open .module-root-dock .dv-pre-actions-container:empty,
+.dock-workspace.module-workspace-layout--sidebar-open .module-segment-dock .dv-pre-actions-container:empty {
+  display: none;
+  width: 0;
+  min-width: 0;
+  padding: 0;
+  margin: 0;
+}
+
+.dock-workspace.module-workspace-layout--sidebar-open .module-left-column__sidebar {
+  border-right: 1px solid var(--border);
+}
+
+.dock-handle.module-workspace-sidebar-handle--open {
+  align-self: flex-start;
+  margin-top: var(--shell-dv-tab-bar-h);
+  margin-left: -2px;
+  margin-right: -3px;
+  width: 5px;
+  height: calc(100% - var(--shell-dv-tab-bar-h));
+  max-height: calc(100% - var(--shell-dv-tab-bar-h));
+  /* border-left: 0.1px solid var(--border); */
+}
+
+.dock-handle.module-workspace-sidebar-handle--collapsed {
+  align-self: stretch;
+  margin: 0 -2px;
+  width: 5px;
+  min-width: 5px;
+  height: 100%;
+  max-height: none;
+  z-index: 15;
+}
+
+.dock-handle.module-workspace-sidebar-handle--collapsed .dock-handle-inner {
+  height: 48px;
+}
+
+.dock-workspace.module-workspace-layout .dock-panel-main {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.dock-workspace.module-workspace-layout .dock-panel-main > .module-root-dock,
+.dock-workspace.module-workspace-layout .dock-panel-main > .module-segment-dock,
+.dock-workspace.module-workspace-layout .dock-panel-main > .module-workspace-layout__main {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+}
+
+.dock-workspace.module-workspace-layout .dock-panel-left .dock-rail-shell {
+  height: 100%;
+  min-height: 0;
+}

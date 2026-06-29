@@ -17,6 +17,7 @@ export interface SshWorkspaceDockProps {
 }
 
 /** SSH 模块右侧 Dock 工作区（主机详情 Tab）。 */
+/** @deprecated 已改用 ModuleSegmentDock */
 export function SshWorkspaceDock({
   dockTabs,
   activeTabId,

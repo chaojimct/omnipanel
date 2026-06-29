@@ -41,6 +41,7 @@ export interface ModuleSegmentDockProps extends DockPanelRefreshProps {
     tabId: string,
     index: number,
   ) => void;
+  onTabDoubleClick?: (tabId: string) => void;
   emptyContent?: ReactNode;
   dockScope?: string;
   /** 是否接受其他 dockview 拖入的 panel */
@@ -49,6 +50,11 @@ export interface ModuleSegmentDockProps extends DockPanelRefreshProps {
   moduleTitle?: ReactNode;
   /** Tab 栏前缀区域（tabs 左侧，位于 moduleTitle 之后，如工作区切换） */
   preActions?: ReactNode;
+  /** workspace = 工作区 Tab（SQL/文档/HTTP）；function = 功能分段 Tab */
+  variant?: "workspace" | "function";
+  /** 为 false 时隐藏 Tab 栏，仅保留标题行与窗口控制（待办全宽页等） */
+  showTabBar?: boolean;
+  panelContentKeysByTab?: Record<string, string>;
 }
 
 const EMPTY_LAYOUT = null;
@@ -70,12 +76,16 @@ export function ModuleSegmentDock({
   onSavedLayoutChange,
   addTabConfig,
   onTabContextMenu,
+  onTabDoubleClick,
   emptyContent,
   dockScope,
   acceptExternalDrops,
   moduleTitle,
   preActions,
+  variant = "function",
+  showTabBar = true,
   panelContentKey,
+  panelContentKeysByTab,
   softRefreshKey,
 }: ModuleSegmentDockProps) {
   const layoutRef = useRef(EMPTY_LAYOUT);
@@ -99,6 +109,8 @@ export function ModuleSegmentDock({
   const rootClassName = [
     "module-root-dock",
     "module-segment-dock",
+    `module-segment-dock--variant-${variant}`,
+    !showTabBar && "module-segment-dock--no-tab-bar",
     className,
     !enabled && "module-segment-dock--route-inactive",
   ]
@@ -132,10 +144,12 @@ export function ModuleSegmentDock({
       renderPanel={renderPanel}
       addTabConfig={enabled ? addTabConfig : undefined}
       onTabContextMenu={onTabContextMenu}
+      onTabDoubleClick={onTabDoubleClick}
       emptyContent={emptyContent}
       preActions={composedPreActions}
       acceptExternalDrops={acceptExternalDrops}
       panelContentKey={panelContentKey}
+      panelContentKeysByTab={panelContentKeysByTab}
       softRefreshKey={softRefreshKey}
     />
   );

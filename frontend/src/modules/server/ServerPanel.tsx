@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { ModuleSegmentDock } from "../../components/dock";
+import { ModuleWorkspaceLayout } from "../../components/workspace";
+import { WorkspaceEmptyPage } from "../../components/ui/WorkspaceEmptyPage";
 import { useConnectionStore } from "../../stores/connectionStore";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { useI18n } from "../../i18n";
@@ -12,8 +14,9 @@ import {
   type ServerWorkspaceTab,
 } from "./panel/ServerWorkspace";
 import { ServerConnectionDialog } from "./panel/ServerConnectionDialog";
-import { ServerPanelsWorkspaceView } from "./panel/ServerPanelsWorkspaceView";
 import { useServerPanelWorkspace } from "./panel/hooks/useServerPanelWorkspace";
+import { ServerPanelSidebar } from "./panel/ServerPanelSidebar";
+import { ServerSidebarLinkageProvider } from "./panel/ServerSidebarLinkageContext";
 import type { ServerPanelDockOpenMode } from "./panel/serverPanelWorkspaceTabs";
 import { SERVER_PATH } from "./panel/constants";
 import { connectionToServerEntry } from "./panel/panelConnection";
@@ -48,45 +51,40 @@ export function ServerPanel() {
     [topbarTabs],
   );
 
+  const resolvedServerId = serverWorkspace.activeServerId ?? activeServerId;
+
+  const sidebarLinkageValue = useMemo(
+    () => ({
+      activeServerId: resolvedServerId,
+    }),
+    [resolvedServerId],
+  );
+
   useEffect(() => {
     if (!selectedResourceByPath[SERVER_PATH] && panelServers[0]) {
       selectResource(panelServers[0].id, SERVER_PATH);
     }
   }, [panelServers, selectedResourceByPath, selectResource]);
 
-  const handleSelectServer = useCallback(
-    (serverId: string) => {
-      selectResource(serverId, SERVER_PATH);
-    },
-    [selectResource],
-  );
-
   const handleSidebarSelectServer = useCallback(
-    (serverId: string, _mode?: ServerPanelDockOpenMode) => {
+    (serverId: string, mode?: ServerPanelDockOpenMode) => {
+      serverWorkspace.handleSelectServer(serverId, mode);
       selectResource(serverId, SERVER_PATH);
     },
-    [selectResource],
+    [selectResource, serverWorkspace],
   );
 
   useEffect(() => {
     if (!activeServerId) {
       return;
     }
-    const { workspaceTabs, activeTabId, activateTab, handleSelectServer: openServerTab } =
-      serverWorkspace;
-    const existing = workspaceTabs.find((item) => item.serverId === activeServerId);
-    if (existing) {
-      if (activeTabId !== existing.id) {
-        activateTab(existing.id);
-      }
-      return;
+    const { activeServerId: workspaceActiveId, handleSelectServer } = serverWorkspace;
+    if (workspaceActiveId !== activeServerId) {
+      handleSelectServer(activeServerId, "permanent");
     }
-    openServerTab(activeServerId, "permanent");
   }, [
     activeServerId,
-    serverWorkspace.workspaceTabs,
-    serverWorkspace.activeTabId,
-    serverWorkspace.activateTab,
+    serverWorkspace.activeServerId,
     serverWorkspace.handleSelectServer,
   ]);
 
@@ -113,7 +111,7 @@ export function ServerPanel() {
   );
 
   const renderServerSegmentContent = useCallback(
-    (segmentTabId: ServerWorkspaceTab, serverId: string, _dockTabId: string, isActive: boolean) => {
+    (segmentTabId: ServerWorkspaceTab, serverId: string, isActive: boolean) => {
       if (!isActive) {
         return <div className="server-panel-tab-pane" aria-hidden />;
       }
@@ -134,29 +132,43 @@ export function ServerPanel() {
 
   return (
     <>
-      <ModuleSegmentDock
-        className="server-module-dock"
-        moduleTitle={t("routes.server")}
-        tabs={segmentTabs}
-        activeTabId={tab}
-        onActiveTabChange={(id) => setTab(id as ServerWorkspaceTab)}
-        enabled={isActiveRoute}
-        renderPanel={(segmentTabId) => (
-          <ServerPanelsWorkspaceView
-            servers={panelServers}
-            workspace={serverWorkspace}
-            selectedServerId={activeServerId}
-            onSelectServer={handleSelectServer}
-            onSidebarSelectServer={handleSidebarSelectServer}
-            onCreateServer={handleCreateServer}
-            onEditServer={handleEditServer}
-            onDeleteServer={handleDeleteServer}
-            renderServerPanel={(serverId, dockTabId, isActive) =>
-              renderServerSegmentContent(segmentTabId as ServerWorkspaceTab, serverId, dockTabId, isActive)
+      <ServerSidebarLinkageProvider value={sidebarLinkageValue}>
+        <ModuleWorkspaceLayout
+          layoutKey="server-panels"
+          className="server-panels-workspace"
+          leftColumnTitle={t("routes.server")}
+          leftPreset="server"
+          leftMinPx={200}
+          leftSidebar={
+            <ServerPanelSidebar
+              servers={panelServers}
+              onSelectServer={handleSidebarSelectServer}
+              onCreateServer={handleCreateServer}
+              onEditServer={handleEditServer}
+              onDeleteServer={handleDeleteServer}
+            />
+          }
+        >
+          <ModuleSegmentDock
+            className="server-module-dock"
+            variant="function"
+            tabs={segmentTabs}
+            activeTabId={tab}
+            onActiveTabChange={(id) => setTab(id as ServerWorkspaceTab)}
+            enabled={isActiveRoute}
+            renderPanel={(segmentTabId) =>
+              resolvedServerId ? (
+                renderServerSegmentContent(segmentTabId as ServerWorkspaceTab, resolvedServerId, true)
+              ) : (
+                <WorkspaceEmptyPage
+                  title={t("routes.server")}
+                  prompt={t("server.empty.selectServer")}
+                />
+              )
             }
           />
-        )}
-      />
+        </ModuleWorkspaceLayout>
+      </ServerSidebarLinkageProvider>
       <ServerConnectionDialog
         open={showDialog}
         onClose={() => setShowDialog(false)}

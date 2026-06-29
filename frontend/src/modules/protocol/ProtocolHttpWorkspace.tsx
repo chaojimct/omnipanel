@@ -1,13 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
-import { SidebarWorkspace } from "../../components/ui/SidebarWorkspace";
 import { ContextMenu, type ContextMenuItem } from "../../components/ui/ContextMenu";
+import { ModuleSegmentDock } from "../../components/dock";
+import { WorkspaceEmptyPage } from "../../components/ui/WorkspaceEmptyPage";
 import { quickInput } from "../../lib/quickInput";
 import { useI18n } from "../../i18n";
 import { useProtocolHttpDockStore } from "../../stores/protocolHttpDockStore";
 import { useProtocolTopbarStore } from "../../stores/protocolTopbarStore";
 import { HttpRequestPanel } from "./HttpRequestPanel";
-import { ProtocolHttpSidebar } from "./ProtocolHttpSidebar";
-import { ProtocolHttpWorkspaceDock } from "./ProtocolHttpWorkspaceDock";
 import { useProtocolHttp } from "./ProtocolHttpContext";
 
 function ProtocolHttpTopbarBridge() {
@@ -25,8 +24,16 @@ function ProtocolHttpTopbarBridge() {
   return null;
 }
 
-/** HTTP 协议工作区：左侧接口树 + 右侧请求 Dock 面板。 */
-export function ProtocolHttpWorkspace() {
+/** HTTP 协议工作区：请求 Tab 在标题栏（侧栏由 ProtocolPanel 提供）。 */
+export function ProtocolHttpWorkspace({
+  moduleTitle,
+  enabled = true,
+  windowControl = true,
+}: {
+  moduleTitle?: React.ReactNode;
+  enabled?: boolean;
+  windowControl?: boolean;
+}) {
   const { t } = useI18n();
   const http = useProtocolHttp();
   const openTabIds = useProtocolHttpDockStore((state) => state.openTabIds);
@@ -161,24 +168,37 @@ export function ProtocolHttpWorkspace() {
   return (
     <>
       <ProtocolHttpTopbarBridge />
-      <SidebarWorkspace
-        layoutPersistKey="protocol-http"
-        className="protocol-workspace"
-        sidebar={<ProtocolHttpSidebar />}
-      >
-        <ProtocolHttpWorkspaceDock
-          dockTabs={dockTabs}
-          activeTabId={activeTabId}
-          onActiveTabChange={handleActiveTabChange}
-          onCloseTab={handleCloseTab}
-          dockLayout={dockLayout}
-          onDockLayoutChange={setDockLayout}
-          renderPanel={renderDockPanel}
-          recentClosedActionItems={recentClosedActionItems}
-          onTabContextMenu={handleTabContextMenu}
-          onTabDoubleClick={handleTabDoubleClick}
-        />
-      </SidebarWorkspace>
+      <ModuleSegmentDock
+        className="protocol-workspace protocol-http-dock"
+        variant="workspace"
+        dockScope="protocol-http"
+        moduleTitle={moduleTitle}
+        enabled={enabled}
+        windowControl={windowControl}
+        tabs={dockTabs}
+        activeTabId={activeTabId ?? ""}
+        onActiveTabChange={handleActiveTabChange}
+        onCloseTab={handleCloseTab}
+        savedLayout={dockLayout}
+        onSavedLayoutChange={setDockLayout}
+        renderPanel={renderDockPanel}
+        onTabContextMenu={handleTabContextMenu}
+        onTabDoubleClick={handleTabDoubleClick}
+        emptyContent={
+          <WorkspaceEmptyPage
+            title={t("protocol.tabs.http")}
+            prompt={t("protocol.http.workspaceEmpty")}
+            actionList={
+              recentClosedActionItems.length > 0
+                ? {
+                    title: t("protocol.http.recentClosed"),
+                    items: recentClosedActionItems,
+                  }
+                : undefined
+            }
+          />
+        }
+      />
 
       {tabCtxMenu ? (
         <ContextMenu

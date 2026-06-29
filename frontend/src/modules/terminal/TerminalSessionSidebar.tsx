@@ -11,7 +11,6 @@ import type { TerminalConnectionStatus } from "../../stores/terminalTypes";
 import { resolveSessionActivityAt } from "../../stores/terminalSessionActivity";
 import { useBlocksStore, type TerminalBlock } from "../../stores/blocksStore";
 import { Button } from "../../components/ui/Button";
-import { ModuleDockTitle } from "../../components/dock/ModuleDockTitle";
 import {
   mergeConnectionOrder,
   moveConnectionInOrder,
@@ -511,9 +510,6 @@ export function TerminalSessionSidebar({
       {isPointerDragging
         ? createPortal(<div className="term-session-tree__drag-cursor-layer" aria-hidden />, document.body)
         : null}
-      <div className="term-session-tree__module-header">
-        <ModuleDockTitle>{t("routes.terminal")}</ModuleDockTitle>
-      </div>
       <div className="term-session-tree__body" ref={treeBodyRef}>
         {connectionGroups.length === 0 ? (
           <div className="term-session-tree__empty">{t("terminal.sessions.empty")}</div>

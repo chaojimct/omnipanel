@@ -1,15 +1,11 @@
-import { useCallback, useMemo, useRef, useState, type ReactNode } from "react";
-import type { PanelImperativeHandle } from "react-resizable-panels";
-import { DockWorkspace } from "../../components/dock";
-import { usePanelLayoutStore } from "../../stores/panelLayoutStore";
+import { useCallback, useMemo, useState, type ReactNode } from "react";
+import { ModuleWorkspaceLayout } from "../../components/workspace";
 import { TerminalSessionSidebar } from "./TerminalSessionSidebar";
 import { TerminalSessionsChromeProvider } from "./TerminalSessionsChromeContext";
+import { useI18n } from "../../i18n";
 
-const LAYOUT_PERSIST_KEY = "terminal-sessions";
 const LEFT_MIN_PX = 180;
 const LEFT_DEFAULT_PX = 220;
-/** 低于此宽度视为侧栏已折叠 */
-const LEFT_COLLAPSED_PX = 12;
 
 export interface TerminalSessionsWorkspaceViewProps {
   onSelectSession: (sessionId: string) => void;
@@ -18,42 +14,19 @@ export interface TerminalSessionsWorkspaceViewProps {
   children: ReactNode;
 }
 
-/** 终端模块主布局：左侧会话树（独立于 tab）+ 右侧 tab 栏与终端视图。 */
+/** 终端模块主布局：左侧会话树 + 右侧 session Tab 与终端视图。 */
 export function TerminalSessionsWorkspaceView({
   onSelectSession,
   onCreateSession,
   onEndSession,
   children,
 }: TerminalSessionsWorkspaceViewProps) {
-  const savedSize = usePanelLayoutStore((s) => s.leftSizes[LAYOUT_PERSIST_KEY]);
-  const setLeftSize = usePanelLayoutStore((s) => s.setLeftSize);
-  const leftSizePx =
-    typeof savedSize === "number" && savedSize >= LEFT_MIN_PX ? savedSize : LEFT_DEFAULT_PX;
-  const pendingLeftSizeRef = useRef<number | null>(null);
-  const leftPanelRef = useRef<PanelImperativeHandle | null>(null);
+  const { t } = useI18n();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
-  const syncSidebarCollapsed = useCallback(() => {
-    const panel = leftPanelRef.current;
-    if (!panel) return;
-    setSidebarCollapsed(panel.isCollapsed() || panel.getSize().inPixels < LEFT_COLLAPSED_PX);
+  const handleSidebarCollapsedChange = useCallback((collapsed: boolean) => {
+    setSidebarCollapsed(collapsed);
   }, []);
-
-  const handleLeftResize = useCallback((sizePx: number) => {
-    pendingLeftSizeRef.current = sizePx;
-    setSidebarCollapsed(sizePx < LEFT_COLLAPSED_PX);
-  }, []);
-
-  const handleLeftLayoutChanged = useCallback(() => {
-    const size = pendingLeftSizeRef.current ?? leftPanelRef.current?.getSize().inPixels ?? leftSizePx;
-    pendingLeftSizeRef.current = null;
-    if (size < LEFT_MIN_PX) {
-      syncSidebarCollapsed();
-      return;
-    }
-    setLeftSize(LAYOUT_PERSIST_KEY, size);
-    syncSidebarCollapsed();
-  }, [setLeftSize, syncSidebarCollapsed]);
 
   const sidebar = useMemo(
     () => (
@@ -66,25 +39,28 @@ export function TerminalSessionsWorkspaceView({
     [onCreateSession, onEndSession, onSelectSession],
   );
 
+  const rootClass = [
+    "term-sessions-workspace",
+    sidebarCollapsed
+      ? "term-sessions-workspace--sidebar-collapsed"
+      : "term-sessions-workspace--sidebar-open",
+  ].join(" ");
+
   return (
     <TerminalSessionsChromeProvider value={{ sidebarCollapsed }}>
-      <DockWorkspace
-        className={`term-sessions-workspace${sidebarCollapsed ? " term-sessions-workspace--sidebar-collapsed" : " term-sessions-workspace--sidebar-open"}`}
+      <ModuleWorkspaceLayout
+        layoutKey="terminal-sessions"
+        className={rootClass}
+        leftColumnTitle={t("routes.terminal")}
         leftPreset="settings"
-        leftSizePx={leftSizePx}
+        leftSizePx={LEFT_DEFAULT_PX}
         leftMinPx={LEFT_MIN_PX}
         leftMaxPx={320}
-        leftPanelRef={leftPanelRef}
-        leftHandleClassName={
-          sidebarCollapsed
-            ? "term-sessions-sidebar-handle term-sessions-sidebar-handle--collapsed"
-            : "term-sessions-sidebar-handle term-sessions-sidebar-handle--open"
-        }
-        onLeftResize={handleLeftResize}
-        onLeftLayoutChanged={handleLeftLayoutChanged}
-        left={sidebar}
-        main={children}
-      />
+        onSidebarCollapsedChange={handleSidebarCollapsedChange}
+        leftSidebar={sidebar}
+      >
+        {children}
+      </ModuleWorkspaceLayout>
     </TerminalSessionsChromeProvider>
   );
 }

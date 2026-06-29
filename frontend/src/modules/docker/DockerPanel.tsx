@@ -6,6 +6,7 @@ import { useConnectionStore } from "../../stores/connectionStore";
 import { useDockerTopbarStore } from "../../stores/dockerTopbarStore";
 import { usePoolConnectionRegistration } from "../../stores/connectionPoolStore";
 import { ModuleSegmentDock } from "../../components/dock";
+import { ModuleWorkspaceLayout } from "../../components/workspace";
 import { useI18n } from "../../i18n";
 import { appConfirm } from "../../lib/appConfirm";
 import {
@@ -29,9 +30,10 @@ import { Button } from "../../components/ui/Button";
 import { LogViewer } from "../../components/ui/LogViewer";
 import { DetailPanelModeToggle, DetailPanelShell } from "../../components/ui/DetailPanelShell";
 import { WorkspaceEmptyPage } from "../../components/ui/WorkspaceEmptyPage";
-import { DockerConnectionsWorkspaceView } from "./DockerConnectionsWorkspaceView";
 import type { DockerConnectionDockOpenMode } from "./dockerConnectionWorkspaceTabs";
 import { useDockerConnectionWorkspace } from "./hooks/useDockerConnectionWorkspace";
+import { DockerConnectionSidebar } from "./DockerConnectionSidebar";
+import { DockerSidebarLinkageProvider } from "./DockerSidebarLinkageContext";
 import { ModuleEmptyState } from "../../components/ui/ModuleEmptyState";
 import { IconAlertTriangle } from "../../components/ui/Icons";
 import type { DockerComposeAction } from "../../ipc/bindings";
@@ -633,37 +635,40 @@ export function DockerPanel() {
     );
   };
 
+  const resolvedConnectionId = connectionWorkspace.activeConnectionId ?? selectedConnectionId;
+
+  const sidebarLinkageValue = useMemo(
+    () => ({
+      activeConnectionId: resolvedConnectionId,
+    }),
+    [resolvedConnectionId],
+  );
+
   const handleSidebarSelectConnection = useCallback(
-    (connectionId: string, _mode?: DockerConnectionDockOpenMode) => {
+    (connectionId: string, mode?: DockerConnectionDockOpenMode) => {
+      connectionWorkspace.handleSelectConnection(connectionId, mode);
       selectConnection(connectionId);
     },
-    [selectConnection],
+    [connectionWorkspace, selectConnection],
   );
 
   useEffect(() => {
     if (connectionsLoading || !selectedConnectionId) {
       return;
     }
-    const { workspaceTabs, activeTabId, activateTab, handleSelectConnection } = connectionWorkspace;
-    const existing = workspaceTabs.find((item) => item.connectionId === selectedConnectionId);
-    if (existing) {
-      if (activeTabId !== existing.id) {
-        activateTab(existing.id);
-      }
-      return;
+    const { activeConnectionId, handleSelectConnection } = connectionWorkspace;
+    if (activeConnectionId !== selectedConnectionId) {
+      handleSelectConnection(selectedConnectionId, "permanent");
     }
-    handleSelectConnection(selectedConnectionId, "permanent");
   }, [
     selectedConnectionId,
     connectionsLoading,
-    connectionWorkspace.workspaceTabs,
-    connectionWorkspace.activeTabId,
-    connectionWorkspace.activateTab,
+    connectionWorkspace.activeConnectionId,
     connectionWorkspace.handleSelectConnection,
   ]);
 
   const renderDockerSegmentContent = useCallback(
-    (segmentTabId: DockerWorkspaceTab, connectionId: string, _dockTabId: string, isActive: boolean) => {
+    (segmentTabId: DockerWorkspaceTab, connectionId: string, isActive: boolean) => {
       if (!isActive) {
         return <div className="docker-connection-tab-pane" aria-hidden />;
       }
@@ -1272,37 +1277,54 @@ export function DockerPanel() {
 
   return (
     <>
-      <ModuleSegmentDock
-        className="docker-module-dock"
-        moduleTitle={t("routes.docker")}
-        tabs={dockerSegmentTabs}
-        activeTabId={tab}
-        onActiveTabChange={(id) => setTab(id as DockerWorkspaceTab)}
-        enabled={isActiveRoute}
-        panelContentKey={dockerPanelContentKey}
-        renderPanel={(segmentTabId) => (
-          <DockerConnectionsWorkspaceView
-            connections={connections}
-            workspace={connectionWorkspace}
-            connectionsLoading={connectionsLoading}
-            scanning={scanning}
-            selectedConnectionId={selectedConnectionId}
-            onSelectConnection={selectConnection}
-            onSidebarSelectConnection={handleSidebarSelectConnection}
-            onCreateConnection={() => {
-              setEditDockerConnection(undefined);
-              setShowAddConn(true);
-            }}
-            onScan={() => void handleScanSshDocker()}
-            onEditConnection={handleEditDockerConnection}
-            onDeleteConnection={(id) => void handleDeleteDockerConnection(id)}
+      <DockerSidebarLinkageProvider value={sidebarLinkageValue}>
+        <ModuleWorkspaceLayout
+          layoutKey="docker-connections"
+          className="docker-connections-workspace"
+          leftColumnTitle={t("routes.docker")}
+          leftPreset="server"
+          leftMinPx={200}
+          leftSidebar={
+            <DockerConnectionSidebar
+              connections={connections}
+              loading={connectionsLoading}
+              scanning={scanning}
+              onSelectConnection={handleSidebarSelectConnection}
+              onCreate={() => {
+                setEditDockerConnection(undefined);
+                setShowAddConn(true);
+              }}
+              onScan={() => void handleScanSshDocker()}
+              onEditConnection={handleEditDockerConnection}
+              onDeleteConnection={(id) => void handleDeleteDockerConnection(id)}
+            />
+          }
+        >
+          <ModuleSegmentDock
+            className="docker-module-dock"
+            variant="function"
+            tabs={dockerSegmentTabs}
+            activeTabId={tab}
+            onActiveTabChange={(id) => setTab(id as DockerWorkspaceTab)}
+            enabled={isActiveRoute}
             panelContentKey={dockerPanelContentKey}
-            renderConnectionPanel={(connectionId, dockTabId, isActive) =>
-              renderDockerSegmentContent(segmentTabId as DockerWorkspaceTab, connectionId, dockTabId, isActive)
+            renderPanel={(segmentTabId) =>
+              resolvedConnectionId ? (
+                renderDockerSegmentContent(
+                  segmentTabId as DockerWorkspaceTab,
+                  resolvedConnectionId,
+                  true,
+                )
+              ) : (
+                <WorkspaceEmptyPage
+                  title={t("routes.docker")}
+                  prompt={t("docker.sidebar.selectConnection")}
+                />
+              )
             }
           />
-        )}
-      />
+        </ModuleWorkspaceLayout>
+      </DockerSidebarLinkageProvider>
 
       <DetailPanelShell
         open={Boolean(drawerId)}

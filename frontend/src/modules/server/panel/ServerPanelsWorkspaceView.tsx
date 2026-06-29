@@ -1,19 +1,16 @@
-import { useCallback, useMemo, useRef, type ReactNode } from "react";
-import { DockWorkspace } from "../../../components/dock";
-import { usePanelLayoutStore } from "../../../stores/panelLayoutStore";
+import { useCallback, useMemo, type ReactNode } from "react";
+import { ModuleWorkspaceLayout } from "../../../components/workspace";
+import { WorkspaceEmptyPage } from "../../../components/ui/WorkspaceEmptyPage";
 import { useI18n } from "../../../i18n";
 import type { ServerEntry } from "./serverConnection";
 import type { useServerPanelWorkspace } from "./hooks/useServerPanelWorkspace";
 import { ServerPanelSidebar } from "./ServerPanelSidebar";
 import { ServerSidebarLinkageProvider } from "./ServerSidebarLinkageContext";
-import { ServerWorkspaceDock } from "./ServerWorkspaceDock";
 import type { ServerPanelDockOpenMode } from "./serverPanelWorkspaceTabs";
-
-const LEFT_MIN_PX = 200;
-const LAYOUT_PERSIST_KEY = "server-panels";
 
 export type ServerPanelWorkspaceApi = ReturnType<typeof useServerPanelWorkspace>;
 
+/** @deprecated 布局已上移至 ServerPanel */
 export interface ServerPanelsWorkspaceViewProps {
   servers: ServerEntry[];
   workspace: ServerPanelWorkspaceApi;
@@ -24,10 +21,10 @@ export interface ServerPanelsWorkspaceViewProps {
   onEditServer?: (server: ServerEntry) => void;
   onDeleteServer?: (serverId: string) => void;
   panelContentKey?: string;
-  renderServerPanel: (serverId: string, dockTabId: string, isActive: boolean) => ReactNode;
+  renderServerPanel: (serverId: string, isActive: boolean) => ReactNode;
 }
 
-/** 服务器模块内层：左侧服务器列表 + 右侧面板 Dock（由顶层 ModuleSegmentDock 包裹）。 */
+/** 服务器模块内层：左侧服务器列表 + 右侧单服务器面板。 */
 export function ServerPanelsWorkspaceView({
   servers,
   workspace,
@@ -37,104 +34,38 @@ export function ServerPanelsWorkspaceView({
   onCreateServer,
   onEditServer,
   onDeleteServer,
-  panelContentKey,
   renderServerPanel,
 }: ServerPanelsWorkspaceViewProps) {
   const { t } = useI18n();
-  const {
-    workspaceTabs,
-    activeTabId,
-    activeServerId,
-    dockTabs,
-    dockLayout,
-    setDockLayout,
-    activateTab,
-    handleSelectServer,
-    handleCloseTab,
-    handleDockTabDoubleClick,
-  } = workspace;
+  const { activeServerId, handleSelectServer } = workspace;
 
-  const savedSize = usePanelLayoutStore((s) => s.leftSizes[LAYOUT_PERSIST_KEY]);
-  const setLeftSize = usePanelLayoutStore((s) => s.setLeftSize);
-  const leftSizePx =
-    typeof savedSize === "number" && savedSize >= LEFT_MIN_PX ? savedSize : undefined;
-  const pendingLeftSizeRef = useRef<number | null>(null);
-
-  const handleLeftResize = useCallback((sizePx: number) => {
-    pendingLeftSizeRef.current = sizePx;
-  }, []);
-
-  const handleLeftLayoutChanged = useCallback(() => {
-    const size = pendingLeftSizeRef.current;
-    if (size == null) return;
-    if (size < LEFT_MIN_PX) {
-      pendingLeftSizeRef.current = null;
-      return;
-    }
-    setLeftSize(LAYOUT_PERSIST_KEY, size);
-    pendingLeftSizeRef.current = null;
-  }, [setLeftSize]);
+  const resolvedServerId = activeServerId ?? selectedServerId;
 
   const sidebarLinkageValue = useMemo(
     () => ({
-      activeServerId: activeServerId ?? selectedServerId,
+      activeServerId: resolvedServerId,
     }),
-    [activeServerId, selectedServerId],
+    [resolvedServerId],
   );
 
   const handleSidebarSelect = useCallback(
     (serverId: string, mode?: ServerPanelDockOpenMode) => {
       handleSelectServer(serverId, mode);
       onSidebarSelectServer(serverId, mode);
+      onSelectServer(serverId);
     },
-    [handleSelectServer, onSidebarSelectServer],
-  );
-
-  const handleActiveTabChange = useCallback(
-    (tabId: string) => {
-      activateTab(tabId);
-      const tab = workspaceTabs.find((item) => item.id === tabId);
-      if (tab) {
-        onSelectServer(tab.serverId);
-      }
-    },
-    [activateTab, workspaceTabs, onSelectServer],
-  );
-
-  const handleCloseDockTab = useCallback(
-    (tabId: string) => {
-      const closingIndex = workspaceTabs.findIndex((item) => item.id === tabId);
-      const nextTabs = workspaceTabs.filter((item) => item.id !== tabId);
-      const wasActive = activeTabId === tabId;
-      handleCloseTab(tabId);
-      if (wasActive && nextTabs.length > 0) {
-        const fallback = nextTabs[Math.min(closingIndex, nextTabs.length - 1)];
-        onSelectServer(fallback.serverId);
-      }
-    },
-    [handleCloseTab, workspaceTabs, activeTabId, onSelectServer],
-  );
-
-  const renderDockPanel = useCallback(
-    (tabId: string) => {
-      const tab = workspaceTabs.find((item) => item.id === tabId);
-      if (!tab) return null;
-      const isActive = tabId === activeTabId;
-      return renderServerPanel(tab.serverId, tabId, isActive);
-    },
-    [workspaceTabs, activeTabId, renderServerPanel],
+    [handleSelectServer, onSidebarSelectServer, onSelectServer],
   );
 
   return (
     <ServerSidebarLinkageProvider value={sidebarLinkageValue}>
-      <DockWorkspace
+      <ModuleWorkspaceLayout
+        layoutKey="server-panels"
         className="server-panels-workspace"
+        leftColumnTitle={t("routes.server")}
         leftPreset="server"
-        leftSizePx={leftSizePx}
-        leftMinPx={LEFT_MIN_PX}
-        onLeftResize={handleLeftResize}
-        onLeftLayoutChanged={handleLeftLayoutChanged}
-        left={
+        leftMinPx={200}
+        leftSidebar={
           <ServerPanelSidebar
             servers={servers}
             onSelectServer={handleSidebarSelect}
@@ -143,21 +74,16 @@ export function ServerPanelsWorkspaceView({
             onDeleteServer={onDeleteServer}
           />
         }
-        main={
-          <ServerWorkspaceDock
-            dockTabs={dockTabs}
-            activeTabId={activeTabId}
-            onActiveTabChange={handleActiveTabChange}
-            onCloseTab={handleCloseDockTab}
-            dockLayout={dockLayout}
-            onDockLayoutChange={setDockLayout}
-            renderDockPanel={renderDockPanel}
-            onTabDoubleClick={handleDockTabDoubleClick}
-            panelContentKey={panelContentKey}
-            emptyPrompt={t("server.empty.selectServer")}
+      >
+        {resolvedServerId ? (
+          renderServerPanel(resolvedServerId, true)
+        ) : (
+          <WorkspaceEmptyPage
+            title={t("routes.server")}
+            prompt={t("server.empty.selectServer")}
           />
-        }
-      />
+        )}
+      </ModuleWorkspaceLayout>
     </ServerSidebarLinkageProvider>
   );
 }

@@ -17,7 +17,7 @@ export interface ProtocolHttpWorkspaceDockProps {
   onTabDoubleClick?: (tabId: string) => void;
 }
 
-/** HTTP 协议实验室右侧 Dock：每个已保存请求一个可关闭 Tab（Postman 风格）。 */
+/** @deprecated 已改用 ModuleSegmentDock */
 export function ProtocolHttpWorkspaceDock({
   dockTabs,
   activeTabId,

@@ -1,19 +1,16 @@
-import { useCallback, useMemo, useRef, type ReactNode } from "react";
-import { DockWorkspace } from "../../components/dock";
-import { usePanelLayoutStore } from "../../stores/panelLayoutStore";
+import { useCallback, useMemo, type ReactNode } from "react";
+import { ModuleWorkspaceLayout } from "../../components/workspace";
+import { WorkspaceEmptyPage } from "../../components/ui/WorkspaceEmptyPage";
 import { useI18n } from "../../i18n";
 import type { DockerConnectionInfo } from "../../ipc/bindings";
 import type { useDockerConnectionWorkspace } from "./hooks/useDockerConnectionWorkspace";
 import { DockerConnectionSidebar } from "./DockerConnectionSidebar";
 import { DockerSidebarLinkageProvider } from "./DockerSidebarLinkageContext";
-import { DockerWorkspaceDock } from "./DockerWorkspaceDock";
 import type { DockerConnectionDockOpenMode } from "./dockerConnectionWorkspaceTabs";
-
-const LEFT_MIN_PX = 200;
-const LAYOUT_PERSIST_KEY = "docker-connections";
 
 export type DockerConnectionWorkspaceApi = ReturnType<typeof useDockerConnectionWorkspace>;
 
+/** @deprecated 布局已上移至 DockerPanel */
 export interface DockerConnectionsWorkspaceViewProps {
   connections: DockerConnectionInfo[];
   workspace: DockerConnectionWorkspaceApi;
@@ -27,10 +24,10 @@ export interface DockerConnectionsWorkspaceViewProps {
   onEditConnection?: (connection: DockerConnectionInfo) => void;
   onDeleteConnection?: (connectionId: string) => void;
   panelContentKey?: string;
-  renderConnectionPanel: (connectionId: string, dockTabId: string, isActive: boolean) => ReactNode;
+  renderConnectionPanel: (connectionId: string, isActive: boolean) => ReactNode;
 }
 
-/** Docker 模块内层：左侧连接树 + 右侧连接 Dock（由顶层 ModuleSegmentDock 包裹）。 */
+/** Docker 模块内层：左侧连接树 + 右侧单连接面板（功能 Tab 由顶层 ModuleSegmentDock 提供）。 */
 export function DockerConnectionsWorkspaceView({
   connections,
   workspace,
@@ -43,104 +40,38 @@ export function DockerConnectionsWorkspaceView({
   onScan,
   onEditConnection,
   onDeleteConnection,
-  panelContentKey,
   renderConnectionPanel,
 }: DockerConnectionsWorkspaceViewProps) {
   const { t } = useI18n();
-  const {
-    workspaceTabs,
-    activeTabId,
-    activeConnectionId,
-    dockTabs,
-    dockLayout,
-    setDockLayout,
-    activateTab,
-    handleSelectConnection,
-    handleCloseTab,
-    handleDockTabDoubleClick,
-  } = workspace;
+  const { activeConnectionId, handleSelectConnection } = workspace;
 
-  const savedSize = usePanelLayoutStore((s) => s.leftSizes[LAYOUT_PERSIST_KEY]);
-  const setLeftSize = usePanelLayoutStore((s) => s.setLeftSize);
-  const leftSizePx =
-    typeof savedSize === "number" && savedSize >= LEFT_MIN_PX ? savedSize : undefined;
-  const pendingLeftSizeRef = useRef<number | null>(null);
-
-  const handleLeftResize = useCallback((sizePx: number) => {
-    pendingLeftSizeRef.current = sizePx;
-  }, []);
-
-  const handleLeftLayoutChanged = useCallback(() => {
-    const size = pendingLeftSizeRef.current;
-    if (size == null) return;
-    if (size < LEFT_MIN_PX) {
-      pendingLeftSizeRef.current = null;
-      return;
-    }
-    setLeftSize(LAYOUT_PERSIST_KEY, size);
-    pendingLeftSizeRef.current = null;
-  }, [setLeftSize]);
+  const resolvedConnectionId = activeConnectionId ?? selectedConnectionId;
 
   const sidebarLinkageValue = useMemo(
     () => ({
-      activeConnectionId: activeConnectionId ?? selectedConnectionId,
+      activeConnectionId: resolvedConnectionId,
     }),
-    [activeConnectionId, selectedConnectionId],
+    [resolvedConnectionId],
   );
 
   const handleSidebarSelect = useCallback(
     (connectionId: string, mode?: DockerConnectionDockOpenMode) => {
       handleSelectConnection(connectionId, mode);
       onSidebarSelectConnection(connectionId, mode);
+      onSelectConnection(connectionId);
     },
-    [handleSelectConnection, onSidebarSelectConnection],
-  );
-
-  const handleActiveTabChange = useCallback(
-    (tabId: string) => {
-      activateTab(tabId);
-      const tab = workspaceTabs.find((item) => item.id === tabId);
-      if (tab) {
-        onSelectConnection(tab.connectionId);
-      }
-    },
-    [activateTab, workspaceTabs, onSelectConnection],
-  );
-
-  const handleCloseDockTab = useCallback(
-    (tabId: string) => {
-      const closingIndex = workspaceTabs.findIndex((item) => item.id === tabId);
-      const nextTabs = workspaceTabs.filter((item) => item.id !== tabId);
-      const wasActive = activeTabId === tabId;
-      handleCloseTab(tabId);
-      if (wasActive && nextTabs.length > 0) {
-        const fallback = nextTabs[Math.min(closingIndex, nextTabs.length - 1)];
-        onSelectConnection(fallback.connectionId);
-      }
-    },
-    [handleCloseTab, workspaceTabs, activeTabId, onSelectConnection],
-  );
-
-  const renderDockPanel = useCallback(
-    (tabId: string) => {
-      const tab = workspaceTabs.find((item) => item.id === tabId);
-      if (!tab) return null;
-      const isActive = tabId === activeTabId;
-      return renderConnectionPanel(tab.connectionId, tabId, isActive);
-    },
-    [workspaceTabs, activeTabId, renderConnectionPanel],
+    [handleSelectConnection, onSidebarSelectConnection, onSelectConnection],
   );
 
   return (
     <DockerSidebarLinkageProvider value={sidebarLinkageValue}>
-      <DockWorkspace
+      <ModuleWorkspaceLayout
+        layoutKey="docker-connections"
         className="docker-connections-workspace"
+        leftColumnTitle={t("routes.docker")}
         leftPreset="server"
-        leftSizePx={leftSizePx}
-        leftMinPx={LEFT_MIN_PX}
-        onLeftResize={handleLeftResize}
-        onLeftLayoutChanged={handleLeftLayoutChanged}
-        left={
+        leftMinPx={200}
+        leftSidebar={
           <DockerConnectionSidebar
             connections={connections}
             loading={connectionsLoading}
@@ -152,21 +83,16 @@ export function DockerConnectionsWorkspaceView({
             onDeleteConnection={onDeleteConnection}
           />
         }
-        main={
-          <DockerWorkspaceDock
-            dockTabs={dockTabs}
-            activeTabId={activeTabId}
-            onActiveTabChange={handleActiveTabChange}
-            onCloseTab={handleCloseDockTab}
-            dockLayout={dockLayout}
-            onDockLayoutChange={setDockLayout}
-            renderDockPanel={renderDockPanel}
-            onTabDoubleClick={handleDockTabDoubleClick}
-            panelContentKey={panelContentKey}
-            emptyPrompt={t("docker.sidebar.selectConnection")}
+      >
+        {resolvedConnectionId ? (
+          renderConnectionPanel(resolvedConnectionId, true)
+        ) : (
+          <WorkspaceEmptyPage
+            title={t("routes.docker")}
+            prompt={t("docker.sidebar.selectConnection")}
           />
-        }
-      />
+        )}
+      </ModuleWorkspaceLayout>
     </DockerSidebarLinkageProvider>
   );
 }

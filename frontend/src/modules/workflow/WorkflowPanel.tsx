@@ -4,6 +4,7 @@ import { useWorkflowStore } from "../../stores/workflowStore";
 import { useActionStore } from "../../stores/actionStore";
 import { useI18n } from "../../i18n";
 import { ModuleSegmentDock } from "../../components/dock";
+import { ModuleWorkspaceLayout } from "../../components/workspace";
 import { usePersistedModuleTab } from "../../hooks/usePersistedModuleTab";
 import { Select } from "../../components/ui/Select";
 import type {
@@ -453,15 +454,21 @@ export function WorkflowPanel() {
 
   return (
     <>
-      <ModuleSegmentDock
-        className="workflow-module-dock"
-        moduleTitle={t("routes.workflow")}
-        tabs={segmentTabs}
-        activeTabId={tab}
-        onActiveTabChange={(id) => setTab(id as WfTab)}
-        enabled={isActiveRoute}
-        renderPanel={renderPanel}
-      />
+      <ModuleWorkspaceLayout
+        layoutKey="workflow"
+        className="workflow-module-layout"
+        leftColumnTitle={t("routes.workflow")}
+      >
+        <ModuleSegmentDock
+          className="workflow-module-dock"
+          variant="function"
+          tabs={segmentTabs}
+          activeTabId={tab}
+          onActiveTabChange={(id) => setTab(id as WfTab)}
+          enabled={isActiveRoute}
+          renderPanel={renderPanel}
+        />
+      </ModuleWorkspaceLayout>
 
       {/* ═══════════════════════════════════════════════ */}
       {/*  CREATE / EDIT DIALOG                         */}

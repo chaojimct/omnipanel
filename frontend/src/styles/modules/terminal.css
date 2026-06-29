@@ -2485,19 +2485,26 @@
  * 终端侧栏顶栏对齐 & 分隔条：必须在 @layer 外。
  * global.css 中 dock-handle / dockview tab 栏为 unlayered，@layer components 无法覆盖。
  */
-.dock-workspace.term-sessions-workspace--sidebar-open .dock-panel-left .dock-rail-shell {
+.dock-workspace.term-sessions-workspace--sidebar-open .dock-panel-left .dock-rail-shell,
+.dock-workspace.module-workspace-layout--sidebar-open .dock-panel-left .dock-rail-shell {
     border-right: none;
 }
 
-.dock-workspace.term-sessions-workspace--sidebar-open .terminal-module-dock .dv-pre-actions-container .module-dock-title {
+.dock-workspace.term-sessions-workspace--sidebar-open .terminal-module-dock .dv-pre-actions-container .module-dock-title,
+.dock-workspace.module-workspace-layout--sidebar-open .module-root-dock .dv-pre-actions-container .module-dock-title,
+.dock-workspace.module-workspace-layout--sidebar-open .module-segment-dock .dv-pre-actions-container .module-dock-title {
     display: none !important;
 }
 
-.dock-workspace.term-sessions-workspace--sidebar-open .terminal-module-dock .dv-tabs-and-actions-container {
+.dock-workspace.term-sessions-workspace--sidebar-open .terminal-module-dock .dv-tabs-and-actions-container,
+.dock-workspace.module-workspace-layout--sidebar-open .module-root-dock .dv-tabs-and-actions-container,
+.dock-workspace.module-workspace-layout--sidebar-open .module-segment-dock .dv-tabs-and-actions-container {
     border-left: none;
 }
 
-.dock-workspace.term-sessions-workspace--sidebar-open .terminal-module-dock .dv-pre-actions-container:empty {
+.dock-workspace.term-sessions-workspace--sidebar-open .terminal-module-dock .dv-pre-actions-container:empty,
+.dock-workspace.module-workspace-layout--sidebar-open .module-root-dock .dv-pre-actions-container:empty,
+.dock-workspace.module-workspace-layout--sidebar-open .module-segment-dock .dv-pre-actions-container:empty {
     display: none;
     width: 0;
     min-width: 0;
@@ -2505,12 +2512,14 @@
     margin: 0;
 }
 
-.dock-workspace.term-sessions-workspace--sidebar-open .term-session-tree__body {
-    border-right: 1px solid var(--border);
+.dock-workspace.term-sessions-workspace--sidebar-open .term-session-tree__body,
+.dock-workspace.module-workspace-layout--sidebar-open .module-left-column__sidebar {
+    border-right: 0px solid var(--border);
 }
 
-/* 分隔条：class 直接挂在 handle 元素上，避免复杂祖先选择器失效 */
-.dock-handle.term-sessions-sidebar-handle--open {
+/* 分隔条：class 直接挂在 handle 元素上 */
+.dock-handle.term-sessions-sidebar-handle--open,
+.dock-handle.module-workspace-sidebar-handle--open {
     align-self: flex-start;
     margin-top: var(--shell-dv-tab-bar-h);
     margin-left: -3px;
@@ -2520,7 +2529,8 @@
     max-height: calc(100% - var(--shell-dv-tab-bar-h));
 }
 
-.dock-handle.term-sessions-sidebar-handle--collapsed {
+.dock-handle.term-sessions-sidebar-handle--collapsed,
+.dock-handle.module-workspace-sidebar-handle--collapsed {
     align-self: stretch;
     margin: 0 -2px;
     width: 5px;
@@ -2530,7 +2540,8 @@
     z-index: 15;
 }
 
-.dock-handle.term-sessions-sidebar-handle--collapsed .dock-handle-inner {
+.dock-handle.term-sessions-sidebar-handle--collapsed .dock-handle-inner,
+.dock-handle.module-workspace-sidebar-handle--collapsed .dock-handle-inner {
     height: 48px;
 }
 

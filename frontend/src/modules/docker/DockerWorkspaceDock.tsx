@@ -18,6 +18,7 @@ export interface DockerWorkspaceDockProps {
 }
 
 /** Docker 模块右侧 Dock 工作区（连接 Tab）。 */
+/** @deprecated 已改用 ModuleSegmentDock */
 export function DockerWorkspaceDock({
   dockTabs,
   activeTabId,
