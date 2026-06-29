@@ -28,6 +28,7 @@ import { textSearchMatches } from "../../lib/textSearchMatch";
 import { type DbColumnMeta } from "./api";
 import { PENDING_INSERT_ROW_KEY, type SortState } from "./dbWorkspaceState";
 import { getFilterColumnNames, buildTablePreviewSql } from "./tablePreviewFilter";
+import { matrixToCsv } from "./csvExport";
 import { TableDataGridFilterPopover } from "./TableDataGridFilterPopover";
 import {
   TableDataGridCellPreviewDrawer,
@@ -132,6 +133,50 @@ function isHeaderInColumnSelection(
   const spansAllRows = r.minRow === 0 && r.maxRow === rowCount - 1;
   if (!spansAllRows) return false;
   return headerColIdx >= r.minCol && headerColIdx <= r.maxCol;
+}
+
+function buildCellRangeCsv(
+  range: CellRange,
+  leafColumns: { id: string }[],
+  tableRows: { index: number; original: Record<string, unknown> }[],
+  opts: {
+    pkCols: { name: string }[];
+    transposed: boolean;
+    displayCellOverrides?: Record<string, Record<string, unknown>>;
+  },
+): string {
+  const { minRow, maxRow, minCol, maxCol } = normalizeRange(range);
+  const colIds: string[] = [];
+  for (let c = minCol; c <= maxCol; c++) {
+    const col = leafColumns[c];
+    if (!col || col.id === ROW_NUM_COL_ID) continue;
+    colIds.push(col.id);
+  }
+  if (colIds.length === 0) return "";
+
+  const matrix: unknown[][] = [];
+  for (let r = minRow; r <= maxRow; r++) {
+    const tableRow = tableRows[r];
+    if (!tableRow) continue;
+    const rowKey = opts.transposed
+      ? String(tableRow.original[TRANSPOSE_FIELD_COL] ?? "")
+      : resolveRowKey(tableRow.original, opts.pkCols);
+    const overrideForRow = rowKey ? opts.displayCellOverrides?.[rowKey] : undefined;
+    const line: unknown[] = [];
+    for (const colId of colIds) {
+      const overrideValue = overrideForRow?.[colId];
+      line.push(overrideValue !== undefined ? overrideValue : tableRow.original[colId]);
+    }
+    matrix.push(line);
+  }
+  return matrixToCsv(matrix);
+}
+
+function isEditableTextTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  if (target.isContentEditable) return true;
+  const tag = target.tagName;
+  return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
 }
 
 function cellToText(value: unknown): string {
@@ -1279,6 +1324,37 @@ export const TableDataGrid = memo(function TableDataGrid({ columns, rows, totalR
   const allColumnsHidden = effectiveColumns.length > 0 && visibleColumns.length === 0;
   const tableRows = table.getRowModel().rows;
   const leafColumnCount = table.getAllLeafColumns().length;
+
+  useEffect(() => {
+    const onCopyKeyDown = (event: KeyboardEvent) => {
+      if (event.isComposing) return;
+      if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== "c") return;
+      if (event.shiftKey || event.altKey) return;
+      if (isEditableTextTarget(event.target)) return;
+      if (document.activeElement instanceof HTMLElement) {
+        if (isEditableTextTarget(document.activeElement)) return;
+        if (document.activeElement.closest(".sql-codemirror-editor")) return;
+      }
+      const range = cellRangeRef.current;
+      if (!range) return;
+
+      const csv = buildCellRangeCsv(range, leafColumns, tableRows, {
+        pkCols,
+        transposed,
+        displayCellOverrides,
+      });
+      if (!csv) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+      void navigator.clipboard.writeText(csv).catch(() => {
+        /* clipboard unavailable */
+      });
+    };
+
+    window.addEventListener("keydown", onCopyKeyDown, true);
+    return () => window.removeEventListener("keydown", onCopyKeyDown, true);
+  }, [leafColumns, tableRows, pkCols, transposed, displayCellOverrides]);
 
   const getRowHeight = useCallback(
     (index: number) => {

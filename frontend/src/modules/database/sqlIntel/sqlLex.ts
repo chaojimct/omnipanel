@@ -96,6 +96,12 @@ export function findStatementRangeAtOffset(
   offset: number,
 ): { from: number; to: number } {
   const pos = Math.max(0, Math.min(offset, sql.length));
+
+  const afterTerminator = findStatementRangeIfAfterTerminator(sql, pos);
+  if (afterTerminator) {
+    return afterTerminator;
+  }
+
   let start = 0;
   const flags = createLexFlags();
 
@@ -121,6 +127,56 @@ export function findStatementRangeAtOffset(
   }
 
   return { from: start, to: end };
+}
+
+/** 光标在语句结束分号之后、下一条语句内容之前时，仍归属前一条语句。 */
+function findStatementRangeIfAfterTerminator(
+  sql: string,
+  pos: number,
+): { from: number; to: number } | null {
+  if (pos === 0) {
+    return null;
+  }
+
+  let lastSemi = -1;
+  const scanFlags = createLexFlags();
+  for (let i = 0; i < pos; i += 1) {
+    if (isSemicolonDelimiter(sql, i, scanFlags)) {
+      lastSemi = i;
+    }
+    i = stepLex(sql, i, scanFlags);
+  }
+
+  if (lastSemi < 0) {
+    return null;
+  }
+
+  const gapFlags = createLexFlags();
+  for (let i = lastSemi + 1; i < pos; i += 1) {
+    const ch = sql[i];
+    if (ch !== " " && ch !== "\t" && ch !== "\r" && ch !== "\n") {
+      return null;
+    }
+    i = stepLex(sql, i, gapFlags);
+  }
+
+  if (pos < sql.length) {
+    const chAt = sql[pos];
+    if (chAt !== " " && chAt !== "\t" && chAt !== "\r" && chAt !== "\n") {
+      return null;
+    }
+  }
+
+  let start = 0;
+  const startFlags = createLexFlags();
+  for (let i = 0; i < lastSemi; i += 1) {
+    if (isSemicolonDelimiter(sql, i, startFlags)) {
+      start = i + 1;
+    }
+    i = stepLex(sql, i, startFlags);
+  }
+
+  return { from: start, to: lastSemi };
 }
 
 /** 按分号切分多条 SQL（忽略字符串与注释中的分号）。 */

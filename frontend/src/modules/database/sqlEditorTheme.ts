@@ -184,34 +184,65 @@ function createDarkTheme(typography: SqlEditorTypography) {
       "&": {
         backgroundColor: "#1a1717",
         color: "#fdfcfc",
+        cursor: "text",
       },
       ".cm-content": {
         caretColor: "#fdfcfc",
+        cursor: "text",
         padding: "12px 0",
         ...contentTypography,
       },
+      ".cm-scroller": { overflow: "auto", cursor: "text" },
       ".cm-gutters": {
         backgroundColor: "#1a1717",
         color: "#6e6e73",
         border: "none",
+        cursor: "default",
         ...contentTypography,
       },
       ".cm-cursor, .cm-dropCursor": { borderLeftColor: "#fdfcfc" },
-      ".cm-selectionBackground, &.cm-focused .cm-selectionBackground": {
-        backgroundColor: "#007aff30 !important",
+      ".cm-selectionBackground": {
+        backgroundColor: "#007aff20 !important",
+      },
+      "&.cm-focused .cm-selectionBackground": {
+        backgroundColor: "#007aff40 !important",
+      },
+      ".cm-content ::selection": {
+        backgroundColor: "#007aff40 !important",
+      },
+      ".cm-selectionMatch, &.cm-focused .cm-selectionMatch": {
+        backgroundColor: "transparent !important",
       },
       ".cm-activeLine": { backgroundColor: "#302c2c40" },
       ".cm-activeLineGutter": { color: "#c8c6c4" },
-      ".cm-activeStatement": {
-        backgroundColor: "color-mix(in srgb, var(--accent) 8%, transparent)",
-        borderLeft: "2px solid var(--accent)",
+      ".cm-editor": { position: "relative" },
+      ".cm-activeStatementOutline": {
+        position: "absolute",
+        boxSizing: "border-box",
+        backgroundColor: "#66bb6a",
+        pointerEvents: "none",
+        zIndex: "1",
+      },
+      ".cm-sql-hover-tooltip": {
+        padding: "6px 10px",
+        fontSize: "12px",
+        lineHeight: "1.45",
+        whiteSpace: "pre-wrap",
+        maxWidth: "360px",
+        color: "var(--text-primary)",
+        backgroundColor: "var(--surface-elevated)",
+        border: "1px solid var(--border-subtle)",
+        borderRadius: "6px",
+        boxShadow: "var(--shadow-md)",
       },
       ".cm-lineNumbers .cm-gutterElement": { padding: "0 8px 0 12px", minWidth: "2.5em" },
       ".cm-foldGutter .cm-gutterElement": { padding: "0 4px" },
-      ".cm-scroller": { overflow: "auto" },
       ".cm-matchingBracket, .cm-nonmatchingBracket": {
-        backgroundColor: "#007aff20",
-        outline: "1px solid #007aff50",
+        backgroundColor: "transparent",
+        outline: "none",
+      },
+      ".cm-lintRange-active": {
+        backgroundColor: "transparent !important",
       },
       ".cm-search-highlight": {
         backgroundColor: "color-mix(in srgb, var(--warn) 35%, transparent)",
@@ -249,34 +280,65 @@ function createLightTheme(typography: SqlEditorTypography) {
       "&": {
         backgroundColor: "#e8e8ed",
         color: "#1d1d1f",
+        cursor: "text",
       },
       ".cm-content": {
         caretColor: "#1d1d1f",
+        cursor: "text",
         padding: "12px 0",
         ...contentTypography,
       },
+      ".cm-scroller": { overflow: "auto", cursor: "text" },
       ".cm-gutters": {
         backgroundColor: "#e8e8ed",
         color: "#aeaeb2",
         border: "none",
+        cursor: "default",
         ...contentTypography,
       },
       ".cm-cursor, .cm-dropCursor": { borderLeftColor: "#1d1d1f" },
-      ".cm-selectionBackground, &.cm-focused .cm-selectionBackground": {
-        backgroundColor: "#007aff20 !important",
+      ".cm-selectionBackground": {
+        backgroundColor: "#007aff18 !important",
+      },
+      "&.cm-focused .cm-selectionBackground": {
+        backgroundColor: "#007aff30 !important",
+      },
+      ".cm-content ::selection": {
+        backgroundColor: "#007aff30 !important",
+      },
+      ".cm-selectionMatch, &.cm-focused .cm-selectionMatch": {
+        backgroundColor: "transparent !important",
       },
       ".cm-activeLine": { backgroundColor: "#ffffff60" },
       ".cm-activeLineGutter": { color: "#424245" },
-      ".cm-activeStatement": {
-        backgroundColor: "color-mix(in srgb, var(--accent) 10%, transparent)",
-        borderLeft: "2px solid var(--accent)",
+      ".cm-editor": { position: "relative" },
+      ".cm-activeStatementOutline": {
+        position: "absolute",
+        boxSizing: "border-box",
+        backgroundColor: "#43a047",
+        pointerEvents: "none",
+        zIndex: "1",
+      },
+      ".cm-sql-hover-tooltip": {
+        padding: "6px 10px",
+        fontSize: "12px",
+        lineHeight: "1.45",
+        whiteSpace: "pre-wrap",
+        maxWidth: "360px",
+        color: "var(--text-primary)",
+        backgroundColor: "var(--surface-elevated)",
+        border: "1px solid var(--border-subtle)",
+        borderRadius: "6px",
+        boxShadow: "var(--shadow-md)",
       },
       ".cm-lineNumbers .cm-gutterElement": { padding: "0 8px 0 12px", minWidth: "2.5em" },
       ".cm-foldGutter .cm-gutterElement": { padding: "0 4px" },
-      ".cm-scroller": { overflow: "auto" },
       ".cm-matchingBracket, .cm-nonmatchingBracket": {
-        backgroundColor: "#007aff15",
-        outline: "1px solid #007aff40",
+        backgroundColor: "transparent",
+        outline: "none",
+      },
+      ".cm-lintRange-active": {
+        backgroundColor: "transparent !important",
       },
       ".cm-search-highlight": {
         backgroundColor: "color-mix(in srgb, var(--warn) 35%, transparent)",

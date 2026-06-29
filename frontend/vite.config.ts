@@ -21,7 +21,12 @@ export default defineConfig({
         find: "standardwebhooks-cjs",
         replacement: requireFromFrontend.resolve("standardwebhooks/dist/index.js"),
       },
+      {
+        find: "node-sql-parser-cjs",
+        replacement: requireFromFrontend.resolve("node-sql-parser/index.js"),
+      },
       { find: "standardwebhooks", replacement: path.join(shimsDir, "standardwebhooks.ts") },
+      { find: "node-sql-parser", replacement: path.join(shimsDir, "node-sql-parser.ts") },
     ],
   },
   define: {
@@ -38,6 +43,7 @@ export default defineConfig({
       "p-timeout",
       "base64-js",
       "standardwebhooks-cjs",
+      "node-sql-parser-cjs",
       "@stablelib/base64",
       "fast-sha256",
       "dockview-react",
@@ -50,7 +56,6 @@ export default defineConfig({
     exclude: [
       "node-ipc",
       "picomatch",
-      "node-sql-parser",
       "@cfworker/json-schema",
       "mustache",
       "p-retry",

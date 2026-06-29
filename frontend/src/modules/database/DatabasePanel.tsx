@@ -59,6 +59,7 @@ import {
   type DbConnectionConfig,
 } from "./api";
 import { buildDatabaseSchema, introspectToTableSchemas } from "./lsp/sqlCompletion";
+import { formatSql } from "./sqlIntel/sqlFormat";
 import { toCsv } from "./csvExport";
 import { buildRedisColumnMeta, buildRedisUpdateCommands } from "./redisTableMeta";
 import { getCachedDatabaseNames, getCachedTableColumns } from "./schemaCacheMerge";
@@ -3390,9 +3391,14 @@ export function DatabasePanel() {
 
       const state = useDbWorkspaceTabStore.getState().sqlTabStates[tabId] ?? createDefaultSqlTabState();
       const store = useDbSqlFileStore.getState();
+      const connection = resolveConnection(state.connId);
+      const sqlToSave = formatSql(state.sql, connection?.db_type ?? null);
+      if (sqlToSave !== state.sql) {
+        updateSqlTabState(tabId, { sql: sqlToSave });
+      }
 
       if (tab.sqlFileId) {
-        store.updateFileSql(tab.sqlFileId, state.sql);
+        store.updateFileSql(tab.sqlFileId, sqlToSave);
         store.updateFileBinding(tab.sqlFileId, state.connId, state.database);
         await store.flushToDisk();
         setDirtySqlWorkspaceTabIds((prev) => {
@@ -3414,7 +3420,7 @@ export function DatabasePanel() {
       });
       if (!name) return;
 
-      const file = store.addFile(null, name.trim(), state.sql);
+      const file = store.addFile(null, name.trim(), sqlToSave);
       store.updateFileBinding(file.id, state.connId, state.database);
       setWorkspaceTabs((prev) =>
         prev.map((item) =>
@@ -3436,7 +3442,7 @@ export function DatabasePanel() {
       syncSqlFileTabHeaderMeta(tabId, false, true);
       await store.flushToDisk();
     },
-    [activeWorkspaceTabId, t, syncSqlFileTabHeaderMeta],
+    [activeWorkspaceTabId, t, syncSqlFileTabHeaderMeta, resolveConnection, updateSqlTabState],
   );
 
   useEffect(() => {

@@ -21,6 +21,8 @@ export interface ToCsvOptions {
   header?: string[];
   /** 行分隔符，默认 "\r\n" */
   newline?: string;
+  /** 是否输出表头行，默认 true */
+  includeHeader?: boolean;
 }
 
 /** 将表格数据序列化为 CSV 字符串。columns 是列名，rows 每行是按列名索引的对象。 */
@@ -29,11 +31,23 @@ export function toCsv(
   rows: ReadonlyArray<Record<string, unknown>>,
   options: ToCsvOptions = {},
 ): string {
-  const { bom = true, header, newline = "\r\n" } = options;
+  const { bom = true, header, newline = "\r\n", includeHeader = true } = options;
   const headerLine = (header ?? columns).map(escapeCsvCell).join(",");
   const dataLines = rows.map((row) =>
     columns.map((col) => escapeCsvCell(row?.[col])).join(","),
   );
-  const text = [headerLine, ...dataLines].join(newline) + newline;
+  const lines = includeHeader ? [headerLine, ...dataLines] : dataLines;
+  const text = lines.join(newline) + (lines.length > 0 ? newline : "");
+  return bom ? "\uFEFF" + text : text;
+}
+
+/** 将二维数组序列化为 CSV（无表头，适合剪贴板选区复制）。 */
+export function matrixToCsv(
+  rows: ReadonlyArray<ReadonlyArray<unknown>>,
+  options: Pick<ToCsvOptions, "bom" | "newline"> = {},
+): string {
+  const { bom = false, newline = "\r\n" } = options;
+  if (rows.length === 0) return "";
+  const text = rows.map((row) => row.map(escapeCsvCell).join(",")).join(newline) + newline;
   return bom ? "\uFEFF" + text : text;
 }

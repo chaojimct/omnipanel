@@ -2213,6 +2213,7 @@
     min-height: 0;
     display: flex;
     flex-direction: column;
+    cursor: text;
 }
 
 .sql-codemirror-editor__host {
@@ -2222,6 +2223,11 @@
 
 .sql-codemirror-editor__host .cm-editor {
     height: 100%;
+    cursor: text;
+}
+
+.sql-codemirror-editor__host .cm-editor .cm-gutters {
+    cursor: default;
 }
 
 .sql-codemirror-editor--inactive {
