@@ -43,6 +43,8 @@ const LARGE_TABLE_ROW_THRESHOLD = 10_000;
 
 interface DatabaseToolboxProps {
   connections: DbConnectionConfig[];
+  /** 数据同步 / 结构同步（由 DatabasePanel 顶级 Tab 传入） */
+  tab: ToolboxTabId;
   /** 打开工具箱时默认元库连接 */
   initialSourceConnectionId?: string | null;
   initialSourceDatabase?: string;
@@ -52,6 +54,7 @@ interface DatabaseToolboxProps {
 
 export function DatabaseToolbox({
   connections,
+  tab,
   initialSourceConnectionId,
   initialSourceDatabase = "",
   active = true,
@@ -64,7 +67,6 @@ export function DatabaseToolbox({
     reset: resetLoadProgress,
     advance: advanceLoadProgress,
   } = useDataLoading();
-  const [tab, setTab] = useState<ToolboxTabId>("dataSync");
 
   const [sourceConnId, setSourceConnId] = useState("");
   const [sourceDb, setSourceDb] = useState("");
@@ -1000,15 +1002,6 @@ export function DatabaseToolbox({
     setTargetDbs([]);
   }, []);
 
-  const tabs = useMemo(
-    () =>
-      [
-        { id: "dataSync" as const, label: t("database.toolbox.tabs.dataSync") },
-        { id: "schemaSync" as const, label: t("database.toolbox.tabs.schemaSync") },
-      ] satisfies { id: ToolboxTabId; label: string }[],
-    [t],
-  );
-
   if (connections.length === 0) {
     return (
       <div className="db-toolbox">
@@ -1023,21 +1016,6 @@ export function DatabaseToolbox({
 
   return (
     <div className="db-toolbox">
-      <nav className="db-toolbox-tabs" role="tablist">
-        {tabs.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            role="tab"
-            aria-selected={tab === item.id}
-            className={`db-toolbox-tab${tab === item.id ? " active" : ""}`}
-            onClick={() => setTab(item.id)}
-          >
-            {item.label}
-          </button>
-        ))}
-      </nav>
-
       {syncAnalysisBusy && (
         <div className="db-toolbox-sync-progress" role="status">
           <span className="db-toolbox-sync-progress__message">{syncAnalysisProgressMessage}</span>

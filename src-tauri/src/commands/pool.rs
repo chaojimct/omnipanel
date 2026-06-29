@@ -55,6 +55,7 @@ pub async fn pool_get_summary(state: State<'_, AppState>) -> Result<PoolSummary,
     let protocol_active = state.serial_sessions.lock().await.len() as u32
         + state.ws_sessions.lock().await.len() as u32
         + state.mqtt_sessions.lock().await.len() as u32
+        + state.redis_pubsub_sessions.lock().await.len() as u32
         + state.grpc_sessions.lock().await.len() as u32
         + state.sniffer_sessions.lock().await.len() as u32
         + state.modbus_sessions.lock().await.len() as u32;

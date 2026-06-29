@@ -2,6 +2,7 @@ pub mod grpc;
 pub mod http;
 pub mod modbus;
 pub mod mqtt;
+pub mod redis_pubsub;
 pub mod serial;
 pub mod sniffer;
 pub mod ws;

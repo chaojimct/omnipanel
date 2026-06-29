@@ -1,12 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { parseResourceTag } from "../../lib/resourceTags";
 import { type WorkspaceResource } from "../../lib/resourceRegistry";
 import { Button } from "../ui/Button";
-import {
-  VerticalSplitSidebarSection,
-  type VerticalSplitSidebarSectionConfig,
-} from "../ui/VerticalSplitSidebar";
 import type { HostDockOpenMode } from "../../modules/server/ssh/workspaceTabs";
 import {
   collectSshGroupSuggestions,
@@ -54,7 +50,10 @@ interface HostListPanelProps {
   onSelectHost?: (hostId: string, mode?: HostDockOpenMode) => void;
   /** @deprecated 双击回调，请使用 onSelectHost */
   onConnect?: (hostId: string) => void;
-  section?: VerticalSplitSidebarSectionConfig;
+  /** 嵌入 VerticalSplitSidebarSection 时使用，隐藏旧版顶栏 */
+  embedded?: boolean;
+  /** embedded 模式下向外同步工具栏与计数 */
+  onHeaderMetaChange?: (meta: { count: number; actions: ReactNode }) => void;
 }
 
 const HOST_LABEL_CLICK_DELAY_MS = 200;
@@ -139,7 +138,8 @@ export function HostListPanel({
   activeHostId: activeHostIdProp,
   onSelectHost,
   onConnect,
-  section,
+  embedded = false,
+  onHeaderMetaChange,
 }: HostListPanelProps) {
   const { t } = useI18n();
   const navigate = useNavigate();
@@ -448,36 +448,46 @@ export function HostListPanel({
     return buildHostCtxItems(listCtxMenu.host);
   };
 
-  const toolbar = (
-    <div className="host-list-actions">
-      <Button
-        variant="icon"
-        title={t("ssh.sidebar.syncConfig")}
-        disabled={syncing}
-        onClick={() => setSyncWarnOpen(true)}
-      >
-        <svg
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          width="14"
-          height="14"
-          className={syncing ? "icon-spin" : undefined}
+  const toolbar = useMemo(
+    () => (
+      <div className="vsplit-sidebar-section__toolbar host-list-actions">
+        <Button
+          variant="icon"
+          title={t("ssh.sidebar.syncConfig")}
+          disabled={syncing}
+          onClick={() => setSyncWarnOpen(true)}
         >
-          <path d="M21 12a9 9 0 1 1-2.64-6.36" />
-          <path d="M21 3v6h-6" />
-        </svg>
-      </Button>
-      <Button variant="icon" title={t("ssh.dialog.addTitle")} onClick={handleAdd}>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
-      </Button>
-    </div>
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            width="14"
+            height="14"
+            className={syncing ? "icon-spin" : undefined}
+          >
+            <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+            <path d="M21 3v6h-6" />
+          </svg>
+        </Button>
+        <Button variant="icon" title={t("ssh.dialog.addTitle")} onClick={handleAdd}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+        </Button>
+      </div>
+    ),
+    [syncing, t],
   );
+
+  useLayoutEffect(() => {
+    if (!embedded || !onHeaderMetaChange) {
+      return;
+    }
+    onHeaderMetaChange({ count: resources.length, actions: toolbar });
+  }, [embedded, onHeaderMetaChange, resources.length, toolbar]);
 
   const panelBody = (
     <div className="host-list-panel">
-      {!section ? (
+      {!embedded ? (
         <div className="host-list-header">
           <h3>{t("ssh.sidebar.title")}</h3>
           <span className="badge badge-muted">{resources.length}</span>
@@ -558,25 +568,5 @@ export function HostListPanel({
     </div>
   );
 
-  if (section) {
-    return (
-      <VerticalSplitSidebarSection
-        {...section}
-        actions={
-          <>
-            <span className="badge badge-muted">{resources.length}</span>
-            {toolbar}
-          </>
-        }
-      >
-        {panelBody}
-      </VerticalSplitSidebarSection>
-    );
-  }
-
-  return (
-    <>
-      {panelBody}
-    </>
-  );
+  return panelBody;
 }

@@ -1,25 +1,16 @@
 import type { ReactNode } from "react";
 import { useI18n } from "../../i18n";
-import { Button } from "../../components/ui/Button";
 import {
   VerticalSplitSidebar,
   VerticalSplitSidebarSection,
   usePersistedVerticalSplitSections,
 } from "../../components/ui/VerticalSplitSidebar";
 import { ProtocolHttpSidebar } from "./ProtocolHttpSidebar";
+import { MQTT_TOPIC_PRESETS, useMqtt } from "./MqttContext";
+import { REDIS_CHANNEL_PRESETS } from "./RedisPubSubPanel";
+import type { ProtocolTabKey } from "../../lib/protocolLabConfig";
 
-export type ProtocolKind = "http" | "mqtt" | "serial" | "grpc" | "sniffer" | "modbus";
-
-const MQTT_TOPICS = [
-  { topic: "/devices/+/telemetry", qos: "1" },
-  { topic: "/alerts/#", qos: "0" },
-  { topic: "home/sensors/temp", qos: "1" },
-];
-
-const SERIAL_PORTS = [
-  { port: "COM3", desc: "USB-SERIAL CH340", baud: "115200" },
-  { port: "COM5", desc: "Arduino Uno", baud: "9600" },
-];
+export type ProtocolKind = ProtocolTabKey;
 
 const SNIFFER_FILTERS = [
   { label: "All Traffic", filter: "" },
@@ -28,6 +19,11 @@ const SNIFFER_FILTERS = [
   { label: "DNS (udp/53)", filter: "udp port 53" },
   { label: "SSH (tcp/22)", filter: "tcp port 22" },
   { label: "ICMP Only", filter: "icmp" },
+];
+
+const SERIAL_PORTS = [
+  { port: "COM3", desc: "USB-SERIAL CH340", baud: "115200" },
+  { port: "COM5", desc: "Arduino Uno", baud: "9600" },
 ];
 
 interface Props {
@@ -67,6 +63,65 @@ function ProtocolGenericSidebar({
   );
 }
 
+function MqttSidebarContent() {
+  const { t } = useI18n();
+  const mqtt = useMqtt();
+  const connected = mqtt.status === "connected";
+
+  return (
+    <>
+      <div className="proto-sidebar-tags">
+        {mqtt.subscriptions.map((sub) => (
+          <span key={sub.topic} className="mqtt-topic">
+            {sub.topic}
+            <span className="topic-qos">QoS {sub.qos}</span>
+          </span>
+        ))}
+        {mqtt.subscriptions.length === 0 && (
+          <span className="proto-sidebar-empty">{t("protocol.mqtt.noSubscriptions")}</span>
+        )}
+      </div>
+      <div className="proto-sidebar-presets">
+        <span className="proto-sidebar-presets-label">{t("protocol.sidebar.topicPresets")}</span>
+        {MQTT_TOPIC_PRESETS.map((item) => (
+          <button
+            key={item.topic}
+            type="button"
+            className="proto-context-item"
+            onClick={() => {
+              mqtt.fillSubscribeTopic(item.topic);
+              if (connected) void mqtt.quickSubscribe(item.topic, item.qos);
+            }}
+          >
+            <span className="proto-context-body">
+              <span className="proto-context-title">{item.topic}</span>
+              <span className="proto-context-meta">QoS {item.qos}</span>
+            </span>
+          </button>
+        ))}
+      </div>
+    </>
+  );
+}
+
+function PubSubSidebarContent() {
+  const { t } = useI18n();
+
+  return (
+    <div className="proto-sidebar-presets">
+      <span className="proto-sidebar-presets-label">{t("protocol.sidebar.channelPresets")}</span>
+      {REDIS_CHANNEL_PRESETS.map((channel) => (
+        <button key={channel} type="button" className="proto-context-item">
+          <span className="proto-context-body">
+            <span className="proto-context-title">{channel}</span>
+          </span>
+        </button>
+      ))}
+      <p className="proto-sidebar-hint">{t("protocol.pubsub.sidebarHint")}</p>
+    </div>
+  );
+}
+
 export function ProtocolContextSidebar({ protocol }: Props) {
   const { t } = useI18n();
 
@@ -82,21 +137,22 @@ export function ProtocolContextSidebar({ protocol }: Props) {
           topics: {
             title: t("protocol.sidebar.topics"),
             defaultExpanded: true,
-            content: (
-              <>
-                <div className="proto-sidebar-tags">
-                  {MQTT_TOPICS.map((item) => (
-                    <span key={item.topic} className="mqtt-topic">
-                      {item.topic}
-                      <span className="topic-qos">QoS {item.qos}</span>
-                    </span>
-                  ))}
-                </div>
-                <Button variant="ghost" size="sm" className="proto-sidebar-action">
-                  {t("protocol.sidebar.addTopic")}
-                </Button>
-              </>
-            ),
+            content: <MqttSidebarContent />,
+          },
+        }}
+      />
+    );
+  }
+
+  if (protocol === "pubsub") {
+    return (
+      <ProtocolGenericSidebar
+        storageKey="omnipanel-protocol-pubsub-sidebar.v1"
+        sections={{
+          channels: {
+            title: t("protocol.sidebar.channels"),
+            defaultExpanded: true,
+            content: <PubSubSidebarContent />,
           },
         }}
       />

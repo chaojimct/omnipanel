@@ -16,12 +16,11 @@ import {
   VerticalSplitSidebar,
   VerticalSplitSidebarSection,
 } from "../../components/ui/VerticalSplitSidebar";
-import { useKnowledgeEmbeddingModelSelectionId } from "../../components/knowledge/KnowledgeEmbeddingModelSelect";
+import { useKnowledgeEmbeddingProviderConfig } from "../../components/knowledge/KnowledgeEmbeddingModelSelect";
 import { useI18n } from "../../i18n";
 import { quickInput } from "../../lib/quickInput";
 import { appConfirm } from "../../lib/appConfirm";
 import { publishModuleStatusLog } from "../../lib/moduleStatusLog";
-import { useAiModelsStore } from "../../stores/aiModelsStore";
 import { useKnowledgeStore } from "../../stores/knowledgeStore";
 import { useSettingsStore } from "../../stores/settingsStore";
 import type { KnowledgeEntry } from "../../ipc/bindings";
@@ -292,8 +291,7 @@ export function KnowledgeSidebar() {
   const deleteEntryRecursive = useKnowledgeStore((s) => s.deleteEntryRecursive);
   const moveEntry = useKnowledgeStore((s) => s.moveEntry);
 
-  const modelSelectionId = useKnowledgeEmbeddingModelSelectionId();
-  const providers = useAiModelsStore((s) => s.providers);
+  const embeddingProvider = useKnowledgeEmbeddingProviderConfig();
   const knowledgeChunkSize = useSettingsStore((s) => s.knowledgeChunkSize);
   const knowledgeChunkOverlap = useSettingsStore((s) => s.knowledgeChunkOverlap);
 
@@ -401,12 +399,12 @@ export function KnowledgeSidebar() {
 
   const handleVectorize = useCallback(
     async (entry: KnowledgeEntry) => {
-      if (!modelSelectionId) {
+      if (!embeddingProvider) {
         publishModuleStatusLog("knowledge", t("knowledge.vectorize.noModel"), "error");
         return;
       }
       publishModuleStatusLog("knowledge", t("knowledge.vectorize.parsing"), "progress");
-      const result = await vectorizeKnowledgeEntry(entry.id, modelSelectionId, providers, {
+      const result = await vectorizeKnowledgeEntry(entry.id, embeddingProvider, {
         knowledgeChunkSize,
         knowledgeChunkOverlap,
       });
@@ -421,7 +419,7 @@ export function KnowledgeSidebar() {
         publishModuleStatusLog("knowledge", result.error, "error");
       }
     },
-    [knowledgeChunkOverlap, knowledgeChunkSize, modelSelectionId, providers, t],
+    [embeddingProvider, knowledgeChunkOverlap, knowledgeChunkSize, t],
   );
 
   const buildMenuItems = useCallback((): ContextMenuItem[] => {
@@ -456,7 +454,7 @@ export function KnowledgeSidebar() {
             {
               id: "vectorize",
               label: t("knowledge.vectorize.parse"),
-              disabled: !modelSelectionId,
+              disabled: !embeddingProvider,
               onClick: () => void handleVectorize(ctxEntry),
             },
           ]
@@ -497,7 +495,7 @@ export function KnowledgeSidebar() {
     handleImportPdf,
     handleRename,
     handleVectorize,
-    modelSelectionId,
+    embeddingProvider,
     parentForNew,
     t,
   ]);

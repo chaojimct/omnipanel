@@ -1,6 +1,7 @@
 import { useEffect, useState, type ComponentType } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { SplashScreen } from "./components/shell/SplashScreen";
+import { useI18n } from "./i18n";
 import { initSettings, useSettingsStore } from "./stores/settingsStore";
 import { commands } from "./ipc/bindings";
 import { initAiModelsStore } from "./stores/aiModelsStore";
@@ -28,9 +29,11 @@ function wait(ms: number) {
 }
 
 export function Bootstrap() {
+  const { t } = useI18n();
   const [phase, setPhase] = useState<BootPhase>("splash");
   const [AppComponent, setAppComponent] = useState<ComponentType | null>(null);
   const [bootStep, setBootStep] = useState(0);
+  const [bootLog, setBootLog] = useState<string | null>(null);
   const [bootErrorMsg, setBootErrorMsg] = useState<string | null>(null);
 
   useEffect(() => {
@@ -42,38 +45,65 @@ export function Bootstrap() {
 
     async function boot() {
       const started = Date.now();
-
       const advance = (step: number) => {
         if (!cancelled) setBootStep(step);
       };
 
+      const pushLog = async (message: string) => {
+        if (cancelled) return;
+        setBootLog(message);
+        await wait(16);
+      };
+
       try {
         advance(1);
+        await pushLog(t("app.splash.logs.settings"));
         initSettings();
 
         const proxy = useSettingsStore.getState().proxy;
         if (proxy.enabled) {
+          await pushLog(t("app.splash.logs.proxy"));
           invoke("set_proxy_config", { config: proxy }).catch(() => {});
         }
 
         const fileIndexStorageDir = useSettingsStore.getState().fileIndexStorageDir;
+        await pushLog(t("app.splash.logs.fileIndex"));
         commands.setFileIndexStorageDir(fileIndexStorageDir).catch(() => {});
 
         advance(2);
+        await pushLog(t("app.splash.logs.modules"));
         await initAppModuleStore();
+
+        await pushLog(t("app.splash.logs.mcpTools"));
         await initMcpToolStore();
+
+        await pushLog(t("app.splash.logs.connections"));
         initConnections();
+
+        await pushLog(t("app.splash.logs.connectionPool"));
         initConnectionPool();
+
+        await pushLog(t("app.splash.logs.actionListener"));
         initActionListener();
+
+        await pushLog(t("app.splash.logs.aiModels"));
         await initAiModelsStore();
+
+        await pushLog(t("app.splash.logs.sqlFiles"));
         await initDbSqlFilesStore();
+
+        await pushLog(t("app.splash.logs.acpServices"));
         await initAcpServicesStore();
 
         advance(3);
+        await pushLog(t("app.splash.logs.xterm"));
         await import("@xterm/xterm/css/xterm.css");
 
         advance(4);
+        await pushLog(t("app.splash.logs.appShell"));
         const { default: App } = await import("./App");
+
+        await pushLog(t("app.splash.logs.ready"));
 
         const remain = MIN_SPLASH_MS - (Date.now() - started);
         if (remain > 0) {
@@ -99,7 +129,7 @@ export function Bootstrap() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [t]);
 
   if (phase === "app" && AppComponent) {
     return <AppComponent />;
@@ -135,6 +165,7 @@ export function Bootstrap() {
       exiting={phase === "exit"}
       step={bootStep}
       totalSteps={4}
+      log={bootLog}
     />
   );
 }

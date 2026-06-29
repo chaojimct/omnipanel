@@ -164,8 +164,8 @@ import { dbTabToSnapshot, addSnapshotToWorkspace } from "../../lib/workspaceTabA
 import type { DbTabSnapshot } from "../../stores/workspaceTabStore";
 import { connectionNodeId } from "./schemaTreeExpanded";
 
-type DbModuleTab = "query" | "transfer";
-const DB_MODULE_TABS: DbModuleTab[] = ["query", "transfer"];
+type DbModuleTab = "query" | "dataSync" | "schemaSync";
+const DB_MODULE_TABS: DbModuleTab[] = ["query", "dataSync", "schemaSync"];
 const EMPTY_DOCKED_DATABASE_TABS: string[] = [];
 
 function tabMatchesTableSelection(
@@ -398,6 +398,19 @@ export function DatabasePanel() {
     "query",
     DB_MODULE_TABS,
   );
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("omnipanel-module-tabs.v1");
+      if (!raw) return;
+      const data = JSON.parse(raw) as { state?: { byModule?: Record<string, string> } };
+      if (data?.state?.byModule?.["database-workspace"] === "transfer") {
+        setModuleTab("dataSync");
+      }
+    } catch {
+      // ignore invalid persisted tab state
+    }
+  }, [setModuleTab]);
   const enqueueAction = useActionStore((s) => s.enqueueAction);
   const groups = useDbGroupStore((s) => s.groups);
   const activeGroupId = useDbGroupStore((s) => s.activeGroupId);
@@ -656,7 +669,8 @@ export function DatabasePanel() {
   const moduleSegmentTabs = useMemo(
     () => [
       { id: "query", label: t("database.tabs.query") },
-      { id: "transfer", label: t("database.tabs.transfer") },
+      { id: "dataSync", label: t("database.tabs.dataSync") },
+      { id: "schemaSync", label: t("database.tabs.schemaSync") },
     ],
     [t],
   );
@@ -3885,10 +3899,11 @@ export function DatabasePanel() {
       activeTabId={moduleTab}
       onActiveTabChange={(id) => setModuleTab(id as DbModuleTab)}
       renderPanel={(panelId) =>
-        panelId === "transfer" ? (
+        panelId === "dataSync" || panelId === "schemaSync" ? (
     <div className="db-module-transfer">
       <DatabaseToolbox
-        active={moduleTab === "transfer"}
+        active={moduleTab === panelId}
+        tab={panelId}
         connections={toolboxConnections}
         initialSourceConnectionId={
           toolboxSeed.connId ??

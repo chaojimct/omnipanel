@@ -7,12 +7,15 @@ export interface SplashScreenProps {
   /** 0–totalSteps，表示当前启动阶段 */
   step?: number;
   totalSteps?: number;
+  /** 当前正在执行的启动任务（单行展示） */
+  log?: string | null;
 }
 
 export function SplashScreen({
   exiting = false,
   step = 0,
   totalSteps = 4,
+  log = null,
 }: SplashScreenProps) {
   const { t } = useI18n();
 
@@ -31,6 +34,8 @@ export function SplashScreen({
     step > 0 && step <= stepLabels.length
       ? stepLabels[step - 1]
       : t("app.splash.steps.runtime");
+
+  const detailLine = log ?? t("app.splash.logsPending");
 
   return (
     <div
@@ -69,6 +74,13 @@ export function SplashScreen({
           </div>
           <span className="splash__progress-pct">{progress}%</span>
         </div>
+
+        <p className="splash__log" aria-live="polite">
+          <span className="splash__log-prefix" aria-hidden>
+            ›
+          </span>
+          {detailLine}
+        </p>
       </div>
     </div>
   );

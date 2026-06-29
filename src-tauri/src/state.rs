@@ -7,6 +7,7 @@ use tokio::sync::Mutex;
 use crate::protocol::grpc::GrpcSession;
 use crate::protocol::modbus::ModbusSession;
 use crate::protocol::mqtt::MqttSession;
+use crate::protocol::redis_pubsub::RedisPubSubSession;
 use crate::protocol::serial::SerialSession;
 use crate::protocol::sniffer::SnifferSession;
 use crate::protocol::ws::WsSession;
@@ -46,6 +47,7 @@ pub struct AppState {
     pub serial_sessions: Arc<Mutex<HashMap<String, SerialSession>>>,
     pub ws_sessions: Arc<Mutex<HashMap<String, WsSession>>>,
     pub mqtt_sessions: Arc<Mutex<HashMap<String, MqttSession>>>,
+    pub redis_pubsub_sessions: Arc<Mutex<HashMap<String, RedisPubSubSession>>>,
     pub grpc_sessions: Arc<Mutex<HashMap<String, GrpcSession>>>,
     pub sniffer_sessions: Arc<Mutex<HashMap<String, SnifferSession>>>,
     pub modbus_sessions: Arc<Mutex<HashMap<String, ModbusSession>>>,
@@ -124,6 +126,7 @@ impl AppState {
             serial_sessions: Arc::new(Mutex::new(HashMap::new())),
             ws_sessions: Arc::new(Mutex::new(HashMap::new())),
             mqtt_sessions: Arc::new(Mutex::new(HashMap::new())),
+            redis_pubsub_sessions: Arc::new(Mutex::new(HashMap::new())),
             grpc_sessions: Arc::new(Mutex::new(HashMap::new())),
             sniffer_sessions: Arc::new(Mutex::new(HashMap::new())),
             modbus_sessions: Arc::new(Mutex::new(HashMap::new())),
