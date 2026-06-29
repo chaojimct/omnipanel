@@ -66,6 +66,7 @@ function FilesBrowserView() {
   const [connections, setConnections] = useState<FileManagerConnectionInfo[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogInitialProtocol, setDialogInitialProtocol] = useState<FileProtocol | undefined>();
+  const [dialogInitialSshId, setDialogInitialSshId] = useState<string | undefined>();
   const [editConnection, setEditConnection] = useState<Connection | undefined>();
   const [ctxMenu, setCtxMenu] = useState<ConnCtxState>(null);
   const [quickPaths, setQuickPaths] = useState<{
@@ -78,6 +79,19 @@ function FilesBrowserView() {
   const [indexStatuses, setIndexStatuses] = useState<Record<string, FileIndexStatus>>({});
   const activeNavigateRef = useRef<((path: string) => void) | null>(null);
   const bootstrappedDefaultRef = useRef(false);
+  const sftpDeepLinkHandledRef = useRef(false);
+
+  // 处理从 SSH 模块跳转过来的 SFTP 深链接
+  useEffect(() => {
+    if (sftpDeepLinkHandledRef.current) return;
+    const state = location.state as { openSftpForSshId?: string; openSftpHostName?: string } | null;
+    if (!state?.openSftpForSshId) return;
+    sftpDeepLinkHandledRef.current = true;
+    openNewConnectionDialog("sftp", state.openSftpForSshId);
+    // 清除 state，防止刷新时重复触发
+    window.history.replaceState({}, "");
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.state]);
 
   useEffect(() => {
     migrateLayoutStorage("files", ["omnipanel.filesDockLayout.v3"]);
@@ -231,9 +245,10 @@ function FilesBrowserView() {
     await loadConnections();
   }, [loadConnections, refreshConnections]);
 
-  const openNewConnectionDialog = (protocol?: FileProtocol) => {
+  const openNewConnectionDialog = (protocol?: FileProtocol, sshConnectionId?: string) => {
     setEditConnection(undefined);
     setDialogInitialProtocol(protocol);
+    setDialogInitialSshId(sshConnectionId);
     setDialogOpen(true);
   };
 
@@ -460,9 +475,11 @@ function FilesBrowserView() {
           setDialogOpen(false);
           setEditConnection(undefined);
           setDialogInitialProtocol(undefined);
+          setDialogInitialSshId(undefined);
         }}
         editConnection={editConnection}
         initialProtocol={dialogInitialProtocol}
+        initialSshConnectionId={dialogInitialSshId}
         onSaved={() => void handleSavedConnection()}
         onTestSuccess={(connId) => patchConnectionStatus(connId, "online")}
       />

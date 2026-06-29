@@ -54,6 +54,10 @@ interface HostListPanelProps {
   embedded?: boolean;
   /** embedded 模式下向外同步工具栏与计数 */
   onHeaderMetaChange?: (meta: { count: number; actions: ReactNode }) => void;
+  /** 多选模式（批量命令） */
+  selectionMode?: boolean;
+  selectedIds?: string[];
+  onToggleSelect?: (hostId: string) => void;
 }
 
 const HOST_LABEL_CLICK_DELAY_MS = 200;
@@ -140,6 +144,9 @@ export function HostListPanel({
   onConnect,
   embedded = false,
   onHeaderMetaChange,
+  selectionMode = false,
+  selectedIds = [],
+  onToggleSelect,
 }: HostListPanelProps) {
   const { t } = useI18n();
   const navigate = useNavigate();
@@ -239,6 +246,10 @@ export function HostListPanel({
   };
 
   const handleHostClick = (host: WorkspaceResource) => {
+    if (selectionMode && onToggleSelect) {
+      onToggleSelect(host.id);
+      return;
+    }
     if (onSelectHost) {
       if (labelClickTimerRef.current !== null) {
         window.clearTimeout(labelClickTimerRef.current);
@@ -512,9 +523,19 @@ export function HostListPanel({
                 {group.items.map((host) => (
                   <div
                     key={`${group.groupKey}::${host.id}`}
-                    className={`host-item-row${activeHostId === host.id ? " active" : ""}`}
+                    className={`host-item-row${activeHostId === host.id ? " active" : ""}${selectedIds.includes(host.id) ? " selected" : ""}`}
                     onContextMenu={(e) => handleContextMenu(e, host)}
                   >
+                    {selectionMode && (
+                      <input
+                        type="checkbox"
+                        className="host-item-select"
+                        checked={selectedIds.includes(host.id)}
+                        onChange={() => onToggleSelect?.(host.id)}
+                        onClick={(e) => e.stopPropagation()}
+                        aria-label={host.name}
+                      />
+                    )}
                     <button
                       type="button"
                       className="host-item"

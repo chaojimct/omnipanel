@@ -34,6 +34,8 @@ type Props = {
   editConnection?: Connection;
   /** 新建连接时预选的协议（编辑时忽略） */
   initialProtocol?: FileProtocol;
+  /** 新建 SFTP 连接时预绑定的 SSH 连接 ID */
+  initialSshConnectionId?: string;
 };
 
 const EMPTY = {
@@ -130,6 +132,7 @@ export function FileConnectionDialog({
   onTestSuccess,
   editConnection,
   initialProtocol,
+  initialSshConnectionId,
 }: Props) {
   const { t } = useI18n();
   const connections = useConnectionStore((s) => s.connections);
@@ -153,13 +156,18 @@ export function FileConnectionDialog({
       setForm(parseConfig(editConnection));
     } else {
       const protocol = initialProtocol ?? "ftp";
-      setForm({ ...EMPTY, protocol, port: defaultPortForProtocol(protocol) });
+      setForm({
+        ...EMPTY,
+        protocol,
+        port: defaultPortForProtocol(protocol),
+        sshConnectionId: (protocol === "sftp" && initialSshConnectionId) ? initialSshConnectionId : "",
+      });
     }
     setError(null);
     setSuccessMsg(null);
     setSaving(false);
     setTesting(false);
-  }, [open, editConnection, initialProtocol]);
+  }, [open, editConnection, initialProtocol, initialSshConnectionId]);
 
   const update = <K extends keyof typeof EMPTY>(key: K, value: (typeof EMPTY)[K]) => {
     setError(null);

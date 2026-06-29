@@ -652,6 +652,17 @@ export function DockerPanel() {
     [connectionWorkspace, selectConnection],
   );
 
+  const dockerDeepLinkHandledRef = useRef(false);
+  useEffect(() => {
+    if (dockerDeepLinkHandledRef.current || connectionsLoading) return;
+    const state = location.state as { selectDockerConnectionId?: string } | null;
+    const targetId = state?.selectDockerConnectionId;
+    if (!targetId || !connections.some((c) => c.connectionId === targetId)) return;
+    dockerDeepLinkHandledRef.current = true;
+    handleSidebarSelectConnection(targetId);
+    window.history.replaceState({}, "");
+  }, [connections, connectionsLoading, handleSidebarSelectConnection, location.state]);
+
   useEffect(() => {
     if (connectionsLoading || !selectedConnectionId) {
       return;

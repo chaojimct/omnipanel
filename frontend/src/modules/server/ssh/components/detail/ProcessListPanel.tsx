@@ -244,7 +244,8 @@ export type ProcessListPanelProps = {
   refreshing: boolean;
   updatedAt: number | null;
   onRefresh: () => void;
-  setDetailTab: (tab: DetailTab) => void;
+  /** @deprecated terminal/sftp Tab 已移除，此 prop 已无效，保留仅为兼容 */
+  setDetailTab?: (tab: DetailTab) => void;
   enableTunnels?: boolean;
   variant?: "default" | "monitor";
 };
@@ -256,7 +257,7 @@ export function ProcessListPanel({
   refreshing: _refreshing,
   updatedAt,
   onRefresh,
-  setDetailTab,
+  setDetailTab: _setDetailTab,
   enableTunnels = true,
   variant = "default",
 }: ProcessListPanelProps) {
@@ -532,7 +533,6 @@ export function ProcessListPanel({
       <ProcessDetailDrawer
         resourceId={resourceId}
         process={selectedProcess}
-        setDetailTab={setDetailTab}
         onClose={() => setSelectedProcess(null)}
         onKilled={onRefresh}
         onPortClick={openTunnelDialog}

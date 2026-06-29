@@ -230,6 +230,39 @@ pub async fn ssh_pool_kill_process(
     Ok(())
 }
 
+/// 非交互执行远程命令（连接池 exec channel）。
+#[derive(Debug, Clone, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct SshExecOutput {
+    pub stdout: String,
+    pub stderr: String,
+    pub exit_code: i32,
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn ssh_pool_exec_command(
+    state: State<'_, AppState>,
+    resource_id: String,
+    command: String,
+) -> Result<SshExecOutput, OmniError> {
+    let session = pool_session(&state, &resource_id).await?;
+    let output = session.exec_capture(&command).await?;
+    Ok(SshExecOutput {
+        stdout: output.stdout,
+        stderr: output.stderr,
+        exit_code: output.exit_code,
+    })
+}
+
+/// 对所有 SSH 主机重新进行端口可达性探测。
+#[tauri::command]
+#[specta::specta]
+pub async fn ssh_pool_probe_all(state: State<'_, AppState>) -> Result<(), OmniError> {
+    state.ssh_pool.probe_all(&state.app_handle).await;
+    Ok(())
+}
+
 /// 列出远端目录。
 #[tauri::command]
 #[specta::specta]

@@ -72,21 +72,19 @@ export const useSshDetailNavigationStore = create<SshDetailNavigationState>((set
   },
 }));
 
-/** 跳转到 SFTP / 终端 Tab 并打开指定路径 */
+/** 跳转到终端 Tab 并发送 cd 命令（已废弃：terminal Tab 已移除，请直接使用 terminalStore + navigate） */
 export function navigateToSftpPath(
-  resourceId: string,
-  path: string,
-  setDetailTab: (tab: DetailTab) => void,
+  _resourceId: string,
+  _path: string,
+  _setDetailTab: (tab: DetailTab) => void,
 ) {
-  useSshDetailNavigationStore.getState().requestSftp(resourceId, path);
-  setDetailTab("sftp");
+  // 保留签名以避免破坏已有调用方，实际跳转由调用方改为 navigateToTerminalOrSftp
 }
 
 export function navigateToTerminalPath(
-  resourceId: string,
-  path: string,
-  setDetailTab: (tab: DetailTab) => void,
+  _resourceId: string,
+  _path: string,
+  _setDetailTab: (tab: DetailTab) => void,
 ) {
-  useSshDetailNavigationStore.getState().requestTerminal(resourceId, path);
-  setDetailTab("terminal");
+  // 保留签名以避免破坏已有调用方，实际跳转由调用方改为 navigateToTerminalOrSftp
 }

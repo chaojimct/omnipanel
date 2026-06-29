@@ -9,6 +9,7 @@ import { HostListPanel } from "../../../components/workspace/HostListPanel";
 import type { WorkspaceResource } from "../../../lib/resourceRegistry";
 import { useSshSidebarLinkage } from "./SshSidebarLinkageContext";
 import type { HostDockOpenMode } from "./workspaceTabs";
+import { useSshSelectionStore } from "./stores/sshSelectionStore";
 
 const SECTION_STORAGE_KEY = "omnipanel-ssh-host-sidebar-sections";
 
@@ -17,11 +18,19 @@ type SectionKey = "hosts";
 export interface SshHostSidebarProps {
   resources: WorkspaceResource[];
   onSelectHost: (hostId: string, mode?: HostDockOpenMode) => void;
+  selectionMode?: boolean;
+  selectedIds?: string[];
 }
 
-export function SshHostSidebar({ resources, onSelectHost }: SshHostSidebarProps) {
+export function SshHostSidebar({
+  resources,
+  onSelectHost,
+  selectionMode = false,
+  selectedIds = [],
+}: SshHostSidebarProps) {
   const { t } = useI18n();
   const { activeHostId } = useSshSidebarLinkage();
+  const toggleHost = useSshSelectionStore((s) => s.toggleHost);
   const { sections, toggleSection, setSectionExpanded } = usePersistedVerticalSplitSections<SectionKey>(
     SECTION_STORAGE_KEY,
     { hosts: true },
@@ -63,6 +72,9 @@ export function SshHostSidebar({ resources, onSelectHost }: SshHostSidebarProps)
           activeHostId={activeHostId}
           onSelectHost={onSelectHost}
           embedded
+          selectionMode={selectionMode}
+          selectedIds={selectedIds}
+          onToggleSelect={toggleHost}
           onHeaderMetaChange={handleHeaderMetaChange}
         />
       </VerticalSplitSidebarSection>

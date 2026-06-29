@@ -5,6 +5,7 @@ import type { WorkspaceResource } from "../../lib/resourceRegistry";
 import { useI18n } from "../../i18n";
 import { Button } from "../ui/Button";
 import { Select } from "../ui/Select";
+import { TunnelFlowList } from "../../modules/server/ssh/components/TunnelFlowList";
 
 export type TunnelPanelProps = {
   activeResource: WorkspaceResource | null;
@@ -166,36 +167,13 @@ export function TunnelPanel({ activeResource }: TunnelPanelProps) {
         {!loading && hostTunnels.length === 0 && (
           <div className="empty-state compact">{t("ssh.tunnels.empty")}</div>
         )}
-        {hostTunnels.map((tunnel) => (
-          <div key={tunnel.id} className="tunnel-item">
-            <div className="tunnel-item-main">
-              <span className={`status-dot ${tunnel.status === "active" ? "online" : "offline"}`} />
-              <span className={`tunnel-bind-badge ${tunnel.tunnelType}`}>
-                {tunnel.tunnelType.toUpperCase()}
-              </span>
-              <span className="tunnel-endpoint">:{tunnel.localPort}</span>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
-                <path d="M5 12h14M12 5l7 7-7 7" />
-              </svg>
-              <span className="tunnel-endpoint">
-                {tunnel.remoteHost}:{tunnel.remotePort}
-              </span>
-              <span className="text-muted text-xs" style={{ marginLeft: 8 }}>
-                {tunnel.status}
-              </span>
-            </div>
-            <button
-              className="tunnel-delete-btn"
-              onClick={() => handleClose(tunnel.id)}
-              title={t("ssh.tunnels.delete")}
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
-                <line x1="18" y1="6" x2="6" y2="18" />
-                <line x1="6" y1="6" x2="18" y2="18" />
-              </svg>
-            </button>
-          </div>
-        ))}
+        {!loading && hostTunnels.length > 0 && (
+          <TunnelFlowList
+            tunnels={hostTunnels}
+            onClose={(id) => void handleClose(id)}
+            compact
+          />
+        )}
       </div>
     </div>
   );
