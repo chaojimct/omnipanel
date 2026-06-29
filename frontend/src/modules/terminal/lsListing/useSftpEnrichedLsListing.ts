@@ -63,6 +63,7 @@ export function useSftpEnrichedLsListing(
   sessionId: string,
   sessionType: TerminalSessionType,
   sessionUser?: string | null,
+  resourceIdOverride?: string | null,
 ): SftpEnrichedLsListingState {
   const needsRemoteEnrich =
     listing != null && sessionType === "remote" && listing.layout === "grid";
@@ -79,8 +80,9 @@ export function useSftpEnrichedLsListing(
 
   const resourceId = useMemo(() => {
     if (!needsRemoteEnrich) return null;
+    if (resourceIdOverride) return resourceIdOverride;
     return findTerminalPane(sessionId)?.resourceId ?? null;
-  }, [needsRemoteEnrich, sessionId]);
+  }, [needsRemoteEnrich, sessionId, resourceIdOverride]);
 
   const persistedListing = resolveKey ? readResolvedLsListing(resolveKey) : null;
 
@@ -141,6 +143,11 @@ export function useSftpEnrichedLsListing(
     return { listing, ready: true };
   }
 
+  // 无法拉 SFTP 时仍展示基础 ls 解析（扩展名着色 + 启发式目录识别）
+  if (!resourceId || !directory) {
+    return { listing, ready: true };
+  }
+
   if (persistedListing) {
     return { listing: persistedListing, ready: true };
   }
@@ -154,5 +161,6 @@ export function useSftpEnrichedLsListing(
     return { listing: fetchedListing, ready: true };
   }
 
-  return { listing: null, ready: false };
+  // 等待 SFTP 期间先展示基础解析，避免命令块回退为无交互纯文本
+  return { listing, ready: false };
 }

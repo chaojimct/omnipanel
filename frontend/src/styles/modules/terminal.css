@@ -1453,14 +1453,30 @@
 
     /* ls 列表：类型着色 + 目录可点击 cd */
     .term-ls-listing {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 0.35rem 1.1rem;
         padding: 0.15em 0 0.35em 0.15em;
         font-family: var(--font-mono);
         font-size: 12px;
         line-height: 1.55;
         contain: layout style;
+        font-variant-ligatures: none;
+    }
+
+    .term-ls-listing--grid {
+        display: flex;
+        flex-direction: row;
+        align-items: flex-start;
+        flex-wrap: nowrap;
+        width: 100%;
+    }
+
+    .term-ls-grid-column {
+        flex: 0 0 auto;
+        min-width: 0;
+    }
+
+    .term-ls-grid-row {
+        white-space: nowrap;
+        line-height: 1.55;
     }
 
     .term-ls-entry {
@@ -1479,7 +1495,7 @@
         cursor: pointer;
         text-decoration: none;
         border-radius: 3px;
-        padding: 0 2px;
+        padding: 0;
         transition: background 0.12s ease, color 0.12s ease;
     }
 
@@ -1534,12 +1550,72 @@
     }
 
     .term-ls-listing--long {
+        display: flex;
         flex-direction: column;
-        gap: 0.15rem;
+        gap: 0;
     }
 
     .term-ls-listing--long .term-ls-entry {
-        display: block;
+        display: inline;
+    }
+
+    .term-ls-long-row {
+        display: flex;
+        align-items: baseline;
+        gap: 0;
+        white-space: pre;
+        min-width: 0;
+    }
+
+    .term-ls-long-row__meta,
+    .term-ls-long-row__prefix,
+    .term-ls-long-row__field {
+        color: #7c6f66;
+        flex: 0 0 auto;
+        white-space: pre;
+        font-variant-ligatures: none;
+    }
+
+    .term-ls-long-row__field {
+        margin-right: 1ch;
+    }
+
+    .term-ls-long-row__field--size {
+        text-align: right;
+        display: inline-block;
+    }
+
+    .term-ls-long-row__prefix {
+        width: var(--ls-prefix-width, auto);
+        min-width: var(--ls-prefix-width, auto);
+    }
+
+    .term-ls-long-row__size {
+        color: #7c6f66;
+        flex: 0 0 var(--ls-size-width, auto);
+        width: var(--ls-size-width, auto);
+        min-width: var(--ls-size-width, auto);
+        text-align: right;
+        white-space: pre;
+        font-variant-ligatures: none;
+    }
+
+    .term-ls-long-row__trailing {
+        color: #7c6f66;
+        flex: 0 0 auto;
+        white-space: pre;
+        font-variant-ligatures: none;
+        margin-right: 2ch;
+    }
+
+    .term-ls-long-row__name {
+        flex: 0 0 auto;
+        margin-left: 2ch;
+        white-space: nowrap;
+    }
+
+    .term-ls-long-row__trailing + .term-ls-long-row__name {
+        margin-left: 0;
     }
 
     /* AI 卡片：明显区分 */

@@ -5,7 +5,7 @@ import {
   type TerminalBlock,
   isAiThreadToolCall,
 } from "../../stores/blocksStore";
-import { extractCommandOutput } from "./terminalOutputText";
+import { extractCommandOutput, normalizeBlockCommand } from "./terminalOutputText";
 import { useTerminalUiStore } from "./terminalUiStore";
 import { TerminalAiThreadView } from "./TerminalAiThreadView";
 import { getResolvedAiThread } from "./aiThreadBridge";
@@ -27,6 +27,7 @@ import {
 
 type TerminalBlockFeedProps = {
   sessionId: string;
+  resourceId?: string;
   promptSymbol?: string;
   onRunCommand?: (command: string) => void;
   sessionType?: TerminalSessionType;
@@ -363,6 +364,7 @@ function AiBlockCard({
 function ShellBlockCard({
   block,
   sessionId,
+  resourceId,
   promptSymbol = "$",
   onRunCommand,
   sessionType = "remote",
@@ -370,6 +372,7 @@ function ShellBlockCard({
 }: {
   block: TerminalBlock;
   sessionId: string;
+  resourceId?: string;
   promptSymbol?: string;
   onRunCommand?: (command: string) => void;
   sessionType?: TerminalSessionType;
@@ -378,14 +381,14 @@ function ShellBlockCard({
   const output = shellOutput(block);
   const duration = formatDuration(block);
   const running = block.status === "running";
-  const cmd = block.command.trim();
+  const cmd = normalizeBlockCommand(block.command);
   const isError =
     block.status === "failed" || (block.exitCode !== null && block.exitCode !== 0);
 
   const lsListing = useMemo(() => {
-    if (running || !output || isError) return null;
+    if (!output || isError) return null;
     return tryParseLsListing(cmd, output);
-  }, [running, output, isError, cmd]);
+  }, [output, isError, cmd]);
 
   return (
     <article className="term-warp-block term-warp-block--shell" data-block-id={block.id}>
@@ -413,6 +416,7 @@ function ShellBlockCard({
             sessionId={sessionId}
             sessionType={sessionType}
             sessionUser={sessionUser}
+            resourceId={resourceId}
             fallbackOutput={output}
             isError={isError}
             onRunCommand={onRunCommand}
@@ -451,6 +455,7 @@ function resolveAiExpanded(
 function FeedAiRunSegmentView({
   segment,
   sessionId,
+  resourceId,
   promptSymbol,
   expandedAiBlockId,
   setExpandedAiBlock,
@@ -463,6 +468,7 @@ function FeedAiRunSegmentView({
 }: {
   segment: FeedAiRunSegment;
   sessionId: string;
+  resourceId?: string;
   promptSymbol?: string;
   expandedAiBlockId: string | null;
   setExpandedAiBlock: (sessionId: string, blockId: string | null) => void;
@@ -508,6 +514,7 @@ function FeedAiRunSegmentView({
           key={shell.id}
           block={shell}
           sessionId={sessionId}
+          resourceId={resourceId}
           promptSymbol={promptSymbol}
           onRunCommand={onRunCommand}
           sessionType={sessionType}
@@ -521,6 +528,7 @@ function FeedAiRunSegmentView({
 /** Warp 式 Block 流：shell 与 AI 卡片按时间交错排列 */
 export function TerminalBlockFeed({
   sessionId,
+  resourceId,
   promptSymbol,
   onRunCommand,
   sessionType = "remote",
@@ -655,6 +663,7 @@ export function TerminalBlockFeed({
                 key={block.id}
                 block={block}
                 sessionId={sessionId}
+                resourceId={resourceId}
                 promptSymbol={promptSymbol}
                 onRunCommand={onRunCommand}
                 sessionType={sessionType}
@@ -668,6 +677,7 @@ export function TerminalBlockFeed({
               key={segment.ai.id}
               segment={segment}
               sessionId={sessionId}
+              resourceId={resourceId}
               promptSymbol={promptSymbol}
               expandedAiBlockId={expandedAiBlockId}
               setExpandedAiBlock={setExpandedAiBlock}

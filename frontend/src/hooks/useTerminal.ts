@@ -23,6 +23,7 @@ import { createTerminalOutputBatcher } from "../lib/terminalOutputBatcher";
 import {
   decodeTerminalBytesRaw,
   extractCommandOutput,
+  isEchoOnlyTerminalOutput,
   normalizeBlockCommand,
   resolveBlockStatus,
   stripTerminalControlSequences,
@@ -602,7 +603,9 @@ export function useTerminal(
                 pendingBlock = { ...pendingBlock, blockId: captureBlockId };
                 break;
               }
-              const effectiveCmd = (pendingBlock.command || commandText).trim();
+              const effectiveCmd = normalizeBlockCommand(
+                (pendingBlock.command || commandText).trim(),
+              );
               if (
                 !effectiveCmd ||
                 isSilentHistorySyncCommand(effectiveCmd) ||
@@ -634,6 +637,7 @@ export function useTerminal(
               const exitCode = parseInt(parts[1] || "0", 10);
               if (pendingBlock?.blockId) {
                 const blockId = pendingBlock.blockId;
+                clearFeedBlockIdleComplete(blockId);
                 const endLine = t.buffer.active.cursorY + t.buffer.active.baseY;
                 const existing = useBlocksStore.getState().findBlockById(blockId);
                 const cmd = normalizeBlockCommand(existing?.command ?? pendingBlock.command);
@@ -682,6 +686,38 @@ export function useTerminal(
     let outputBatcher: ReturnType<typeof createTerminalOutputBatcher> | null = null;
     let remoteInitEchoFilter: ReturnType<typeof createRemoteInitEchoFilter> | null = null;
     let remoteInitEchoFilterTimer: number | null = null;
+    const FEED_BLOCK_IDLE_MS = 800;
+    const feedBlockIdleTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+    function scheduleFeedBlockIdleComplete(blockId: string) {
+      if (!isWarpDisplay(sessionId)) return;
+      const prev = feedBlockIdleTimers.get(blockId);
+      if (prev) clearTimeout(prev);
+      feedBlockIdleTimers.set(
+        blockId,
+        setTimeout(() => {
+          feedBlockIdleTimers.delete(blockId);
+          const block = useBlocksStore.getState().findBlockById(blockId);
+          if (!block || block.kind === "ai" || block.status !== "running") return;
+          if (!block.output.trim()) return;
+          const cmd = normalizeBlockCommand(block.command);
+          if (cmd && isEchoOnlyTerminalOutput(block.output, cmd)) return;
+          const cleaned = cmd ? extractCommandOutput(block.output, cmd) : block.output.trim();
+          useBlocksStore.getState().updateBlock(blockId, {
+            status: resolveBlockStatus(block.exitCode ?? 0),
+            exitCode: block.exitCode ?? 0,
+            ...(cleaned ? { output: cleaned } : {}),
+          });
+        }, FEED_BLOCK_IDLE_MS),
+      );
+    }
+
+    function clearFeedBlockIdleComplete(blockId: string) {
+      const prev = feedBlockIdleTimers.get(blockId);
+      if (!prev) return;
+      clearTimeout(prev);
+      feedBlockIdleTimers.delete(blockId);
+    }
 
     function queueOutput(bytes: Uint8Array) {
       outputBatcher?.push(bytes);
@@ -713,6 +749,7 @@ export function useTerminal(
           pendingBlock?.blockId ?? claimFeedCaptureBlockId(sessionId);
         if (outputBlockId) {
           useBlocksStore.getState().appendBlockOutput(outputBlockId, text);
+          scheduleFeedBlockIdleComplete(outputBlockId);
         }
         if (suspendedRef.current) {
           runtimeRef.current.outputBuffer.push(merged);
@@ -1039,6 +1076,10 @@ export function useTerminal(
       if (remoteInitEchoFilterTimer) {
         clearTimeout(remoteInitEchoFilterTimer);
       }
+      for (const timer of feedBlockIdleTimers.values()) {
+        clearTimeout(timer);
+      }
+      feedBlockIdleTimers.clear();
       remoteInitEchoFilter?.releasePending();
       if (contextmenuHandler) {
         container.removeEventListener("contextmenu", contextmenuHandler);

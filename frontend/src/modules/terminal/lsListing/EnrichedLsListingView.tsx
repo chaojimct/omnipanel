@@ -11,6 +11,7 @@ type EnrichedLsListingViewProps = {
   sessionId: string;
   sessionType?: TerminalSessionType;
   sessionUser?: string | null;
+  resourceId?: string | null;
   fallbackOutput: string;
   isError?: boolean;
   onRunCommand?: (command: string) => void;
@@ -23,6 +24,7 @@ function EnrichedLsListingViewInner({
   sessionId,
   sessionType = "remote",
   sessionUser,
+  resourceId,
   fallbackOutput,
   isError = false,
   onRunCommand,
@@ -39,6 +41,7 @@ function EnrichedLsListingViewInner({
     sessionId,
     sessionType,
     sessionUser,
+    resourceId,
   );
   const lastResolvedRef = useRef<LsListing | null>(null);
 
@@ -46,8 +49,11 @@ function EnrichedLsListingViewInner({
     lastResolvedRef.current = resolved;
   }
 
-  const displayListing = resolved ?? lastResolvedRef.current;
+  const displayListing = resolved ?? lastResolvedRef.current ?? listing;
   if (displayListing) {
+    if (ready && resolved) {
+      lastResolvedRef.current = resolved;
+    }
     return (
       <LsListingView
         listing={displayListing}

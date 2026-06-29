@@ -238,6 +238,7 @@ function PaneViewBody(
         {inputMode === "external" ? (
           <TerminalBlockFeed
             sessionId={paneId}
+            resourceId={session.resourceId}
             promptSymbol={promptSymbol}
             onRunCommand={onSendCommand}
             sessionType={session.type}

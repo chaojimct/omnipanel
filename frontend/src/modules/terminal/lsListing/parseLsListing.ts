@@ -1,4 +1,4 @@
-/** ls 列表项类型（对齐 GNU ls --color 语义） */
+import { normalizeBlockCommand } from "../terminalOutputText";
 export type LsEntryKind =
   | "directory"
   | "symlink"
@@ -15,6 +15,14 @@ export type LsEntry = {
   kind: LsEntryKind;
   /** 是否可点击执行 cd（目录、目录型符号链接等） */
   navigable?: boolean;
+  /** 长格式前缀（权限/模式、属主等，不含 size 与文件名） */
+  longDetail?: string;
+  /** 长格式 size 列（目录为空字符串；CMD 目录为 <DIR>） */
+  longSize?: string;
+  /** 长格式 size 之后、文件名之前（如 ls -l 的月日时分） */
+  longTrailing?: string;
+  /** 长格式逐列元数据（不含文件名），用于分栏对齐 */
+  longFields?: string[];
 };
 
 export type LsListing = {
@@ -98,6 +106,24 @@ function unquoteName(raw: string): string {
   return trimmed;
 }
 
+/** 剥除 ls -F / --indicator-style 追加的 / * @ = 后缀 */
+export function normalizeLsEntryName(name: string): string {
+  let base = name;
+  if (base.endsWith("/")) {
+    return base.replace(/\/+$/, "");
+  }
+  if (base.endsWith("*") || base.endsWith("@") || base.endsWith("=")) {
+    return base.slice(0, -1);
+  }
+  return base;
+}
+
+/** 目录展示名：保证至多一个尾部 / */
+export function lsEntryDisplayName(entry: { name: string; kind: LsEntryKind }): string {
+  const base = normalizeLsEntryName(entry.name);
+  return entry.kind === "directory" ? `${base}/` : base;
+}
+
 function extractExtension(name: string): string {
   const lower = name.toLowerCase();
   if (lower.endsWith(".tar.gz")) return "tgz";
@@ -120,7 +146,7 @@ function hasFileExtension(name: string): boolean {
 function classifyByExtension(name: string): LsEntryKind {
   const ext = extractExtension(name);
   if (!ext) return "file";
-  if (ext === "sh" || ext === "bash" || ext === "exe" || ext === "bat" || ext === "cmd") {
+  if (ext === "sh" || ext === "bash" || ext === "exe" || ext === "bat" || ext === "cmd" || ext === "dll") {
     return "executable";
   }
   if (ARCHIVE_EXT.has(ext)) return "archive";
@@ -143,8 +169,116 @@ export function isLsExtensionlessFileName(name: string): boolean {
   return isExtensionlessFile(base);
 }
 
+/** PowerShell Mode：d/- 开头 + 4–6 位属性（a r h s l 或 -）；`-` 必须放在字符类末尾 */
+const WINDOWS_LINE_MODE = /^([d-][arhslARHSL-]{4,6})\s+/i;
+
+function isWindowsModeToken(value: string): boolean {
+  return /^[d-][arhslARHSL-]{4,6}$/i.test(value);
+}
+
+function isPowerShellDirOutput(lines: string[]): boolean {
+  if (lines.some((line) => /^Directory:/i.test(line.trim()))) return true;
+  if (lines.some((line) => /^Mode\s+LastWriteTime/i.test(line))) return true;
+  const modeLines = lines.filter((line) => WINDOWS_LINE_MODE.test(line));
+  return modeLines.length >= 1;
+}
+
+function isCmdDirOutput(lines: string[]): boolean {
+  if (lines.some((line) => /^Directory of /i.test(line.trim()))) return true;
+  return lines.some((line) => /^\d{1,2}\/\d{1,2}\/\d{4}\s+\d{1,2}:\d{2}/.test(line) && /<DIR>|\d/.test(line));
+}
+
+function parsePowerShellDirLine(line: string): LsEntry | null {
+  const modeMatch = line.match(WINDOWS_LINE_MODE);
+  if (!modeMatch) return null;
+
+  const mode = modeMatch[1]!;
+  const rest = line.slice(modeMatch[0].length).trim();
+  // Format-Table 用 2+ 空格/制表符分列；Name 为最后一列
+  const columns = rest.split(/\s{2,}|\t+/).filter(Boolean);
+  if (columns.length < 2) return null;
+
+  let tail = columns[columns.length - 1]!;
+  let size = "";
+  const sizeName = tail.match(/^(\d[\d,]*)\s+(.+)$/);
+  if (sizeName) {
+    size = sizeName[1]!.replace(/,/g, "");
+    tail = sizeName[2]!;
+  }
+
+  const name = unquoteName(tail);
+  if (!name || isWindowsModeToken(name)) return null;
+
+  const beforeName = columns.slice(0, -1).join("  ");
+  const isDir = mode.toLowerCase().startsWith("d");
+  const kind: LsEntryKind = isDir ? "directory" : classifyByExtension(name);
+
+  return {
+    name,
+    kind,
+    navigable: isDir,
+    longDetail: [mode, beforeName].join("  "),
+    longSize: size,
+    longFields: [mode, beforeName, size],
+  };
+}
+
+function parseCmdDirLine(line: string): LsEntry | null {
+  const match = line.match(
+    /^(\d{1,2}\/\d{1,2}\/\d{4}\s+\d{1,2}:\d{2}(?:\s+[AP]M)?)\s+(<DIR>|\d[\d,]*)\s+(.+)$/i,
+  );
+  if (!match) return null;
+
+  const [, dateTime, marker, rawName] = match;
+  const name = unquoteName(rawName.trim());
+  if (!name) return null;
+
+  const isDir = marker.toUpperCase() === "<DIR>";
+  const size = isDir ? "" : marker.replace(/,/g, "");
+  const kind: LsEntryKind = isDir ? "directory" : classifyByExtension(name);
+
+  return {
+    name,
+    kind,
+    navigable: isDir,
+    longDetail: dateTime,
+    longSize: isDir ? "<DIR>" : size,
+    longFields: [dateTime, isDir ? "<DIR>" : size],
+  };
+}
+
+function tryParseWindowsDirListing(lines: string[]): LsListing | null {
+  const entries: LsEntry[] = [];
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    if (/^Directory:/i.test(trimmed) || /^Directory of /i.test(trimmed)) continue;
+    if (/^Mode\s+LastWriteTime/i.test(trimmed)) continue;
+    if (/^----+\s+----+/i.test(trimmed)) continue;
+    if (/^(Mode|LastWriteTime|Length|Name)$/i.test(trimmed)) continue;
+
+    const entry = parsePowerShellDirLine(line) ?? parseCmdDirLine(line);
+    if (entry) entries.push(entry);
+  }
+
+  if (entries.length === 0) return null;
+  return { entries, layout: "long" };
+}
+
+function isGridNoiseToken(token: string): boolean {
+  if (isWindowsModeToken(token)) return true;
+  if (/^-{3,}$/.test(token)) return true;
+  if (/^(Mode|LastWriteTime|Length|Name|Directory:|Directory)$/i.test(token)) return true;
+  if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(token)) return true;
+  return false;
+}
+
 function classifyPlainName(raw: string): LsEntry {
   let name = unquoteName(raw);
+  if (isWindowsModeToken(name) || isGridNoiseToken(name)) {
+    return { name, kind: "file" };
+  }
   let kind: LsEntryKind = "file";
 
   if (name.endsWith("/")) {
@@ -197,16 +331,22 @@ function parseLongLine(line: string): LsEntry | null {
     rawName = rawName.split(" -> ")[0]!.trim();
   }
 
-  const name = unquoteName(rawName);
+  const name = normalizeLsEntryName(unquoteName(rawName));
   if (!name) return null;
 
   const modeChar = match[1]!;
   const kind = modeToKind(modeChar, match[2]!);
 
+  const metaParts = parts.slice(0, nameStart);
+
   return {
     name,
     kind,
     navigable: modeChar === "d" || modeChar === "l",
+    longDetail: parts.slice(0, 4).join(" "),
+    longSize: parts[4] ?? "",
+    longTrailing: parts.slice(5, nameStart).join(" "),
+    longFields: metaParts,
   };
 }
 
@@ -221,28 +361,54 @@ function tokenizePlainLsOutput(output: string): string[] {
   return entries;
 }
 
-function isLsCommand(command: string): boolean {
-  const cmd = command.trim();
-  if (!cmd) return false;
-  const base = cmd.split(/\s+/)[0] ?? "";
-  return base === "ls" || base === "dir";
+const LS_COMMAND_BASES = new Set(["ls", "dir", "ll", "la", "l"]);
+
+/** 取归一化后的列表命令主命令名（ls / ll / dir …） */
+export function lsListingCommandBase(command: string): string {
+  return normalizeBlockCommand(command).trim().split(/\s+/)[0] ?? "";
+}
+
+export function isLsListingCommand(command: string): boolean {
+  const base = lsListingCommandBase(command);
+  if (!base) return false;
+  if (LS_COMMAND_BASES.has(base)) return true;
+  return base.endsWith("/ls") || base.endsWith("\\ls");
 }
 
 function isLongListing(command: string): boolean {
-  return /(^|\s)-[a-zA-Z]*l[a-zA-Z]*(\s|$)/.test(command) || /\bll\b/.test(command);
+  const cmd = normalizeBlockCommand(command);
+  const base = lsListingCommandBase(command);
+  if (base === "ll" || base === "l") return true;
+  return /(^|\s)-[a-zA-Z]*l[a-zA-Z]*(\s|$)/.test(cmd);
+}
+
+function shouldParseAsLongListing(command: string, lines: string[]): boolean {
+  if (isLongListing(command)) return true;
+  const longLines = lines.filter((line) => /^[-dlbcps][rwx-]{9}\s/.test(line));
+  if (longLines.length === 0) return false;
+  // 避免 plain ls 输出里夹杂一行权限串时整段解析失败
+  return longLines.length >= Math.max(2, Math.ceil(lines.length * 0.6));
+}
+
+function isLsCommand(command: string): boolean {
+  return isLsListingCommand(command);
 }
 
 /** 解析 ls / dir 输出为结构化列表；无法识别时返回 null */
 export function tryParseLsListing(command: string, output: string): LsListing | null {
   if (!isLsCommand(command)) return null;
 
-  const text = output.trim();
+  const text = output.trim().replace(/\r/g, "\n");
   if (!text) return null;
 
   const lines = text.split("\n").map((line) => line.trim()).filter(Boolean);
   if (lines.length === 0) return null;
 
-  if (isLongListing(command) || lines.some((line) => /^[-dlbcps][rwx-]{9}\s/.test(line))) {
+  if (isPowerShellDirOutput(lines) || isCmdDirOutput(lines)) {
+    return tryParseWindowsDirListing(lines);
+  }
+
+  if (shouldParseAsLongListing(command, lines)) {
     const entries: LsEntry[] = [];
     for (const line of lines) {
       if (line.startsWith("total ")) continue;
@@ -256,8 +422,12 @@ export function tryParseLsListing(command: string, output: string): LsListing | 
     if (entries.length > 0) return { entries, layout: "long" };
   }
 
-  const tokens = tokenizePlainLsOutput(text);
-  if (tokens.length < 2) return null;
+  const gridSource = lines
+    .filter((line) => !/^[-dlbcps][rwx-]{9}\s/.test(line))
+    .join(" ")
+    .trim();
+  const tokens = tokenizePlainLsOutput(gridSource || text).filter((token) => !isGridNoiseToken(token));
+  if (tokens.length < 1) return null;
 
   const invalid = tokens.some(
     (token) => token.length > 260 || token.includes("=") && token.includes("error"),

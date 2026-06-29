@@ -4,6 +4,15 @@ import type { LsListing } from "./parseLsListing";
 import { resolveLsListingDirectory, joinListingEntryPath } from "./resolveLsListingDirectory";
 
 describe("resolveLsListingDirectory", () => {
+  it("ll 使用 block cwd", () => {
+    expect(resolveLsListingDirectory("ll", "/root/projects", "root")).toBe("/root/projects");
+  });
+
+  it("dir 在 C: 盘使用 block cwd", () => {
+    expect(resolveLsListingDirectory("dir", "C:", null)).toBe("C:\\");
+    expect(resolveLsListingDirectory("ls", "C:\\", null)).toBe("C:\\");
+  });
+
   it("无参数时使用 block cwd", () => {
     expect(resolveLsListingDirectory("ls", "/root/projects", "root")).toBe("/root/projects");
   });
@@ -14,6 +23,15 @@ describe("resolveLsListingDirectory", () => {
 
   it("显式文件参数时列出父目录", () => {
     expect(resolveLsListingDirectory("ls Makefile", "/root", "root")).toBe("/root");
+  });
+
+  it("C: 盘根路径拼接", () => {
+    expect(joinListingEntryPath("C:", "Windows")).toBe("C:\\Windows");
+    expect(joinListingEntryPath("C:\\", "Windows")).toBe("C:\\Windows");
+  });
+
+  it("Windows cwd 下拼接路径", () => {
+    expect(joinListingEntryPath("C:\\Users\\chaoj", ".cursor")).toBe("C:\\Users\\chaoj\\.cursor");
   });
 
   it("拼接列表条目绝对路径", () => {

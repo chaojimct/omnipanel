@@ -1,7 +1,8 @@
 import { normalizeTerminalCwdForSftp } from "@/modules/server/ssh/utils/parseCommandPaths";
 import { resolveAbsoluteTerminalCwd } from "../terminalPathCrumbs";
 
-import { isLsExtensionlessFileName } from "./parseLsListing";
+import { isLsExtensionlessFileName, isLsListingCommand, lsListingCommandBase } from "./parseLsListing";
+import { normalizeBlockCommand } from "../terminalOutputText";
 
 function normalizeRemotePath(path: string): string {
   const parts: string[] = [];
@@ -35,7 +36,24 @@ function unquoteArg(raw: string): string {
 }
 
 function resolveBlockCwd(cwd: string, sessionUser?: string | null): string | null {
+  const trimmed = cwd.trim();
+  if (/^[A-Za-z]:$/.test(trimmed)) {
+    return `${trimmed}\\`;
+  }
+  if (/^[A-Za-z]:[\\/]/.test(trimmed)) {
+    return trimmed.replace(/\//g, "\\");
+  }
   return normalizeTerminalCwdForSftp(cwd) ?? resolveAbsoluteTerminalCwd(cwd, sessionUser);
+}
+
+function isWindowsPath(path: string): boolean {
+  return /^[A-Za-z]:[\\/]/.test(path);
+}
+
+function joinWindowsListingPath(base: string, segment: string): string {
+  const root = base.replace(/[\\/]+$/, "") || base;
+  const name = segment.replace(/^[\\/]+/, "");
+  return `${root}\\${name}`;
 }
 
 function looksLikeExplicitFile(name: string): boolean {
@@ -55,23 +73,36 @@ export function resolveLsListingDirectory(
   cwd: string,
   sessionUser?: string | null,
 ): string | null {
-  const trimmed = command.trim();
+  if (!isLsListingCommand(command)) return null;
+
+  const trimmed = normalizeBlockCommand(command).trim();
   const parts = trimmed.split(/\s+/);
-  const base = parts[0];
-  if (base !== "ls" && base !== "dir") return null;
+  const base = lsListingCommandBase(command);
 
   const blockCwd = resolveBlockCwd(cwd, sessionUser);
   if (!blockCwd) return null;
 
   let index = 1;
-  while (index < parts.length && /^-[a-zA-Z][a-zA-Z0-9]*$/.test(parts[index]!)) {
-    index += 1;
+  if (base === "ls" || base === "dir") {
+    while (index < parts.length && /^-[a-zA-Z][a-zA-Z0-9]*$/.test(parts[index]!)) {
+      index += 1;
+    }
   }
 
   const rawTarget = parts[index];
   if (!rawTarget) return blockCwd;
 
   const target = unquoteArg(rawTarget);
+  if (isWindowsPath(blockCwd)) {
+    if (target.endsWith("\\") || target.endsWith("/")) {
+      return target.replace(/\//g, "\\");
+    }
+    if (/^[A-Za-z]:[\\/]/.test(target)) {
+      return target.replace(/\//g, "\\");
+    }
+    return joinWindowsListingPath(blockCwd, target);
+  }
+
   if (target.endsWith("/")) {
     return target.startsWith("/")
       ? normalizeRemotePath(target)
@@ -91,7 +122,11 @@ export function resolveLsListingDirectory(
 
 /** 将 ls 列表所在目录与条目名拼接为绝对路径。 */
 export function joinListingEntryPath(listingDir: string, entryName: string): string {
-  const name = entryName.replace(/\/+$/, "");
+  const name = entryName.replace(/[/\\]+$/, "");
+  const driveRoot = listingDir.match(/^([A-Za-z]:)[\\/]?$/);
+  if (driveRoot) {
+    return `${driveRoot[1]}\\${name}`;
+  }
   if (/^[A-Za-z]:[\\/]/.test(listingDir) || listingDir.includes("\\")) {
     const base = listingDir.replace(/[\\/]+$/, "") || listingDir;
     return `${base}\\${name}`;

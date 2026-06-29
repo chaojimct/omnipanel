@@ -35,7 +35,7 @@ const MAX_WRAPPED_PROMPT_LINES = 24;
 
 /** 从块记录或 OSC 读行中取出纯命令文本 */
 export function normalizeBlockCommand(command: string): string {
-  const trimmed = command.trim();
+  const trimmed = command.trim().replace(/^[#$]\s+/, "");
   const withoutPrompt = trimmed.replace(PROMPT_WITH_CMD_RE, "").trim();
   if (withoutPrompt) return withoutPrompt;
   return trimmed.replace(/^[^#$>]*[$#>]\s*/, "").trim();
