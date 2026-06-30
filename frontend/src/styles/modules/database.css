@@ -2044,8 +2044,8 @@
     }
 
     .db-toolbox-side__filters--source-row .db-select {
-        flex: 0 1 140px;
-        min-width: 96px;
+        flex: 0 1 220px;
+        min-width: 160px;
     }
 
     .db-toolbox-side__filters--source-row .db-toolbox-search {

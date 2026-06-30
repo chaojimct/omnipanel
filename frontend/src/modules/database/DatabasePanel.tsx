@@ -92,6 +92,7 @@ import {
   isToolboxTab,
   makeToolboxWorkspaceTab,
   findTabIdForToolbox,
+  toolboxDockTabId,
   makeTableDesignerTabLabel,
   type SchemaDockOpenMode,
   type ConnectionInfoWorkspaceTab,
@@ -569,6 +570,7 @@ export function DatabasePanel() {
   workspaceTabsRef.current = workspaceTabs;
   const activeWorkspaceTabIdRef = useRef(activeWorkspaceTabId);
   activeWorkspaceTabIdRef.current = activeWorkspaceTabId;
+  const hasReconciledModuleTabRef = useRef(false);
   const tableDesignerStatesRef = useRef(tableDesignerStates);
   tableDesignerStatesRef.current = tableDesignerStates;
 
@@ -598,7 +600,7 @@ export function DatabasePanel() {
 
   const activateWorkspaceTab = useCallback(
     (tabId: string) => {
-      setActiveWorkspaceTabId(tabId);
+      setActiveWorkspaceTabId((prev) => (prev === tabId ? prev : tabId));
       syncConnForTabId(tabId);
     },
     [syncConnForTabId],
@@ -606,14 +608,21 @@ export function DatabasePanel() {
 
   const openOrActivateToolboxTab = useCallback(
     (toolboxTab: ToolboxTabId) => {
-      const tabId = findTabIdForToolbox(workspaceTabsRef.current, toolboxTab);
+      const expectedId = toolboxDockTabId(toolboxTab);
+      const existingById = workspaceTabsRef.current.find((tab) => tab.id === expectedId);
+      const tabId = existingById?.id ?? findTabIdForToolbox(workspaceTabsRef.current, toolboxTab);
       const label = t(`database.tabs.${toolboxTab}`);
       if (tabId) {
         activateWorkspaceTab(tabId);
         return;
       }
       const tab = makeToolboxWorkspaceTab(toolboxTab, label);
-      setWorkspaceTabs((prev) => [...prev, tab]);
+      setWorkspaceTabs((prev) => {
+        if (prev.some((item) => item.id === tab.id)) {
+          return prev;
+        }
+        return [...prev, tab];
+      });
       activateWorkspaceTab(tab.id);
     },
     [activateWorkspaceTab, setWorkspaceTabs, t],
@@ -1054,12 +1063,30 @@ export function DatabasePanel() {
 
   useEffect(() => {
     if (!workspaceInitialized) {
+      hasReconciledModuleTabRef.current = false;
+      return;
+    }
+    if (hasReconciledModuleTabRef.current) {
+      return;
+    }
+    hasReconciledModuleTabRef.current = true;
+
+    const activeTab = workspaceTabs.find((item) => item.id === activeWorkspaceTabId);
+    if (isToolboxTab(activeTab)) {
+      setModuleTab((prev) => (prev === activeTab.toolboxTab ? prev : activeTab.toolboxTab));
       return;
     }
     if (moduleTab === "dataSync" || moduleTab === "schemaSync") {
       openOrActivateToolboxTab(moduleTab);
     }
-  }, [workspaceInitialized, moduleTab, openOrActivateToolboxTab]);
+  }, [
+    workspaceInitialized,
+    workspaceTabs,
+    activeWorkspaceTabId,
+    moduleTab,
+    openOrActivateToolboxTab,
+    setModuleTab,
+  ]);
 
   useEffect(() => {
     if (!workspaceInitialized || !activeWorkspaceTabId) {
@@ -1067,15 +1094,11 @@ export function DatabasePanel() {
     }
     const tab = workspaceTabs.find((item) => item.id === activeWorkspaceTabId);
     if (isToolboxTab(tab)) {
-      if (moduleTab !== tab.toolboxTab) {
-        setModuleTab(tab.toolboxTab);
-      }
+      setModuleTab((prev) => (prev === tab.toolboxTab ? prev : tab.toolboxTab));
       return;
     }
-    if (moduleTab !== "query") {
-      setModuleTab("query");
-    }
-  }, [workspaceInitialized, workspaceTabs, activeWorkspaceTabId, moduleTab, setModuleTab]);
+    setModuleTab((prev) => (prev === "query" ? prev : "query"));
+  }, [workspaceInitialized, workspaceTabs, activeWorkspaceTabId, setModuleTab]);
 
   useEffect(() => {
     const flush = () => flushPersistWorkspaceSession();

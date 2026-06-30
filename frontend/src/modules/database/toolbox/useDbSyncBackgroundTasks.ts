@@ -7,7 +7,9 @@ import { sourceTableSchemaSignature } from "./schemaDiff";
 import {
   cancelBackgroundTask,
   submitDbDataSyncAnalysis,
+  submitDbDataSyncExecute,
   submitDbSchemaSyncAnalysis,
+  submitDbSchemaSyncExecute,
 } from "../../../stores/backgroundTaskStore";
 
 export interface BgTaskDbEventPayload {
@@ -218,4 +220,48 @@ export async function startDbSchemaSyncBackgroundTask(
     indexes: sourceTableIndexes[name] ?? [],
   }));
   return submitDbSchemaSyncAnalysis({ ...targetConn, database: targetDb }, targetDb, specs);
+}
+
+export async function startDbDataSyncExecute(
+  sourceConn: DbConnectionConfig,
+  targetConn: DbConnectionConfig,
+  sourceDb: string,
+  targetDb: string,
+  tables: Array<{
+    name: string;
+    columns: DbColumnMeta[];
+    strategy?: string;
+  }>,
+): Promise<string> {
+  const specs = tables.map((table) => ({
+    name: table.name,
+    columns: table.columns,
+    strategy: table.strategy ?? null,
+  }));
+  return submitDbDataSyncExecute(
+    { ...sourceConn, database: sourceDb },
+    { ...targetConn, database: targetDb },
+    specs,
+  );
+}
+
+export async function startDbSchemaSyncExecute(
+  sourceConn: DbConnectionConfig,
+  targetConn: DbConnectionConfig,
+  sourceDb: string,
+  targetDb: string,
+  tables: string[],
+  sourceTableColumns: Record<string, DbColumnMeta[]>,
+  sourceTableIndexes: Record<string, DbIndexMeta[]>,
+): Promise<string> {
+  const specs = tables.map((name) => ({
+    name,
+    columns: sourceTableColumns[name] ?? [],
+    indexes: sourceTableIndexes[name] ?? [],
+  }));
+  return submitDbSchemaSyncExecute(
+    { ...sourceConn, database: sourceDb },
+    { ...targetConn, database: targetDb },
+    specs,
+  );
 }

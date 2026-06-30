@@ -2,7 +2,10 @@ use omnipanel_error::OmniError;
 use omnipanel_store::DbConnectionConfig;
 use tauri::State;
 
-use crate::background::db_sync_jobs::{DbSyncTableSpec, run_db_data_sync_analysis, run_db_schema_sync_analysis};
+use crate::background::db_sync_jobs::{
+    DbSyncExecTableSpec, DbSyncTableSpec, run_db_data_sync_analysis, run_db_data_sync_execute,
+    run_db_schema_sync_analysis, run_db_schema_sync_execute,
+};
 use crate::background::knowledge_vector_jobs::run_knowledge_vectorize_background;
 use crate::background::schema_cache_jobs::run_db_schema_cache_refresh;
 use crate::background::worker_pool::BackgroundTaskInfo;
@@ -168,6 +171,60 @@ pub async fn bg_task_submit_db_schema_cache_refresh(
         total,
         move |task_id, cancel, progress| {
             run_db_schema_cache_refresh(app, connections, ids, task_id, cancel, progress)
+        },
+    )
+    .await
+}
+
+/// 提交数据库数据同步执行后台任务（目标表不存在时自动建表）。
+#[tauri::command]
+#[specta::specta]
+pub async fn bg_task_submit_db_data_sync_execute(
+    state: State<'_, AppState>,
+    source: DbConnectionConfig,
+    target: DbConnectionConfig,
+    tables: Vec<DbSyncExecTableSpec>,
+) -> Result<String, OmniError> {
+    let total = tables.len().max(1) as u32;
+    let title = format!("数据同步（{} 张表）", tables.len());
+    let app = state.app_handle.clone();
+    let pool = state.worker_pool.clone();
+
+    pool.spawn(
+        app.clone(),
+        "database",
+        "dbDataSyncExecute",
+        title,
+        total,
+        move |task_id, cancel, progress| {
+            run_db_data_sync_execute(app, task_id, source, target, tables, cancel, progress)
+        },
+    )
+    .await
+}
+
+/// 提交数据库结构同步执行后台任务（目标表不存在时自动建表）。
+#[tauri::command]
+#[specta::specta]
+pub async fn bg_task_submit_db_schema_sync_execute(
+    state: State<'_, AppState>,
+    source: DbConnectionConfig,
+    target: DbConnectionConfig,
+    tables: Vec<DbSyncTableSpec>,
+) -> Result<String, OmniError> {
+    let total = tables.len().max(1) as u32;
+    let title = format!("结构同步（{} 张表）", tables.len());
+    let app = state.app_handle.clone();
+    let pool = state.worker_pool.clone();
+
+    pool.spawn(
+        app.clone(),
+        "database",
+        "dbSchemaSyncExecute",
+        title,
+        total,
+        move |task_id, cancel, progress| {
+            run_db_schema_sync_execute(app, task_id, source, target, tables, cancel, progress)
         },
     )
     .await

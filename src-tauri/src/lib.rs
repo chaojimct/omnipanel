@@ -63,6 +63,8 @@ fn export_ipc_bindings() {
         commands::bg_task::bg_task_cancel,
         commands::bg_task::bg_task_submit_db_data_sync,
         commands::bg_task::bg_task_submit_db_schema_sync,
+        commands::bg_task::bg_task_submit_db_data_sync_execute,
+        commands::bg_task::bg_task_submit_db_schema_sync_execute,
         commands::bg_task::bg_task_submit_db_schema_cache_refresh,
         commands::bg_task::bg_task_submit_knowledge_vectorize,
         commands::panel::panel_1panel_request,
@@ -551,6 +553,8 @@ pub fn run() {
         commands::bg_task::bg_task_cancel,
         commands::bg_task::bg_task_submit_db_data_sync,
         commands::bg_task::bg_task_submit_db_schema_sync,
+        commands::bg_task::bg_task_submit_db_data_sync_execute,
+        commands::bg_task::bg_task_submit_db_schema_sync_execute,
         commands::bg_task::bg_task_submit_db_schema_cache_refresh,
         commands::bg_task::bg_task_submit_knowledge_vectorize,
             // 面板 API

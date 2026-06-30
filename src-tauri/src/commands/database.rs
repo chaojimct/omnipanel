@@ -1230,6 +1230,24 @@ pub async fn db_count_tables(
     Ok(out)
 }
 
+/// 在指定库上执行单条 SQL（DDL / DML），返回影响行数。
+pub async fn db_run_sql(
+    connection: DbConnectionConfig,
+    schema: Option<String>,
+    sql: String,
+) -> Result<u64, String> {
+    let params = with_schema(&connection, schema);
+    if params.database.trim().is_empty() {
+        return Err("未指定数据库".to_string());
+    }
+    let driver = omnipanel_db::connect(&params).await.map_err(err_msg)?;
+    driver
+        .execute(&sql)
+        .await
+        .map_err(err_msg)
+        .map(|result| result.rows_affected)
+}
+
 /// 执行任意 SQL（SELECT 返回行集，DML 返回影响行数）。高风险写操作由前端经执行引擎确认后调用。
 /// `limit` / `offset` 非零时，SELECT/WITH 语句会被包裹为 `SELECT * FROM (...) LIMIT n OFFSET m`，防止超大结果集卡死前端。
 /// `run_id` 供前端中断长时间查询（`db_cancel_query`）。

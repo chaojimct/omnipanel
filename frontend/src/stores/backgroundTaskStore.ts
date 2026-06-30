@@ -115,6 +115,30 @@ export async function submitDbSchemaCacheRefresh(
   });
 }
 
+export async function submitDbDataSyncExecute(
+  source: unknown,
+  target: unknown,
+  tables: unknown[],
+): Promise<string> {
+  return invoke<string>("bg_task_submit_db_data_sync_execute", {
+    source,
+    target,
+    tables,
+  });
+}
+
+export async function submitDbSchemaSyncExecute(
+  source: unknown,
+  target: unknown,
+  tables: unknown[],
+): Promise<string> {
+  return invoke<string>("bg_task_submit_db_schema_sync_execute", {
+    source,
+    target,
+    tables,
+  });
+}
+
 let bgTaskInitialized = false;
 
 /** 订阅后台任务事件，在 Bootstrap 中调用一次。 */

@@ -6,8 +6,14 @@ import { useDataLoading } from "../../../components/ui/DataLoading";
 import { WarnAlert } from "../../../components/ui/WarnAlert";
 import { SubWindow } from "../../../components/ui/SubWindow";
 import { quickInput } from "../../../lib/quickInput";
-import { useActionStore } from "../../../stores/actionStore";
-import { useDbSyncTaskStore } from "../../../stores/dbSyncTaskStore";
+import {
+  cancelDbBackgroundTask,
+  startDbDataSyncBackgroundTask,
+  startDbDataSyncExecute,
+  startDbSchemaSyncBackgroundTask,
+  startDbSchemaSyncExecute,
+  useDbSyncBackgroundTaskEvents,
+} from "./useDbSyncBackgroundTasks";
 import type { BackgroundTaskInfo } from "../../../stores/backgroundTaskStore";
 import {
   countTable,
@@ -27,12 +33,7 @@ import {
   type SchemaTableDiff,
 } from "./schemaDiff";
 import { TableRowDiffPanel } from "./TableRowDiffPanel";
-import {
-  cancelDbBackgroundTask,
-  startDbDataSyncBackgroundTask,
-  startDbSchemaSyncBackgroundTask,
-  useDbSyncBackgroundTaskEvents,
-} from "./useDbSyncBackgroundTasks";
+import { useDbSyncTaskStore } from "../../../stores/dbSyncTaskStore";
 import {
   connectionWithDatabase,
   resolveDataSyncConflictStatus,
@@ -103,8 +104,6 @@ export function DatabaseToolbox({
   const [submitting, setSubmitting] = useState(false);
   const [submitNotice, setSubmitNotice] = useState<string | null>(null);
   const [largeTableWarn, setLargeTableWarn] = useState<{ names: string[]; rows: Record<string, number> } | null>(null);
-  const enqueueAction = useActionStore((s) => s.enqueueAction);
-  const completeAction = useActionStore((s) => s.completeAction);
   const analyzingRef = useRef(new Set<string>());
   /** 递增后使进行中的统计/比对任务全部失效 */
   const syncRunIdRef = useRef(0);
@@ -135,6 +134,8 @@ export function DatabaseToolbox({
   const taskLoadRef = useRef<{ config: SyncTaskConfig; runAfterLoad: boolean } | null>(null);
   const runAfterLoadRef = useRef(false);
   const taskLoadAppliedRef = useRef(false);
+  const prevSourceConnIdRef = useRef<string | null>(null);
+  const prevTargetConnIdRef = useRef<string | null>(null);
 
   const targetConfigured = Boolean(targetConnId && targetDb.trim());
 
@@ -153,8 +154,18 @@ export function DatabaseToolbox({
       return;
     }
     const defaultConn = pickDefaultConnId(initialSourceConnectionId);
-    setSourceConnId(defaultConn);
-    setTargetConnId(defaultConn);
+    setSourceConnId((prev) => {
+      if (prev && connections.some((c) => c.id === prev)) {
+        return prev;
+      }
+      return prev === defaultConn ? prev : defaultConn;
+    });
+    setTargetConnId((prev) => {
+      if (prev && connections.some((c) => c.id === prev)) {
+        return prev;
+      }
+      return prev === defaultConn ? prev : defaultConn;
+    });
   }, [active, initialSourceConnectionId, pickDefaultConnId, connections]);
 
   useEffect(() => {
@@ -212,13 +223,21 @@ export function DatabaseToolbox({
 
   useEffect(() => {
     if (!active) {
+      prevSourceConnIdRef.current = null;
       return;
     }
     if (!sourceConnId) {
-      setSourceDbs([]);
-      setSourceDb("");
+      if (prevSourceConnIdRef.current !== null) {
+        setSourceDbs([]);
+        setSourceDb("");
+        prevSourceConnIdRef.current = null;
+      }
       return;
     }
+    if (prevSourceConnIdRef.current === sourceConnId) {
+      return;
+    }
+    prevSourceConnIdRef.current = sourceConnId;
     setSourceDbs([]);
     setSourceDb("");
     void loadDatabases(sourceConnId, "source");
@@ -226,13 +245,21 @@ export function DatabaseToolbox({
 
   useEffect(() => {
     if (!active) {
+      prevTargetConnIdRef.current = null;
       return;
     }
     if (!targetConnId) {
-      setTargetDbs([]);
-      setTargetDb("");
+      if (prevTargetConnIdRef.current !== null) {
+        setTargetDbs([]);
+        setTargetDb("");
+        prevTargetConnIdRef.current = null;
+      }
       return;
     }
+    if (prevTargetConnIdRef.current === targetConnId) {
+      return;
+    }
+    prevTargetConnIdRef.current = targetConnId;
     setTargetDbs([]);
     setTargetDb("");
     void loadDatabases(targetConnId, "target");
@@ -998,6 +1025,8 @@ export function DatabaseToolbox({
     setSourceExpanded(new Set());
     setTableSyncStrategies({});
     taskLoadRef.current = { config, runAfterLoad };
+    prevSourceConnIdRef.current = null;
+    prevTargetConnIdRef.current = null;
     setSourceConnId(config.sourceConnId);
     setTargetConnId(config.targetConnId);
     setSourceDb("");
@@ -1133,59 +1162,39 @@ export function DatabaseToolbox({
     setSubmitNotice(null);
 
     const tableNames = Array.from(sourceSelected).sort((a, b) => a.localeCompare(b));
-    const title =
-      tab === "dataSync"
-        ? t("database.toolbox.submitDataTitle")
-        : t("database.toolbox.submitSchemaTitle");
 
-    const lines =
-      tab === "dataSync"
-        ? tableNames.map((name) => {
-            const status = tableTargetStatus[name];
-            const strategy = tableSyncStrategies[name];
-            if (status === "new") {
-              return `${name}: ${t("database.toolbox.side.tagNew")}`;
-            }
-            if (status === "conflict" && strategy) {
-              return `${name}: ${t("database.toolbox.side.tagConflict")} · ${strategy}`;
-            }
-            return name;
-          })
-        : tableNames.map((name) => {
-            const diff = schemaTableDiffs[name];
-            if (!diff) return name;
-            if (diff.status === "new") return `${name}: ${t("database.toolbox.side.schemaDiffNewTable")}`;
-            if (diff.status === "diff") {
-              const parts: string[] = [];
-              if (diff.columns.length > 0) {
-                parts.push(`${diff.columns.length} ${t("database.toolbox.side.schemaDiffColumnChanges")}`);
-              }
-              if (diff.indexes.length > 0) {
-                parts.push(`${diff.indexes.length} ${t("database.toolbox.side.schemaDiffIndexChanges")}`);
-              }
-              return `${name}: ${parts.join(" · ")}`;
-            }
-            if (diff.status === "match") return `${name}: ${t("database.toolbox.side.schemaDiffMatch")}`;
-            return name;
-          });
-
-    const description = [
-      `${sourceConn.name}/${sourceDb} → ${targetConn.name}/${targetDb}`,
-      ...lines,
-    ].join("\n");
-
-    const action = enqueueAction({
-      type: "sql",
-      title,
-      description,
-      command: `-- ${title}\n${description}`,
-      resourceId: sourceConn.id,
-      source: "用户",
-    });
-
-    completeAction(action.id);
-    setSubmitNotice(t("database.toolbox.submitSuccess"));
-    setSubmitting(false);
+    try {
+      if (tab === "dataSync") {
+        await startDbDataSyncExecute(
+          sourceConn,
+          targetConn,
+          sourceDb,
+          targetDb,
+          tableNames.map((name) => ({
+            name,
+            columns: sourceTableColumns[name] ?? [],
+            strategy:
+              tableSyncStrategies[name] ??
+              (tableTargetStatus[name] === "new" ? "rewrite" : "rewrite"),
+          })),
+        );
+      } else {
+        await startDbSchemaSyncExecute(
+          sourceConn,
+          targetConn,
+          sourceDb,
+          targetDb,
+          tableNames,
+          sourceTableColumns,
+          sourceTableIndexes,
+        );
+      }
+      setSubmitNotice(t("database.toolbox.submitSuccess"));
+    } catch (error) {
+      setSubmitNotice(String(error));
+    } finally {
+      setSubmitting(false);
+    }
   }, [
     canSubmit,
     submitting,
@@ -1196,11 +1205,10 @@ export function DatabaseToolbox({
     targetDb,
     sourceSelected,
     tab,
-    tableTargetStatus,
+    sourceTableColumns,
+    sourceTableIndexes,
     tableSyncStrategies,
-    schemaTableDiffs,
-    enqueueAction,
-    completeAction,
+    tableTargetStatus,
     t,
   ]);
 
@@ -1337,7 +1345,7 @@ export function DatabaseToolbox({
             disabled={!canSubmit || submitting}
             onClick={() => void handleSubmit()}
           >
-            {tab === "dataSync" ? t("database.toolbox.submitData") : t("database.toolbox.submitSchema")}
+            {t("database.toolbox.submit")}
           </Button>
         </div>
       </footer>
