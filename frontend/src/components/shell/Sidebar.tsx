@@ -12,6 +12,7 @@ import {
 } from "../../lib/workspaceNavigation";
 import { isDashboardPath, MODULE_PATHS } from "../../lib/paths";
 import { isModulePathEnabled, useAppModuleStore } from "../../stores/appModuleStore";
+import { usePanelLayoutStore } from "../../stores/panelLayoutStore";
 
 const navPaths = [
   {
@@ -141,6 +142,10 @@ export function Sidebar() {
   };
 
   const handleModuleNav = (path: string) => {
+    if (isActive(path)) {
+      usePanelLayoutStore.getState().toggleModuleSidebar();
+      return;
+    }
     go(path);
   };
 

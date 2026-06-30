@@ -1,12 +1,14 @@
-import { useCallback, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import type { PanelImperativeHandle } from "react-resizable-panels";
 import { DockWorkspace, type DockRailPreset } from "../dock";
 import {
   getModuleLeftSidebarSize,
+  MODULE_LEFT_SIDEBAR_DEFAULT_PX,
   MODULE_LEFT_SIDEBAR_MAX_PX,
   MODULE_LEFT_SIDEBAR_MIN_PX,
   usePanelLayoutStore,
 } from "../../stores/panelLayoutStore";
+import { useModuleVisibility } from "../../lib/moduleVisibility";
 import { ModuleLeftColumn } from "./ModuleLeftColumn";
 import "./moduleWorkspaceLayout.css";
 
@@ -55,11 +57,14 @@ export function ModuleWorkspaceLayout({
 }: ModuleWorkspaceLayoutProps) {
   const savedSize = usePanelLayoutStore((s) => getModuleLeftSidebarSize(s.leftSizes));
   const setModuleLeftSidebarSize = usePanelLayoutStore((s) => s.setModuleLeftSidebarSize);
+  const moduleSidebarToggleNonce = usePanelLayoutStore((s) => s.moduleSidebarToggleNonce);
+  const { active: moduleActive } = useModuleVisibility();
   const leftSizePx = propLeftSizePx ?? savedSize;
   const pendingLeftSizeRef = useRef<number | null>(null);
   const internalLeftPanelRef = useRef<PanelImperativeHandle | null>(null);
   const leftPanelRef = externalLeftPanelRef ?? internalLeftPanelRef;
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const lastSidebarToggleNonceRef = useRef(moduleSidebarToggleNonce);
 
   const updateSidebarCollapsed = useCallback(
     (collapsed: boolean) => {
@@ -87,6 +92,32 @@ export function ModuleWorkspaceLayout({
 
   const hasSidebarHeader = Boolean(leftColumnTitle || leftIconRail);
   const hasLeft = Boolean(hasSidebarHeader || leftSidebar);
+
+  const toggleSidebarFromShell = useCallback(() => {
+    const handle = leftPanelRef.current;
+    if (!handle) return;
+    if (handle.isCollapsed()) {
+      const restorePx =
+        getModuleLeftSidebarSize(usePanelLayoutStore.getState().leftSizes) ??
+        leftSizePx ??
+        MODULE_LEFT_SIDEBAR_DEFAULT_PX;
+      handle.expand();
+      requestAnimationFrame(() => {
+        handle.resize(`${restorePx}px`);
+        updateSidebarCollapsed(false);
+      });
+      return;
+    }
+    handle.collapse();
+    updateSidebarCollapsed(true);
+  }, [leftPanelRef, leftSizePx, updateSidebarCollapsed]);
+
+  useEffect(() => {
+    if (!moduleActive || !hasLeft) return;
+    if (moduleSidebarToggleNonce === lastSidebarToggleNonceRef.current) return;
+    lastSidebarToggleNonceRef.current = moduleSidebarToggleNonce;
+    toggleSidebarFromShell();
+  }, [moduleSidebarToggleNonce, moduleActive, hasLeft, toggleSidebarFromShell]);
 
   const resolvedHandleClassName =
     leftHandleClassName ??
