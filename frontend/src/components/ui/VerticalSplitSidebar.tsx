@@ -23,10 +23,14 @@ export function VerticalSplitSidebarSection({
   onToggle,
   actions,
   children,
+  keepMounted = false,
 }: VerticalSplitSidebarSectionConfig & {
   actions?: ReactNode;
   children: ReactNode;
+  /** 折叠时仍挂载子树（用于向标题栏上报操作按钮） */
+  keepMounted?: boolean;
 }) {
+  const showBody = expanded || keepMounted;
   return (
     <section
       className={cn("vsplit-sidebar-section", !expanded && "vsplit-sidebar-section--collapsed")}
@@ -54,7 +58,16 @@ export function VerticalSplitSidebarSection({
           </div>
         ) : null}
       </div>
-      {expanded ? <div className="vsplit-sidebar-section__body">{children}</div> : null}
+      {showBody ? (
+        <div
+          className={cn(
+            "vsplit-sidebar-section__body",
+            !expanded && keepMounted && "vsplit-sidebar-section__body--hidden",
+          )}
+        >
+          {children}
+        </div>
+      ) : null}
     </section>
   );
 }

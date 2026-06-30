@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ComponentProps, type MouseEvent as ReactMouseEvent } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentProps, type MouseEvent as ReactMouseEvent } from "react";
 import { useLocation } from "react-router-dom";
 import {
   useTerminalStore,
@@ -15,7 +15,6 @@ import {
 import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { useI18n } from "../../i18n";
 import type { TopbarTabDef } from "../../stores/topbarStore";
-import { navigateToPath } from "../../lib/terminalSession";
 import { LOCAL_TERMINAL_RESOURCE_ID } from "./paneResource";
 import { TerminalTabDockPane } from "./TerminalTabDockPane";
 import { TerminalModuleContextBridge } from "./ai/TerminalModuleContextBridge";
@@ -50,6 +49,14 @@ import {
   touchTerminalBackendSession,
 } from "./terminalBackendLifecycle";
 import { useTerminalHistoryStore } from "../../stores/terminalHistoryStore";
+import { SshWorkspacePanel } from "../server/ssh/SshWorkspacePanel";
+import { useTerminalLeftPanelStore } from "./terminalLeftPanelStore";
+import { useSshActiveHostStore } from "../server/ssh/stores/sshActiveHostStore";
+import {
+  TERMINAL_SSH_MANAGEMENT_TAB_ID,
+  isTerminalSshManagementTab,
+} from "./constants";
+import { useSshWorkspaceNavStore } from "../server/ssh/stores/sshWorkspaceNavStore";
 
 function tabLabel(tab: TerminalTab, fallbackName?: string) {
   const resource = resolveResourceById(tab.session.resourceId);
@@ -90,6 +97,13 @@ export function TerminalPanel() {
   const { t } = useI18n();
   const location = useLocation();
   const isActiveRoute = location.pathname === "/module/terminal";
+  const leftPanelMode = useTerminalLeftPanelStore((s) => s.mode);
+  const focusSshPanel = useTerminalLeftPanelStore((s) => s.focusSsh);
+  const focusSessionsPanel = useTerminalLeftPanelStore((s) => s.focusSessions);
+  const isSshMode = leftPanelMode === "ssh";
+  const sshSection = useSshWorkspaceNavStore((s) => s.section);
+  const [dockActiveId, setDockActiveId] = useState("");
+  const sshModePrevRef = useRef(isSshMode);
   const allTabs = useTerminalStore((state) => state.tabs);
   const tabs = useMemo(
     () => allTabs.filter((tab) => !tab.workspaceOnly),
@@ -105,6 +119,7 @@ export function TerminalPanel() {
   const addLocalTerminalTab = useTerminalStore((state) => state.addLocalTerminalTab);
   const addSshTerminalTab = useTerminalStore((state) => state.addSshTerminalTab);
   const sshHosts = useSshHostResources();
+  const sshActiveHostId = useSshActiveHostStore((s) => s.activeHostId);
 
   const dockLayout = useTerminalDockLayoutStore((state) => state.savedLayout);
   const setDockLayout = useTerminalDockLayoutStore((state) => state.setSavedLayout);
@@ -185,11 +200,40 @@ export function TerminalPanel() {
 
   useEffect(() => {
     if (!isActiveRoute) return;
+    if (isSshMode && isTerminalSshManagementTab(dockActiveId)) return;
     if (tabs.length === 0) return;
     if (!activeTabId || !tabs.some((tab) => tab.id === activeTabId)) {
       setActiveTab(tabs[0].id);
     }
-  }, [isActiveRoute, tabs, activeTabId, setActiveTab]);
+  }, [isActiveRoute, tabs, activeTabId, setActiveTab, isSshMode, dockActiveId]);
+
+  useLayoutEffect(() => {
+    const enteredSsh = isSshMode && !sshModePrevRef.current;
+    const leftSsh = !isSshMode && sshModePrevRef.current;
+    sshModePrevRef.current = isSshMode;
+
+    if (enteredSsh) {
+      setDockActiveId(TERMINAL_SSH_MANAGEMENT_TAB_ID);
+      return;
+    }
+    if (leftSsh) {
+      setDockActiveId((current) => {
+        if (!isTerminalSshManagementTab(current)) return current;
+        const state = useTerminalStore.getState();
+        const next =
+          state.activeTabId && !isTerminalSshManagementTab(state.activeTabId)
+            ? state.activeTabId
+            : state.tabs.find((tab) => !tab.workspaceOnly)?.id ?? "";
+        return next || current;
+      });
+    }
+  }, [isSshMode]);
+
+  useLayoutEffect(() => {
+    if (!isSshMode) return;
+    if (sshSection === "hosts") return;
+    setDockActiveId(TERMINAL_SSH_MANAGEMENT_TAB_ID);
+  }, [sshSection, isSshMode]);
 
   const activeTab = useMemo(
     () => tabs.find((tab) => tab.id === activeTabId) ?? tabs[0] ?? null,
@@ -259,6 +303,7 @@ export function TerminalPanel() {
 
   const handleCloseTab = useCallback(
     (id: string) => {
+      if (isTerminalSshManagementTab(id)) return;
       handleCloseTabs([id]);
     },
     [handleCloseTabs],
@@ -267,10 +312,12 @@ export function TerminalPanel() {
   const handleSelectSession = useCallback(
     (sessionId: string) => {
       const tabId = openSessionTab(sessionId);
+      focusSessionsPanel();
+      setDockActiveId(tabId);
       setActiveTab(tabId);
       useTerminalHistoryStore.getState().restoreSession(sessionId);
     },
-    [openSessionTab, setActiveTab],
+    [focusSessionsPanel, openSessionTab, setActiveTab],
   );
 
   const handleCreateSession = useCallback(
@@ -282,9 +329,11 @@ export function TerminalPanel() {
         tabId = addSshTerminalTab(resourceId, title);
       }
       selectResource(resourceId);
+      focusSessionsPanel();
+      setDockActiveId(tabId);
       setActiveTab(tabId);
     },
-    [addLocalTerminalTab, addSshTerminalTab, selectResource, setActiveTab],
+    [addLocalTerminalTab, addSshTerminalTab, focusSessionsPanel, selectResource, setActiveTab],
   );
 
   const visibleTabs = useMemo(
@@ -294,6 +343,16 @@ export function TerminalPanel() {
       ),
     [tabs],
   );
+
+  useLayoutEffect(() => {
+    if (isSshMode) return;
+    if (!isTerminalSshManagementTab(dockActiveId)) return;
+    const next =
+      activeTabId && !isTerminalSshManagementTab(activeTabId)
+        ? activeTabId
+        : visibleTabs[0]?.id ?? "";
+    if (next) setDockActiveId(next);
+  }, [activeTabId, dockActiveId, isSshMode, visibleTabs]);
 
   const dockTabs = useMemo(
     () =>
@@ -305,6 +364,66 @@ export function TerminalPanel() {
         status: topbarTabStatus(tab.status),
       })),
     [visibleTabs],
+  );
+
+  const mergedDockTabs = useMemo(
+    () => [
+      {
+        id: TERMINAL_SSH_MANAGEMENT_TAB_ID,
+        label: t("terminal.leftPanel.ssh"),
+        panelType: "ssh-management",
+        closable: false,
+        tabBarHidden: !isSshMode,
+      },
+      ...dockTabs,
+    ],
+    [dockTabs, isSshMode, t],
+  );
+
+  const effectiveDockActiveId = useMemo(() => {
+    const isValidTab = (id: string) =>
+      mergedDockTabs.some((tab) => tab.id === id);
+
+    if (isSshMode) {
+      if (
+        dockActiveId &&
+        !isTerminalSshManagementTab(dockActiveId) &&
+        isValidTab(dockActiveId)
+      ) {
+        return dockActiveId;
+      }
+      return TERMINAL_SSH_MANAGEMENT_TAB_ID;
+    }
+
+    if (
+      activeTabId &&
+      !isTerminalSshManagementTab(activeTabId) &&
+      isValidTab(activeTabId)
+    ) {
+      return activeTabId;
+    }
+    if (
+      dockActiveId &&
+      !isTerminalSshManagementTab(dockActiveId) &&
+      isValidTab(dockActiveId)
+    ) {
+      return dockActiveId;
+    }
+    return visibleTabs[0]?.id ?? "";
+  }, [activeTabId, dockActiveId, isSshMode, mergedDockTabs, visibleTabs]);
+
+  const handleDockActiveChange = useCallback(
+    (tabId: string) => {
+      if (isTerminalSshManagementTab(tabId)) {
+        focusSshPanel();
+        setDockActiveId(tabId);
+        return;
+      }
+      focusSessionsPanel();
+      setDockActiveId(tabId);
+      setActiveTab(tabId);
+    },
+    [focusSessionsPanel, focusSshPanel, setActiveTab],
   );
 
   const addMenuItems = useMemo(
@@ -332,18 +451,23 @@ export function TerminalPanel() {
   const handleTopbarAdd = useCallback(() => {
     const name = workspaceActiveResource?.name ?? t("terminal.newSession.local");
     const id = addLocalTerminalTab(name);
+    focusSessionsPanel();
+    setDockActiveId(id);
     setActiveTab(id);
-  }, [addLocalTerminalTab, setActiveTab, workspaceActiveResource?.name, t]);
+  }, [addLocalTerminalTab, focusSessionsPanel, setActiveTab, workspaceActiveResource?.name, t]);
 
   const handleTopbarAddMenuSelect = useCallback(
     (id: string) => {
       if (id === "manage-hosts") {
-        navigateToPath("/module/ssh");
+        focusSshPanel();
+        setDockActiveId(TERMINAL_SSH_MANAGEMENT_TAB_ID);
         return;
       }
       if (id === LOCAL_TERMINAL_RESOURCE_ID) {
         const tabId = addLocalTerminalTab(t("terminal.newSession.local"));
         selectResource(LOCAL_TERMINAL_RESOURCE_ID);
+        focusSessionsPanel();
+        setDockActiveId(tabId);
         setActiveTab(tabId);
         return;
       }
@@ -351,6 +475,8 @@ export function TerminalPanel() {
       if (host) {
         const tabId = addSshTerminalTab(host.id, host.name);
         selectResource(host.id);
+        focusSessionsPanel();
+        setDockActiveId(tabId);
         setActiveTab(tabId);
       }
     },
@@ -361,11 +487,14 @@ export function TerminalPanel() {
       setActiveTab,
       sshHosts,
       t,
+      focusSshPanel,
+      focusSessionsPanel,
     ],
   );
 
   const handleDockTabContextMenu = useCallback(
     (event: ReactMouseEvent, tabId: string, index: number) => {
+      if (isTerminalSshManagementTab(tabId)) return;
       event.preventDefault();
       setCtxMenu({ x: event.clientX, y: event.clientY, tabId, index });
     },
@@ -443,14 +572,24 @@ export function TerminalPanel() {
   );
 
   const renderDockPanel = useCallback(
-    (tabId: string) => (
-      <TerminalTabDockPane
-        tabId={tabId}
-        isActive={tabId === activeTabId}
-        onActivate={() => setActiveTab(tabId)}
-      />
-    ),
-    [activeTabId, setActiveTab],
+    (tabId: string) => {
+      if (isTerminalSshManagementTab(tabId)) {
+        return <SshWorkspacePanel embedded />;
+      }
+      return (
+        <TerminalTabDockPane
+          tabId={tabId}
+          isActive={tabId === effectiveDockActiveId}
+          onActivate={() => handleDockActiveChange(tabId)}
+        />
+      );
+    },
+    [effectiveDockActiveId, handleDockActiveChange],
+  );
+
+  const sshDockPanelContentKey = useMemo(
+    () => `${isSshMode}:${sshActiveHostId ?? ""}`,
+    [isSshMode, sshActiveHostId],
   );
 
   const addTabConfig = useMemo(
@@ -483,13 +622,16 @@ export function TerminalPanel() {
             className: "terminal-module-dock",
             dockScope: "terminal",
             acceptExternalDrops: true,
-            tabs: dockTabs,
-            activeTabId: activeTabId ?? visibleTabs[0]?.id ?? "",
-            onActiveTabChange: setActiveTab,
+            tabs: mergedDockTabs,
+            activeTabId: effectiveDockActiveId,
+            onActiveTabChange: handleDockActiveChange,
             onCloseTab: handleCloseTab,
             savedLayout: visibleTabs.length === 0 ? null : dockLayout,
             onSavedLayoutChange: setDockLayout,
             renderPanel: renderDockPanel,
+            panelContentKeysByTab: {
+              [TERMINAL_SSH_MANAGEMENT_TAB_ID]: sshDockPanelContentKey,
+            },
             onTabContextMenu: handleDockTabContextMenu,
             addTabConfig,
             enabled: isActiveRoute,

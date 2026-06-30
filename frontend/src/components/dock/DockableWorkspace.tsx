@@ -27,6 +27,7 @@ import {
   enrichLayoutWithTabMeta,
   isLayoutUsable,
   describeDockLayout,
+  reorderLayoutViews,
 } from "./dockViewLayout";
 import { DockErrorBoundary } from "./DockErrorBoundary";
 import {
@@ -216,6 +217,8 @@ export function DockableWorkspace({
     setLayoutReady(true);
   }, []);
   const isSyncingRef = useRef(false);
+  /** 程序化 setActive 时不向上冒泡，避免与用户点击 Tab 冲突 */
+  const isProgrammaticActiveRef = useRef(false);
   const pendingSavedLayoutRef = useRef<SerializedDockview | null>(savedLayout);
   // 跟踪最近一次主动写回 store 的布局；useEffect 用它来识别"自己写回去"vs"外部变更"
   const lastWrittenLayoutRef = useRef<SerializedDockview | null>(null);
@@ -863,6 +866,21 @@ export function DockableWorkspace({
             syncPanelTabParams(api, tab);
           }
         }
+        const tabIds = currentTabs.map((tab) => tab.id);
+        const panelOrder = api.groups.flatMap((group) => group.panels.map((panel) => panel.id));
+        const expectedOrder = tabIds.filter((id) => panelOrder.includes(id));
+        const actualOrder = panelOrder.filter((id) => tabIds.includes(id));
+        if (actualOrder.join("\0") !== expectedOrder.join("\0")) {
+          try {
+            const raw = api.toJSON();
+            const normalized = normalizeDockLayout(raw) ?? raw;
+            const reordered = reorderLayoutViews(normalized, tabIds);
+            api.fromJSON(enrichLayoutWithTabMeta(reordered, currentTabs));
+            layoutChanged = true;
+          } catch (err) {
+            console.warn("[DockableWorkspace] reorder tabs failed", err);
+          }
+        }
         syncTabGroups(api, false);
       } finally {
         isSyncingRef.current = false;
@@ -878,6 +896,25 @@ export function DockableWorkspace({
   // 同步 tab 变更（添加/删除/重命名）
   useLayoutEffect(() => {
     publishDockTabMeta(tabs);
+  }, [tabs]);
+
+  // 同步 tab 栏隐藏（兜底：Tab 头未挂载 hook 时仍按 tabBarHidden 隐藏标签）
+  useLayoutEffect(() => {
+    const root = wrapperRef.current;
+    if (!root) return;
+    const hiddenIds = new Set(
+      tabs.filter((tab) => tab.tabBarHidden).map((tab) => tab.id),
+    );
+    root
+      .querySelectorAll<HTMLElement>(".dv-default-tab[data-dock-tab-id]")
+      .forEach((header) => {
+        const id = header.dataset.dockTabId;
+        if (!id) return;
+        const tabEl = header.closest(".dv-tab");
+        if (!tabEl) return;
+        tabEl.classList.toggle("dock-tab--bar-hidden", hiddenIds.has(id));
+        tabEl.setAttribute("data-tab-id", id);
+      });
   }, [tabs]);
 
   const tabIdsKey = useMemo(() => tabs.map((tab) => tab.id).join("\0"), [tabs]);
@@ -977,11 +1014,11 @@ export function DockableWorkspace({
     if (!tabs.some((t) => t.id === activeTabId)) return;
     const panel = api.getPanel(activeTabId);
     if (panel && api.activePanel?.id !== activeTabId) {
-      isSyncingRef.current = true;
+      isProgrammaticActiveRef.current = true;
       try {
         panel.api.setActive();
       } finally {
-        isSyncingRef.current = false;
+        isProgrammaticActiveRef.current = false;
       }
     }
   }, [activeTabId, tabs]);
@@ -1087,7 +1124,7 @@ export function DockableWorkspace({
         onCloseTabRef.current(panel.id);
       });
       const activeDisposable = api.onDidActivePanelChange((panel) => {
-        if (isSyncingRef.current) return;
+        if (isProgrammaticActiveRef.current) return;
         if (panel) {
           onActiveTabChangeRef.current(panel.id);
         }
@@ -1200,11 +1237,11 @@ export function DockableWorkspace({
       if (initialActiveTabId) {
         const target = api.getPanel(initialActiveTabId);
         if (target) {
-          isSyncingRef.current = true;
+          isProgrammaticActiveRef.current = true;
           try {
             target.api.setActive();
           } finally {
-            isSyncingRef.current = false;
+            isProgrammaticActiveRef.current = false;
           }
         }
       }

@@ -5,6 +5,7 @@
 //! - shell 输出通过 [`SshSink`] 抽象回流，crate 不依赖 Tauri；事件桥接由 `src-tauri` 提供。
 //! - SFTP 在独立 channel 上按需打开。
 
+mod connection_config;
 mod gpu;
 mod openssh_config;
 mod process;
@@ -15,11 +16,12 @@ pub use gpu::{
     parse_remote_gpu_sections, parse_rocm_smi_output, INTEL_GPU_QUERY, NVIDIA_GPU_QUERY,
     NVIDIA_PROCESS_GPU_QUERY, ROCM_SMI_QUERY,
 };
+pub use connection_config::ssh_config_from_json;
 pub use openssh_config::{
     SshConfigEntry, default_ssh_config_path, default_ssh_dir, discover_ssh_identity_file,
     discover_ssh_identity_file_in, find_ssh_config_entry, list_ssh_private_key_paths,
     list_ssh_private_key_paths_in, load_ssh_config_hosts, load_ssh_config_hosts_from,
-    ssh_config_to_connect_config, ssh_public_key_meta,
+    is_private_key_pem_content, ssh_config_to_connect_config, ssh_public_key_meta,
 };
 pub use process::{
     attach_ports, merge_ports, parse_netstat_ports, parse_ss_ports, parse_windows_netstat_ports,
@@ -37,7 +39,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use omnipanel_error::{ErrorCode, OmniError, OmniResult};
-use russh::client;
+use russh::client::{self, KeyboardInteractiveAuthResponse};
 use russh::keys::{PrivateKeyWithHashAlg, decode_secret_key, ssh_key};
 use russh::{Channel, ChannelMsg, Disconnect};
 use russh_sftp::client::SftpSession;
@@ -161,6 +163,45 @@ async fn authenticate_private_key(
     };
     Err(OmniError::new(ErrorCode::Auth, message)
         .with_cause(last_error.unwrap_or_else(|| "没有可用私钥".into())))
+}
+
+/// 密码认证：先 `password`，失败则回退 `keyboard-interactive`（许多 Linux 仅开放后者）。
+async fn authenticate_with_password(
+    session: &mut client::Handle<Client>,
+    user: &str,
+    password: &str,
+) -> OmniResult<()> {
+    if let Ok(result) = session.authenticate_password(user, password).await {
+        if result.success() {
+            return Ok(());
+        }
+    }
+
+    let mut response = session
+        .authenticate_keyboard_interactive_start(user, None)
+        .await
+        .map_err(|e| {
+            OmniError::new(ErrorCode::Auth, "SSH 键盘交互认证失败").with_cause(e.to_string())
+        })?;
+
+    loop {
+        match response {
+            KeyboardInteractiveAuthResponse::Success => return Ok(()),
+            KeyboardInteractiveAuthResponse::Failure { .. } => {
+                return Err(OmniError::new(ErrorCode::Auth, "SSH 密码认证被拒绝"));
+            }
+            KeyboardInteractiveAuthResponse::InfoRequest { prompts, .. } => {
+                let answers: Vec<String> = prompts.iter().map(|_| password.to_string()).collect();
+                response = session
+                    .authenticate_keyboard_interactive_respond(answers)
+                    .await
+                    .map_err(|e| {
+                        OmniError::new(ErrorCode::Auth, "SSH 键盘交互认证失败")
+                            .with_cause(e.to_string())
+                    })?;
+            }
+        }
+    }
 }
 
 /// SFTP 目录项。
@@ -543,26 +584,21 @@ impl SshSession {
                     OmniError::new(ErrorCode::Connection, "SSH 连接失败").with_cause(e.to_string())
                 })?;
 
-        let auth_ok = match &config.auth {
-            SshAuth::Password { password } => session
-                .authenticate_password(&config.user, password)
-                .await
-                .map_err(|e| {
-                    OmniError::new(ErrorCode::Auth, "SSH 密码认证失败").with_cause(e.to_string())
-                })?
-                .success(),
+        match &config.auth {
+            SshAuth::Password { password } => {
+                authenticate_with_password(&mut session, &config.user, password).await?;
+            }
             SshAuth::PrivateKey {
                 pem,
                 key_path,
                 passphrase,
             } => {
-                authenticate_private_key(&mut session, &config.user, pem, key_path, passphrase)
+                if !authenticate_private_key(&mut session, &config.user, pem, key_path, passphrase)
                     .await?
+                {
+                    return Err(OmniError::new(ErrorCode::Auth, "SSH 认证被拒绝"));
+                }
             }
-        };
-
-        if !auth_ok {
-            return Err(OmniError::new(ErrorCode::Auth, "SSH 认证被拒绝"));
         }
 
         let mut channel = session.channel_open_session().await.map_err(|e| {
@@ -640,26 +676,21 @@ impl SshSession {
                     OmniError::new(ErrorCode::Connection, "SSH 连接失败").with_cause(e.to_string())
                 })?;
 
-        let auth_ok = match &config.auth {
-            SshAuth::Password { password } => session
-                .authenticate_password(&config.user, password)
-                .await
-                .map_err(|e| {
-                    OmniError::new(ErrorCode::Auth, "SSH 密码认证失败").with_cause(e.to_string())
-                })?
-                .success(),
+        match &config.auth {
+            SshAuth::Password { password } => {
+                authenticate_with_password(&mut session, &config.user, password).await?;
+            }
             SshAuth::PrivateKey {
                 pem,
                 key_path,
                 passphrase,
             } => {
-                authenticate_private_key(&mut session, &config.user, pem, key_path, passphrase)
+                if !authenticate_private_key(&mut session, &config.user, pem, key_path, passphrase)
                     .await?
+                {
+                    return Err(OmniError::new(ErrorCode::Auth, "SSH 认证被拒绝"));
+                }
             }
-        };
-
-        if !auth_ok {
-            return Err(OmniError::new(ErrorCode::Auth, "SSH 认证被拒绝"));
         }
 
         Ok(Self {

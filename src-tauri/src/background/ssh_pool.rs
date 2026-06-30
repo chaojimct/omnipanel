@@ -7,12 +7,12 @@ use futures::future::join_all;
 use omnipanel_error::{ErrorCode, OmniError, OmniResult};
 use omnipanel_ssh::attach_ports;
 use omnipanel_ssh::{
-    attach_process_gpu, parse_nvidia_process_gpu, parse_remote_stats_output, CpuStats, DiskStats,
-    GpuStats, HostSystemStats, MemoryStats, NetworkStats, SshAuth, SshConfig, SshProcessInfo,
-    SshSession, NVIDIA_PROCESS_GPU_QUERY,
+    attach_process_gpu, parse_nvidia_process_gpu, parse_remote_stats_output, ssh_config_from_json,
+    CpuStats, DiskStats, GpuStats, HostSystemStats, MemoryStats, NetworkStats, SshAuth, SshConfig,
+    SshProcessInfo, SshSession, NVIDIA_PROCESS_GPU_QUERY,
 };
 use omnipanel_store::Connection;
-use omnipanel_store::{ConnectionKind, Storage};
+use omnipanel_store::{ConnectionKind, Storage, Vault};
 use serde::Serialize;
 use specta::Type;
 use tauri::Emitter;
@@ -311,7 +311,11 @@ impl SshPool {
         let mut specs = Vec::new();
         let mut errors = Vec::new();
         for conn in connections {
-            match serde_json::from_str::<SshConfig>(&conn.config) {
+            let secret = conn
+                .credential_ref
+                .as_deref()
+                .and_then(|r| Vault::get(r).ok());
+            match ssh_config_from_json(&conn.config, secret.as_deref()) {
                 Ok(config) => {
                     specs.push(ConnSpec {
                         resource_id: conn.id.clone(),

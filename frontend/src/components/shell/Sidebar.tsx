@@ -8,10 +8,12 @@ import { useI18n } from "../../i18n";
 import { AppLogo } from "../ui/AppLogo";
 import {
   navigateToFeature,
+  navigateToSshManagement,
   toggleWorkspaceFromChromeIcon,
 } from "../../lib/workspaceNavigation";
 import { isDashboardPath, MODULE_PATHS } from "../../lib/paths";
 import { isModulePathEnabled, useAppModuleStore } from "../../stores/appModuleStore";
+import { useTerminalLeftPanelStore } from "../../modules/terminal/terminalLeftPanelStore";
 
 const navPaths = [
   {
@@ -129,8 +131,16 @@ export function Sidebar() {
   const openSettings = useSettingsUiStore((s) => s.openSettings);
   useAppModuleStore((s) => s.modules);
 
+  const leftPanelMode = useTerminalLeftPanelStore((s) => s.mode);
+
   const isActive = (path: string) => {
     if (isWorkspaceHome) return false;
+    if (path === MODULE_PATHS.ssh) {
+      return (
+        location.pathname.startsWith(MODULE_PATHS.ssh) ||
+        (location.pathname === MODULE_PATHS.terminal && leftPanelMode === "ssh")
+      );
+    }
     return location.pathname.startsWith(path);
   };
 
@@ -141,6 +151,12 @@ export function Sidebar() {
   };
 
   const handleModuleNav = (path: string) => {
+    if (path === MODULE_PATHS.ssh) {
+      startTransition(() => {
+        navigateToSshManagement(navigate);
+      });
+      return;
+    }
     go(path);
   };
 

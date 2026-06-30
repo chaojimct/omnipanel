@@ -55,6 +55,7 @@ export function KeysModuleView() {
         genKeyType === "rsa" ? parseInt(genBits, 10) || 4096 : null,
         genComment,
         genPassphrase,
+        null,
       );
       if (res.status === "ok") {
         setShowGenerate(false);

@@ -2,7 +2,6 @@ import { useEffect, useRef, type RefObject } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import {
   commands,
-  type SshConfig_Serialize,
 } from "../ipc/bindings";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { Terminal, type IDisposable, type ITheme } from "@xterm/xterm";
@@ -178,21 +177,7 @@ function isRemotePane(sessionId: string): boolean {
   return findPaneById(sessionId)?.type === "remote";
 }
 
-/**
- * 把持久化配置（`SshConfig_Serialize` 形态 = serde 内部 tag 的扁平 JSON）
- * 透传给后端。
- *
- * 后端 `SshAuth` 使用 `#[serde(tag = "type", rename_all = "camelCase")]`，
- * 即 internally tagged —— JSON 线缆格式就是 `{ type: "password", password }`，
- * 与持久化在 `conn.config` 里的形态一致（见 `serverConnection.ts:155`）。
- * 这里不再做形态转换；旧的嵌套转换会把 `auth` 变成 `{ password: { type } }`，
- * 触发后端 `missing field \`type\`` 报错。
- */
-function toSshConnectConfig(config: SshConfig_Serialize): SshConfig_Serialize {
-  return config;
-}
-
-/** 远程 pane 走 SSH（ssh_connect），本地 pane 走本地 PTY（create_terminal）。 */
+/** 远程 pane 走 SSH（ssh_connect_connection），本地 pane 走本地 PTY（create_terminal）。 */
 async function createBackendSession(sessionId: string, cols: number, rows: number): Promise<string> {
   const pane = findPaneById(sessionId);
   if (pane?.type === "remote" && pane.resourceId) {
@@ -209,20 +194,7 @@ async function createBackendSession(sessionId: string, cols: number, rows: numbe
     if (!conn) {
       throw new Error("未找到对应的 SSH 连接配置，请先在 SSH 管理中添加连接");
     }
-    let config: SshConfig_Serialize;
-    try {
-      config = JSON.parse(conn.config || "{}") as SshConfig_Serialize;
-    } catch {
-      throw new Error("SSH 连接配置解析失败");
-    }
-    const res = await commands.sshConnect(
-      // specta 生成的 `SshConfig_Deserialize` 形态与 Rust serde 实际接受的
-      // internally-tagged 扁平 JSON 不一致；这里把已校验的 Serialize 形态直传，
-      // 通过 unknown 绕过错误的 Deserialize 类型。后端只接受扁平形态。
-      toSshConnectConfig(config) as unknown as Parameters<typeof commands.sshConnect>[0],
-      cols,
-      rows,
-    );
+    const res = await commands.sshConnectConnection(conn.id, cols, rows);
     if (res.status === "ok") return res.data;
     throw normalizeBackendError(res.error, "SSH 终端创建失败");
   }
@@ -919,7 +891,6 @@ export function useTerminal(
         } else {
           window.setTimeout(() => {
             if (destroyed) return;
-            requestShellHistorySync(sessionId);
             tryShellSessionBootstrapOnReady();
           }, 800);
         }

@@ -79,13 +79,31 @@ export function parsePanelConfig(connection: Connection): PanelConfigJson {
 
 export function parseSshConfig(connection: Connection): SshConfigJson | null {
   try {
-    const cfg = JSON.parse(connection.config || "{}") as Partial<SshConfigJson>;
+    const cfg = JSON.parse(connection.config || "{}") as Partial<SshConfigJson> & {
+      auth?: SshAuthJson & { password?: SshAuthJson | string };
+    };
     if (!cfg.host || !cfg.user) return null;
+    let auth: SshAuthJson = cfg.auth ?? { type: "password", password: "" };
+    if (auth && typeof auth.password === "object" && auth.password !== null) {
+      const nested = auth.password as SshAuthJson;
+      auth = {
+        type: "password",
+        password: nested.password ?? "",
+      };
+    } else if (!auth.type) {
+      if (typeof auth.password === "string" && auth.password) {
+        auth = { ...auth, type: "password" };
+      } else if (auth.keyPath || auth.pem) {
+        auth = { ...auth, type: "privateKey" };
+      } else {
+        auth = { ...auth, type: "password" };
+      }
+    }
     return {
       host: cfg.host,
       port: typeof cfg.port === "number" ? cfg.port : 22,
       user: cfg.user,
-      auth: cfg.auth ?? { type: "password", password: "" },
+      auth,
       panelConnectionId: cfg.panelConnectionId,
     };
   } catch {
@@ -150,10 +168,22 @@ export function buildSshConnection(
   existingId?: string,
   panelConnectionId?: string,
   tags?: string[],
+  existingConnection?: Connection,
 ): Connection {
+  let password = form.password;
+  if (
+    form.authType === "password" &&
+    !password.trim() &&
+    existingConnection
+  ) {
+    const existing = parseSshConfig(existingConnection);
+    if (existing?.auth.type === "password" && existing.auth.password) {
+      password = existing.auth.password;
+    }
+  }
   const auth =
     form.authType === "password"
-      ? { type: "password" as const, password: form.password }
+      ? { type: "password" as const, password }
       : {
           type: "privateKey" as const,
           ...(form.pem.trim() ? { pem: form.pem } : {}),

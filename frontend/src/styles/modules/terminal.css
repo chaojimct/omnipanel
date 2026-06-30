@@ -2189,6 +2189,32 @@
         height: 100%;
     }
 
+    .term-sidebar-dual {
+        position: relative;
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .term-sidebar-dual__pane {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        visibility: hidden;
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        overflow: hidden;
+    }
+
+    .term-sidebar-dual__pane--active {
+        visibility: visible;
+        position: relative;
+        pointer-events: auto;
+    }
+
     /* 侧栏展开/折叠与顶栏对齐：见文件末尾 unlayered 规则（须覆盖 global dock-handle） */
 
     .term-sessions-workspace .dock-panel-left .dock-rail-shell {
@@ -2479,6 +2505,12 @@
         min-height: 0;
         min-width: 0;
     }
+
+    .terminal-module-dock .dock-pane-surface > .ssh-workspace-panel {
+        flex: 1;
+        min-height: 0;
+        height: 100%;
+    }
 }
 
 /*
@@ -2543,6 +2575,42 @@
 .dock-handle.term-sessions-sidebar-handle--collapsed .dock-handle-inner,
 .dock-handle.module-workspace-sidebar-handle--collapsed .dock-handle-inner {
     height: 48px;
+}
+
+.dock-workspace.term-sessions-workspace .dock-panel-main > .terminal-module-dock {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.terminal-module-dock.dockable-workspace {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.terminal-module-dock .dockable-workspace__dockview,
+.terminal-module-dock .dv-groupview,
+.terminal-module-dock .dv-content-container {
+    flex: 1;
+    min-height: 0;
+    height: 100%;
+}
+
+.terminal-module-dock .dock-pane-surface {
+    flex: 1;
+    min-height: 0;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+.terminal-module-dock .dock-pane-surface > .ssh-workspace-panel {
+    flex: 1;
+    min-height: 0;
+    height: 100%;
 }
 
 body.term-session-tree--dragging {

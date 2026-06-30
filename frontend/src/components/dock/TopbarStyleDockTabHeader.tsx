@@ -4,6 +4,7 @@ import type { TopbarTabDef } from "../../stores/topbarStore";
 import { DockTabChrome } from "./DockTabChrome";
 import type { DockTabPageType } from "./dockableTab";
 import { useDockTabLiveMeta } from "./dockTabLiveMeta";
+import { useDockTabBarHidden } from "./useDockTabBarHidden";
 
 interface PanelParams {
   tabId: string;
@@ -37,7 +38,8 @@ export function TopbarStyleDockTabHeader({
 }: TopbarStyleDockTabHeaderProps) {
   const tabId = props.params?.tabId ?? props.api.id;
   const liveMeta = useDockTabLiveMeta(tabId);
-  const label = props.params?.label ?? tabId;
+  const rootRef = useDockTabBarHidden(tabId, Boolean(liveMeta.tabBarHidden));
+  const label = liveMeta.label ?? props.params?.label ?? tabId;
   const status = props.params?.status;
   const tooltip = props.params?.tooltip ?? label;
   const pageType: DockTabPageType | undefined =
@@ -56,10 +58,12 @@ export function TopbarStyleDockTabHeader({
   ) : null;
 
   return (
-    <DockTabChrome
+    <div ref={rootRef} className="dock-tab-header-root">
+      <DockTabChrome
       {...props}
       closable={closable}
       tooltip={tooltip}
+      tabId={tabId}
       onContextMenu={onContextMenu}
       onPointerUp={onPointerUp}
     >
@@ -69,5 +73,6 @@ export function TopbarStyleDockTabHeader({
       <span className="dock-tab-label">{label}</span>
       {statusMark}
     </DockTabChrome>
+    </div>
   );
 }

@@ -5,7 +5,7 @@ use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use omnipanel_error::{ErrorCode, OmniError};
-use omnipanel_ssh::{SshAuth, SshConfig, SshSession};
+use omnipanel_ssh::{ssh_config_from_json, SshAuth, SshConfig, SshSession};
 use omnipanel_store::{Connection, ConnectionKind, Vault};
 use s3::bucket::Bucket;
 use s3::creds::Credentials;
@@ -300,9 +300,8 @@ async fn ssh_config_from_file_conn(
         if ssh_conn.kind != ConnectionKind::Ssh {
             return Err(OmniError::invalid_input("关联连接不是 SSH 类型"));
         }
-        return serde_json::from_str(&ssh_conn.config).map_err(|e| {
-            OmniError::new(ErrorCode::InvalidInput, "SSH 配置解析失败").with_cause(e.to_string())
-        });
+        let secret = resolve_secret(&ssh_conn);
+        return ssh_config_from_json(&ssh_conn.config, secret.as_deref());
     }
     let secret = resolve_secret(conn).unwrap_or_default();
     let port = cfg.port.unwrap_or(22);

@@ -1,9 +1,10 @@
 import { useCallback } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import type { WorkspaceResource } from "../../../../lib/resourceRegistry";
 import { MODULE_PATHS } from "../../../../lib/paths";
 import { useWorkspaceStore } from "../../../../stores/workspaceStore";
 import { useTerminalStore } from "../../../../stores/terminalStore";
+import { useTerminalLeftPanelStore } from "../../../terminal/terminalLeftPanelStore";
 import { SERVER_PATH } from "../../panel/constants";
 import type { LaunchPreset } from "../types";
 import type { SshHostContext } from "./useSshHostContext";
@@ -18,6 +19,8 @@ export function useSshHostActions(
   },
 ) {
   const navigate = useNavigate();
+  const location = useLocation();
+  const focusSessions = useTerminalLeftPanelStore((s) => s.focusSessions);
   const selectResource = useWorkspaceStore((s) => s.selectResource);
   const setActivePath = useWorkspaceStore((s) => s.setActivePath);
   const addTab = useTerminalStore((s) => s.addTab);
@@ -29,8 +32,11 @@ export function useSshHostActions(
     const tabId = openOrFocusSshTab(resource.id, resource.name);
     setActiveTab(tabId);
     setActivePath(MODULE_PATHS.terminal);
-    navigate(MODULE_PATHS.terminal);
-  }, [navigate, openOrFocusSshTab, resource, setActivePath, setActiveTab]);
+    focusSessions();
+    if (location.pathname !== MODULE_PATHS.terminal) {
+      navigate(MODULE_PATHS.terminal);
+    }
+  }, [focusSessions, location.pathname, navigate, openOrFocusSshTab, resource, setActivePath, setActiveTab]);
 
   const openTerminalWithPreset = useCallback(
     (preset: LaunchPreset) => {
@@ -50,9 +56,12 @@ export function useSshHostActions(
       });
       setActiveTab(tabId);
       setActivePath(MODULE_PATHS.terminal);
-      navigate(MODULE_PATHS.terminal);
+      focusSessions();
+      if (location.pathname !== MODULE_PATHS.terminal) {
+        navigate(MODULE_PATHS.terminal);
+      }
     },
-    [addTab, navigate, resource, setActivePath, setActiveTab],
+    [addTab, focusSessions, location.pathname, navigate, resource, setActivePath, setActiveTab],
   );
 
   const openSftp = useCallback(() => {

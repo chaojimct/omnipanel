@@ -3158,6 +3158,14 @@
     display: none;
 }
 
+.dockable-workspace .dv-tab.dock-tab--bar-hidden {
+    display: none !important;
+}
+
+.dock-tab-header-root {
+    display: contents;
+}
+
 .module-root-dock .dv-content-container {
     background: var(--bg-deeper);
 }
@@ -13913,6 +13921,10 @@
     display: flex;
     flex-direction: column;
     overflow: hidden;
+}
+
+.vsplit-sidebar-section__body--hidden {
+    display: none;
 }
 
 .files-workspace.dock-workspace {

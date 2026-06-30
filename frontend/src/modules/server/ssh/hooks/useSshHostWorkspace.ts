@@ -1,21 +1,24 @@
 import { useCallback, useEffect } from "react";
 import type { WorkspaceResource } from "../../../../lib/resourceRegistry";
-import { useActiveResourceSelection } from "../../../../hooks/useActiveResourceSelection";
 import { migrateLayoutStorage } from "../../../../lib/layoutMigration";
+import { useSshActiveHostStore } from "../stores/sshActiveHostStore";
 import type { HostDockOpenMode } from "../workspaceTabs";
-
-const ACTIVE_HOST_STORAGE_KEY = "omnipanel.ssh.activeHostId";
 
 export function useSshHostWorkspace(sshResources: WorkspaceResource[]) {
   useEffect(() => {
     migrateLayoutStorage("ssh", ["omnipanel.sshDockLayout.v1"]);
   }, []);
 
-  const { activeId: activeHostId, setActiveId: setActiveHostId } = useActiveResourceSelection({
-    storageKey: ACTIVE_HOST_STORAGE_KEY,
-    resources: sshResources,
-    defaultId: sshResources[0]?.id ?? null,
-  });
+  const activeHostId = useSshActiveHostStore((s) => s.activeHostId);
+  const setActiveHostId = useSshActiveHostStore((s) => s.setActiveHostId);
+
+  useEffect(() => {
+    if (activeHostId && sshResources.some((item) => item.id === activeHostId)) return;
+    const fallback = sshResources[0]?.id ?? null;
+    if (fallback !== activeHostId) {
+      setActiveHostId(fallback);
+    }
+  }, [activeHostId, setActiveHostId, sshResources]);
 
   const handleSelectHost = useCallback(
     (hostId: string, _mode?: HostDockOpenMode) => {

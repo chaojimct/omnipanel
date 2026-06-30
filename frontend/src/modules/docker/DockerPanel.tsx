@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate, type NavigateFunction } from "react-router-dom";
 import { useActionStore } from "../../stores/actionStore";
 import { useAiStore } from "../../stores/aiStore";
 import { useConnectionStore } from "../../stores/connectionStore";
@@ -9,6 +9,7 @@ import { ModuleSegmentDock } from "../../components/dock";
 import { ModuleWorkspaceLayout } from "../../components/workspace";
 import { useI18n } from "../../i18n";
 import { appConfirm } from "../../lib/appConfirm";
+import { navigateToSshManagement } from "../../lib/workspaceNavigation";
 import {
   useContainerLogStream,
   useDockerWorkspace,
@@ -1732,7 +1733,7 @@ function ContainerDrawerBody({
                 <span className="v">{hostLabel ?? "—"}</span>
               </div>
               <div className="flex gap-2" style={{ flexWrap: "wrap", marginTop: "var(--sp-2)" }}>
-                <Button variant="secondary" size="sm" onClick={() => onNavigate("/module/ssh")}>
+                <Button variant="secondary" size="sm" onClick={() => navigateToSshManagement(onNavigate as NavigateFunction)}>
                   打开 SSH
                 </Button>
                 <Button variant="secondary" size="sm" onClick={() => onNavigate("/module/server")}>查看服务器</Button>

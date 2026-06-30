@@ -24,4 +24,6 @@ export interface DockableTab {
   saved?: boolean;
   /** Schema 预览 Tab：标题以斜体显示 */
   preview?: boolean;
+  /** 为 true 时保留 panel 但不在 Tab 栏展示（避免切换时销毁面板） */
+  tabBarHidden?: boolean;
 }
