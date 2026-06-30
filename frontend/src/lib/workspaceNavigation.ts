@@ -1,7 +1,8 @@
 import type { NavigateFunction } from "react-router-dom";
+import { useTerminalLeftPanelStore } from "../modules/terminal/terminalLeftPanelStore";
 import { useBottomPanelStore } from "../stores/bottomPanelStore";
 import { DEFAULT_WORKSPACE, useWorkspaceStore } from "../stores/workspaceStore";
-import { DASHBOARD_PATH, WORKSPACE_PATHS, isWorkspacePath } from "./paths";
+import { DASHBOARD_PATH, MODULE_PATHS, WORKSPACE_PATHS, isWorkspacePath } from "./paths";
 
 let chromeIconTransition = false;
 
@@ -101,6 +102,12 @@ export function toggleEngineeringWorkspaceFullscreen(
 /** 从全屏工作区离开并恢复上次记住的非全屏嵌入形态 */
 export function leaveWorkspaceHomeForFeature(): void {
   useBottomPanelStore.getState().leaveFullscreenForFeature();
+}
+
+/** 进入终端模块的 SSH 管理左栏模式 */
+export function navigateToSshManagement(navigate: NavigateFunction): void {
+  useTerminalLeftPanelStore.getState().focusSsh();
+  navigateToFeature(MODULE_PATHS.terminal, navigate);
 }
 
 /** 侧边栏 / 命令面板：导航到功能模块，全屏时按记忆状态恢复底部工作区 */

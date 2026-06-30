@@ -18,6 +18,8 @@ export function isInternalHistoryCommand(command: string): boolean {
   if (trimmed.includes("__OMNIPANEL_HIST_BEGIN__")) return true;
   if (trimmed.includes("__OMNIPANEL_HIST_END__")) return true;
   if (trimmed.includes("HISTFILE") && trimmed.includes("base64")) return true;
+  if (trimmed.includes("Get-PSReadLineOption") && trimmed.includes("__OMNIPANEL_HIST_")) return true;
+  if (trimmed.includes("HistorySavePath") && trimmed.includes("ToBase64String")) return true;
   return INTERNAL_PATTERNS.some((pattern) => pattern.test(trimmed));
 }
 

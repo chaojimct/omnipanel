@@ -4,7 +4,7 @@ import { useAiStore } from "../../stores/aiStore";
 import { useActionStore } from "../../stores/actionStore";
 import { useSettingsUiStore } from "../../stores/settingsUiStore";
 import { openLocalTerminalSession } from "../../lib/terminalSession";
-import { goWorkspaceHome, navigateToFeature } from "../../lib/workspaceNavigation";
+import { goWorkspaceHome, navigateToFeature, navigateToSshManagement } from "../../lib/workspaceNavigation";
 import { MODULE_PATHS } from "../../lib/paths";
 import { isModuleOpen, useAppModuleStore } from "../../stores/appModuleStore";
 import { useI18n } from "../../i18n";
@@ -139,7 +139,9 @@ export function CommandPalette() {
   }, [query]);
 
   const execute = (cmd: (typeof commands)[number]) => {
-    if (cmd.path) {
+    if (cmd.path === MODULE_PATHS.ssh) {
+      navigateToSshManagement(navigate);
+    } else if (cmd.path) {
       navigateToFeature(cmd.path, navigate);
     }
     if (cmd.action) {

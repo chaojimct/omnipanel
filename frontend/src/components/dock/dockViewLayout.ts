@@ -310,6 +310,34 @@ function addMissingPanels(
   return next;
 }
 
+/** 按业务 tab 顺序重排 group 内 views（固定 Tab 置首等场景） */
+export function reorderLayoutViews(
+  layout: SerializedDockview,
+  tabIds: string[],
+): SerializedDockview {
+  if (tabIds.length === 0) return layout;
+  const allowed = new Set(tabIds);
+  const next = cloneLayout(layout);
+  const root = fromGridNode(next.grid.root);
+  const updated = mapRoot(root, (leaf) => {
+    const views = (leaf.data.views ?? []).filter((id) => allowed.has(id));
+    if (views.length === 0) return leaf;
+    const ordered = tabIds.filter((id) => views.includes(id));
+    const trailing = views.filter((id) => !ordered.includes(id));
+    const finalViews = [...ordered, ...trailing];
+    const activeView =
+      leaf.data.activeView && allowed.has(leaf.data.activeView)
+        ? leaf.data.activeView
+        : finalViews[0];
+    return {
+      ...leaf,
+      data: { ...leaf.data, views: finalViews, activeView },
+    };
+  });
+  next.grid.root = toGridNode(updated);
+  return next;
+}
+
 function mapRoot(
   node: SerializedNode,
   fn: (leaf: SerializedLeaf) => SerializedLeaf,
@@ -428,7 +456,9 @@ export function mergePanelsIntoLayout(
 ): SerializedDockview | null {
   if (tabIds.length === 0) return null;
   if (!base) return createDefaultLayout(tabIds, activeTabId);
-  if (!layoutNeedsMerge(base, tabIds)) return stripSideHeaderLayout(base);
+  if (!layoutNeedsMerge(base, tabIds)) {
+    return stripSideHeaderLayout(reorderLayoutViews(base, tabIds));
+  }
 
   const allowed = new Set(tabIds);
   const cleaned = stripMissingPanels(base, allowed);
@@ -436,7 +466,9 @@ export function mergePanelsIntoLayout(
   // 当且仅当 panels 字典里有内容但 grid 中没有匹配 leaf 时出现，视为
   // "views 漂移"，必须走 addMissingPanels 重建 grid。
   if (!isLayoutUsable(cleaned)) {
-    return stripSideHeaderLayout(addMissingPanels(cleaned, tabIds, activeTabId));
+    return stripSideHeaderLayout(
+      reorderLayoutViews(addMissingPanels(cleaned, tabIds, activeTabId), tabIds),
+    );
   }
   const missing = tabIds.filter((id) => !collectPanelIds(cleaned).has(id));
   if (missing.length === 0) {
@@ -456,12 +488,14 @@ export function mergePanelsIntoLayout(
     });
     if (updatedActiveView) {
       withUpdatedActive.grid.root = toGridNode(updated);
-      return stripSideHeaderLayout(withUpdatedActive);
+      return stripSideHeaderLayout(reorderLayoutViews(withUpdatedActive, tabIds));
     }
-    return stripSideHeaderLayout(cleaned);
+    return stripSideHeaderLayout(reorderLayoutViews(cleaned, tabIds));
   }
 
-  return stripSideHeaderLayout(addMissingPanels(cleaned, missing, activeTabId));
+  return stripSideHeaderLayout(
+    reorderLayoutViews(addMissingPanels(cleaned, missing, activeTabId), tabIds),
+  );
 }
 
 /** 从布局中批量移除 panel；空布局返回 null */

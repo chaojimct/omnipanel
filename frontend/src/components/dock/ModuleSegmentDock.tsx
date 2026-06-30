@@ -18,6 +18,8 @@ export interface ModuleSegmentTab {
   closable?: boolean;
   status?: TopbarTabDef["status"];
   panelType?: string;
+  /** 保留 panel，仅隐藏 Tab 栏标签 */
+  tabBarHidden?: boolean;
 }
 
 export interface ModuleSegmentDockProps extends DockPanelRefreshProps {
@@ -102,6 +104,7 @@ export function ModuleSegmentDock({
         icon: tab.icon,
         tooltip: tab.tooltip ?? tab.label,
         status: tab.status,
+        tabBarHidden: tab.tabBarHidden,
       })),
     [tabs],
   );

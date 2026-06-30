@@ -1416,6 +1416,10 @@ export const enUS: TranslationDict = {
   terminal: {
     localTab: "local",
     sidebar: { title: "Terminal Resources", collapse: "Collapse sidebar", expand: "Expand sidebar" },
+    leftPanel: {
+      sessions: "Sessions",
+      ssh: "SSH",
+    },
     command: {
       placeholder: "Enter to send; Chinese/English questions route to AI; # natural language; Tab",
       followUpHint: "Enter to follow up in the open AI card; prefix with #",
@@ -1625,12 +1629,19 @@ export const enUS: TranslationDict = {
       deleteConfirm: "Delete key «{name}»? This cannot be undone.",
       deleteAction: "Delete",
       viewPublic: "Public",
+      viewPrivate: "Private",
       copyPath: "Copy path",
       copyPublic: "Copy public key",
+      copyPrivate: "Copy private key",
       copyFailed: "Copy failed",
       publicKeyTitle: "Public Key",
+      privateKeyTitle: "Private Key",
       noPublicKey: "No matching .pub file found",
+      noPrivateKey: "Private key file not found",
       close: "Close",
+      generateSuccess: "Key generated: {name}",
+      importSuccess: "Key imported: {name}",
+      nameOptional: "Filename (optional, auto-named if empty)",
     },
     capabilities: {
       title: "Connection Capabilities",
@@ -1773,11 +1784,6 @@ export const enUS: TranslationDict = {
         success: "Success",
         error: "Failed",
       },
-    },
-    orchestration: {
-      aiTroubleshoot: "AI troubleshoot",
-      patrol: "Create patrol workflow",
-      release: "Pre-release check",
     },
     prod: {
       badge: "Production",
@@ -2000,7 +2006,7 @@ export const enUS: TranslationDict = {
     context: {
       title: "Container Context",
       linkage: "Linked Capabilities",
-      linkageDesc: "Jump to logs, terminal, server monitoring and AI troubleshooting.",
+      linkageDesc: "Jump to logs, terminal, and server monitoring.",
       pruneConfirm: "Generate Prune Confirmation",
     },
     drawer: {

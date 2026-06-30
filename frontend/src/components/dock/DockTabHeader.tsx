@@ -1,10 +1,11 @@
-import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from "react";
+import { type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
 import type { IDockviewPanelHeaderProps } from "dockview-react";
 import { DockTabChrome } from "./DockTabChrome";
 import { DockTabIcon, type DockTabIconKind } from "./DockTabIcon";
 import type { DockTabPageType } from "./dockableTab";
 import { useDockTabLiveMeta } from "./dockTabLiveMeta";
 import { useDockTabHeaderRuntime } from "./dockTabHeaderRuntime";
+import { useDockTabBarHidden } from "./useDockTabBarHidden";
 
 interface PanelParams {
   tabId: string;
@@ -31,6 +32,7 @@ export function DockTabHeader({
 }: DockTabHeaderProps) {
   const tabId = props.params?.tabId ?? props.api.id;
   const liveMeta = useDockTabLiveMeta(tabId);
+  const rootRef = useDockTabBarHidden(tabId, Boolean(liveMeta.tabBarHidden));
   const label = liveMeta.label ?? props.params?.label ?? tabId;
   const icon = liveMeta.icon ?? props.params?.icon;
   const tooltip = props.params?.tooltip ?? label;
@@ -66,7 +68,8 @@ export function DockTabHeader({
   ) : null;
 
   return (
-    <DockTabChrome
+    <div ref={rootRef} className="dock-tab-header-root">
+      <DockTabChrome
       {...props}
       closable={closable}
       tooltip={tooltip}
@@ -103,5 +106,6 @@ export function DockTabHeader({
         </>
       )}
     </DockTabChrome>
+    </div>
   );
 }

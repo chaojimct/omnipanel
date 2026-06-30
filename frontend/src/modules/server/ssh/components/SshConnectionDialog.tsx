@@ -95,7 +95,7 @@ export function SshConnectionDialog({
     if (!form.name.trim()) return t("ssh.dialog.nameRequired");
     if (!form.host.trim()) return t("ssh.dialog.hostRequired");
     if (!form.user.trim()) return t("ssh.dialog.userRequired");
-    if (form.authType === "password" && !form.password.trim()) {
+    if (form.authType === "password" && !form.password.trim() && !isEdit) {
       return t("ssh.dialog.passwordRequired");
     }
     if (form.authType === "privateKey" && !form.keyPath.trim() && !form.pem.trim()) {
@@ -113,7 +113,9 @@ export function SshConnectionDialog({
     setSaving(true);
     setError(null);
     try {
-      const saved = await saveConn(buildSshConnection(form, editConnection?.id, undefined, tags));
+      const saved = await saveConn(
+        buildSshConnection(form, editConnection?.id, undefined, tags, editConnection),
+      );
       if (!saved) throw new Error("SSH save failed");
       onSaved?.();
       onClose();

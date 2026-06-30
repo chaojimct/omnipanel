@@ -1,12 +1,13 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use omnipanel_error::{ErrorCode, OmniError};
-use omnipanel_store::{Connection, ConnectionKind};
+use omnipanel_store::{Connection, ConnectionKind, Vault};
 use serde::Deserialize;
 use serde_json::Value;
 use tauri::State;
 
 use crate::state::AppState;
+use omnipanel_ssh::ssh_config_from_json;
 use omnipanel_store::DbConnectionConfig;
 
 #[derive(Debug, Deserialize)]
@@ -42,6 +43,50 @@ fn gen_id() -> String {
     format!("conn-{nanos:x}")
 }
 
+fn ssh_credential_ref(connection_id: &str) -> String {
+    format!("ssh-password-{connection_id}")
+}
+
+/// 保存 SSH 密码到钥匙串，并规范化 config 中的 `auth` 字段。
+fn normalize_ssh_connection(mut connection: Connection) -> Result<Connection, OmniError> {
+    let value: Value = serde_json::from_str(&connection.config).map_err(|e| {
+        OmniError::new(ErrorCode::InvalidInput, "SSH 配置解析失败").with_cause(e.to_string())
+    })?;
+    let Some(auth) = value.get("auth").and_then(|a| a.as_object()) else {
+        return Ok(connection);
+    };
+    let auth_type = auth
+        .get("type")
+        .and_then(|t| t.as_str())
+        .unwrap_or("");
+    if auth_type != "password" {
+        return Ok(connection);
+    }
+
+    let password = auth
+        .get("password")
+        .and_then(|p| {
+            p.as_str()
+                .map(str::to_string)
+                .or_else(|| p.get("password").and_then(|v| v.as_str()).map(str::to_string))
+        })
+        .filter(|p| !p.is_empty());
+
+    if let Some(pw) = password {
+        let cred_ref = ssh_credential_ref(&connection.id);
+        Vault::store(&cred_ref, &pw)?;
+        connection.credential_ref = Some(cred_ref);
+    }
+
+    // 校验配置可被 ssh_config_from_json 解析
+    let secret = connection
+        .credential_ref
+        .as_deref()
+        .and_then(|r| Vault::get(r).ok());
+    ssh_config_from_json(&connection.config, secret.as_deref())?;
+    Ok(connection)
+}
+
 /// 列出全部已保存连接。
 #[tauri::command]
 #[specta::specta]
@@ -66,8 +111,21 @@ pub async fn conn_save(
     }
     connection.updated_at = now;
 
+    if connection.kind == ConnectionKind::Ssh {
+        connection = normalize_ssh_connection(connection)?;
+    }
+
     let storage = state.storage.lock().await;
     storage.save_connection(&connection)?;
+    drop(storage);
+
+    if connection.kind == ConnectionKind::Ssh {
+        state
+            .ssh_pool
+            .reload_hosts(state.storage.clone(), state.app_handle.clone(), false)
+            .await;
+    }
+
     Ok(connection)
 }
 

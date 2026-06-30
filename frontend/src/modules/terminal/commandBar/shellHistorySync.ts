@@ -1,4 +1,6 @@
 import { setTerminalPaneSender, terminalPaneSenders } from "../terminalPaneSenders";
+import { findTerminalPane } from "../../../stores/terminalStore";
+import { resolveTerminalShellFamily } from "../terminalAutoLsShell";
 import { useSessionShellHistoryStore } from "./sessionShellHistoryStore";
 import { fetchShellHistoryFromBackend } from "./shellHistoryFetch";
 
@@ -19,6 +21,25 @@ export const SHELL_HISTORY_SYNC_COMMAND = [
   `printf '\\n${SHELL_HISTORY_SYNC_END}\\n'`,
 ].join("; ");
 
+/** Windows PowerShell：读取 PSReadLine 历史文件（与 bash 同步共用 BEGIN/END 标记） */
+export const SHELL_HISTORY_SYNC_COMMAND_POWERSHELL = [
+  `Write-Output '${SHELL_HISTORY_SYNC_BEGIN}'`,
+  "try { $f=(Get-PSReadLineOption).HistorySavePath",
+  `if ($f -and (Test-Path -LiteralPath $f)) { $t=Get-Content -LiteralPath $f -Tail ${SHELL_HISTORY_SYNC_MAX} -Raw; if ($t) { [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($t)) } }`,
+  "} catch {}",
+  `Write-Output '${SHELL_HISTORY_SYNC_END}'`,
+].join("; ");
+
+/** 按会话 shell 类型选择 PTY 历史同步命令；不支持时返回 null（如 cmd）。 */
+export function resolveShellHistorySyncCommand(sessionId: string): string | null {
+  const pane = findTerminalPane(sessionId);
+  if (!pane) return null;
+  const shell = resolveTerminalShellFamily(pane.type, pane.shellLabel);
+  if (shell === "posix") return SHELL_HISTORY_SYNC_COMMAND;
+  if (shell === "powershell") return SHELL_HISTORY_SYNC_COMMAND_POWERSHELL;
+  return null;
+}
+
 const SYNC_THROTTLE_MS = 30_000;
 const SYNC_TIMEOUT_MS = 25_000;
 
@@ -32,6 +53,8 @@ export function isSilentHistorySyncCommand(command: string): boolean {
   if (trimmed.includes(SHELL_HISTORY_SYNC_END)) return true;
   if (trimmed.includes("HistoryBlobEnd") || trimmed.includes("HistoryPart=")) return true;
   if (trimmed.includes("HISTFILE") && trimmed.includes("base64")) return true;
+  if (trimmed.includes("Get-PSReadLineOption") && trimmed.includes(SHELL_HISTORY_SYNC_BEGIN)) return true;
+  if (trimmed.includes("HistorySavePath") && trimmed.includes("ToBase64String")) return true;
   return false;
 }
 
@@ -66,11 +89,14 @@ function requestShellHistorySyncViaPty(sessionId: string): void {
   const sender = terminalPaneSenders[sessionId];
   if (!sender || syncingSessions.has(sessionId)) return;
 
+  const command = resolveShellHistorySyncCommand(sessionId);
+  if (!command) return;
+
   beginSilentHistorySync(sessionId);
-  sender(SHELL_HISTORY_SYNC_COMMAND);
+  sender(command);
 }
 
-/** 拉取 shell 历史：优先 SFTP 直读，失败再走 PTY 静默同步 */
+/** 拉取 shell 历史：远端优先 SFTP 直读，本地/失败再走 PTY 静默同步 */
 export function requestShellHistorySync(sessionId: string): void {
   const syncedAt = useSessionShellHistoryStore.getState().getSyncedAt(sessionId);
   const existingCount = useSessionShellHistoryStore.getState().getCommands(sessionId).length;
@@ -84,6 +110,7 @@ export function requestShellHistorySync(sessionId: string): void {
 
   void fetchShellHistoryFromBackend(sessionId).then((ok) => {
     if (!ok) {
+      if (!resolveShellHistorySyncCommand(sessionId)) return;
       requestShellHistorySyncViaPty(sessionId);
     }
   });
@@ -99,6 +126,7 @@ export function requestShellHistorySyncWithRetry(
 
   const run = () => {
     if (attempt >= maxAttempts) return;
+    if (!resolveShellHistorySyncCommand(sessionId)) return;
     attempt += 1;
 
     const prev = useSessionShellHistoryStore.getState().getCommands(sessionId).length;

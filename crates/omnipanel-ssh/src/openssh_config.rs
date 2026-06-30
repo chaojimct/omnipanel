@@ -74,6 +74,11 @@ fn looks_like_private_key_pem(content: &str) -> bool {
         || trimmed.starts_with("-----BEGIN PRIVATE KEY-----")
 }
 
+/// 判断文本是否为 OpenSSH / PEM 私钥内容。
+pub fn is_private_key_pem_content(content: &str) -> bool {
+    looks_like_private_key_pem(content)
+}
+
 fn is_private_key_file(path: &Path) -> bool {
     if !path.is_file() {
         return false;

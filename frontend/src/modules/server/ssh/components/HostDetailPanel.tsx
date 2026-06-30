@@ -69,9 +69,6 @@ export function HostDetailPanel({ hostId }: Props) {
         {detailTab === "overview" && (
           <OverviewDetailTab
             activeResource={activeResource}
-            hostContext={hostContext}
-            presets={hostContext.presets}
-            onRunPreset={actions.openTerminalWithPreset}
             setDetailTab={setDetailTab}
           />
         )}

@@ -1412,6 +1412,10 @@ export const zhCN = {
   terminal: {
     localTab: "local",
     sidebar: { title: "终端资源", collapse: "收起侧栏", expand: "展开侧栏" },
+    leftPanel: {
+      sessions: "会话",
+      ssh: "SSH 管理",
+    },
     command: {
       placeholder: "Enter 发送；中文/英文问句自动走 AI；# 自然语言；Tab 补全",
       followUpHint: "Enter 追问当前 AI 卡片；# 开头；Shift+Enter 换行",
@@ -1621,12 +1625,19 @@ export const zhCN = {
       deleteConfirm: "确定要删除密钥「{name}」吗？此操作不可恢复。",
       deleteAction: "确认删除",
       viewPublic: "公钥",
+      viewPrivate: "私钥",
       copyPath: "复制路径",
       copyPublic: "复制公钥",
+      copyPrivate: "复制私钥",
       copyFailed: "复制失败",
       publicKeyTitle: "公钥",
+      privateKeyTitle: "私钥",
       noPublicKey: "未找到对应公钥文件",
+      noPrivateKey: "未找到对应私钥文件",
       close: "关闭",
+      generateSuccess: "密钥已生成：{name}",
+      importSuccess: "密钥已导入：{name}",
+      nameOptional: "文件名（可选，留空自动命名）",
     },
     capabilities: {
       title: "连接能力",
@@ -1769,11 +1780,6 @@ export const zhCN = {
         success: "成功",
         error: "失败",
       },
-    },
-    orchestration: {
-      aiTroubleshoot: "AI 排查",
-      patrol: "创建巡检工作流",
-      release: "发布前检查",
     },
     prod: {
       badge: "生产环境",
@@ -1959,7 +1965,7 @@ export const zhCN = {
     context: {
       title: "容器上下文",
       linkage: "联动能力",
-      linkageDesc: "从容器跳转日志、终端、服务器监控和 AI 排查。",
+      linkageDesc: "从容器跳转日志、终端与服务器监控。",
       pruneConfirm: "生成清理确认",
     },
     drawer: {

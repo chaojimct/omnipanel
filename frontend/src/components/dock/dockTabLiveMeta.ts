@@ -10,6 +10,7 @@ export interface DockTabLiveMeta {
   preview?: boolean;
   icon?: DockTabIconKind;
   label?: string;
+  tabBarHidden?: boolean;
   rev: number;
 }
 
@@ -53,7 +54,8 @@ export function publishDockTabMeta(tabs: DockableTab[]): void {
       prev.saved === tab.saved &&
       Boolean(prev.preview) === nextPreview &&
       prev.icon === tab.icon &&
-      prev.label === tab.label
+      prev.label === tab.label &&
+      prev.tabBarHidden === tab.tabBarHidden
     ) {
       continue;
     }
@@ -64,6 +66,7 @@ export function publishDockTabMeta(tabs: DockableTab[]): void {
       preview: nextPreview,
       icon: tab.icon,
       label: tab.label,
+      tabBarHidden: tab.tabBarHidden,
       rev: (prev?.rev ?? 0) + 1,
     });
     changed = true;

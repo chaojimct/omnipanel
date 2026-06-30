@@ -42,8 +42,6 @@ import { goWorkspaceHome, navigateToFeature } from "./lib/workspaceNavigation";
 import "./lib/workspaceComponentRegistry";
 import { useActionStore, getPendingRiskAction } from "./stores/actionStore";
 import { useTopbarStore } from "./stores/topbarStore";
-import { getResourceById } from "./lib/resourceRegistry";
-import { openSshTerminalSession } from "./lib/terminalSession";
 import type { DangerCheckResult } from "./lib/commandGuard";
 import { getRouteTitle, useI18n } from "./i18n";
 import { useSettingsStore, AI_DOCK_WIDTH_MIN } from "./stores/settingsStore";
@@ -52,6 +50,7 @@ import { useProtocolTopbarStore } from "./stores/protocolTopbarStore";
 import { ProtocolNewTabDialog } from "./modules/protocol/ProtocolNewTabDialog";
 import { DASHBOARD_PATH, MODULE_PATHS, WORKSPACE_PATHS, isWorkspacePath, moduleKeyFromPath } from "./lib/paths";
 import { getNavVisibleModuleKeys, isModuleOpen, useAppModuleStore } from "./stores/appModuleStore";
+import { SshToTerminalRedirect } from "./modules/terminal/SshToTerminalRedirect";
 import {
   LazyDashboardPage,
   LazyDatabasePanel,
@@ -60,7 +59,6 @@ import {
   LazyKnowledgePanel,
   LazyProtocolPanel,
   LazyServerPanel,
-  LazySshPanel,
   LazyTerminalPanel,
   LazyUserWorkspace,
   LazyWorkflowPanel,
@@ -70,8 +68,6 @@ function TopbarPageActions() {
   const { t } = useI18n();
   const location = useLocation();
   const path = location.pathname;
-  const activeResourceId = useWorkspaceStore((state) => state.activeResourceId);
-  const activeResource = getResourceById(activeResourceId);
   const dockerRefreshing = useDockerTopbarStore((s) => s.refreshing);
   const requestDockerRefresh = useDockerTopbarStore((s) => s.requestRefresh);
   const triggerNewRequest = useProtocolTopbarStore((state) => state.triggerNewRequest);
@@ -79,32 +75,6 @@ function TopbarPageActions() {
 
   if (path === MODULE_PATHS.terminal) {
     return null;
-  }
-
-  if (path === MODULE_PATHS.ssh) {
-    return (
-      <Button
-        variant="primary"
-        size="sm"
-        onClick={() => {
-          if (activeResource?.type === "ssh") {
-            openSshTerminalSession(activeResource.id);
-          }
-        }}
-      >
-        <svg
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          width="14"
-          height="14"
-        >
-          <path d="M12 5v14M5 12h14" />
-        </svg>
-        {t("ssh.connect")}
-      </Button>
-    );
   }
 
   if (path === MODULE_PATHS.protocol) {
@@ -448,11 +418,7 @@ function AppShell() {
             <Route path={MODULE_PATHS.terminal} element={null} />
             <Route
               path={MODULE_PATHS.ssh}
-              element={
-                <SuspendedModulePanel active={location.pathname === MODULE_PATHS.ssh}>
-                  <LazySshPanel />
-                </SuspendedModulePanel>
-              }
+              element={<SshToTerminalRedirect />}
             />
             <Route path={MODULE_PATHS.database} element={null} />
             <Route path={MODULE_PATHS.docker} element={null} />
