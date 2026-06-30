@@ -498,7 +498,7 @@ export function HostListPanel({
   const panelBody = (
     <div className="host-list-panel">
       {!embedded ? (
-        <div className="host-list-header">
+        <div className="host-list-header window-drag-surface" data-tauri-drag-region>
           <h3>{t("ssh.sidebar.title")}</h3>
           <span className="badge badge-muted">{resources.length}</span>
           {toolbar}
