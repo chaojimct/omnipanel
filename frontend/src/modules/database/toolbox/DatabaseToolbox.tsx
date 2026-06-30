@@ -16,13 +16,14 @@ import {
   listTables,
   type DbConnectionConfig,
   type DbColumnMeta,
+  type DbIndexMeta,
 } from "../api";
 import { SyncSidePanel } from "./SyncSidePanel";
 import { DbToolboxSplitLayout } from "./DbToolboxSplitLayout";
 import { ModuleEmptyState } from "../../../components/ui/ModuleEmptyState";
 import {
   buildNewTableDiff,
-  sourceColumnsSignature,
+  sourceTableSchemaSignature,
   type SchemaTableDiff,
 } from "./schemaDiff";
 import { TableRowDiffPanel } from "./TableRowDiffPanel";
@@ -92,6 +93,8 @@ export function DatabaseToolbox({
   const [targetTablesLoading, setTargetTablesLoading] = useState(false);
 
   const [sourceExpanded, setSourceExpanded] = useState<Set<string>>(() => new Set());
+  const [targetExpanded, setTargetExpanded] = useState<Set<string>>(() => new Set());
+  const [showMatchingTables, setShowMatchingTables] = useState(true);
   const [sourceSelected, setSourceSelected] = useState<Set<string>>(() => new Set());
   const [tableTargetStatus, setTableTargetStatus] = useState<Record<string, TableTargetStatus>>({});
   const [tableSyncStrategies, setTableSyncStrategies] = useState<Record<string, DataSyncStrategy>>({});
@@ -288,6 +291,7 @@ export function DatabaseToolbox({
         const tables: SyncTableInfo[] = result.tables.map((tbl) => ({
           name: tbl.name,
           columns: tbl.columns,
+          indexes: tbl.indexes ?? [],
           rowCount: mode === "dataSync" ? null : 0,
         }));
 
@@ -475,7 +479,7 @@ export function DatabaseToolbox({
       setSchemaTableDiffs(() => {
         const next: Record<string, SchemaTableDiff> = {};
         for (const name of selected) {
-          next[name] = { tableName: name, status: "checking", columns: [] };
+          next[name] = { tableName: name, status: "checking", columns: [], indexes: [] };
         }
         return next;
       });
@@ -489,10 +493,16 @@ export function DatabaseToolbox({
       for (const name of selected) {
         if (!targetTableNames.has(name)) {
           const sourceTable = sourceSnapshot.tables.find((t) => t.name === name);
-          next[name] = buildNewTableDiff(name, sourceTable?.columns ?? []);
+          next[name] = buildNewTableDiff(
+            name,
+            sourceTable?.columns ?? [],
+            sourceTable?.indexes ?? [],
+          );
         } else {
           const sourceTable = sourceSnapshot.tables.find((t) => t.name === name);
-          const sourceKey = sourceTable ? sourceColumnsSignature(sourceTable.columns) : "";
+          const sourceKey = sourceTable
+            ? sourceTableSchemaSignature(sourceTable.columns, sourceTable.indexes)
+            : "";
           if (
             prev[name]?.targetKey === targetKey &&
             prev[name]?.sourceKey === sourceKey &&
@@ -500,7 +510,7 @@ export function DatabaseToolbox({
           ) {
             next[name] = prev[name];
           } else {
-            next[name] = { tableName: name, status: "checking", columns: [] };
+            next[name] = { tableName: name, status: "checking", columns: [], indexes: [] };
           }
         }
       }
@@ -520,6 +530,15 @@ export function DatabaseToolbox({
 
   const toggleSourceTable = useCallback((name: string) => {
     setSourceExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
+      return next;
+    });
+  }, []);
+
+  const toggleTargetTable = useCallback((name: string) => {
+    setTargetExpanded((prev) => {
       const next = new Set(prev);
       if (next.has(name)) next.delete(name);
       else next.add(name);
@@ -565,6 +584,14 @@ export function DatabaseToolbox({
     const map: Record<string, DbColumnMeta[]> = {};
     for (const table of sourceSnapshot.tables) {
       map[table.name] = table.columns;
+    }
+    return map;
+  }, [sourceSnapshot.tables]);
+
+  const sourceTableIndexes = useMemo(() => {
+    const map: Record<string, DbIndexMeta[]> = {};
+    for (const table of sourceSnapshot.tables) {
+      map[table.name] = table.indexes;
     }
     return map;
   }, [sourceSnapshot.tables]);
@@ -620,6 +647,7 @@ export function DatabaseToolbox({
   useDbSyncBackgroundTaskEvents({
     active,
     sourceTableColumns,
+    sourceTableIndexes,
     targetKey: schemaTargetKey,
     onTargetRowCount: handleBgTargetRowCount,
     onTableAnalysis: handleBgTableAnalysis,
@@ -697,7 +725,7 @@ export function DatabaseToolbox({
         schemaFetchingRef.current.add(name);
         setSchemaTableDiffs((prev) => ({
           ...prev,
-          [name]: { tableName: name, status: "checking", columns: [] },
+          [name]: { tableName: name, status: "checking", columns: [], indexes: [] },
         }));
       }
 
@@ -707,6 +735,7 @@ export function DatabaseToolbox({
           targetDb,
           tableNames,
           sourceTableColumns,
+          sourceTableIndexes,
         );
         bgSchemaTaskIdRef.current = taskId;
       } catch (e) {
@@ -718,13 +747,14 @@ export function DatabaseToolbox({
               tableName: name,
               status: "error",
               columns: [],
+              indexes: [],
               error: typeof e === "string" ? e : String(e),
             },
           }));
         }
       }
     },
-    [connections, targetConnId, targetDb, sourceTableColumns],
+    [connections, targetConnId, targetDb, sourceTableColumns, sourceTableIndexes],
   );
 
   const handleViewConflictDetail = useCallback(
@@ -881,7 +911,9 @@ export function DatabaseToolbox({
     for (const name of selected) {
       if (schemaFetchingRef.current.has(name)) continue;
       const sourceTable = sourceSnapshot.tables.find((t) => t.name === name);
-      const sourceKey = sourceTable ? sourceColumnsSignature(sourceTable.columns) : "";
+      const sourceKey = sourceTable
+        ? sourceTableSchemaSignature(sourceTable.columns, sourceTable.indexes)
+        : "";
       const prev = schemaTableDiffsRef.current[name];
       if (
         prev?.targetKey === targetKey &&
@@ -1124,7 +1156,14 @@ export function DatabaseToolbox({
             if (!diff) return name;
             if (diff.status === "new") return `${name}: ${t("database.toolbox.side.schemaDiffNewTable")}`;
             if (diff.status === "diff") {
-              return `${name}: ${diff.columns.length} ${t("database.toolbox.side.schemaDiffChanged")}`;
+              const parts: string[] = [];
+              if (diff.columns.length > 0) {
+                parts.push(`${diff.columns.length} ${t("database.toolbox.side.schemaDiffColumnChanges")}`);
+              }
+              if (diff.indexes.length > 0) {
+                parts.push(`${diff.indexes.length} ${t("database.toolbox.side.schemaDiffIndexChanges")}`);
+              }
+              return `${name}: ${parts.join(" · ")}`;
             }
             if (diff.status === "match") return `${name}: ${t("database.toolbox.side.schemaDiffMatch")}`;
             return name;
@@ -1239,8 +1278,8 @@ export function DatabaseToolbox({
               databasesLoading={targetDbsLoading}
               snapshot={EMPTY_SNAPSHOT}
               tab={tab}
-              expandedTables={new Set()}
-              onToggleTable={() => {}}
+              expandedTables={targetExpanded}
+              onToggleTable={toggleTargetTable}
               selectedTables={new Set()}
               onToggleSelect={() => {}}
               onSelectAllTables={() => {}}
@@ -1254,6 +1293,10 @@ export function DatabaseToolbox({
               tableAnalysis={tableAnalysis}
               conflictDetailTable={conflictDetailTable}
               onViewConflictDetail={handleViewConflictDetail}
+              showMatchingTables={showMatchingTables}
+              onShowMatchingTablesChange={setShowMatchingTables}
+              sourceTableColumns={sourceTableColumns}
+              sourceTableIndexes={sourceTableIndexes}
             />
           }
         />

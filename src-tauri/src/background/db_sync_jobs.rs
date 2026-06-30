@@ -1,14 +1,16 @@
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::Arc;
 
+use futures::stream::{self, StreamExt};
 use omnipanel_db::DbParams;
 use omnipanel_store::DbConnectionConfig;
 use serde::{Deserialize, Serialize};
 use specta::Type;
 use tauri::{AppHandle, Emitter};
 
-use crate::commands::database::{self, DbColumnMeta};
+use crate::background::worker_pool::DEFAULT_WORKER_COUNT;
+use crate::commands::database::{self, DbColumnMeta, DbIndexMeta};
 
 const PAGE_SIZE: i64 = 500;
 const MAX_DIFF_DETAIL_ROWS: usize = 100;
@@ -18,6 +20,8 @@ const MAX_DIFF_DETAIL_ROWS: usize = 100;
 pub struct DbSyncTableSpec {
     pub name: String,
     pub columns: Vec<DbColumnMeta>,
+    #[serde(default)]
+    pub indexes: Vec<DbIndexMeta>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -71,11 +75,24 @@ pub struct SchemaColumnDiffPayload {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct SchemaIndexDiffPayload {
+    pub name: String,
+    pub kind: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_detail: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target_detail: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SchemaCompareEvent {
     pub table: String,
     pub status: String,
     #[serde(default)]
     pub columns: Vec<SchemaColumnDiffPayload>,
+    #[serde(default)]
+    pub indexes: Vec<SchemaIndexDiffPayload>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
 }
@@ -479,6 +496,95 @@ fn compare_table_columns(
     diffs
 }
 
+fn index_signature(idx: &DbIndexMeta) -> String {
+    format!("{}|{}", idx.unique, idx.columns.join("\x1f"))
+}
+
+fn format_index_detail(idx: &DbIndexMeta) -> String {
+    let cols = idx.columns.join(", ");
+    if idx.unique {
+        format!("UNIQUE ({cols})")
+    } else {
+        format!("({cols})")
+    }
+}
+
+fn compare_table_indexes(
+    source: &[DbIndexMeta],
+    target: &[DbIndexMeta],
+) -> Vec<SchemaIndexDiffPayload> {
+    let mut diffs = Vec::new();
+    let target_by_name: HashMap<_, _> = target.iter().map(|i| (i.name.as_str(), i)).collect();
+    let source_by_name: HashMap<_, _> = source.iter().map(|i| (i.name.as_str(), i)).collect();
+
+    for si in source {
+        match target_by_name.get(si.name.as_str()) {
+            None => diffs.push(SchemaIndexDiffPayload {
+                name: si.name.clone(),
+                kind: "added".to_string(),
+                source_detail: Some(format_index_detail(si)),
+                target_detail: None,
+            }),
+            Some(ti) if index_signature(si) != index_signature(ti) => {
+                diffs.push(SchemaIndexDiffPayload {
+                    name: si.name.clone(),
+                    kind: "changed".to_string(),
+                    source_detail: Some(format_index_detail(si)),
+                    target_detail: Some(format_index_detail(ti)),
+                });
+            }
+            _ => {}
+        }
+    }
+
+    for ti in target {
+        if !source_by_name.contains_key(ti.name.as_str()) {
+            diffs.push(SchemaIndexDiffPayload {
+                name: ti.name.clone(),
+                kind: "removed".to_string(),
+                source_detail: None,
+                target_detail: Some(format_index_detail(ti)),
+            });
+        }
+    }
+
+    diffs.sort_by(|a, b| a.name.cmp(&b.name));
+    diffs
+}
+
+async fn compare_schema_for_table(
+    target: DbConnectionConfig,
+    target_schema: String,
+    spec: DbSyncTableSpec,
+) -> SchemaCompareEvent {
+    let table = spec.name.clone();
+    match database::db_introspect_table(target, Some(target_schema), table.clone()).await {
+        Ok(target_table) => {
+            let columns = compare_table_columns(&spec.columns, &target_table.columns);
+            let indexes = compare_table_indexes(&spec.indexes, &target_table.indexes);
+            let has_diff = !columns.is_empty() || !indexes.is_empty();
+            SchemaCompareEvent {
+                table,
+                status: if has_diff {
+                    "diff".to_string()
+                } else {
+                    "match".to_string()
+                },
+                columns,
+                indexes,
+                error: None,
+            }
+        }
+        Err(e) => SchemaCompareEvent {
+            table,
+            status: "error".to_string(),
+            columns: Vec::new(),
+            indexes: Vec::new(),
+            error: Some(e),
+        },
+    }
+}
+
 async fn emit_db_event(app: &AppHandle, event: BgTaskDbEvent) {
     let _ = app.emit("bg-task-db-event", &event);
 }
@@ -607,63 +713,72 @@ pub async fn run_db_schema_sync_analysis(
     progress: Arc<dyn Fn(String, u32, u32, Option<u32>, Option<u32>) + Send + Sync>,
 ) -> Result<(), String> {
     let total = tables.len().max(1) as u32;
-
-    for (idx, spec) in tables.iter().enumerate() {
-        if cancel.load(Ordering::Relaxed) {
-            return Ok(());
-        }
-
-        let index = (idx + 1) as u32;
-        let table = spec.name.clone();
-
+    if tables.is_empty() {
         progress(
-            format!("正在对比表结构 ({index}/{total})：{table}"),
-            index,
+            format!("对比分析已完成 ({total}/{total})"),
+            total,
             total,
             None,
             None,
         );
+        return Ok(());
+    }
 
-        let schema_result = match database::db_introspect_table(
-            target.clone(),
-            Some(target_schema.clone()),
-            table.clone(),
-        )
-        .await
-        {
-            Ok(target_table) => {
-                let columns = compare_table_columns(&spec.columns, &target_table.columns);
-                SchemaCompareEvent {
-                    table: table.clone(),
-                    status: if columns.is_empty() {
-                        "match".to_string()
-                    } else {
-                        "diff".to_string()
-                    },
-                    columns,
-                    error: None,
+    let concurrency = DEFAULT_WORKER_COUNT.max(1) as usize;
+    let completed = Arc::new(AtomicU32::new(0));
+
+    stream::iter(tables.into_iter())
+        .map(|spec| {
+            let app = app.clone();
+            let task_id = task_id.clone();
+            let target = target.clone();
+            let target_schema = target_schema.clone();
+            let cancel = cancel.clone();
+            let progress = progress.clone();
+            let completed = completed.clone();
+
+            async move {
+                if cancel.load(Ordering::Relaxed) {
+                    return;
                 }
-            }
-            Err(e) => SchemaCompareEvent {
-                table: table.clone(),
-                status: "error".to_string(),
-                columns: Vec::new(),
-                error: Some(e),
-            },
-        };
 
-        emit_db_event(
-            &app,
-            BgTaskDbEvent {
-                task_id: task_id.clone(),
-                event_type: "schema_result".to_string(),
-                table: Some(table),
-                count: None,
-                row_result: None,
-                schema_result: Some(schema_result),
-            },
-        )
+                let table = spec.name.clone();
+                let schema_result =
+                    compare_schema_for_table(target, target_schema, spec).await;
+
+                if cancel.load(Ordering::Relaxed) {
+                    return;
+                }
+
+                emit_db_event(
+                    &app,
+                    BgTaskDbEvent {
+                        task_id: task_id.clone(),
+                        event_type: "schema_result".to_string(),
+                        table: Some(table.clone()),
+                        count: None,
+                        row_result: None,
+                        schema_result: Some(schema_result),
+                    },
+                )
+                .await;
+
+                let done = completed.fetch_add(1, Ordering::Relaxed) + 1;
+                progress(
+                    format!("正在对比表结构 ({done}/{total})：{table}"),
+                    done,
+                    total,
+                    None,
+                    None,
+                );
+            }
+        })
+        .buffer_unordered(concurrency)
+        .collect::<Vec<_>>()
         .await;
+
+    if cancel.load(Ordering::Relaxed) {
+        return Ok(());
     }
 
     progress(
