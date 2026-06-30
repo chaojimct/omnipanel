@@ -547,8 +547,10 @@ export function HostListPanel({
                       <div className="host-info">
                         <div className="host-row-1">
                           <span className="host-name">{host.name}</span>
-                          <HostResourceTags resourceId={host.id} />
-                          <HostMonitoringBadge resourceId={host.id} />
+                          <div className="host-row-1-meta">
+                            <HostResourceTags resourceId={host.id} />
+                            <HostMonitoringBadge resourceId={host.id} />
+                          </div>
                         </div>
                         <div className="host-row-2">{host.subtitle}</div>
                       </div>

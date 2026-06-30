@@ -8,12 +8,10 @@ import { useI18n } from "../../i18n";
 import { AppLogo } from "../ui/AppLogo";
 import {
   navigateToFeature,
-  navigateToSshManagement,
   toggleWorkspaceFromChromeIcon,
 } from "../../lib/workspaceNavigation";
 import { isDashboardPath, MODULE_PATHS } from "../../lib/paths";
 import { isModulePathEnabled, useAppModuleStore } from "../../stores/appModuleStore";
-import { useTerminalLeftPanelStore } from "../../modules/terminal/terminalLeftPanelStore";
 import { usePanelLayoutStore } from "../../stores/panelLayoutStore";
 
 const navPaths = [
@@ -35,16 +33,6 @@ const navPaths = [
         <ellipse cx="12" cy="5" rx="9" ry="3" />
         <path d="M21 12c0 1.66-4.03 3-9 3s-9-1.34-9-3" />
         <path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5" />
-      </svg>
-    ),
-  },
-  {
-    path: MODULE_PATHS.ssh,
-    key: "shell.nav.ssh",
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-        <rect x="2" y="3" width="20" height="14" rx="2" />
-        <path d="M8 21h8M12 17v4" />
       </svg>
     ),
   },
@@ -132,16 +120,8 @@ export function Sidebar() {
   const openSettings = useSettingsUiStore((s) => s.openSettings);
   useAppModuleStore((s) => s.modules);
 
-  const leftPanelMode = useTerminalLeftPanelStore((s) => s.mode);
-
   const isActive = (path: string) => {
     if (isWorkspaceHome) return false;
-    if (path === MODULE_PATHS.ssh) {
-      return (
-        location.pathname.startsWith(MODULE_PATHS.ssh) ||
-        (location.pathname === MODULE_PATHS.terminal && leftPanelMode === "ssh")
-      );
-    }
     return location.pathname.startsWith(path);
   };
 
@@ -152,12 +132,6 @@ export function Sidebar() {
   };
 
   const handleModuleNav = (path: string) => {
-    if (path === MODULE_PATHS.ssh) {
-      startTransition(() => {
-        navigateToSshManagement(navigate);
-      });
-      return;
-    }
     if (isActive(path)) {
       usePanelLayoutStore.getState().toggleModuleSidebar();
       return;

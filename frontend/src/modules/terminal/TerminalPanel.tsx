@@ -373,11 +373,10 @@ export function TerminalPanel() {
         label: t("terminal.leftPanel.ssh"),
         panelType: "ssh-management",
         closable: false,
-        tabBarHidden: !isSshMode,
       },
       ...dockTabs,
     ],
-    [dockTabs, isSshMode, t],
+    [dockTabs, t],
   );
 
   const effectiveDockActiveId = useMemo(() => {

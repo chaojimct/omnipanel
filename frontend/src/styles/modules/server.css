@@ -238,15 +238,34 @@
         display: flex;
         align-items: center;
         gap: var(--sp-2);
+        width: 100%;
+        min-width: 0;
     }
 
     .host-item .host-name {
+        flex: 1 1 auto;
+        min-width: 0;
         font-size: 12px;
         font-weight: 500;
         color: var(--fg);
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
+    }
+
+    .host-item .host-row-1-meta {
+        margin-left: auto;
+        display: inline-flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: var(--sp-1);
+        flex-shrink: 0;
+        max-width: 55%;
+    }
+
+    .host-item .host-row-1-meta .resource-tags {
+        flex-shrink: 1;
+        justify-content: flex-end;
     }
 
     .host-item .host-row-2 {
@@ -2646,51 +2665,6 @@
 
     .ssh-batch-result__output--error {
         color: var(--danger);
-    }
-
-    .ssh-orchestration {
-        display: flex;
-        align-items: center;
-        gap: var(--sp-3);
-        padding: var(--sp-2) var(--sp-4);
-        border-bottom: 1px solid var(--border);
-        flex-shrink: 0;
-    }
-
-    .ssh-orchestration--prod {
-        border-bottom-color: color-mix(in srgb, var(--danger) 40%, var(--border));
-        background: color-mix(in srgb, var(--danger) 6%, var(--bg));
-    }
-
-    .ssh-orchestration__prod-badge {
-        font-size: 10px;
-        font-weight: 600;
-        color: var(--danger);
-        padding: 2px 8px;
-        border: 1px solid color-mix(in srgb, var(--danger) 40%, var(--border));
-        border-radius: 999px;
-        flex-shrink: 0;
-    }
-
-    .ssh-orchestration__actions {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 6px;
-    }
-
-    .ssh-orchestration__btn {
-        padding: 4px 10px;
-        font-size: 11px;
-        border: 1px solid var(--border);
-        border-radius: 6px;
-        background: var(--surface);
-        color: var(--fg);
-        cursor: pointer;
-    }
-
-    .ssh-orchestration__btn:hover {
-        border-color: var(--accent);
-        color: var(--accent);
     }
 
     .ssh-detail--prod {

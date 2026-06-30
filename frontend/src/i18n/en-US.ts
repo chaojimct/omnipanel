@@ -1780,11 +1780,6 @@ export const enUS: TranslationDict = {
         error: "Failed",
       },
     },
-    orchestration: {
-      aiTroubleshoot: "AI troubleshoot",
-      patrol: "Create patrol workflow",
-      release: "Pre-release check",
-    },
     prod: {
       badge: "Production",
       killConfirm: "This is a production host. Force kill requires confirmation.",
@@ -2006,7 +2001,7 @@ export const enUS: TranslationDict = {
     context: {
       title: "Container Context",
       linkage: "Linked Capabilities",
-      linkageDesc: "Jump to logs, terminal, server monitoring and AI troubleshooting.",
+      linkageDesc: "Jump to logs, terminal, and server monitoring.",
       pruneConfirm: "Generate Prune Confirmation",
     },
     drawer: {

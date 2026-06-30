@@ -1776,11 +1776,6 @@ export const zhCN = {
         error: "失败",
       },
     },
-    orchestration: {
-      aiTroubleshoot: "AI 排查",
-      patrol: "创建巡检工作流",
-      release: "发布前检查",
-    },
     prod: {
       badge: "生产环境",
       killConfirm: "该主机为生产环境，强制结束进程需要二次确认。",
@@ -1965,7 +1960,7 @@ export const zhCN = {
     context: {
       title: "容器上下文",
       linkage: "联动能力",
-      linkageDesc: "从容器跳转日志、终端、服务器监控和 AI 排查。",
+      linkageDesc: "从容器跳转日志、终端与服务器监控。",
       pruneConfirm: "生成清理确认",
     },
     drawer: {
