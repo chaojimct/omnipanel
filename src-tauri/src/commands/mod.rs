@@ -1,4 +1,5 @@
 pub mod acp;
+pub mod bg_task;
 pub mod agents;
 pub mod ai;
 pub mod app_module;

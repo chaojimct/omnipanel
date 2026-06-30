@@ -1,4 +1,5 @@
 import type { FileEntry, FileManagerConnectionInfo } from "../../ipc/bindings";
+import { parentLocalPath } from "./localFilesystem";
 
 export const LOCAL_CONNECTION_ID = "__local__";
 
@@ -100,10 +101,7 @@ export function joinRemotePath(base: string, name: string, protocol: string): st
 
 export function parentPath(path: string, protocol: string): string {
   if (protocol === "local") {
-    const sep = path.includes("\\") ? "\\" : "/";
-    const parts = path.split(sep).filter(Boolean);
-    if (parts.length <= 1) return parts[0] ? `${parts[0]}${sep}` : sep;
-    return parts.slice(0, -1).join(sep);
+    return parentLocalPath(path);
   }
   if (protocol === "s3") {
     const trimmed = path.replace(/\/+$/, "");

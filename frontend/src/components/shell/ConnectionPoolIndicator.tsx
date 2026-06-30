@@ -7,7 +7,7 @@ import {
   type PoolKind,
 } from "../../stores/connectionPoolStore";
 
-const VISIBLE_KINDS: PoolKind[] = ["ssh", "docker", "database", "redis", "protocol", "terminal"];
+const VISIBLE_KINDS: PoolKind[] = ["ssh", "docker", "database", "redis", "protocol", "terminal", "background"];
 
 function poolTotal(active: number, idle: number): number {
   return active + idle;

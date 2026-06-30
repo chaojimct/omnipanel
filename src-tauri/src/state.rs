@@ -30,7 +30,7 @@ pub struct ProxyConfig {
 
 use omnipanel_ai::provider::AiProviderRegistry;
 
-use crate::background::SshPool;
+use crate::background::{BackgroundWorkerPool, DEFAULT_WORKER_COUNT, SshPool};
 use crate::commands::ssh::SshTunnelInfo;
 use crate::log_store::LogStore;
 use crate::output_buffer::{self, OutputBuffers};
@@ -101,6 +101,8 @@ pub struct AppState {
     pub mcp_manager: SharedMcpManager,
     /// ACP agent 连接与会话管理。
     pub acp_state: Arc<Mutex<crate::commands::acp::AcpState>>,
+    /// 全局后台任务线程池（对比分析等 CPU/IO 密集型任务）。
+    pub worker_pool: Arc<BackgroundWorkerPool>,
 }
 
 impl AppState {
@@ -158,6 +160,7 @@ impl AppState {
             proxy_config: Arc::new(Mutex::new(ProxyConfig::default())),
             mcp_manager,
             acp_state: Arc::new(Mutex::new(crate::commands::acp::AcpState::default())),
+            worker_pool: Arc::new(BackgroundWorkerPool::new(DEFAULT_WORKER_COUNT)),
         }
     }
 }

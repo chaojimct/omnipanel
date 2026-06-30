@@ -1,12 +1,16 @@
+pub mod db_sync_jobs;
 pub mod gpu_local;
+pub mod knowledge_vector_jobs;
 pub mod local_ports;
 pub mod local_system;
 pub mod ssh_pool;
+pub mod worker_pool;
 
 use std::sync::Arc;
 
 use omnipanel_store::Storage;
 pub use ssh_pool::{PoolStatusEvent, SshHostOverview, SshPool};
+pub use worker_pool::{BackgroundWorkerPool, DEFAULT_WORKER_COUNT};
 pub use omnipanel_ssh::HostSystemStats;
 
 /// Background scheduler — SSH 连接池初始化。

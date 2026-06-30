@@ -9,6 +9,7 @@ import { initDbSqlFilesStore } from "./stores/dbSqlFileStore";
 import { initAcpServicesStore } from "./stores/acpServicesStore";
 import { initConnections } from "./stores/connectionStore";
 import { initConnectionPool } from "./stores/connectionPoolStore";
+import { initBackgroundTasks } from "./stores/backgroundTaskStore";
 import { initAppModuleStore } from "./stores/appModuleStore";
 import { initMcpToolStore } from "./stores/mcpToolStore";
 import { initActionListener } from "./stores/actionStore";
@@ -82,6 +83,7 @@ export function Bootstrap() {
 
         await pushLog(t("app.splash.logs.connectionPool"));
         initConnectionPool();
+        initBackgroundTasks();
 
         await pushLog(t("app.splash.logs.actionListener"));
         initActionListener();

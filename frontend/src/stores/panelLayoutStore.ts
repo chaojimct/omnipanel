@@ -51,12 +51,31 @@ function migrateLegacyLeftSidebarSizes(leftSizes: Record<string, number>): Recor
   };
 }
 
+/** 数据库同步工具箱：源库面板宽度占比（0–100） */
+export const DB_TOOLBOX_SYNC_SPLIT_KEY = "database-toolbox-sync-split";
+export const DB_TOOLBOX_SYNC_SPLIT_DEFAULT = 50;
+export const DB_TOOLBOX_SYNC_SPLIT_MIN = 22;
+export const DB_TOOLBOX_SYNC_SPLIT_MAX = 78;
+
+export function getDbToolboxSyncSourceRatio(splitRatios: Record<string, number>): number {
+  const raw = splitRatios[DB_TOOLBOX_SYNC_SPLIT_KEY];
+  if (typeof raw !== "number" || !Number.isFinite(raw)) {
+    return DB_TOOLBOX_SYNC_SPLIT_DEFAULT;
+  }
+  return Math.min(DB_TOOLBOX_SYNC_SPLIT_MAX, Math.max(DB_TOOLBOX_SYNC_SPLIT_MIN, raw));
+}
+
 interface PanelLayoutState {
   leftSizes: Record<string, number>;
   rightSizes: Record<string, number>;
+  splitRatios: Record<string, number>;
+  /** 递增信号：Shell 侧栏重复点击当前模块时触发侧栏折叠切换 */
+  moduleSidebarToggleNonce: number;
   setLeftSize: (key: string, size: number) => void;
   setModuleLeftSidebarSize: (size: number) => void;
   setRightSize: (key: string, size: number) => void;
+  setSplitRatio: (key: string, percent: number) => void;
+  toggleModuleSidebar: () => void;
 }
 
 export const usePanelLayoutStore = create<PanelLayoutState>()(
@@ -64,6 +83,8 @@ export const usePanelLayoutStore = create<PanelLayoutState>()(
     (set) => ({
       leftSizes: {},
       rightSizes: {},
+      splitRatios: {},
+      moduleSidebarToggleNonce: 0,
 
       setLeftSize: (key, size) =>
         set((state) => ({
@@ -79,18 +100,37 @@ export const usePanelLayoutStore = create<PanelLayoutState>()(
         set((state) => ({
           rightSizes: { ...state.rightSizes, [key]: size },
         })),
+
+      setSplitRatio: (key, percent) =>
+        set((state) => ({
+          splitRatios: { ...state.splitRatios, [key]: percent },
+        })),
+
+      toggleModuleSidebar: () =>
+        set((state) => ({
+          moduleSidebarToggleNonce: state.moduleSidebarToggleNonce + 1,
+        })),
     }),
     {
       name: "omnipanel-panel-layout",
-      version: 2,
+      version: 3,
       migrate: (persistedState) => {
-        const state = persistedState as { leftSizes?: Record<string, number>; rightSizes?: Record<string, number> };
+        const state = persistedState as {
+          leftSizes?: Record<string, number>;
+          rightSizes?: Record<string, number>;
+          splitRatios?: Record<string, number>;
+        };
         const leftSizes = migrateLegacyLeftSidebarSizes(state.leftSizes ?? {});
-        return { ...state, leftSizes };
+        return {
+          ...state,
+          leftSizes,
+          splitRatios: state.splitRatios ?? {},
+        };
       },
       partialize: (state) => ({
         leftSizes: state.leftSizes,
         rightSizes: state.rightSizes,
+        splitRatios: state.splitRatios,
       }),
     },
   ),

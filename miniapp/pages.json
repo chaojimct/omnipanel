@@ -1,93 +1,59 @@
 {
-	"leftWindow": {
-		"path": "windows/left-window.uvue",
-		"style": {
-			"width": "350px"
-		}
-	},
-	"topWindow": {
-		"path": "windows/top-window.uvue",
-		"style": {
-			"height": "60px"
-		}
-	},
-	"pages": [
-		// #ifdef VUE3-VAPOR
-		{"path": "pages/tabBar/tab-bar"},
-		// #endif
-		// #ifndef VUE3-VAPOR
-		{
-			"path": "pages/tabBar/dashboard",
-			"style": {
-				"navigationBarTitleText": "仪表盘",
-				"backgroundColorContent": "@tabBarPagebackgroundColorContent"
-			}
-		},
-		{
-			"path": "pages/tabBar/ai-assistant",
-			"style": {
-				"navigationBarTitleText": "AI助手",
-				"backgroundColorContent": "@tabBarPagebackgroundColorContent"
-			}
-		},
-		{
-			"path": "pages/tabBar/profile",
-			"style": {
-				"navigationBarTitleText": "个人中心",
-				"backgroundColorContent": "@tabBarPagebackgroundColorContent"
-			}
-		},
-		// #endif
-		{
-			"path": "pages/error/404",
-			"style": {
-				"navigationBarTitleText": "页面不存在"
-			}
-		}
-	],
-	"globalStyle": {
-		"pageOrientation": "portrait",
-		"navigationBarTitleText": "OmniPanel",
-		"navigationBarTextStyle": "@navigationBarTextStyle",
-		"navigationBarBackgroundColor": "@navigationBarBackgroundColor",
-		"backgroundColorContent": "@backgroundColorContent",
-		"backgroundColor": "@backgroundColor",
-		"backgroundTextStyle": "@backgroundTextStyle"
-	},
-	"tabBar": {
-		"color": "@tabBarColor",
-		"selectedColor": "@tabBarSelectedColor",
-		"borderStyle": "@tabBarBorderStyle",
-		"backgroundColor": "@tabBarBackgroundColor",
-		"list": [
-			{
-				"pagePath": "pages/tabBar/dashboard",
-				"iconPath": "@tabBarDashboardIconPath",
-				"selectedIconPath": "@tabBarDashboardSelectedIconPath",
-				"text": "仪表盘"
-			},
-			{
-				"pagePath": "pages/tabBar/ai-assistant",
-				"iconPath": "@tabBarAIIconPath",
-				"selectedIconPath": "@tabBarAISelectedIconPath",
-				"text": "AI助手"
-			},
-			{
-				"pagePath": "pages/tabBar/profile",
-				"iconPath": "@tabBarProfileIconPath",
-				"selectedIconPath": "@tabBarProfileSelectedIconPath",
-				"text": "个人中心"
-			}
-		]
-	},
-	"condition": {
-		"current": 0,
-		"list": [
-			{
-				"name": "",
-				"path": "",
-				"query": ""
-			}
-		]
-	}
+  "pages": [
+    {
+      "path": "pages/tabBar/dashboard",
+      "style": {
+        "navigationBarTitleText": "OmniPanel",
+        "navigationStyle": "default"
+      }
+    },
+    {
+      "path": "pages/tabBar/ai-assistant",
+      "style": {
+        "navigationBarTitleText": "AI Assistant",
+        "navigationStyle": "default"
+      }
+    },
+    {
+      "path": "pages/tabBar/profile",
+      "style": {
+        "navigationBarTitleText": "Profile",
+        "navigationStyle": "default"
+      }
+    }
+  ],
+  "globalStyle": {
+    "navigationBarTextStyle": "white",
+    "navigationBarTitleText": "OmniPanel",
+    "navigationBarBackgroundColor": "#201d1d",
+    "backgroundColor": "#201d1d"
+  },
+  "tabBar": {
+    "custom": true,
+    "color": "#9a9898",
+    "selectedColor": "#007aff",
+    "backgroundColor": "#1a1717",
+    "borderStyle": "black",
+    "list": [
+      {
+        "pagePath": "pages/tabBar/dashboard",
+        "iconPath": "static/tabbar/dashboard.png",
+        "selectedIconPath": "static/tabbar/dashboard-active.png",
+        "text": "Dashboard"
+      },
+      {
+        "pagePath": "pages/tabBar/ai-assistant",
+        "iconPath": "static/tabbar/ai.png",
+        "selectedIconPath": "static/tabbar/ai-active.png",
+        "text": "AI"
+      },
+      {
+        "pagePath": "pages/tabBar/profile",
+        "iconPath": "static/tabbar/profile.png",
+        "selectedIconPath": "static/tabbar/profile-active.png",
+        "text": "Profile"
+      }
+    ]
+  },
+  "uniIdRouter": {}
 }

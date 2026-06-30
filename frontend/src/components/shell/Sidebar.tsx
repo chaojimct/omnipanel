@@ -14,6 +14,7 @@ import {
 import { isDashboardPath, MODULE_PATHS } from "../../lib/paths";
 import { isModulePathEnabled, useAppModuleStore } from "../../stores/appModuleStore";
 import { useTerminalLeftPanelStore } from "../../modules/terminal/terminalLeftPanelStore";
+import { usePanelLayoutStore } from "../../stores/panelLayoutStore";
 
 const navPaths = [
   {
@@ -155,6 +156,10 @@ export function Sidebar() {
       startTransition(() => {
         navigateToSshManagement(navigate);
       });
+      return;
+    }
+    if (isActive(path)) {
+      usePanelLayoutStore.getState().toggleModuleSidebar();
       return;
     }
     go(path);

@@ -6,7 +6,7 @@ import { FileEntryIcon } from "../../components/ui/FileEntryIcon";
 import { ModuleEmptyState } from "../../components/ui/ModuleEmptyState";
 import { useI18n } from "../../i18n";
 import { appConfirm } from "../../lib/appConfirm";
-import type { FileEntry, FileIndexStatus, FileManagerConnectionInfo } from "../../ipc/bindings";
+import type { FileEntry, FileIndexStatus, FileLocalSystemInfo, FileManagerConnectionInfo } from "../../ipc/bindings";
 import type { FileIndexProgress } from "./fileApi";
 import { useFileManagerStore } from "../../stores/fileManagerStore";
 import { quickInput } from "../../stores/quickInputStore";
@@ -53,7 +53,14 @@ import {
 import { useFilesWorkspaceSessionStore } from "../../stores/filesWorkspaceSessionStore";
 import { useConnectionStore } from "../../stores/connectionStore";
 import { useSettingsStore } from "../../stores/settingsStore";
+import {
+  currentLocalDrive,
+  isLocalAtRoot,
+  LOCAL_COMPUTER_ROOT,
+  splitLocalBreadcrumb,
+} from "./localFilesystem";
 import { buildS3PublicUrl, parseFileConfigJson } from "./s3PublicUrl";
+import { formatPathForInput, parseFileNavigationPath } from "./fileNavigationPath";
 import type { FileConnectionPanelSnapshot } from "./filesWorkspaceSession";
 
 type ViewMode = FileConnectionPanelSnapshot["viewMode"];
@@ -66,7 +73,15 @@ export type QuickPaths = {
   downloads: string;
 };
 
-function splitBreadcrumb(path: string, protocol: string): { label: string; path: string }[] {
+function splitBreadcrumb(
+  path: string,
+  protocol: string,
+  localLabels?: { computer: string; home: string; root: string },
+  localSystemInfo?: FileLocalSystemInfo | null,
+): { label: string; path: string }[] {
+  if (protocol === "local" && localLabels) {
+    return splitLocalBreadcrumb(path, localLabels, localSystemInfo);
+  }
   if (!path) return [{ label: protocol === "local" ? "~" : "/", path: "" }];
   if (protocol === "local") {
     const sep = path.includes("\\") ? "\\" : "/";
@@ -108,6 +123,7 @@ function splitBreadcrumb(path: string, protocol: string): { label: string; path:
 export interface FileConnectionPanelProps {
   connection: FileManagerConnectionInfo;
   quickPaths: QuickPaths | null;
+  localSystemInfo: FileLocalSystemInfo | null;
   isActive: boolean;
   savedState?: FileConnectionPanelSnapshot | null;
   onPatchStatus: (connId: string, status: "online" | "offline") => void;
@@ -117,6 +133,7 @@ export interface FileConnectionPanelProps {
 export function FileConnectionPanel({
   connection,
   quickPaths,
+  localSystemInfo,
   isActive,
   savedState,
   onPatchStatus,
@@ -165,6 +182,10 @@ export function FileConnectionPanel({
   });
   const persistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const restoredStateRef = useRef(savedState);
+  const [pathEditing, setPathEditing] = useState(false);
+  const [pathInput, setPathInput] = useState("");
+  const pathInputRef = useRef<HTMLInputElement>(null);
+  const pathEditSkipCommitRef = useRef(false);
 
   const displayEntries = useMemo(() => {
     const q = search.trim();
@@ -544,15 +565,19 @@ export function FileConnectionPanel({
   }, [connId, currentPath, loadDir, protocol, t]);
 
   const handleDelete = useCallback(async (entry: FileEntry) => {
-    if (!(await appConfirm(t("files.actions.deleteConfirm", { name: entry.name })))) return;
+    const confirmKey =
+      protocol === "s3" && entry.kind === "dir"
+        ? "files.actions.deleteS3FolderConfirm"
+        : "files.actions.deleteConfirm";
+    if (!(await appConfirm(t(confirmKey, { name: entry.name })))) return;
     try {
-      await deleteRemote(connId, entry.path);
+      await deleteRemote(connId, entry.path, entry.kind);
       setSelected(null);
       void loadDir(currentPath);
     } catch (e) {
       setError(fmtError(e));
     }
-  }, [connId, currentPath, loadDir, t]);
+  }, [connId, currentPath, loadDir, protocol, t]);
 
   const handleOpenFile = useCallback((entry: FileEntry) => {
     if (entry.kind !== "file") return;
@@ -640,9 +665,63 @@ export function FileConnectionPanel({
     return items;
   }, [ctxMenu, handleCopyS3Link, handleDelete, handleDownload, handleEnter, handleOpenFile, handleRename, protocol, t]);
 
-  const crumbs = splitBreadcrumb(currentPath, protocol);
+  const effectiveLocalPath =
+    protocol === "local" && !currentPath && quickPaths?.home ? quickPaths.home : currentPath;
+  const crumbs = splitBreadcrumb(currentPath, protocol, {
+    computer: t("files.local.computer"),
+    home: t("files.quick.home"),
+    root: t("files.local.root"),
+  }, localSystemInfo);
+  const atLocalRoot = protocol === "local" && isLocalAtRoot(currentPath, localSystemInfo);
+  const localDrive =
+    protocol === "local" ? currentLocalDrive(effectiveLocalPath) : null;
+  const pathForInput = useMemo(
+    () =>
+      formatPathForInput(currentPath, protocol, {
+        homePath: quickPaths?.home,
+        platform: localSystemInfo?.platform,
+      }),
+    [currentPath, localSystemInfo?.platform, protocol, quickPaths?.home],
+  );
   const canBack = historyIndex > 0;
   const canForward = historyIndex >= 0 && historyIndex < history.length - 1;
+
+  const startPathEdit = useCallback(() => {
+    pathEditSkipCommitRef.current = false;
+    setPathInput(pathForInput);
+    setPathEditing(true);
+    requestAnimationFrame(() => {
+      pathInputRef.current?.focus();
+      pathInputRef.current?.select();
+    });
+  }, [pathForInput]);
+
+  const cancelPathEdit = useCallback(() => {
+    pathEditSkipCommitRef.current = true;
+    setPathEditing(false);
+    setPathInput("");
+  }, []);
+
+  const commitPathEdit = useCallback(() => {
+    if (pathEditSkipCommitRef.current) {
+      pathEditSkipCommitRef.current = false;
+      return;
+    }
+    const next = parseFileNavigationPath(pathInput, protocol, {
+      platform: localSystemInfo?.platform,
+    });
+    setPathEditing(false);
+    setPathInput("");
+    if (next !== currentPath) {
+      navigateTo(next);
+    }
+  }, [currentPath, localSystemInfo?.platform, navigateTo, pathInput, protocol]);
+
+  useEffect(() => {
+    if (!pathEditing) return;
+    pathInputRef.current?.focus();
+    pathInputRef.current?.select();
+  }, [pathEditing]);
 
   return (
     <>
@@ -679,11 +758,30 @@ export function FileConnectionPanel({
           <button
             type="button"
             className="fm-action-btn"
-            onClick={() => navigateTo(parentPath(currentPath, protocol))}
+            disabled={atLocalRoot || (protocol === "s3" && !currentPath) || (protocol !== "local" && protocol !== "s3" && currentPath === "/")}
+            onClick={() => navigateTo(parentPath(effectiveLocalPath, protocol))}
             title={t("files.toolbar.up")}
           >
             <IconNavUp />
           </button>
+          {protocol === "local" && localSystemInfo?.platform === "windows" ? (
+            <select
+              className="fm-drive-select"
+              value={localDrive ?? ""}
+              title={t("files.local.driveSelect")}
+              onChange={(e) => {
+                const next = e.target.value;
+                navigateTo(next ? `${next}\\` : LOCAL_COMPUTER_ROOT);
+              }}
+            >
+              <option value="">{t("files.local.computer")}</option>
+              {localSystemInfo.volumes.map((volume) => (
+                <option key={volume.path} value={volume.path.replace(/\\+$/, "")}>
+                  {volume.label}
+                </option>
+              ))}
+            </select>
+          ) : null}
           <button
             type="button"
             className="fm-action-btn"
@@ -692,19 +790,49 @@ export function FileConnectionPanel({
           >
             <IconRefresh />
           </button>
-          <div className="fm-breadcrumb">
-            {crumbs.map((crumb, i) => (
-              <span key={`${crumb.path}-${i}`} className="fm-crumb-segment">
-                {i > 0 && <span className="fm-crumb-sep">›</span>}
+          <div className={`fm-breadcrumb${pathEditing ? " fm-breadcrumb--editing" : ""}`}>
+            {pathEditing ? (
+              <input
+                ref={pathInputRef}
+                className="fm-breadcrumb-input"
+                value={pathInput}
+                onChange={(e) => setPathInput(e.target.value)}
+                placeholder={t("ssh.sftp.pathEditPlaceholder")}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    commitPathEdit();
+                  } else if (e.key === "Escape") {
+                    e.preventDefault();
+                    cancelPathEdit();
+                  }
+                }}
+                onBlur={commitPathEdit}
+              />
+            ) : (
+              <>
+                <div className="fm-breadcrumb-crumbs">
+                  {crumbs.map((crumb, i) => (
+                    <span key={`${crumb.path}-${i}`} className="fm-crumb-segment">
+                      {i > 0 && <span className="fm-crumb-sep">›</span>}
+                      <button
+                        type="button"
+                        className={`fm-crumb${i === crumbs.length - 1 ? " current" : ""}`}
+                        onClick={() => navigateTo(crumb.path)}
+                      >
+                        {crumb.label}
+                      </button>
+                    </span>
+                  ))}
+                </div>
                 <button
                   type="button"
-                  className={`fm-crumb${i === crumbs.length - 1 ? " current" : ""}`}
-                  onClick={() => navigateTo(crumb.path)}
-                >
-                  {crumb.label}
-                </button>
-              </span>
-            ))}
+                  className="fm-breadcrumb-edit-hit"
+                  aria-label={t("ssh.sftp.pathEditPlaceholder")}
+                  onClick={startPathEdit}
+                />
+              </>
+            )}
           </div>
           <div className="fm-search">
             <span className="search-icon">

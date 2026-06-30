@@ -14,7 +14,7 @@ export interface KnowledgeEmbeddingOllamaModel {
   baseUrl: string;
 }
 
-export const OLLAMA_DEFAULT_BASE_URL = "http://localhost:11434/v1";
+export const OLLAMA_DEFAULT_BASE_URL = "http://127.0.0.1:11434";
 export const KNOWLEDGE_EMBEDDING_OLLAMA_PROVIDER_ID = "ollama";
 
 export const DEFAULT_KNOWLEDGE_EMBEDDING_OLLAMA_MODEL: KnowledgeEmbeddingOllamaModel = {
@@ -33,12 +33,12 @@ export function normalizeOllamaBaseUrl(baseUrl: string): string {
   if (!trimmed) {
     return OLLAMA_DEFAULT_BASE_URL;
   }
-  return trimmed.endsWith("/v1") ? trimmed : `${trimmed}/v1`;
+  const root = trimmed.replace(/\/v1$/, "");
+  return root.replace("://localhost", "://127.0.0.1");
 }
 
 export function ollamaTagsUrl(baseUrl: string): string {
-  const root = normalizeOllamaBaseUrl(baseUrl).replace(/\/v1$/, "");
-  return `${root}/api/tags`;
+  return `${normalizeOllamaBaseUrl(baseUrl)}/api/tags`;
 }
 
 export async function fetchOllamaModelNames(baseUrl: string): Promise<string[]> {
@@ -94,7 +94,7 @@ export function resolveKnowledgeEmbeddingProvider(
       modelName: ollama.modelName.trim(),
       baseUrl: normalizeOllamaBaseUrl(ollama.baseUrl),
       apiKey: "",
-      apiStandard: "openai",
+      apiStandard: "ollama",
     };
   }
 

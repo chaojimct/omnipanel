@@ -76,8 +76,12 @@ export async function renameRemote(connectionId: string, oldPath: string, newPat
   await unwrap(await commands.fileRename(connectionId, oldPath, newPath));
 }
 
-export async function deleteRemote(connectionId: string, path: string): Promise<void> {
-  await unwrap(await commands.fileDelete(connectionId, path));
+export async function deleteRemote(
+  connectionId: string,
+  path: string,
+  entryKind?: string | null,
+): Promise<void> {
+  await unwrap(await commands.fileDelete(connectionId, path, entryKind ?? null));
 }
 
 export async function uploadRemote(connectionId: string, path: string, data: number[]): Promise<void> {
@@ -94,6 +98,10 @@ export async function readRemotePreview(connectionId: string, path: string, maxB
 
 export async function loadQuickPaths() {
   return unwrap(await commands.fileLocalQuickPaths());
+}
+
+export async function loadLocalSystemInfo() {
+  return unwrap(await commands.fileLocalSystemInfo());
 }
 
 export async function searchS3Files(

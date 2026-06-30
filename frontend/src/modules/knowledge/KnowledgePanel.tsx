@@ -14,7 +14,6 @@ import { KnowledgeSidebar } from "./KnowledgeSidebar";
 import { KnowledgeTodosView } from "./KnowledgeTodosView";
 import { isKnowledgeImported } from "./knowledgeTree";
 import { useKnowledgeOpenEntry } from "./useKnowledgeOpenEntry";
-import { initKnowledgeVectorizeProgressListener } from "./knowledgeVectorizeStatusLog";
 
 type KnowledgeModuleTab = "library" | "todos";
 const KNOWLEDGE_TABS: KnowledgeModuleTab[] = ["library", "todos"];
@@ -43,16 +42,6 @@ export function KnowledgePanel() {
       void loadEntries();
     }
   }, [loadEntries, mode]);
-
-  useEffect(() => {
-    let unlisten: (() => void) | undefined;
-    void initKnowledgeVectorizeProgressListener(t).then((fn) => {
-      unlisten = fn;
-    });
-    return () => {
-      unlisten?.();
-    };
-  }, [t]);
 
   const modeIconItems = useMemo(
     () => [
