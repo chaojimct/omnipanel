@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { listen } from "@tauri-apps/api/event";
 import { useI18n } from "../../../i18n";
 import { Button } from "../../../components/ui/Button";
 import { useDataLoading } from "../../../components/ui/DataLoading";
@@ -7,26 +8,30 @@ import { SubWindow } from "../../../components/ui/SubWindow";
 import { quickInput } from "../../../lib/quickInput";
 import { useActionStore } from "../../../stores/actionStore";
 import { useDbSyncTaskStore } from "../../../stores/dbSyncTaskStore";
+import type { BackgroundTaskInfo } from "../../../stores/backgroundTaskStore";
 import {
   countTable,
-  countTables,
   introspectSchema,
-  introspectTable,
   listDatabases,
   listTables,
   type DbConnectionConfig,
   type DbColumnMeta,
 } from "../api";
 import { SyncSidePanel } from "./SyncSidePanel";
+import { DbToolboxSplitLayout } from "./DbToolboxSplitLayout";
 import { ModuleEmptyState } from "../../../components/ui/ModuleEmptyState";
 import {
   buildNewTableDiff,
-  compareTableColumns,
-  type SchemaTableDiff,
   sourceColumnsSignature,
+  type SchemaTableDiff,
 } from "./schemaDiff";
-import { compareTableRows } from "./rowDiff";
 import { TableRowDiffPanel } from "./TableRowDiffPanel";
+import {
+  cancelDbBackgroundTask,
+  startDbDataSyncBackgroundTask,
+  startDbSchemaSyncBackgroundTask,
+  useDbSyncBackgroundTaskEvents,
+} from "./useDbSyncBackgroundTasks";
 import {
   connectionWithDatabase,
   resolveDataSyncConflictStatus,
@@ -114,6 +119,8 @@ export function DatabaseToolbox({
   const schemaTableDiffsRef = useRef(schemaTableDiffs);
   schemaTableDiffsRef.current = schemaTableDiffs;
   const lastAnalyzedSelectionRef = useRef<Set<string>>(new Set());
+  const bgDataTaskIdRef = useRef<string | null>(null);
+  const bgSchemaTaskIdRef = useRef<string | null>(null);
 
   const pendingLoad = useDbSyncTaskStore((s) => s.pendingLoad);
   const syncTasks = useDbSyncTaskStore((s) => s.tasks);
@@ -390,94 +397,6 @@ export function DatabaseToolbox({
     };
   }, [active, tab, sourceSnapshot.loading, sourceSnapshot.tables, sourceSelected, sourceConnId, sourceDb, connections]);
 
-  /** 数据同步：已勾选且目标存在的表，统计目标侧行数 */
-  useEffect(() => {
-    if (!active || tab !== "dataSync" || !targetConfigured || targetTablesLoading) return;
-
-    const conn = connections.find((c) => c.id === targetConnId);
-    if (!conn || !targetDb.trim()) return;
-
-    const pending = Array.from(sourceSelected).filter(
-      (name) =>
-        targetTableNames.has(name) &&
-        !targetCountingRef.current.has(name) &&
-        !(name in targetRowCounts),
-    );
-
-    if (pending.length === 0) return;
-
-    const scoped = connectionWithDatabase(conn, targetDb);
-    const runId = syncRunIdRef.current;
-
-    for (const name of pending) {
-      targetCountingRef.current.add(name);
-    }
-    setTargetCountingTables((prev) => new Set([...prev, ...pending]));
-
-    void (async () => {
-      try {
-        const results = await countTables(scoped, targetDb, pending);
-        if (syncRunIdRef.current !== runId) return;
-        setTargetRowCounts((prev) => {
-          const next = { ...prev };
-          for (const row of results) {
-            next[row.name] = row.count ?? -1;
-          }
-          for (const name of pending) {
-            if (!(name in next)) {
-              next[name] = -1;
-            }
-          }
-          return next;
-        });
-      } catch {
-        if (syncRunIdRef.current !== runId) return;
-        setTargetRowCounts((prev) => {
-          const next = { ...prev };
-          for (const name of pending) {
-            next[name] = -1;
-          }
-          return next;
-        });
-      } finally {
-        for (const name of pending) {
-          targetCountingRef.current.delete(name);
-        }
-        if (syncRunIdRef.current === runId) {
-          setTargetCountingTables((prev) => {
-            const next = new Set(prev);
-            for (const name of pending) next.delete(name);
-            return next;
-          });
-        }
-      }
-    })();
-
-    return () => {
-      if (syncRunIdRef.current !== runId) {
-        return;
-      }
-      for (const name of pending) {
-        targetCountingRef.current.delete(name);
-      }
-      setTargetCountingTables((prev) => {
-        const next = new Set(prev);
-        for (const name of pending) next.delete(name);
-        return next;
-      });
-    };
-  }, [
-    active,
-    tab,
-    targetConfigured,
-    targetTablesLoading,
-    sourceSelected,
-    targetTableNames,
-    targetConnId,
-    targetDb,
-    connections,
-  ]);
-
   /** 已勾选源表：按源/目标行数判定冲突或新增 */
   useEffect(() => {
     if (!active || !targetConfigured || tab !== "dataSync") {
@@ -565,25 +484,6 @@ export function DatabaseToolbox({
 
     const targetKey = `${targetConnId}|${targetDb}`;
 
-    const toFetch: string[] = [];
-    for (const name of selected) {
-      if (!targetTableNames.has(name)) continue;
-      if (schemaFetchingRef.current.has(name)) continue;
-
-      const sourceTable = sourceSnapshot.tables.find((t) => t.name === name);
-      const sourceKey = sourceTable ? sourceColumnsSignature(sourceTable.columns) : "";
-      const prev = schemaTableDiffsRef.current[name];
-
-      if (
-        prev?.targetKey === targetKey &&
-        prev?.sourceKey === sourceKey &&
-        (prev.status === "diff" || prev.status === "match")
-      ) {
-        continue;
-      }
-      toFetch.push(name);
-    }
-
     setSchemaTableDiffs((prev) => {
       const next: Record<string, SchemaTableDiff> = {};
       for (const name of selected) {
@@ -606,65 +506,6 @@ export function DatabaseToolbox({
       }
       return next;
     });
-
-    const conn = connections.find((c) => c.id === targetConnId);
-    if (!conn || !targetDb.trim() || toFetch.length === 0) return;
-
-    const scoped = connectionWithDatabase(conn, targetDb);
-    let cancelled = false;
-
-    for (const name of toFetch) {
-      schemaFetchingRef.current.add(name);
-    }
-
-    void (async () => {
-      for (const name of toFetch) {
-        if (cancelled) break;
-        const sourceTable = sourceSnapshot.tables.find((t) => t.name === name);
-        if (!sourceTable) {
-          schemaFetchingRef.current.delete(name);
-          continue;
-        }
-
-        try {
-          const targetTable = await introspectTable(scoped, targetDb, name);
-          if (cancelled) return;
-
-          const columns = compareTableColumns(sourceTable.columns, targetTable.columns);
-          const sourceKey = sourceColumnsSignature(sourceTable.columns);
-          setSchemaTableDiffs((prev) => ({
-            ...prev,
-            [name]: {
-              tableName: name,
-              status: columns.length === 0 ? "match" : "diff",
-              columns,
-              targetKey,
-              sourceKey,
-            },
-          }));
-        } catch (e) {
-          if (cancelled) return;
-          setSchemaTableDiffs((prev) => ({
-            ...prev,
-            [name]: {
-              tableName: name,
-              status: "error",
-              columns: [],
-              error: typeof e === "string" ? e : String(e),
-            },
-          }));
-        } finally {
-          schemaFetchingRef.current.delete(name);
-        }
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-      for (const name of toFetch) {
-        schemaFetchingRef.current.delete(name);
-      }
-    };
   }, [
     active,
     tab,
@@ -675,7 +516,6 @@ export function DatabaseToolbox({
     targetConfigured,
     targetConnId,
     targetDb,
-    connections,
   ]);
 
   const toggleSourceTable = useCallback((name: string) => {
@@ -716,6 +556,11 @@ export function DatabaseToolbox({
     [sourceSelected],
   );
 
+  const sourceSelectedInTarget = useMemo(
+    () => sourceSelectedTableNames.filter((name) => targetTableNames.has(name)),
+    [sourceSelectedTableNames, targetTableNames],
+  );
+
   const sourceTableColumns = useMemo(() => {
     const map: Record<string, DbColumnMeta[]> = {};
     for (const table of sourceSnapshot.tables) {
@@ -724,58 +569,162 @@ export function DatabaseToolbox({
     return map;
   }, [sourceSnapshot.tables]);
 
-  const runRowByRowAnalysis = useCallback(
-    async (tableNames: string[], runId: number) => {
+  const schemaTargetKey = useMemo(
+    () => `${targetConnId}|${targetDb}`,
+    [targetConnId, targetDb],
+  );
+
+  const handleBgTargetRowCount = useCallback((table: string, count: number | null) => {
+    setTargetRowCounts((prev) => ({ ...prev, [table]: count }));
+  }, []);
+
+  const handleBgTableAnalysis = useCallback((table: string, result: DataAnalysisResult) => {
+    analyzingRef.current.delete(table);
+    setTableAnalysis((prev) => ({ ...prev, [table]: result }));
+  }, []);
+
+  const handleBgSchemaDiff = useCallback((table: string, diff: SchemaTableDiff) => {
+    schemaFetchingRef.current.delete(table);
+    setSchemaTableDiffs((prev) => ({ ...prev, [table]: diff }));
+  }, []);
+
+  const handleBgAnalysisPending = useCallback((tables: string[], pending: boolean) => {
+    for (const name of tables) {
+      if (pending) {
+        analyzingRef.current.add(name);
+        setTableAnalysis((prev) => ({ ...prev, [name]: { status: "analyzing" } }));
+      } else {
+        analyzingRef.current.delete(name);
+      }
+    }
+  }, []);
+
+  const handleBgTargetCounting = useCallback((tables: string[], counting: boolean) => {
+    for (const name of tables) {
+      if (counting) {
+        targetCountingRef.current.add(name);
+      } else {
+        targetCountingRef.current.delete(name);
+      }
+    }
+    setTargetCountingTables((prev) => {
+      const next = new Set(prev);
+      for (const name of tables) {
+        if (counting) next.add(name);
+        else next.delete(name);
+      }
+      return next;
+    });
+  }, []);
+
+  useDbSyncBackgroundTaskEvents({
+    active,
+    sourceTableColumns,
+    targetKey: schemaTargetKey,
+    onTargetRowCount: handleBgTargetRowCount,
+    onTableAnalysis: handleBgTableAnalysis,
+    onSchemaDiff: handleBgSchemaDiff,
+    onAnalysisTablesPending: handleBgAnalysisPending,
+    onTargetCounting: handleBgTargetCounting,
+  });
+
+  const runBackgroundDataSync = useCallback(
+    async (tableNames: string[]) => {
       if (tableNames.length === 0) return;
 
       const sourceConn = connections.find((c) => c.id === sourceConnId);
       const targetConn = connections.find((c) => c.id === targetConnId);
       if (!sourceConn || !targetConn || !sourceDb.trim() || !targetDb.trim()) return;
 
-      const sourceScoped = connectionWithDatabase(sourceConn, sourceDb);
-      const targetScoped = connectionWithDatabase(targetConn, targetDb);
+      const runId = syncRunIdRef.current;
+      await cancelDbBackgroundTask(bgDataTaskIdRef.current);
+      bgDataTaskIdRef.current = null;
 
-      for (const name of tableNames) {
-        if (syncRunIdRef.current !== runId) return;
-        if (analyzingRef.current.has(name)) continue;
-        analyzingRef.current.add(name);
-        setTableAnalysis((prev) => ({
-          ...prev,
-          [name]: { status: "analyzing" },
-        }));
-        try {
-          const sourceTable = sourceSnapshot.tables.find((tbl) => tbl.name === name);
-          const result = await compareTableRows(
-            sourceScoped,
-            targetScoped,
-            name,
-            sourceTable?.columns ?? [],
-          );
-          if (syncRunIdRef.current !== runId) return;
+      handleBgTargetCounting(tableNames, true);
+      handleBgAnalysisPending(tableNames, true);
+
+      try {
+        const taskId = await startDbDataSyncBackgroundTask(
+          sourceConn,
+          targetConn,
+          sourceDb,
+          targetDb,
+          tableNames,
+          sourceTableColumns,
+        );
+        if (syncRunIdRef.current !== runId) {
+          await cancelDbBackgroundTask(taskId);
+          return;
+        }
+        bgDataTaskIdRef.current = taskId;
+      } catch (e) {
+        handleBgTargetCounting(tableNames, false);
+        handleBgAnalysisPending(tableNames, false);
+        for (const name of tableNames) {
           setTableAnalysis((prev) => ({
             ...prev,
-            [name]:
-              result.status === "match"
-                ? { status: "match", diffRows: 0, diffs: [] }
-                : {
-                    status: "diff",
-                    diffRows: result.diffRows,
-                    diffs: result.diffs,
-                    truncated: result.truncated,
-                  },
+            [name]: {
+              status: "error",
+              error: typeof e === "string" ? e : String(e),
+            },
           }));
-        } catch (e) {
-          if (syncRunIdRef.current !== runId) return;
-          setTableAnalysis((prev) => ({
-            ...prev,
-            [name]: { status: "error", error: typeof e === "string" ? e : String(e) },
-          }));
-        } finally {
-          analyzingRef.current.delete(name);
         }
       }
     },
-    [connections, sourceConnId, sourceDb, targetConnId, targetDb, sourceSnapshot.tables],
+    [
+      connections,
+      sourceConnId,
+      sourceDb,
+      targetConnId,
+      targetDb,
+      sourceTableColumns,
+      handleBgAnalysisPending,
+      handleBgTargetCounting,
+    ],
+  );
+
+  const runBackgroundSchemaSync = useCallback(
+    async (tableNames: string[]) => {
+      if (tableNames.length === 0) return;
+
+      const targetConn = connections.find((c) => c.id === targetConnId);
+      if (!targetConn || !targetDb.trim()) return;
+
+      await cancelDbBackgroundTask(bgSchemaTaskIdRef.current);
+      bgSchemaTaskIdRef.current = null;
+
+      for (const name of tableNames) {
+        schemaFetchingRef.current.add(name);
+        setSchemaTableDiffs((prev) => ({
+          ...prev,
+          [name]: { tableName: name, status: "checking", columns: [] },
+        }));
+      }
+
+      try {
+        const taskId = await startDbSchemaSyncBackgroundTask(
+          targetConn,
+          targetDb,
+          tableNames,
+          sourceTableColumns,
+        );
+        bgSchemaTaskIdRef.current = taskId;
+      } catch (e) {
+        for (const name of tableNames) {
+          schemaFetchingRef.current.delete(name);
+          setSchemaTableDiffs((prev) => ({
+            ...prev,
+            [name]: {
+              tableName: name,
+              status: "error",
+              columns: [],
+              error: typeof e === "string" ? e : String(e),
+            },
+          }));
+        }
+      }
+    },
+    [connections, targetConnId, targetDb, sourceTableColumns],
   );
 
   const handleViewConflictDetail = useCallback(
@@ -789,35 +738,76 @@ export function DatabaseToolbox({
         (analysis.status === "match" && tableTargetStatus[tableName] === "conflict");
 
       if (needsAnalysis && !analyzingRef.current.has(tableName)) {
-        void runRowByRowAnalysis([tableName], syncRunIdRef.current);
+        void runBackgroundDataSync([tableName]);
       }
     },
-    [runRowByRowAnalysis, tableTargetStatus],
+    [runBackgroundDataSync, tableTargetStatus],
   );
 
-  const cancelSyncAnalysis = useCallback(() => {
+  const applyAnalysisCancelled = useCallback((kind: "data" | "schema" | "all") => {
     syncRunIdRef.current += 1;
     setLargeTableWarn(null);
-    analyzingRef.current.clear();
-    countingRef.current.clear();
-    targetCountingRef.current.clear();
-    setCountingTables(new Set());
-    setTargetCountingTables(new Set());
-    setTableAnalysis((prev) => {
-      const next: Record<string, DataAnalysisResult> = {};
-      for (const [name, result] of Object.entries(prev)) {
-        if (result.status !== "analyzing") {
-          next[name] = result;
+
+    if (kind === "data" || kind === "all") {
+      analyzingRef.current.clear();
+      targetCountingRef.current.clear();
+      setTargetCountingTables(new Set());
+      setTableAnalysis((prev) => {
+        const next: Record<string, DataAnalysisResult> = {};
+        for (const [name, result] of Object.entries(prev)) {
+          if (result.status !== "analyzing") {
+            next[name] = result;
+          }
         }
-      }
-      return next;
-    });
-    lastAnalyzedSelectionRef.current = new Set(
-      Object.entries(tableAnalysisRef.current)
-        .filter(([, result]) => result.status === "match" || result.status === "diff" || result.status === "error")
-        .map(([name]) => name),
-    );
+        return next;
+      });
+      lastAnalyzedSelectionRef.current = new Set(
+        Object.entries(tableAnalysisRef.current)
+          .filter(([, result]) => result.status === "match" || result.status === "diff" || result.status === "error")
+          .map(([name]) => name),
+      );
+    }
+
+    if (kind === "schema" || kind === "all") {
+      schemaFetchingRef.current.clear();
+      setSchemaTableDiffs((prev) => {
+        const next: Record<string, SchemaTableDiff> = {};
+        for (const [name, diff] of Object.entries(prev)) {
+          if (diff.status !== "checking") {
+            next[name] = diff;
+          }
+        }
+        return next;
+      });
+    }
   }, []);
+
+  useEffect(() => {
+    if (!active) return;
+
+    let dispose: (() => void) | undefined;
+    listen<BackgroundTaskInfo>("bg-task-update", (event) => {
+      const task = event.payload;
+      if (task.module !== "database" || task.status !== "cancelled") return;
+
+      if (task.id === bgDataTaskIdRef.current) {
+        bgDataTaskIdRef.current = null;
+        applyAnalysisCancelled("data");
+      }
+      if (task.id === bgSchemaTaskIdRef.current) {
+        bgSchemaTaskIdRef.current = null;
+        applyAnalysisCancelled("schema");
+      }
+    })
+      .then((fn) => {
+        dispose = fn;
+      })
+      .catch(() => {});
+
+    return () => {
+      dispose?.();
+    };
+  }, [active, applyAnalysisCancelled]);
 
   const syncAnalysisBusy = useMemo(() => {
     if (tab !== "dataSync") return false;
@@ -825,18 +815,13 @@ export function DatabaseToolbox({
     return Object.values(tableAnalysis).some((result) => result.status === "analyzing");
   }, [tab, countingTables, targetCountingTables, tableAnalysis]);
 
-  const syncAnalysisProgressMessage = useMemo(() => {
-    if (Object.values(tableAnalysis).some((result) => result.status === "analyzing")) {
-      return t("database.toolbox.syncProgressAnalyzing");
-    }
-    if (targetCountingTables.size > 0) {
-      return t("database.toolbox.syncProgressTargetCount");
-    }
-    if (countingTables.size > 0) {
-      return t("database.toolbox.syncProgressSourceCount");
-    }
-    return t("database.toolbox.syncProgressAnalyzing");
-  }, [countingTables, targetCountingTables, tableAnalysis, t]);
+  const schemaSyncBusy = useMemo(() => {
+    if (tab !== "schemaSync") return false;
+    return Object.values(schemaTableDiffs).some((diff) => diff.status === "checking");
+  }, [tab, schemaTableDiffs]);
+
+  const syncCompareBusy =
+    (tab === "dataSync" && syncAnalysisBusy) || (tab === "schemaSync" && schemaSyncBusy);
 
   // 勾选即触发逐条比对：仅在 dataSync tab 下，对源侧新勾选且目标库中存在的表做处理。
   useEffect(() => {
@@ -866,8 +851,7 @@ export function DatabaseToolbox({
       setLargeTableWarn({ names: oversized, rows: oversizedRows });
       return;
     }
-    const runId = syncRunIdRef.current;
-    void runRowByRowAnalysis(newlySelected, runId);
+    void runBackgroundDataSync(newlySelected);
   }, [
     active,
     tab,
@@ -876,21 +860,52 @@ export function DatabaseToolbox({
     sourceSelectedTableNames,
     targetTableNames,
     targetRowCounts,
-    runRowByRowAnalysis,
+    runBackgroundDataSync,
   ]);
 
   const confirmLargeTableAnalysis = useCallback(() => {
     const ctx = largeTableWarn;
     setLargeTableWarn(null);
     if (!ctx) return;
-    const runId = syncRunIdRef.current;
-    void runRowByRowAnalysis(ctx.names, runId);
-  }, [largeTableWarn, runRowByRowAnalysis]);
+    void runBackgroundDataSync(ctx.names);
+  }, [largeTableWarn, runBackgroundDataSync]);
 
-  const schemaSyncBusy = useMemo(() => {
-    if (tab !== "schemaSync") return false;
-    return Object.values(schemaTableDiffs).some((diff) => diff.status === "checking");
-  }, [tab, schemaTableDiffs]);
+  /** 结构同步：提交后台对比任务 */
+  useEffect(() => {
+    if (!active || tab !== "schemaSync" || !targetConfigured || targetTablesLoading) return;
+
+    const selected = Array.from(sourceSelected).filter((name) => targetTableNames.has(name));
+    const targetKey = schemaTargetKey;
+    const toFetch: string[] = [];
+
+    for (const name of selected) {
+      if (schemaFetchingRef.current.has(name)) continue;
+      const sourceTable = sourceSnapshot.tables.find((t) => t.name === name);
+      const sourceKey = sourceTable ? sourceColumnsSignature(sourceTable.columns) : "";
+      const prev = schemaTableDiffsRef.current[name];
+      if (
+        prev?.targetKey === targetKey &&
+        prev?.sourceKey === sourceKey &&
+        (prev.status === "diff" || prev.status === "match")
+      ) {
+        continue;
+      }
+      toFetch.push(name);
+    }
+
+    if (toFetch.length === 0) return;
+    void runBackgroundSchemaSync(toFetch);
+  }, [
+    active,
+    tab,
+    targetConfigured,
+    targetTablesLoading,
+    sourceSelected,
+    sourceSnapshot.tables,
+    targetTableNames,
+    schemaTargetKey,
+    runBackgroundSchemaSync,
+  ]);
 
   const canSubmit = useMemo(() => {
     if (sourceSelected.size === 0) return false;
@@ -1184,70 +1199,64 @@ export function DatabaseToolbox({
 
   return (
     <div className="db-toolbox">
-      {syncAnalysisBusy && (
-        <div className="db-toolbox-sync-progress" role="status">
-          <span className="db-toolbox-sync-progress__message">{syncAnalysisProgressMessage}</span>
-          <Button type="button" variant="ghost" size="sm" onClick={cancelSyncAnalysis}>
-            {t("database.toolbox.side.cancelAnalysis")}
-          </Button>
-        </div>
-      )}
-
       <div className="db-toolbox-panels" role="tabpanel">
-        <div className="db-toolbox-split">
-          <SyncSidePanel
-            sideLabel={t("database.toolbox.side.source")}
-            connections={connections}
-            connectionId={sourceConnId}
-            database={sourceDb}
-            onConnectionChange={handleSourceConnectionChange}
-            onDatabaseChange={setSourceDb}
-            databases={sourceDbs}
-            databasesLoading={sourceDbsLoading}
-            snapshot={sourceSnapshot}
-            loadingProgress={
-              sourceSnapshot.loading
-                ? { total: loadTotal, current: loadCurrent, message: loadMessage }
-                : undefined
-            }
-            tab={tab}
-            expandedTables={sourceExpanded}
-            onToggleTable={toggleSourceTable}
-            selectedTables={sourceSelected}
-            onToggleSelect={toggleSourceSelected}
-            onSelectAllTables={selectSourceAllTables}
-            countingTables={countingTables}
-          />
-          <div className="db-toolbox-split__divider" aria-hidden />
-          <SyncSidePanel
-            sideLabel={t("database.toolbox.side.target")}
-            tableListMode="targetSync"
-            connections={connections}
-            connectionId={targetConnId}
-            database={targetDb}
-            onConnectionChange={handleTargetConnectionChange}
-            onDatabaseChange={setTargetDb}
-            databases={targetDbs}
-            databasesLoading={targetDbsLoading}
-            snapshot={EMPTY_SNAPSHOT}
-            tab={tab}
-            expandedTables={new Set()}
-            onToggleTable={() => {}}
-            selectedTables={new Set()}
-            onToggleSelect={() => {}}
-            onSelectAllTables={() => {}}
-            sourceSelectedTableNames={sourceSelectedTableNames}
-            targetConfigured={targetConfigured}
-            targetTablesLoading={targetTablesLoading}
-            tableTargetStatus={tableTargetStatus}
-            tableSyncStrategies={tableSyncStrategies}
-            onSyncStrategyChange={setTableSyncStrategy}
-            schemaTableDiffs={schemaTableDiffs}
-            tableAnalysis={tableAnalysis}
-            conflictDetailTable={conflictDetailTable}
-            onViewConflictDetail={handleViewConflictDetail}
-          />
-        </div>
+        <DbToolboxSplitLayout
+          source={
+            <SyncSidePanel
+              sideLabel={t("database.toolbox.side.source")}
+              connections={connections}
+              connectionId={sourceConnId}
+              database={sourceDb}
+              onConnectionChange={handleSourceConnectionChange}
+              onDatabaseChange={setSourceDb}
+              databases={sourceDbs}
+              databasesLoading={sourceDbsLoading}
+              snapshot={sourceSnapshot}
+              loadingProgress={
+                sourceSnapshot.loading
+                  ? { total: loadTotal, current: loadCurrent, message: loadMessage }
+                  : undefined
+              }
+              tab={tab}
+              expandedTables={sourceExpanded}
+              onToggleTable={toggleSourceTable}
+              selectedTables={sourceSelected}
+              onToggleSelect={toggleSourceSelected}
+              onSelectAllTables={selectSourceAllTables}
+              countingTables={countingTables}
+            />
+          }
+          target={
+            <SyncSidePanel
+              sideLabel={t("database.toolbox.side.target")}
+              tableListMode="targetSync"
+              connections={connections}
+              connectionId={targetConnId}
+              database={targetDb}
+              onConnectionChange={handleTargetConnectionChange}
+              onDatabaseChange={setTargetDb}
+              databases={targetDbs}
+              databasesLoading={targetDbsLoading}
+              snapshot={EMPTY_SNAPSHOT}
+              tab={tab}
+              expandedTables={new Set()}
+              onToggleTable={() => {}}
+              selectedTables={new Set()}
+              onToggleSelect={() => {}}
+              onSelectAllTables={() => {}}
+              sourceSelectedTableNames={sourceSelectedTableNames}
+              targetConfigured={targetConfigured}
+              targetTablesLoading={targetTablesLoading}
+              tableTargetStatus={tableTargetStatus}
+              tableSyncStrategies={tableSyncStrategies}
+              onSyncStrategyChange={setTableSyncStrategy}
+              schemaTableDiffs={schemaTableDiffs}
+              tableAnalysis={tableAnalysis}
+              conflictDetailTable={conflictDetailTable}
+              onViewConflictDetail={handleViewConflictDetail}
+            />
+          }
+        />
       </div>
 
       <footer className="db-toolbox-footer">

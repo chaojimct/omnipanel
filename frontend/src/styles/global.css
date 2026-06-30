@@ -6760,6 +6760,215 @@
         white-space: nowrap;
     }
 
+    /* ─── 后台任务列表 SubWindow ─────────────────────────────────────── */
+    .background-tasks-window .subwindow-body {
+        background: var(--bg-deeper);
+    }
+
+    .background-tasks-body {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .background-tasks-empty {
+        flex: 1;
+        min-height: 220px;
+    }
+
+    .background-tasks-summary {
+        display: flex;
+        align-items: center;
+        gap: var(--sp-2);
+        margin: var(--sp-3) var(--sp-4) var(--sp-2);
+        padding: var(--sp-2) var(--sp-3);
+        border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--border));
+        border-radius: var(--r-sm);
+        background: color-mix(in srgb, var(--accent) 6%, var(--surface));
+        font-size: 12px;
+        color: var(--fg-2);
+    }
+
+    .background-tasks-summary__dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--accent);
+        box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+        flex-shrink: 0;
+        animation: background-tasks-pulse 1.6s ease-in-out infinite;
+    }
+
+    @keyframes background-tasks-pulse {
+        0%, 100% { opacity: 1; transform: scale(1); }
+        50% { opacity: 0.65; transform: scale(0.92); }
+    }
+
+    .background-tasks-summary__text {
+        font-weight: 500;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .background-tasks-list {
+        list-style: none;
+        margin: 0;
+        padding: 0 var(--sp-4) var(--sp-4);
+        display: flex;
+        flex-direction: column;
+        gap: var(--sp-2);
+        overflow-y: auto;
+        flex: 1;
+        min-height: 0;
+    }
+
+    .background-tasks-row {
+        position: relative;
+        display: flex;
+        align-items: flex-start;
+        gap: var(--sp-3);
+        padding: var(--sp-3);
+        padding-left: calc(var(--sp-3) + 3px);
+        border: 1px solid var(--border);
+        border-radius: var(--r-md);
+        background: var(--bg);
+        overflow: hidden;
+        transition: border-color 0.15s ease, background-color 0.15s ease;
+    }
+
+    .background-tasks-row:hover {
+        border-color: color-mix(in srgb, var(--accent) 28%, var(--border));
+        background: color-mix(in srgb, var(--surface) 40%, var(--bg));
+    }
+
+    .background-tasks-row__accent {
+        position: absolute;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        width: 3px;
+        background: var(--border);
+    }
+
+    .background-tasks-row--pending .background-tasks-row__accent,
+    .background-tasks-row--running .background-tasks-row__accent {
+        background: var(--accent);
+    }
+
+    .background-tasks-row--completed .background-tasks-row__accent {
+        background: var(--success);
+    }
+
+    .background-tasks-row--failed .background-tasks-row__accent,
+    .background-tasks-row--cancelled .background-tasks-row__accent {
+        background: var(--danger);
+    }
+
+    .background-tasks-row__body {
+        min-width: 0;
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+    }
+
+    .background-tasks-row__header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: var(--sp-2);
+    }
+
+    .background-tasks-row__title {
+        min-width: 0;
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--fg);
+        line-height: 1.35;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+    }
+
+    .background-tasks-row__meta {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 6px;
+    }
+
+    .background-tasks-row__module {
+        display: inline-flex;
+        align-items: center;
+        padding: 1px 8px;
+        border-radius: 999px;
+        border: 1px solid var(--border);
+        background: var(--surface);
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+        color: var(--muted);
+    }
+
+    .background-tasks-row__stat {
+        font-size: 11px;
+        color: var(--meta);
+        font-variant-numeric: tabular-nums;
+    }
+
+    .background-tasks-row__stat--accent {
+        color: var(--accent);
+    }
+
+    .background-tasks-row__message {
+        margin: 0;
+        font-size: 12px;
+        line-height: 1.45;
+        color: var(--fg-2);
+    }
+
+    .background-tasks-row__bar {
+        height: 4px;
+        border-radius: 999px;
+        background: var(--surface);
+        overflow: hidden;
+    }
+
+    .background-tasks-row__bar-fill {
+        display: block;
+        height: 100%;
+        border-radius: inherit;
+        background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 70%, #fff));
+        transition: width 0.25s ease;
+    }
+
+    .background-tasks-row__bar--indeterminate .background-tasks-row__bar-fill {
+        width: 36% !important;
+        animation: background-tasks-indeterminate 1.2s ease-in-out infinite;
+    }
+
+    @keyframes background-tasks-indeterminate {
+        0% { transform: translateX(-120%); }
+        100% { transform: translateX(320%); }
+    }
+
+    .background-tasks-row__error {
+        margin: 0;
+        padding: var(--sp-2) var(--sp-3);
+        border-radius: var(--r-sm);
+        background: var(--danger-soft);
+        font-size: 11px;
+        line-height: 1.45;
+        color: var(--danger);
+    }
+
+    .background-tasks-row__cancel {
+        flex-shrink: 0;
+        margin-top: 1px;
+    }
+
     /* ─── Statusbar 工作区按钮 ───────────────────────────────────────── */
     .statusbar-workspace-controls {
         display: inline-flex;
@@ -14121,13 +14330,78 @@
     background: var(--bg);
 }
 
+.fm-drive-select {
+    height: 28px;
+    min-width: 72px;
+    max-width: 120px;
+    padding: 0 var(--sp-2);
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    background: var(--surface);
+    color: var(--text);
+    font-size: 12px;
+    flex-shrink: 0;
+}
+
+.fm-drive-select:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
 .fm-breadcrumb {
     display: flex;
     align-items: center;
-    gap: 2px;
+    gap: 0;
     flex: 1;
     min-width: 0;
     overflow: hidden;
+    background: var(--bg-deeper);
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    padding: 2px 8px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+}
+
+.fm-breadcrumb--editing {
+    padding: 1px 8px;
+}
+
+.fm-breadcrumb-crumbs {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    flex-shrink: 0;
+}
+
+.fm-breadcrumb-edit-hit {
+    flex: 1;
+    align-self: stretch;
+    min-width: 24px;
+    min-height: 22px;
+    margin: 0;
+    padding: 0;
+    border: none;
+    background: transparent;
+    cursor: text;
+}
+
+.fm-breadcrumb-input {
+    flex: 1;
+    width: 100%;
+    min-width: 0;
+    padding: 2px 0;
+    border: none;
+    outline: none;
+    background: transparent;
+    color: var(--fg);
+    font: inherit;
+}
+
+.fm-crumb-segment {
+    display: inline-flex;
+    align-items: center;
+    min-width: 0;
 }
 
 .fm-crumb {

@@ -7,10 +7,64 @@ import { getResourceById } from "../../lib/resourceRegistry";
 import { isWorkspacePath } from "../../lib/paths";
 import { pathnameToModuleKey } from "../../lib/moduleStatusLog";
 import { useStatusBarLogStore } from "../../stores/statusBarLogStore";
+import {
+  useBackgroundTaskStore,
+  backgroundTaskStatusBarLevel,
+  countRunningBackgroundTasks,
+  formatBackgroundTaskStatusMessage,
+  getPrimaryBackgroundTaskForStatusBar,
+} from "../../stores/backgroundTaskStore";
 import { useI18n } from "../../i18n";
 import { ConnectionPoolIndicator } from "./ConnectionPoolIndicator";
+import { BackgroundTasksWindow } from "./BackgroundTasksWindow";
 import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
 import { StatusBarAgentIndicator } from "./StatusBarAgentIndicator";
+
+/** 全局后台任务进度（切换模块后仍展示） */
+function StatusBarBackgroundTaskLog() {
+  const { t } = useI18n();
+  const setTaskListOpen = useBackgroundTaskStore((s) => s.setTaskListOpen);
+  const tasks = useBackgroundTaskStore((s) => s.tasks);
+  const primary = getPrimaryBackgroundTaskForStatusBar(tasks);
+  const runningCount = countRunningBackgroundTasks(tasks);
+
+  const handleOpenTasks = useCallback(() => {
+    setTaskListOpen(true);
+  }, [setTaskListOpen]);
+
+  const handleKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLSpanElement>) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        handleOpenTasks();
+      }
+    },
+    [handleOpenTasks],
+  );
+
+  if (!primary) {
+    return null;
+  }
+
+  const message = formatBackgroundTaskStatusMessage(primary, runningCount, t);
+  const level = backgroundTaskStatusBarLevel(primary.status);
+  const title = `${message}\n${t("shell.backgroundTasks.openHint")}`;
+
+  return (
+    <span
+      role="button"
+      tabIndex={0}
+      className={`statusbar-log statusbar-log--${level}`}
+      title={title}
+      aria-label={message}
+      onClick={handleOpenTasks}
+      onKeyDown={handleKeyDown}
+    >
+      {level === "progress" ? <span className="statusbar-dot yellow" aria-hidden /> : null}
+      {message}
+    </span>
+  );
+}
 
 /** 订阅当前激活模块的运行日志并展示在状态栏 */
 function StatusBarModuleLog() {
@@ -18,6 +72,9 @@ function StatusBarModuleLog() {
   const location = useLocation();
   const [copied, setCopied] = useState(false);
   const setActivePublisher = useStatusBarLogStore((s) => s.setActivePublisher);
+  const hasBackgroundTasks = useBackgroundTaskStore(
+    (s) => countRunningBackgroundTasks(s.tasks) > 0,
+  );
   const logEntry = useStatusBarLogStore((s) => {
     const key = s.activePublisher;
     return key ? s.logsByModule[key] : undefined;
@@ -54,7 +111,7 @@ function StatusBarModuleLog() {
     [handleCopy],
   );
 
-  if (!logEntry?.message) {
+  if (!logEntry?.message || hasBackgroundTasks) {
     return null;
   }
 
@@ -167,7 +224,9 @@ export function StatusBar() {
     return (
       <div className="statusbar">
         <ConnectionPoolIndicator />
+        <StatusBarBackgroundTaskLog />
         <StatusBarModuleLog />
+        <BackgroundTasksWindow />
         <span className="statusbar-item">
           <span className="statusbar-dot green" />
           {terminalState}
@@ -202,7 +261,9 @@ export function StatusBar() {
   return (
     <div className="statusbar">
       <ConnectionPoolIndicator />
+      <StatusBarBackgroundTaskLog />
       <StatusBarModuleLog />
+      <BackgroundTasksWindow />
       <span className="statusbar-spacer" />
       <StatusBarAgentIndicator />
       {showWorkspaceControls ? <StatusBarWorkspaceControls /> : null}

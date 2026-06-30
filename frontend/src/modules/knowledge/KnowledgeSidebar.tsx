@@ -36,7 +36,7 @@ import {
   type KnowledgeLibrarySection,
   type KnowledgeTreeNode,
 } from "./knowledgeTree";
-import { dispatchKnowledgeVectorized, loadKnowledgeVectorStatus, vectorizeKnowledgeEntry, KNOWLEDGE_VECTORIZED_EVENT, KNOWLEDGE_CHUNKS_CHANGED_EVENT } from "./knowledgeVectorize";
+import { loadKnowledgeVectorStatus, submitKnowledgeVectorize, isKnowledgeEntryVectorizing, subscribeKnowledgeVectorizeState, KNOWLEDGE_VECTORIZED_EVENT, KNOWLEDGE_CHUNKS_CHANGED_EVENT } from "./knowledgeVectorize";
 import { useKnowledgeOpenEntry } from "./useKnowledgeOpenEntry";
 
 const SECTION_STORAGE_KEY = "omnipanel-knowledge-sidebar-sections";
@@ -304,6 +304,9 @@ export function KnowledgeSidebar() {
   const [dropHint, setDropHint] = useState<DropHint | null>(null);
   const dragIdRef = useRef<string | null>(null);
   const newMenuRef = useRef<HTMLDivElement>(null);
+  const [, setVectorizeTick] = useState(0);
+
+  useEffect(() => subscribeKnowledgeVectorizeState(() => setVectorizeTick((n) => n + 1)), []);
 
   const { sections, toggleSection, setSectionExpanded } =
     usePersistedVerticalSplitSections<SidebarSectionKey>(SECTION_STORAGE_KEY, {
@@ -448,24 +451,13 @@ export function KnowledgeSidebar() {
         publishModuleStatusLog("knowledge", t("knowledge.vectorize.noModel"), "error");
         return;
       }
-      publishModuleStatusLog(
-        "knowledge",
-        t("knowledge.vectorize.parsing", { title: entry.title }),
-        "progress",
-      );
-      const result = await vectorizeKnowledgeEntry(entry.id, embeddingProvider, {
-        knowledgeChunkSize,
-        knowledgeChunkOverlap,
-      });
-      if (result.ok) {
-        publishModuleStatusLog(
-          "knowledge",
-          t("knowledge.vectorize.success", { count: result.chunkCount }),
-          "success",
-        );
-        dispatchKnowledgeVectorized(entry.id);
-      } else {
-        publishModuleStatusLog("knowledge", result.error, "error");
+      try {
+        await submitKnowledgeVectorize(entry.id, embeddingProvider, {
+          knowledgeChunkSize,
+          knowledgeChunkOverlap,
+        });
+      } catch (err) {
+        publishModuleStatusLog("knowledge", err instanceof Error ? err.message : String(err), "error");
       }
     },
     [embeddingProvider, knowledgeChunkOverlap, knowledgeChunkSize, t],
@@ -504,7 +496,7 @@ export function KnowledgeSidebar() {
               id: "vectorize",
               label: t("knowledge.vectorize.parse"),
               shortcut: ctxVectorized ? t("knowledge.vectorize.reparse") : undefined,
-              disabled: !embeddingProvider,
+              disabled: !embeddingProvider || isKnowledgeEntryVectorizing(ctxEntry.id),
               onClick: () => void handleVectorize(ctxEntry),
             },
             {

@@ -76,6 +76,8 @@ pub async fn pool_get_summary(state: State<'_, AppState>) -> Result<PoolSummary,
         }
     }
 
+    let worker_summary = state.worker_pool.summary().await;
+
     let categories = vec![
         cat("ssh", ssh_active, ssh_idle),
         cat("docker", docker_active, docker_idle),
@@ -83,6 +85,7 @@ pub async fn pool_get_summary(state: State<'_, AppState>) -> Result<PoolSummary,
         cat("redis", 0, redis_idle),
         cat("protocol", protocol_active, 0),
         cat("terminal", terminal_active, 0),
+        cat("background", worker_summary.active, worker_summary.idle),
     ];
 
     let active = categories.iter().map(|c| c.active).sum();

@@ -20,6 +20,31 @@ use crate::state::AppState;
 /// 内置本地文件连接 id。
 pub const LOCAL_CONNECTION_ID: &str = "__local__";
 
+/// Windows「此电脑」虚拟根路径（列出盘符）。
+pub const LOCAL_COMPUTER_ROOT: &str = "\\\\";
+
+fn is_local_computer_root(path: &str) -> bool {
+    path == LOCAL_COMPUTER_ROOT || path == "\\"
+}
+
+fn local_platform_name() -> &'static str {
+    if cfg!(windows) {
+        "windows"
+    } else if cfg!(target_os = "macos") {
+        "macos"
+    } else {
+        "linux"
+    }
+}
+
+fn local_computer_root_path() -> &'static str {
+    if cfg!(windows) {
+        LOCAL_COMPUTER_ROOT
+    } else {
+        "/"
+    }
+}
+
 pub(crate) fn mark_file_connection_online(state: &AppState, connection_id: &str) {
     if connection_id == LOCAL_CONNECTION_ID {
         return;
@@ -177,6 +202,10 @@ pub(crate) async fn load_file_connection(
 // ─── Local backend ───────────────────────────────────────────────────────────
 
 pub(crate) fn list_local_dir(path: &str) -> Result<Vec<FileEntry>, OmniError> {
+    #[cfg(windows)]
+    if is_local_computer_root(path) {
+        return list_windows_drives();
+    }
     let p = resolve_local_path(path)?;
     if !p.exists() {
         return Err(OmniError::new(
@@ -230,6 +259,62 @@ pub(crate) fn list_local_dir(path: &str) -> Result<Vec<FileEntry>, OmniError> {
             .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
     });
     Ok(entries)
+}
+
+#[cfg(windows)]
+fn list_windows_drives() -> Result<Vec<FileEntry>, OmniError> {
+    let mut entries = Vec::new();
+    for letter in b'A'..=b'Z' {
+        let drive = format!("{}:\\", letter as char);
+        if Path::new(&drive).exists() {
+            entries.push(FileEntry {
+                name: format!("{}:", letter as char),
+                path: drive,
+                kind: "dir".into(),
+                size: 0,
+                modified: 0,
+                permissions: None,
+            });
+        }
+    }
+    Ok(entries)
+}
+
+fn list_local_volumes() -> Vec<(String, String)> {
+    let mut volumes = Vec::new();
+    if cfg!(windows) {
+        for letter in b'A'..=b'Z' {
+            let drive = format!("{}:\\", letter as char);
+            if Path::new(&drive).exists() {
+                volumes.push((format!("{}:", letter as char), drive));
+            }
+        }
+    } else if cfg!(target_os = "macos") {
+        volumes.push(("/".to_string(), "/".to_string()));
+        if let Ok(read_dir) = std::fs::read_dir("/Volumes") {
+            for entry in read_dir.flatten() {
+                if entry.path().is_dir() {
+                    let name = entry.file_name().to_string_lossy().to_string();
+                    let path = entry.path().to_string_lossy().to_string();
+                    volumes.push((name, path));
+                }
+            }
+        }
+    } else {
+        volumes.push(("/".to_string(), "/".to_string()));
+        for mount_root in ["/mnt", "/media"] {
+            if let Ok(read_dir) = std::fs::read_dir(mount_root) {
+                for entry in read_dir.flatten() {
+                    if entry.path().is_dir() {
+                        let name = format!("{mount_root}/{}", entry.file_name().to_string_lossy());
+                        let path = entry.path().to_string_lossy().to_string();
+                        volumes.push((name, path));
+                    }
+                }
+            }
+        }
+    }
+    volumes
 }
 
 fn local_mkdir(path: &str) -> Result<(), OmniError> {
@@ -908,6 +993,91 @@ fn normalize_s3_object_key(path: &str) -> String {
     path.trim_start_matches('/').to_string()
 }
 
+fn is_s3_prefix_delete_path(path: &str, entry_kind: Option<&str>) -> bool {
+    if entry_kind == Some("dir") {
+        return true;
+    }
+    normalize_s3_object_key(path).ends_with('/')
+}
+
+fn normalize_s3_delete_prefix(path: &str, entry_kind: Option<&str>) -> String {
+    let mut key = normalize_s3_object_key(path);
+    if is_s3_prefix_delete_path(path, entry_kind) && !key.ends_with('/') {
+        key.push('/');
+    }
+    key
+}
+
+/// 删除 S3 前缀下全部对象（含子目录中的文件），并尝试删除目录占位对象。
+async fn delete_s3_prefix_recursive(bucket: &Bucket, prefix: &str) -> Result<(), OmniError> {
+    let prefix = if prefix.ends_with('/') {
+        prefix.to_string()
+    } else {
+        format!("{prefix}/")
+    };
+    const S3_DELETE_PAGE_SIZE: usize = 1000;
+    let mut token: Option<String> = None;
+    loop {
+        let (page, _) = bucket
+            .list_page(
+                prefix.clone(),
+                None,
+                token.clone(),
+                None,
+                Some(S3_DELETE_PAGE_SIZE),
+            )
+            .await
+            .map_err(|e| {
+                OmniError::new(ErrorCode::Io, "列出 S3 对象失败").with_cause(e.to_string())
+            })?;
+        for obj in page.contents {
+            bucket.delete_object(&obj.key).await.map_err(|e| {
+                OmniError::new(ErrorCode::Io, "S3 删除对象失败").with_cause(e.to_string())
+            })?;
+        }
+        if !page.is_truncated {
+            break;
+        }
+        token = page.next_continuation_token;
+        if token.is_none() {
+            break;
+        }
+    }
+    let _ = bucket.delete_object(&prefix).await;
+    Ok(())
+}
+
+async fn delete_s3_path(bucket: &Bucket, path: &str, entry_kind: Option<&str>) -> Result<(), OmniError> {
+    let key = normalize_s3_object_key(path);
+    if key.is_empty() {
+        return Err(OmniError::invalid_input("不能删除存储桶根目录"));
+    }
+    if is_s3_prefix_delete_path(path, entry_kind) {
+        let prefix = normalize_s3_delete_prefix(path, entry_kind);
+        delete_s3_prefix_recursive(bucket, &prefix).await
+    } else {
+        bucket.delete_object(&key).await.map_err(|e| {
+            OmniError::new(ErrorCode::Io, "S3 删除失败").with_cause(e.to_string())
+        })?;
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod s3_delete_tests {
+    use super::{is_s3_prefix_delete_path, normalize_s3_delete_prefix};
+
+    #[test]
+    fn prefix_delete_detects_trailing_slash_and_kind() {
+        assert!(is_s3_prefix_delete_path("foo/", None));
+        assert!(is_s3_prefix_delete_path("root/foo/bar/", None));
+        assert!(is_s3_prefix_delete_path("foo/bar", Some("dir")));
+        assert!(!is_s3_prefix_delete_path("foo/bar.txt", None));
+        assert!(!is_s3_prefix_delete_path("/object.key", None));
+        assert_eq!(normalize_s3_delete_prefix("foo/bar", Some("dir")), "foo/bar/");
+    }
+}
+
 /// 列出文件管理器可用连接（含内置本机）。
 #[tauri::command]
 #[specta::specta]
@@ -1418,6 +1588,7 @@ pub async fn file_delete(
     state: State<'_, AppState>,
     connection_id: String,
     path: String,
+    entry_kind: Option<String>,
 ) -> Result<(), OmniError> {
     if connection_id == LOCAL_CONNECTION_ID {
         return local_delete(&path);
@@ -1458,11 +1629,7 @@ pub async fn file_delete(
         }
         FileProtocol::S3 => {
             let bucket = s3_bucket(&cfg, &secret)?;
-            let key = normalize_s3_object_key(&path);
-            bucket.delete_object(&key).await.map_err(|e| {
-                OmniError::new(ErrorCode::Io, "S3 删除失败").with_cause(e.to_string())
-            })?;
-            Ok(())
+            delete_s3_path(&bucket, &path, entry_kind.as_deref()).await
         }
     }
 }
@@ -1475,6 +1642,35 @@ pub struct FileQuickPaths {
     pub desktop: String,
     pub documents: String,
     pub downloads: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct FileLocalVolume {
+    pub label: String,
+    pub path: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct FileLocalSystemInfo {
+    pub platform: String,
+    pub computer_root: String,
+    pub volumes: Vec<FileLocalVolume>,
+}
+
+/// 本机文件系统平台信息与卷/盘符列表。
+#[tauri::command]
+#[specta::specta]
+pub async fn file_local_system_info() -> Result<FileLocalSystemInfo, OmniError> {
+    Ok(FileLocalSystemInfo {
+        platform: local_platform_name().to_string(),
+        computer_root: local_computer_root_path().to_string(),
+        volumes: list_local_volumes()
+            .into_iter()
+            .map(|(label, path)| FileLocalVolume { label, path })
+            .collect(),
+    })
 }
 
 /// 本机常用目录快捷路径。

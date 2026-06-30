@@ -14,7 +14,7 @@ import { WorkspaceEmptyPage } from "../../components/ui/WorkspaceEmptyPage";
 import { useI18n } from "../../i18n";
 import { migrateLayoutStorage } from "../../lib/layoutMigration";
 import { appConfirm } from "../../lib/appConfirm";
-import type { Connection, FileIndexStatus, FileManagerConnectionInfo } from "../../ipc/bindings";
+import type { Connection, FileIndexStatus, FileLocalSystemInfo, FileManagerConnectionInfo } from "../../ipc/bindings";
 import type { FileIndexProgress } from "./fileApi";
 import { useConnectionStore } from "../../stores/connectionStore";
 import { useFileManagerStore } from "../../stores/fileManagerStore";
@@ -33,6 +33,7 @@ import {
   fmtError,
   getFileIndexStatus,
   listFileConnections,
+  loadLocalSystemInfo,
   loadQuickPaths,
   testFileConnection,
 } from "./fileApi";
@@ -75,6 +76,7 @@ function FilesBrowserView() {
     documents: string;
     downloads: string;
   } | null>(null);
+  const [localSystemInfo, setLocalSystemInfo] = useState<FileLocalSystemInfo | null>(null);
   const [connBanner, setConnBanner] = useState<{ kind: "info" | "error"; text: string } | null>(null);
   const [indexStatuses, setIndexStatuses] = useState<Record<string, FileIndexStatus>>({});
   const activeNavigateRef = useRef<((path: string) => void) | null>(null);
@@ -183,6 +185,7 @@ function FilesBrowserView() {
   useEffect(() => {
     void loadConnections();
     void loadQuickPaths().then(setQuickPaths).catch(() => undefined);
+    void loadLocalSystemInfo().then(setLocalSystemInfo).catch(() => undefined);
     void refreshConnections();
   }, [loadConnections, refreshConnections]);
 
@@ -375,6 +378,7 @@ function FilesBrowserView() {
         <FileConnectionPanel
           connection={conn}
           quickPaths={quickPaths}
+          localSystemInfo={localSystemInfo}
           isActive={activePanelId === panelId}
           savedState={panelStates[connId] ?? null}
           onPatchStatus={patchConnectionStatus}
@@ -382,7 +386,7 @@ function FilesBrowserView() {
         />
       );
     },
-    [activePanelId, connections, panelStates, patchConnectionStatus, quickPaths, registerNavigate],
+    [activePanelId, connections, localSystemInfo, panelStates, patchConnectionStatus, quickPaths, registerNavigate],
   );
 
   if (!sessionHydrated) {

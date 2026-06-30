@@ -5,9 +5,9 @@ import { commands, type PoolCategorySummary, type PoolSummary } from "../ipc/bin
 import { useSshPoolSessionStore } from "./sshPoolSessionStore";
 
 /** 连接池分类，与后端 `PoolCategorySummary.kind` 对齐。 */
-export type PoolKind = "ssh" | "docker" | "database" | "redis" | "protocol" | "terminal";
+export type PoolKind = "ssh" | "docker" | "database" | "redis" | "protocol" | "terminal" | "background";
 
-const POOL_KINDS: PoolKind[] = ["ssh", "docker", "database", "redis", "protocol", "terminal"];
+const POOL_KINDS: PoolKind[] = ["ssh", "docker", "database", "redis", "protocol", "terminal", "background"];
 
 const EMPTY_LOCAL: Record<PoolKind, Record<string, number>> = {
   ssh: {},
@@ -16,6 +16,7 @@ const EMPTY_LOCAL: Record<PoolKind, Record<string, number>> = {
   redis: {},
   protocol: {},
   terminal: {},
+  background: {},
 };
 
 type ConnectionPoolState = {

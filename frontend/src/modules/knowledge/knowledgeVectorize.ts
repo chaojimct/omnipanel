@@ -5,10 +5,12 @@ import type {
   KnowledgeDeleteChunksResult,
   KnowledgeRecallHit,
 } from "../../ipc/bindings";
+import { listen } from "@tauri-apps/api/event";
 import {
   clampKnowledgeChunkOverlap,
   clampKnowledgeChunkSize,
 } from "../../stores/settingsStore";
+import type { BackgroundTaskInfo } from "../../stores/backgroundTaskStore";
 
 type KnowledgeVectorizeSettings = {
   knowledgeChunkSize: number;
@@ -53,6 +55,133 @@ export async function vectorizeKnowledgeEntry(
     return { ok: true, chunkCount: res.data.chunkCount ?? 0 };
   }
   return { ok: false, error: res.error.message };
+}
+
+const vectorizingEntryIds = new Set<string>();
+const entryIdByVectorizeTaskId = new Map<string, string>();
+const vectorizeStateListeners = new Set<() => void>();
+let knowledgeBgTaskInitialized = false;
+
+function notifyVectorizeStateChange() {
+  for (const listener of vectorizeStateListeners) {
+    listener();
+  }
+}
+
+export function subscribeKnowledgeVectorizeState(listener: () => void): () => void {
+  vectorizeStateListeners.add(listener);
+  return () => {
+    vectorizeStateListeners.delete(listener);
+  };
+}
+
+export function isKnowledgeEntryVectorizing(entryId: string): boolean {
+  return vectorizingEntryIds.has(entryId);
+}
+
+function markKnowledgeVectorizing(entryId: string, taskId: string) {
+  vectorizingEntryIds.add(entryId);
+  entryIdByVectorizeTaskId.set(taskId, entryId);
+  notifyVectorizeStateChange();
+}
+
+function unmarkKnowledgeVectorizingByTaskId(taskId: string) {
+  const entryId = entryIdByVectorizeTaskId.get(taskId);
+  if (entryId) {
+    vectorizingEntryIds.delete(entryId);
+    entryIdByVectorizeTaskId.delete(taskId);
+    notifyVectorizeStateChange();
+  }
+}
+
+export interface BgTaskKnowledgeEvent {
+  taskId: string;
+  eventType: string;
+  entryId: string;
+  chunkCount?: number | null;
+  error?: string | null;
+}
+
+/** 订阅知识库后台任务完成事件，在 initBackgroundTasks 中调用一次。 */
+export function initKnowledgeVectorizeBackgroundTasks() {
+  if (knowledgeBgTaskInitialized) return;
+  knowledgeBgTaskInitialized = true;
+
+  const unsubs: Array<() => void> = [];
+
+  listen<BgTaskKnowledgeEvent>("bg-task-knowledge-event", (event) => {
+    const payload = event.payload;
+    unmarkKnowledgeVectorizingByTaskId(payload.taskId);
+    if (payload.eventType === "vectorize_done") {
+      dispatchKnowledgeVectorized(payload.entryId);
+    }
+  })
+    .then((fn) => unsubs.push(fn))
+    .catch(() => {});
+
+  listen<BackgroundTaskInfo>("bg-task-update", (event) => {
+    const task = event.payload;
+    if (task.kind !== "knowledgeVectorize") return;
+    if (
+      task.status === "completed" ||
+      task.status === "failed" ||
+      task.status === "cancelled"
+    ) {
+      unmarkKnowledgeVectorizingByTaskId(task.id);
+    }
+  })
+    .then((fn) => unsubs.push(fn))
+    .catch(() => {});
+
+  if (import.meta.hot) {
+    import.meta.hot.dispose(() => {
+      for (const fn of unsubs) fn();
+    });
+  }
+}
+
+export async function submitKnowledgeVectorize(
+  entryId: string,
+  provider: EmbeddingProviderConfig,
+  knowledgeSettings: KnowledgeVectorizeSettings,
+): Promise<string> {
+  if (provider.apiStandard.toLowerCase() === "anthropic") {
+    throw new Error("Anthropic 模型暂不支持 embedding，请选用 OpenAI 兼容模型");
+  }
+  if (!provider.modelName.trim()) {
+    throw new Error("未配置 Embedding 模型名称");
+  }
+  if (!provider.baseUrl.trim()) {
+    throw new Error("未配置 Embedding API Base URL");
+  }
+  if (isKnowledgeEntryVectorizing(entryId)) {
+    throw new Error("该文档正在向量化中，请稍候");
+  }
+
+  const chunkSize = clampKnowledgeChunkSize(knowledgeSettings.knowledgeChunkSize);
+  const chunkOverlap = clampKnowledgeChunkOverlap(
+    knowledgeSettings.knowledgeChunkOverlap,
+    chunkSize,
+  );
+
+  const res = await commands.bgTaskSubmitKnowledgeVectorize({
+    entryId,
+    provider: {
+      providerId: provider.providerId,
+      modelName: provider.modelName.trim(),
+      baseUrl: provider.baseUrl.trim(),
+      apiKey: provider.apiKey.trim(),
+      apiStandard: provider.apiStandard,
+    },
+    chunkSize,
+    chunkOverlap,
+  });
+
+  if (res.status === "ok") {
+    markKnowledgeVectorizing(entryId, res.data);
+    return res.data;
+  }
+  throw new Error(res.error.message);
 }
 
 export const KNOWLEDGE_VECTORIZED_EVENT = "omnipanel:knowledge-vectorized";

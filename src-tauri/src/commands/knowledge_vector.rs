@@ -1,13 +1,16 @@
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use omnipanel_error::OmniError;
 use omnipanel_store::{
-    KnowledgeChunkListResult, KnowledgeChunkPreview, KnowledgeChunkRecord, KnowledgeRecallHit,
-    KnowledgeVectorStatus, chunk_text,
+    KnowledgeChunkListResult, KnowledgeChunkRecord, KnowledgeRecallHit,
+    KnowledgeVectorStatus, Storage, chunk_text,
 };
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use tauri::{Emitter, State};
+use tauri::State;
+use tokio::sync::Mutex;
 
 use crate::state::AppState;
 
@@ -50,28 +53,6 @@ pub struct KnowledgeDeleteChunksResult {
     pub remaining: i64,
 }
 
-/// 向量化进度（经 `knowledge-vectorize-progress` 事件推送至前端状态栏）。
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct KnowledgeVectorizeProgress {
-    pub entry_id: String,
-    pub title: String,
-    /// chunking | embedding | saving
-    pub phase: String,
-    #[serde(rename = "chunkTotal")]
-    pub chunk_total: u32,
-    #[serde(rename = "batchIndex")]
-    pub batch_index: u32,
-    #[serde(rename = "batchTotal")]
-    pub batch_total: u32,
-    #[serde(rename = "chunksDone")]
-    pub chunks_done: u32,
-}
-
-fn emit_vectorize_progress(state: &AppState, payload: KnowledgeVectorizeProgress) {
-    let _ = state.app_handle.emit("knowledge-vectorize-progress", payload);
-}
-
 fn now_millis() -> i64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -81,6 +62,30 @@ fn now_millis() -> i64 {
 
 fn new_chunk_id(entry_id: &str, index: usize) -> String {
     format!("{entry_id}:chunk:{index}")
+}
+
+fn is_ollama_embedding_provider(provider: &EmbeddingProviderConfig) -> bool {
+    provider.provider_id == "ollama" || provider.api_standard.eq_ignore_ascii_case("ollama")
+}
+
+/// Ollama / 本地 embedding 请求不走系统代理，避免 localhost 被代理拦截。
+fn embedding_http_client() -> Result<Client, String> {
+    Client::builder()
+        .no_proxy()
+        .connect_timeout(std::time::Duration::from_secs(15))
+        .timeout(std::time::Duration::from_secs(300))
+        .build()
+        .map_err(|e| format!("创建 HTTP 客户端失败: {e}"))
+}
+
+fn normalize_localhost_host(url: &str) -> String {
+    url.replace("://localhost", "://127.0.0.1")
+}
+
+fn ollama_root_url(base_url: &str) -> String {
+    let trimmed = base_url.trim().trim_end_matches('/');
+    let without_v1 = trimmed.strip_suffix("/v1").unwrap_or(trimmed);
+    normalize_localhost_host(without_v1)
 }
 
 async fn fetch_openai_embeddings(
@@ -98,6 +103,7 @@ async fn fetch_openai_embeddings(
     struct Body<'a> {
         model: &'a str,
         input: &'a [String],
+        encoding_format: &'static str,
     }
     #[derive(Deserialize)]
     struct EmbeddingItem {
@@ -109,14 +115,18 @@ async fn fetch_openai_embeddings(
         data: Vec<EmbeddingItem>,
     }
 
-    let mut req = client.post(&url).json(&Body { model, input: inputs });
+    let mut req = client.post(&url).json(&Body {
+        model,
+        input: inputs,
+        encoding_format: "float",
+    });
     if !api_key.trim().is_empty() {
         req = req.bearer_auth(api_key.trim());
     }
     let resp = req
         .send()
         .await
-        .map_err(|e| format!("请求 embedding 接口失败: {e}"))?;
+        .map_err(|e| format!("请求 embedding 接口失败 ({url}): {e}"))?;
     if !resp.status().is_success() {
         let status = resp.status();
         let body = resp.text().await.unwrap_or_default();
@@ -138,112 +148,232 @@ async fn fetch_openai_embeddings(
     Ok(ordered)
 }
 
-/// 将知识条目分块并向量化存储。
+async fn fetch_ollama_embeddings(
+    client: &Client,
+    base_url: &str,
+    model: &str,
+    inputs: &[String],
+) -> Result<Vec<Vec<f32>>, String> {
+    if inputs.is_empty() {
+        return Ok(Vec::new());
+    }
+    let root = ollama_root_url(base_url);
+    let url = format!("{root}/api/embed");
+    #[derive(Serialize)]
+    struct Body<'a> {
+        model: &'a str,
+        input: &'a [String],
+    }
+    #[derive(Deserialize)]
+    struct Response {
+        embeddings: Vec<Vec<f32>>,
+    }
+
+    let resp = client
+        .post(&url)
+        .json(&Body { model, input: inputs })
+        .send()
+        .await
+        .map_err(|e| format!("请求 Ollama embedding 接口失败 ({url}): {e}"))?;
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let body = resp.text().await.unwrap_or_default();
+        // 旧版 Ollama 可能尚未提供 /api/embed，回退 OpenAI 兼容端点
+        if status.as_u16() == 404 || status.as_u16() == 405 {
+            let openai_base = format!("{root}/v1");
+            return fetch_openai_embeddings(client, &openai_base, "", model, inputs).await;
+        }
+        return Err(format!("Ollama embedding 接口返回 {status}: {body}"));
+    }
+    let parsed: Response = resp
+        .json()
+        .await
+        .map_err(|e| format!("解析 Ollama embedding 响应失败: {e}"))?;
+    if parsed.embeddings.len() != inputs.len() {
+        return Err(format!(
+            "Ollama embedding 数量不匹配：期望 {}，实际 {}",
+            inputs.len(),
+            parsed.embeddings.len()
+        ));
+    }
+    if parsed.embeddings.iter().any(|item| item.is_empty()) {
+        return Err("Ollama embedding 响应包含空向量".to_string());
+    }
+    Ok(parsed.embeddings)
+}
+
+async fn fetch_provider_embeddings(
+    provider: &EmbeddingProviderConfig,
+    inputs: &[String],
+) -> Result<Vec<Vec<f32>>, String> {
+    let client = embedding_http_client()?;
+    if is_ollama_embedding_provider(provider) {
+        fetch_ollama_embeddings(&client, &provider.base_url, &provider.model_name, inputs).await
+    } else {
+        fetch_openai_embeddings(
+            &client,
+            &provider.base_url,
+            &provider.api_key,
+            &provider.model_name,
+            inputs,
+        )
+        .await
+    }
+}
+
+#[cfg(test)]
+mod embedding_tests {
+    use super::{is_ollama_embedding_provider, ollama_root_url, EmbeddingProviderConfig};
+
+    #[test]
+    fn ollama_root_strips_v1_and_normalizes_localhost() {
+        assert_eq!(
+            ollama_root_url("http://localhost:11434/v1"),
+            "http://127.0.0.1:11434"
+        );
+        assert_eq!(ollama_root_url("http://127.0.0.1:11434"), "http://127.0.0.1:11434");
+    }
+
+    #[test]
+    fn detects_ollama_provider() {
+        let provider = EmbeddingProviderConfig {
+            provider_id: "ollama".into(),
+            model_name: "nomic-embed-text".into(),
+            base_url: "http://localhost:11434/v1".into(),
+            api_key: String::new(),
+            api_standard: "ollama".into(),
+        };
+        assert!(is_ollama_embedding_provider(&provider));
+    }
+}
+
+/// 将知识条目分块并向量化存储（同步命令，供兼容调用）。
 #[tauri::command]
 #[specta::specta]
 pub async fn knowledge_vectorize(
     state: State<'_, AppState>,
     args: KnowledgeVectorizeArgs,
 ) -> Result<KnowledgeVectorizeResult, OmniError> {
+    let cancel = Arc::new(AtomicBool::new(false));
+    let progress: Arc<dyn Fn(String, u32, u32, Option<u32>, Option<u32>) + Send + Sync> =
+        Arc::new(|_msg, _index, _total, _row_done, _row_total| {});
+    execute_knowledge_vectorize(state.storage.clone(), args, cancel, progress)
+        .await
+        .map_err(OmniError::connection)
+}
+
+/// 后台任务执行：分块、嵌入、持久化；通过 progress 回调更新任务进度。
+pub async fn execute_knowledge_vectorize(
+    storage: Arc<Mutex<Storage>>,
+    args: KnowledgeVectorizeArgs,
+    cancel: Arc<AtomicBool>,
+    progress: Arc<dyn Fn(String, u32, u32, Option<u32>, Option<u32>) + Send + Sync>,
+) -> Result<KnowledgeVectorizeResult, String> {
     if args.provider.api_standard.to_lowercase() == "anthropic" {
-        return Err(OmniError::invalid_input(
-            "Anthropic 提供商暂不支持 embedding，请在设置中选用 OpenAI 兼容模型",
-        ));
+        return Err(
+            "Anthropic 提供商暂不支持 embedding，请在设置中选用 OpenAI 兼容模型".to_string(),
+        );
     }
     let chunk_size = args.chunk_size.clamp(100, 8000) as usize;
     let chunk_overlap = args.chunk_overlap.clamp(0, chunk_size as u32 - 1) as usize;
 
     let entry = {
-        let storage = state.storage.lock().await;
-        storage
-            .get_knowledge(&args.entry_id)?
-            .ok_or_else(|| OmniError::invalid_input("知识条目不存在"))?
+        let storage_guard = storage.lock().await;
+        storage_guard
+            .get_knowledge(&args.entry_id)
+            .map_err(|e| e.user_message())?
+            .ok_or_else(|| "知识条目不存在".to_string())?
     };
 
     if entry.node_type == "folder" {
-        return Err(OmniError::invalid_input("文件夹不支持向量化，请选择文档"));
+        return Err("文件夹不支持向量化，请选择文档".to_string());
     }
 
     let source = format!("{}\n\n{}", entry.title.trim(), entry.content.trim());
     let entry_title = entry.title.clone();
     let pieces = chunk_text(&source, chunk_size, chunk_overlap);
     if pieces.is_empty() {
-        return Err(OmniError::invalid_input("文档内容为空，无法向量化"));
+        return Err("文档内容为空，无法向量化".to_string());
     }
 
     let chunk_total = pieces.len() as u32;
-    emit_vectorize_progress(
-        &state,
-        KnowledgeVectorizeProgress {
-            entry_id: args.entry_id.clone(),
-            title: entry_title.clone(),
-            phase: "chunking".into(),
-            chunk_total,
-            batch_index: 0,
-            batch_total: 0,
-            chunks_done: 0,
-        },
+    progress(
+        format!("正在分块：{entry_title}（{chunk_total} 段）"),
+        0,
+        1,
+        Some(0),
+        Some(chunk_total),
     );
 
-    let client = Client::new();
+    if cancel.load(Ordering::Relaxed) {
+        return Err("cancelled".to_string());
+    }
+
+    let client = embedding_http_client().map_err(|e| e)?;
     let mut embeddings: Vec<Vec<f32>> = Vec::with_capacity(pieces.len());
     const BATCH: usize = 32;
     let batch_total = ((pieces.len() + BATCH - 1) / BATCH) as u32;
     for (batch_idx, batch) in pieces.chunks(BATCH).enumerate() {
+        if cancel.load(Ordering::Relaxed) {
+            return Err("cancelled".to_string());
+        }
         let batch_index = (batch_idx + 1) as u32;
-        emit_vectorize_progress(
-            &state,
-            KnowledgeVectorizeProgress {
-                entry_id: args.entry_id.clone(),
-                title: entry_title.clone(),
-                phase: "embedding".into(),
-                chunk_total,
-                batch_index,
-                batch_total,
-                chunks_done: embeddings.len() as u32,
-            },
+        progress(
+            format!(
+                "正在嵌入 ({batch_index}/{batch_total})：{entry_title}"
+            ),
+            batch_index,
+            batch_total,
+            Some(embeddings.len() as u32),
+            Some(chunk_total),
         );
         let batch_inputs: Vec<String> = batch.to_vec();
-        let batch_vectors = fetch_openai_embeddings(
-            &client,
-            &args.provider.base_url,
-            &args.provider.api_key,
-            &args.provider.model_name,
-            &batch_inputs,
-        )
-        .await
+        let batch_vectors = if is_ollama_embedding_provider(&args.provider) {
+            fetch_ollama_embeddings(
+                &client,
+                &args.provider.base_url,
+                &args.provider.model_name,
+                &batch_inputs,
+            )
+            .await
+        } else {
+            fetch_openai_embeddings(
+                &client,
+                &args.provider.base_url,
+                &args.provider.api_key,
+                &args.provider.model_name,
+                &batch_inputs,
+            )
+            .await
+        }
         .map_err(|e| {
-            OmniError::connection(format!(
+            format!(
                 "provider {} / {}: {e}",
                 args.provider.provider_id, args.provider.model_name
-            ))
+            )
         })?;
         embeddings.extend(batch_vectors);
-        emit_vectorize_progress(
-            &state,
-            KnowledgeVectorizeProgress {
-                entry_id: args.entry_id.clone(),
-                title: entry_title.clone(),
-                phase: "embedding".into(),
-                chunk_total,
-                batch_index,
-                batch_total,
-                chunks_done: embeddings.len() as u32,
-            },
+        progress(
+            format!(
+                "正在嵌入 ({batch_index}/{batch_total})：{entry_title}"
+            ),
+            batch_index,
+            batch_total,
+            Some(embeddings.len() as u32),
+            Some(chunk_total),
         );
     }
 
-    emit_vectorize_progress(
-        &state,
-        KnowledgeVectorizeProgress {
-            entry_id: args.entry_id.clone(),
-            title: entry_title.clone(),
-            phase: "saving".into(),
-            chunk_total,
-            batch_index: batch_total,
-            batch_total,
-            chunks_done: chunk_total,
-        },
+    if cancel.load(Ordering::Relaxed) {
+        return Err("cancelled".to_string());
+    }
+
+    progress(
+        format!("正在保存：{entry_title}"),
+        batch_total,
+        batch_total,
+        Some(chunk_total),
+        Some(chunk_total),
     );
 
     let embedded_at = now_millis();
@@ -263,9 +393,19 @@ pub async fn knowledge_vectorize(
 
     let chunk_count = records.len() as u32;
     {
-        let storage = state.storage.lock().await;
-        storage.replace_knowledge_chunks(&args.entry_id, &records)?;
+        let storage_guard = storage.lock().await;
+        storage_guard
+            .replace_knowledge_chunks(&args.entry_id, &records)
+            .map_err(|e| e.user_message())?;
     }
+
+    progress(
+        format!("向量化完成：{entry_title}（{chunk_count} 段）"),
+        batch_total,
+        batch_total,
+        Some(chunk_total),
+        Some(chunk_total),
+    );
 
     Ok(KnowledgeVectorizeResult {
         entry_id: args.entry_id,
@@ -353,21 +493,14 @@ pub async fn knowledge_recall_test(
         }
     }
 
-    let client = Client::new();
-    let query_vectors = fetch_openai_embeddings(
-        &client,
-        &args.provider.base_url,
-        &args.provider.api_key,
-        &args.provider.model_name,
-        &[query.to_string()],
-    )
-    .await
-    .map_err(|e| {
-        OmniError::connection(format!(
-            "provider {} / {}: {e}",
-            args.provider.provider_id, args.provider.model_name
-        ))
-    })?;
+    let query_vectors = fetch_provider_embeddings(&args.provider, &[query.to_string()])
+        .await
+        .map_err(|e| {
+            OmniError::connection(format!(
+                "provider {} / {}: {e}",
+                args.provider.provider_id, args.provider.model_name
+            ))
+        })?;
     let query_embedding = query_vectors
         .into_iter()
         .next()
