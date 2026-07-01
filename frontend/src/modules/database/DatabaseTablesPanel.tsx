@@ -3,11 +3,12 @@ import { useI18n } from "../../i18n";
 import { textSearchMatches } from "../../lib/textSearchMatch";
 import { ScopedSearch } from "../../components/ui/ScopedSearch";
 import { DockHandle, DockLayout, DockPanel } from "../../components/dock";
-import { fetchTableDdl } from "./api";
+import { fetchTableDdl, fetchTableDetails, type DbTableDetails } from "./api";
 import { supportsTableDesign } from "./tableDesigner/resolveTableDesignerDriver";
 import { formatSqlDdl } from "./formatSqlDdl";
 import type { SchemaDatabaseSelection, SchemaTableSelection } from "./SchemaBrowser";
 import { TableDdlViewer } from "./TableDdlViewer";
+import { TableDetailsSummary } from "./TableDetailsSummary";
 import { useDbSchemaCacheStore } from "../../stores/dbSchemaCacheStore";
 import {
   buildTableNameTree,
@@ -189,6 +190,9 @@ export function DatabaseTablesPanel({
   const [search, setSearch] = useState("");
   const [viewMode, setViewMode] = useState<TablesPanelViewMode>(readStoredViewMode);
   const [previewTableName, setPreviewTableName] = useState<string | null>(null);
+  const [tableDetails, setTableDetails] = useState<DbTableDetails | null>(null);
+  const [detailsLoading, setDetailsLoading] = useState(false);
+  const [detailsError, setDetailsError] = useState<string | null>(null);
   const [ddl, setDdl] = useState("");
   const [ddlLoading, setDdlLoading] = useState(false);
   const [ddlError, setDdlError] = useState<string | null>(null);
@@ -211,6 +215,8 @@ export function DatabaseTablesPanel({
   useEffect(() => {
     setSearch("");
     setPreviewTableName(null);
+    setTableDetails(null);
+    setDetailsError(null);
     setDdl("");
     setDdlError(null);
     setExpandedFolders(new Set());
@@ -254,6 +260,9 @@ export function DatabaseTablesPanel({
 
   useEffect(() => {
     if (!previewTableName) {
+      setTableDetails(null);
+      setDetailsError(null);
+      setDetailsLoading(false);
       setDdl("");
       setDdlError(null);
       setDdlLoading(false);
@@ -261,9 +270,29 @@ export function DatabaseTablesPanel({
     }
 
     let cancelled = false;
+    setDetailsLoading(true);
+    setDetailsError(null);
+    setTableDetails(null);
     setDdlLoading(true);
     setDdlError(null);
     setDdl("");
+
+    void fetchTableDetails(selection.connection, selection.dbName, previewTableName)
+      .then((details) => {
+        if (!cancelled) {
+          setTableDetails(details);
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setDetailsError(String(err));
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setDetailsLoading(false);
+        }
+      });
 
     void fetchTableDdl(selection.connection, selection.dbName, previewTableName)
       .then((raw) => {
@@ -426,6 +455,12 @@ export function DatabaseTablesPanel({
                       </svg>
                     </button>
                   </div>
+                  <TableDetailsSummary
+                    details={tableDetails}
+                    loading={detailsLoading}
+                    error={detailsError}
+                    fallbackComment={tableComments.get(previewTableName)}
+                  />
                   <div className="db-tables-panel-ddl-content">
                     {ddlLoading && (
                       <div className="db-tables-panel-ddl-status">{t("database.tablesPanel.ddlLoading")}</div>

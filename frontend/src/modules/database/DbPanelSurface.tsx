@@ -179,6 +179,13 @@ export const DbPanelSurface = memo(function DbPanelSurface({ tab }: DbPanelSurfa
     [ws.closeSqlResultSession, tab.id],
   );
 
+  const handlePinSession = useCallback(
+    (sessionId: string, pinned: boolean) => {
+      ws.setSqlResultSessionPinned(tab.id, sessionId, pinned);
+    },
+    [ws.setSqlResultSessionPinned, tab.id],
+  );
+
   const editorContent = (
     <div className="db-editor-area">
       <div className="sql-toolbar">
@@ -287,6 +294,7 @@ export const DbPanelSurface = memo(function DbPanelSurface({ tab }: DbPanelSurfa
         activeSessionId={tabState.activeResultSessionId}
         onActiveSessionChange={handleActiveSessionChange}
         onCloseSession={handleCloseSession}
+        onPinSession={handlePinSession}
       />
     </div>
   );

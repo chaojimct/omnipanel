@@ -1,6 +1,19 @@
-import { requestAppConfirm } from "../stores/appDialogStore";
+import { nativeConfirm, type NativeDialogOptions } from "./nativeDialog";
 
-/** 应用内确认框，替代 window.confirm / Tauri 原生 dialog */
-export function appConfirm(message: string, title = "OmniPanel"): Promise<boolean> {
-  return requestAppConfirm(message, title);
+export type AppConfirmOptions = Pick<NativeDialogOptions, "okLabel" | "cancelLabel" | "kind"> & {
+  confirmLabel?: string;
+};
+
+/** 系统原生确认框 */
+export function appConfirm(
+  message: string,
+  title = "OmniPanel",
+  options?: AppConfirmOptions,
+): Promise<boolean> {
+  return nativeConfirm(message, {
+    title,
+    kind: options?.kind ?? "warning",
+    okLabel: options?.confirmLabel ?? options?.okLabel,
+    cancelLabel: options?.cancelLabel,
+  });
 }

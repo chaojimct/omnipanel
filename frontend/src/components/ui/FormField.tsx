@@ -6,9 +6,11 @@ export interface FormFieldProps {
   /** 关联控件 id */
   htmlFor?: string;
   /** 字段说明，悬停 label 旁问号时显示 */
-  description?: string;
+  description?: ReactNode;
   /** 输入框下方的补充说明（较长文本） */
   hint?: ReactNode;
+  /** 垂直（默认）或水平（label 左、控件右） */
+  layout?: "vertical" | "horizontal";
   children: ReactNode;
   className?: string;
 }
@@ -26,11 +28,18 @@ export function FormField({
   htmlFor,
   description,
   hint,
+  layout = "vertical",
   children,
   className,
 }: FormFieldProps) {
   const tooltipId = useId();
-  const rootClass = ["form-field", className].filter(Boolean).join(" ");
+  const rootClass = [
+    "form-field",
+    layout === "horizontal" ? "form-field--horizontal" : null,
+    className,
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   return (
     <div className={rootClass}>
@@ -40,7 +49,7 @@ export function FormField({
         </label>
         {description ? (
           <span className="form-label-help" aria-describedby={tooltipId}>
-            <span className="form-label-help__trigger" tabIndex={0} aria-label={description}>
+            <span className="form-label-help__trigger" tabIndex={0} aria-label={typeof description === "string" ? description : undefined}>
               {HELP_ICON}
             </span>
             <span id={tooltipId} role="tooltip" className="form-label-help__tooltip">
@@ -49,7 +58,7 @@ export function FormField({
           </span>
         ) : null}
       </div>
-      {children}
+      <div className="form-field__control">{children}</div>
       {hint ? <div className="form-field-hint">{hint}</div> : null}
     </div>
   );

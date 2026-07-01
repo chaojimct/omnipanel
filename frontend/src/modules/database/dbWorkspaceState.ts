@@ -54,6 +54,8 @@ export type SqlResultSession = {
   running: boolean;
   resultPage: number;
   resultHasMore: boolean;
+  /** 固定后不会被后续查询覆盖；未固定时为临时结果。 */
+  pinned?: boolean;
 };
 
 export type SqlTabState = {
@@ -112,6 +114,18 @@ export const NEW_ROW_KEY_PREFIX = "__new__:";
 /** 预览网格行对象上标记 pending insert 的内部字段（非表列） */
 export const PENDING_INSERT_ROW_KEY = "__pendingRowKey";
 
+export function resolvePreviewRowKey(
+  row: Record<string, unknown>,
+  pkCols: { name: string }[],
+): string {
+  const pendingKey = row[PENDING_INSERT_ROW_KEY];
+  if (typeof pendingKey === "string") return pendingKey;
+  if (pkCols.length === 0) return "";
+  return pkCols
+    .map((pk) => `${pk.name}=${row[pk.name] == null ? "" : String(row[pk.name])}`)
+    .join("&");
+}
+
 export function createDefaultTablePreviewState(): TablePreviewState {
   return {
     loading: false,
@@ -150,9 +164,33 @@ export function makeSqlResultSessionLabel(index: number): string {
   return `Result${index}`;
 }
 
-export function createSqlResultSession(sql: string): SqlResultSession {
+export function findTemporarySqlResultSession(
+  sessions: SqlResultSession[],
+): SqlResultSession | undefined {
+  return sessions.find((session) => !session.pinned);
+}
+
+export function createSqlResultSession(sql: string, pinned = false): SqlResultSession {
   return {
     id: makeSqlResultSessionId(),
+    sql,
+    result: null,
+    error: null,
+    elapsed: null,
+    running: true,
+    resultPage: 0,
+    resultHasMore: false,
+    pinned,
+  };
+}
+
+/** 重置临时结果会话以承载新查询。 */
+export function reuseTemporarySqlResultSession(
+  session: SqlResultSession,
+  sql: string,
+): SqlResultSession {
+  return {
+    ...session,
     sql,
     result: null,
     error: null,

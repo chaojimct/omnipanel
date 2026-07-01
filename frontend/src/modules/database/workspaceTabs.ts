@@ -70,6 +70,8 @@ export type ToolboxWorkspaceTab = {
   kind: "toolbox";
   /** 数据同步 / 结构同步 */
   toolboxTab: "dataSync" | "schemaSync";
+  /** 绑定的同步任务 id */
+  syncTaskId: string;
   label: string;
   workspaceOnly?: boolean;
   preview?: boolean;
@@ -108,39 +110,40 @@ export function isRedisQueryTab(tab: DbWorkspaceTab): tab is RedisQueryWorkspace
   return tab.kind === "redis-query";
 }
 
-export function isToolboxTab(tab: DbWorkspaceTab): tab is ToolboxWorkspaceTab {
-  return tab.kind === "toolbox";
+export function isToolboxTab(tab: DbWorkspaceTab | null | undefined): tab is ToolboxWorkspaceTab {
+  return tab?.kind === "toolbox";
 }
 
+/** @deprecated 旧版全局同步 Tab，会话恢复时会被丢弃 */
 export const DATA_SYNC_DOCK_TAB_ID = "toolbox:dataSync";
+/** @deprecated 旧版全局同步 Tab，会话恢复时会被丢弃 */
 export const SCHEMA_SYNC_DOCK_TAB_ID = "toolbox:schemaSync";
 
-export function toolboxDockTabId(toolboxTab: ToolboxWorkspaceTab["toolboxTab"]): string {
-  return toolboxTab === "dataSync" ? DATA_SYNC_DOCK_TAB_ID : SCHEMA_SYNC_DOCK_TAB_ID;
+export function syncTaskDockTabId(taskId: string): string {
+  return `synctask:${taskId}`;
 }
 
-export function makeToolboxWorkspaceTab(
-  toolboxTab: ToolboxWorkspaceTab["toolboxTab"],
-  label: string,
-): ToolboxWorkspaceTab {
+export function makeSyncTaskWorkspaceTab(task: {
+  id: string;
+  name: string;
+  kind: ToolboxWorkspaceTab["toolboxTab"];
+}): ToolboxWorkspaceTab {
   return {
-    id: toolboxDockTabId(toolboxTab),
+    id: syncTaskDockTabId(task.id),
     kind: "toolbox",
-    toolboxTab,
-    label,
+    toolboxTab: task.kind,
+    syncTaskId: task.id,
+    label: task.name,
   };
 }
 
-/** 查找已打开的数据/结构同步 Dock Tab */
-export function findTabIdForToolbox(
-  tabs: DbWorkspaceTab[],
-  toolboxTab: ToolboxWorkspaceTab["toolboxTab"],
-): string | undefined {
+/** 查找已打开的同步任务 Dock Tab */
+export function findTabIdForSyncTask(tabs: DbWorkspaceTab[], taskId: string): string | undefined {
   return tabs.find(
     (tab) =>
       isModuleDockTab(tab) &&
       tab.kind === "toolbox" &&
-      tab.toolboxTab === toolboxTab,
+      tab.syncTaskId === taskId,
   )?.id;
 }
 

@@ -27,14 +27,31 @@ import { ContextMenu, type ContextMenuItem } from "../../components/ui/ContextMe
 import { useI18n } from "../../i18n";
 import { textSearchMatches } from "../../lib/textSearchMatch";
 import { type DbColumnMeta } from "./api";
-import { PENDING_INSERT_ROW_KEY, type SortState } from "./dbWorkspaceState";
+import { PENDING_INSERT_ROW_KEY, resolvePreviewRowKey, type SortState } from "./dbWorkspaceState";
 import { getFilterColumnNames, buildTablePreviewSql } from "./tablePreviewFilter";
 import { matrixToCsv } from "./csvExport";
+import { isAutoIncrementColumn } from "./columnMetaUtils";
+import { showToast } from "../../stores/toastStore";
+import {
+  detectCellEditorKind,
+  formatCellValue,
+  formatInlineEditText,
+  parseCellValue,
+  shouldUseInlineCellEdit,
+  type CellEditorKind,
+} from "./cell_editor";
+import { TableDataGridInlineCellEditor } from "./TableDataGridInlineCellEditor";
 import { TableDataGridFilterPopover } from "./TableDataGridFilterPopover";
 import {
   TableDataGridCellPreviewDrawer,
   type TableDataGridCellPreview,
 } from "./TableDataGridCellPreviewDrawer";
+
+export type TableDataGridActiveCell = {
+  rowIndex: number;
+  column: string;
+  row: Record<string, unknown>;
+};
 
 export type TableDataGridProps = {
   columns: string[];
@@ -46,6 +63,11 @@ export type TableDataGridProps = {
   onPageChange: (page: number) => void;
   columnMeta?: DbColumnMeta[];
   onCellEdit?: (cellInfo: { rowIndex: number; column: string; row: Record<string, unknown> }) => void;
+  /** 单元格内联编辑提交（数字 / 短字符串等） */
+  onCellCommit?: (
+    cellInfo: { rowIndex: number; column: string; row: Record<string, unknown> },
+    value: unknown,
+  ) => void;
   onRowEdit?: (cellInfo: { rowIndex: number; column: string; row: Record<string, unknown> }) => void;
   onCellSetNull?: (cellInfo: { rowIndex: number; column: string; row: Record<string, unknown> }) => void;
   /** 已修改的行 key 集合（来自父组件脏数据状态），用于高亮 */
@@ -80,6 +102,16 @@ export type TableDataGridProps = {
   onTransposedChange?: (transposed: boolean) => void;
   /** 底部分页栏中间区域（如 SQL 结果统计、导出等） */
   footerExtra?: ReactNode;
+  /** 底栏值编辑器是否折叠（表预览模式） */
+  cellEditorCollapsed?: boolean;
+  /** 切换底栏值编辑器展开/折叠 */
+  onCellEditorCollapsedChange?: () => void;
+  /** 双击单元格且值编辑器展开时，请求聚焦底栏编辑器 */
+  onCellEditorFocusRequest?: () => void;
+  /** 粘贴为新行（表预览编辑模式） */
+  onRowPaste?: (payload: { values: Record<string, unknown> }) => void;
+  /** 当前选中的单个数据单元格（用于底栏编辑器等） */
+  onActiveCellChange?: (cell: TableDataGridActiveCell | null) => void;
 };
 
 function buildRowKey(row: Record<string, unknown>, pkCols: { name: string }[]): string {
@@ -89,14 +121,8 @@ function buildRowKey(row: Record<string, unknown>, pkCols: { name: string }[]): 
     .join("&");
 }
 
-function resolveRowKey(
-  row: Record<string, unknown>,
-  pkCols: { name: string }[],
-): string {
-  const pendingKey = row[PENDING_INSERT_ROW_KEY];
-  if (typeof pendingKey === "string") return pendingKey;
-  if (pkCols.length === 0) return "";
-  return buildRowKey(row, pkCols);
+function resolveRowKey(row: Record<string, unknown>, pkCols: { name: string }[]): string {
+  return resolvePreviewRowKey(row, pkCols);
 }
 
 const MIN_ROW_HEIGHT = 28;
@@ -107,6 +133,13 @@ const ROW_NUM_COL_ID = '__row_num__';
 
 type CellPos = { row: number; col: number };
 type CellRange = { start: CellPos; end: CellPos };
+type InlineEditState = {
+  rowIndex: number;
+  column: string;
+  row: Record<string, unknown>;
+  text: string;
+  kind: CellEditorKind;
+};
 
 function normalizeRange(range: CellRange): { minRow: number; maxRow: number; minCol: number; maxCol: number } {
   return {
@@ -173,6 +206,42 @@ function buildCellRangeCsv(
   return matrixToCsv(matrix);
 }
 
+function resolveSingleSelectedCell(
+  range: CellRange | null,
+  leafColumns: { id: string }[],
+  tableRows: { index: number; original: Record<string, unknown> }[],
+  opts: {
+    transposed: boolean;
+    rows: Record<string, unknown>[];
+  },
+): TableDataGridActiveCell | null {
+  if (!range) return null;
+  const { minRow, maxRow, minCol, maxCol } = normalizeRange(range);
+  if (minRow !== maxRow || minCol !== maxCol) return null;
+  const col = leafColumns[minCol];
+  if (!col || col.id === ROW_NUM_COL_ID) return null;
+  if (opts.transposed && col.id === TRANSPOSE_FIELD_COL) return null;
+
+  const tableRow = tableRows[minRow];
+  if (!tableRow) return null;
+
+  if (opts.transposed) {
+    const mapped = resolveTransposedDataCellContext(col.id, tableRow.original, opts.rows);
+    if (!mapped) return null;
+    return {
+      rowIndex: mapped.originalRowIndex,
+      column: mapped.fieldColumn,
+      row: mapped.originalRow,
+    };
+  }
+
+  return {
+    rowIndex: tableRow.index,
+    column: col.id,
+    row: tableRow.original,
+  };
+}
+
 function isEditableTextTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
   if (target.isContentEditable) return true;
@@ -184,6 +253,53 @@ function cellToText(value: unknown): string {
   if (value === null || value === undefined) return "NULL";
   if (typeof value === "object") return JSON.stringify(value);
   return String(value);
+}
+
+function isFullRowSelection(range: CellRange, leafColumnCount: number): boolean {
+  const r = normalizeRange(range);
+  if (r.minRow !== r.maxRow) return false;
+  return r.minCol === 0 && r.maxCol === leafColumnCount - 1;
+}
+
+function extractRowValuesFromIndex(
+  rowIndex: number,
+  tableRows: { index: number; original: Record<string, unknown> }[],
+  effectiveColumns: string[],
+  pkCols: { name: string }[],
+  displayCellOverrides?: Record<string, Record<string, unknown>>,
+): Record<string, unknown> | null {
+  const tableRow = tableRows[rowIndex];
+  if (!tableRow) return null;
+  const rowKey = resolveRowKey(tableRow.original, pkCols);
+  const overrides = rowKey ? displayCellOverrides?.[rowKey] : undefined;
+  const data: Record<string, unknown> = {};
+  for (const col of effectiveColumns) {
+    data[col] = overrides?.[col] !== undefined ? overrides[col] : tableRow.original[col];
+  }
+  return data;
+}
+
+function formatCellDisplayText(
+  value: unknown,
+  opts: {
+    row: Record<string, unknown>;
+    columnId: string;
+    colMeta: DbColumnMeta | undefined;
+    overrideForRow: Record<string, unknown> | undefined;
+    pkCount: number;
+    autoIncrementPlaceholder: string;
+  },
+): string {
+  const isPendingInsert = typeof opts.row[PENDING_INSERT_ROW_KEY] === "string";
+  if (
+    isPendingInsert &&
+    opts.colMeta &&
+    isAutoIncrementColumn(opts.colMeta, opts.pkCount) &&
+    opts.overrideForRow?.[opts.columnId] === undefined
+  ) {
+    return opts.autoIncrementPlaceholder;
+  }
+  return cellToText(value);
 }
 
 function buildColumnHeaderTooltip(
@@ -290,15 +406,23 @@ function ColumnHeaderLabel({
   t: (key: string) => string;
 }) {
   const showNotNull = meta?.nullable === false;
+  const typeLabel = meta?.type?.trim();
   return (
-    <span className="db-data-table-th-label-wrap">
-      <span className="db-data-table-th-name">{label}</span>
-      {showNotNull ? (
-        <span
-          className="db-data-table-th-nullability db-data-table-th-nullability--no"
-          title={t("database.results.columnNotNullable")}
-        >
-          {t("database.results.columnNotNullableShort")}
+    <span className="db-data-table-th-header">
+      <span className="db-data-table-th-header__name-row">
+        <span className="db-data-table-th-header__name">{label}</span>
+        {showNotNull ? (
+          <span
+            className="db-data-table-th-nullability db-data-table-th-nullability--no"
+            title={t("database.results.columnNotNullable")}
+          >
+            {t("database.results.columnNotNullableShort")}
+          </span>
+        ) : null}
+      </span>
+      {typeLabel ? (
+        <span className="db-data-table-th-header__type-tag" title={typeLabel}>
+          {typeLabel}
         </span>
       ) : null}
     </span>
@@ -711,7 +835,7 @@ function ColumnVisibilitySidebar({
   );
 }
 
-export const TableDataGrid = memo(function TableDataGrid({ columns, rows, totalRows, page, pageSize, loading, onPageChange, columnMeta, onCellEdit, onRowEdit, onCellSetNull, dirtyRowKeys, cellOverrides, enableTranspose = false, toolbar, sort = null, onSortChange, enableSort = false, filter = null, onFilterChange, enableFilter = false, dbType, tableName, hiddenColumns: hiddenColumnsProp, onHiddenColumnsChange, transposed: transposedProp, onTransposedChange, footerExtra }: TableDataGridProps) {
+export const TableDataGrid = memo(function TableDataGrid({ columns, rows, totalRows, page, pageSize, loading, onPageChange, columnMeta, onCellEdit, onCellCommit, onRowEdit, onCellSetNull, dirtyRowKeys, cellOverrides, enableTranspose = false, toolbar, sort = null, onSortChange, enableSort = false, filter = null, onFilterChange, enableFilter = false, dbType, tableName, hiddenColumns: hiddenColumnsProp, onHiddenColumnsChange, transposed: transposedProp, onTransposedChange, footerExtra, cellEditorCollapsed = false, onCellEditorCollapsedChange, onCellEditorFocusRequest, onRowPaste, onActiveCellChange }: TableDataGridProps) {
   const { t } = useI18n();
   const effectiveColumns = useMemo(() => {
     if (columns.length > 0) {
@@ -784,13 +908,19 @@ export const TableDataGrid = memo(function TableDataGrid({ columns, rows, totalR
   const savedScrollRef = useRef({ left: 0, top: 0 });
   const restoreScrollAfterPageChangeRef = useRef(false);
   const [cellRange, setCellRange] = useState<CellRange | null>(null);
+  const [inlineEdit, setInlineEdit] = useState<InlineEditState | null>(null);
+  const inlineEditRef = useRef(inlineEdit);
+  inlineEditRef.current = inlineEdit;
   const cellRangeRef = useRef(cellRange);
   cellRangeRef.current = cellRange;
   const cellDragRef = useRef<{ active: boolean; start: CellPos } | null>(null);
   const hoverResetPendingRef = useRef(false);
+  const copiedRowRef = useRef<Record<string, unknown> | null>(null);
+  const autoIncrementPlaceholder = t("database.rowEditor.autoIncrementPlaceholder");
 
   useEffect(() => {
     if (loading) {
+      setInlineEdit(null);
       hoverResetPendingRef.current = true;
       return;
     }
@@ -858,6 +988,7 @@ export const TableDataGrid = memo(function TableDataGrid({ columns, rows, totalR
   }, [effectiveColumns]);
 
   const pkCols = useMemo(() => (columnMeta ?? []).filter((c) => c.isPk), [columnMeta]);
+  const pkCount = pkCols.length;
 
   const buildCellPreviewRowLabel = useCallback(
     (row: Record<string, unknown>, rowIndex: number) =>
@@ -1002,19 +1133,77 @@ export const TableDataGrid = memo(function TableDataGrid({ columns, rows, totalR
     return map;
   }, [columnMeta]);
 
-  const handleCellEdit = useCallback(
+  const cancelInlineEdit = useCallback(() => {
+    setInlineEdit(null);
+  }, []);
+
+  const commitPreviousInlineEdit = useCallback(() => {
+    const prev = inlineEditRef.current;
+    if (!prev || !onCellCommit) {
+      setInlineEdit(null);
+      return;
+    }
+    const parsed = parseCellValue(prev.kind, prev.text);
+    onCellCommit(
+      {
+        rowIndex: prev.rowIndex,
+        column: prev.column,
+        row: prev.row,
+      },
+      parsed,
+    );
+    setInlineEdit(null);
+  }, [onCellCommit]);
+
+  const commitInlineEdit = useCallback(() => {
+    commitPreviousInlineEdit();
+  }, [commitPreviousInlineEdit]);
+
+  const startInlineEdit = useCallback(
+    (target: { rowIndex: number; column: string; row: Record<string, unknown> }, colMeta: DbColumnMeta) => {
+      commitPreviousInlineEdit();
+      const rowKey = resolveRowKey(target.row, pkCols);
+      const overrides = rowKey ? displayCellOverrides?.[rowKey] : undefined;
+      const raw =
+        overrides?.[target.column] !== undefined
+          ? overrides[target.column]
+          : target.row[target.column];
+      const kind = detectCellEditorKind(colMeta.type);
+      setInlineEdit({
+        rowIndex: target.rowIndex,
+        column: target.column,
+        row: target.row,
+        text: formatInlineEditText(kind, raw),
+        kind,
+      });
+    },
+    [commitPreviousInlineEdit, pkCols, displayCellOverrides],
+  );
+
+  const usePanelCellEditor = Boolean(onCellEditorCollapsedChange && !cellEditorCollapsed);
+  const useGridInlineCellEditor = Boolean(onCellEditorCollapsedChange && cellEditorCollapsed);
+
+  useEffect(() => {
+    if (!onCellEditorCollapsedChange || cellEditorCollapsed) return;
+    commitPreviousInlineEdit();
+  }, [cellEditorCollapsed, onCellEditorCollapsedChange, commitPreviousInlineEdit]);
+
+  const beginCellEdit = useCallback(
     (
       info: { rowIndex: number; column: string; row: Record<string, unknown> },
       opts?: { displayColIndex?: number },
     ) => {
       cellDragRef.current = null;
-      if (!onCellEdit) return;
 
+      let target = info;
       if (transposed) {
         const mapped = resolveTransposedDataCellContext(info.column, info.row, rows);
         if (!mapped) return;
-        const fieldMeta = columnMetaMap?.[mapped.fieldColumn];
-        if (!fieldMeta) return;
+        target = {
+          rowIndex: mapped.originalRowIndex,
+          column: mapped.fieldColumn,
+          row: mapped.originalRow,
+        };
 
         const displayColIndex = opts?.displayColIndex;
         if (displayColIndex != null && displayColIndex >= 0) {
@@ -1026,19 +1215,47 @@ export const TableDataGrid = memo(function TableDataGrid({ columns, rows, totalR
             });
           }
         }
+      }
 
-        onCellEdit({
-          rowIndex: mapped.originalRowIndex,
-          column: mapped.fieldColumn,
-          row: mapped.originalRow,
-        });
+      const colMeta = columnMetaMap?.[target.column];
+      if (!colMeta) return;
+
+      if (usePanelCellEditor) {
+        onCellEditorFocusRequest?.();
         return;
       }
 
-      onCellEdit(info);
+      if (useGridInlineCellEditor && !transposed && onCellCommit) {
+        startInlineEdit(target, colMeta);
+        return;
+      }
+
+      if (!transposed && onCellCommit && shouldUseInlineCellEdit(colMeta.type)) {
+        startInlineEdit(target, colMeta);
+        return;
+      }
+
+      if (onActiveCellChange) return;
+
+      if (!onCellEdit) return;
+      onCellEdit(target);
     },
-    [transposed, rows, onCellEdit, columnMetaMap, displayRows.length],
+    [
+      transposed,
+      rows,
+      onCellEdit,
+      onCellCommit,
+      onActiveCellChange,
+      onCellEditorFocusRequest,
+      usePanelCellEditor,
+      useGridInlineCellEditor,
+      columnMetaMap,
+      displayRows.length,
+      startInlineEdit,
+    ],
   );
+
+  const handleCellEdit = beginCellEdit;
 
   const columnDefs = useMemo<ColumnDef<Record<string, unknown>>[]>(
     () => {
@@ -1117,11 +1334,30 @@ export const TableDataGrid = memo(function TableDataGrid({ columns, rows, totalR
                 : transposed
                   ? columnMetaMap?.[String(row.original[TRANSPOSE_FIELD_COL] ?? "")]
                   : columnMetaMap?.[column.id];
-            const canEditCell = Boolean(onCellEdit && colMetaForCell && !isFieldCol && !isRowNumCol);
+            const canEditCell = Boolean(
+              (onCellEdit || onCellCommit || onActiveCellChange) &&
+                colMetaForCell &&
+                !isFieldCol &&
+                !isRowNumCol,
+            );
             const displayColIndex = transposed ? displayColumns.indexOf(column.id) : -1;
+            const rowKey = transposed
+              ? String(row.original[TRANSPOSE_FIELD_COL] ?? "")
+              : resolveRowKey(row.original, pkCols);
+            const overrideForRow = rowKey ? displayCellOverrides?.[rowKey] : undefined;
+            const displayText = formatCellDisplayText(value, {
+              row: row.original,
+              columnId: column.id,
+              colMeta: colMetaForCell,
+              overrideForRow,
+              pkCount,
+              autoIncrementPlaceholder,
+            });
+            const isAutoIncrementPlaceholder =
+              displayText === autoIncrementPlaceholder;
             return (
               <span
-                className="db-data-table-cell-text"
+                className={`db-data-table-cell-text${isAutoIncrementPlaceholder ? " db-data-table-cell-text--placeholder" : ""}`}
                 onDoubleClick={
                   canEditCell
                     ? (event) => {
@@ -1141,7 +1377,7 @@ export const TableDataGrid = memo(function TableDataGrid({ columns, rows, totalR
                     : undefined
                 }
               >
-                {cellToText(value)}
+                {displayText}
               </span>
             );
           },
@@ -1165,7 +1401,7 @@ export const TableDataGrid = memo(function TableDataGrid({ columns, rows, totalR
       }
       return defs;
     },
-    [displayColumns, transposed, columnMetaMap, t, page, pageSize, onCellEdit, handleCellEdit, canFilter, filterColumnNames, openFilterPopover, enableSort, sort, handleColumnSortClick],
+    [displayColumns, transposed, columnMetaMap, t, page, pageSize, onCellEdit, onCellCommit, onActiveCellChange, handleCellEdit, canFilter, filterColumnNames, openFilterPopover, enableSort, sort, handleColumnSortClick, pkCols, pkCount, displayCellOverrides, autoIncrementPlaceholder],
   );
 
   const table = useReactTable({
@@ -1327,35 +1563,112 @@ export const TableDataGrid = memo(function TableDataGrid({ columns, rows, totalR
   const leafColumnCount = table.getAllLeafColumns().length;
 
   useEffect(() => {
-    const onCopyKeyDown = (event: KeyboardEvent) => {
+    if (!onActiveCellChange) return;
+    const activeCell = resolveSingleSelectedCell(cellRange, leafColumns, tableRows, {
+      transposed,
+      rows,
+    });
+    onActiveCellChange(activeCell);
+  }, [cellRange, leafColumns, tableRows, transposed, rows, onActiveCellChange]);
+
+  useEffect(() => {
+    const edit = inlineEditRef.current;
+    if (!edit || transposed) return;
+    const selected = resolveSingleSelectedCell(cellRange, leafColumns, tableRows, {
+      transposed,
+      rows,
+    });
+    if (
+      !selected ||
+      selected.rowIndex !== edit.rowIndex ||
+      selected.column !== edit.column
+    ) {
+      commitPreviousInlineEdit();
+    }
+  }, [
+    cellRange,
+    leafColumns,
+    tableRows,
+    transposed,
+    rows,
+    commitPreviousInlineEdit,
+  ]);
+
+  useEffect(() => {
+    const onGridClipboardKeyDown = (event: KeyboardEvent) => {
       if (event.isComposing) return;
-      if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== "c") return;
+      if (!(event.metaKey || event.ctrlKey)) return;
       if (event.shiftKey || event.altKey) return;
       if (isEditableTextTarget(event.target)) return;
       if (document.activeElement instanceof HTMLElement) {
         if (isEditableTextTarget(document.activeElement)) return;
         if (document.activeElement.closest(".sql-codemirror-editor")) return;
       }
+
+      const key = event.key.toLowerCase();
       const range = cellRangeRef.current;
-      if (!range) return;
 
-      const csv = buildCellRangeCsv(range, leafColumns, tableRows, {
-        pkCols,
-        transposed,
-        displayCellOverrides,
-      });
-      if (!csv) return;
+      if (key === "c") {
+        if (!range) return;
 
-      event.preventDefault();
-      event.stopPropagation();
-      void navigator.clipboard.writeText(csv).catch(() => {
-        /* clipboard unavailable */
-      });
+        const csv = buildCellRangeCsv(range, leafColumns, tableRows, {
+          pkCols,
+          transposed,
+          displayCellOverrides,
+        });
+        if (!csv) return;
+
+        event.preventDefault();
+        event.stopPropagation();
+        void navigator.clipboard.writeText(csv).catch(() => {
+          /* clipboard unavailable */
+        });
+
+        if (!transposed && isFullRowSelection(range, leafColumnCount)) {
+          const rowValues = extractRowValuesFromIndex(
+            normalizeRange(range).minRow,
+            tableRows,
+            effectiveColumns,
+            pkCols,
+            displayCellOverrides,
+          );
+          copiedRowRef.current = rowValues;
+          if (rowValues) {
+            showToast(t("database.rowEditor.copyRowDone"));
+          }
+        } else {
+          copiedRowRef.current = null;
+        }
+        return;
+      }
+
+      if (key === "v") {
+        if (!onRowPaste || transposed) return;
+        const rowValues = copiedRowRef.current;
+        if (!rowValues) {
+          showToast(t("database.rowEditor.pasteRowUnavailable"));
+          return;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        onRowPaste({ values: { ...rowValues } });
+        showToast(t("database.rowEditor.pasteRowDone"));
+      }
     };
 
-    window.addEventListener("keydown", onCopyKeyDown, true);
-    return () => window.removeEventListener("keydown", onCopyKeyDown, true);
-  }, [leafColumns, tableRows, pkCols, transposed, displayCellOverrides]);
+    window.addEventListener("keydown", onGridClipboardKeyDown, true);
+    return () => window.removeEventListener("keydown", onGridClipboardKeyDown, true);
+  }, [
+    leafColumns,
+    tableRows,
+    pkCols,
+    transposed,
+    displayCellOverrides,
+    leafColumnCount,
+    effectiveColumns,
+    onRowPaste,
+    t,
+  ]);
 
   const getRowHeight = useCallback(
     (index: number) => {
@@ -1536,10 +1849,15 @@ export const TableDataGrid = memo(function TableDataGrid({ columns, rows, totalR
               : transposed
                 ? columnMetaMap?.[transposedFieldName]
                 : columnMetaMap?.[cell.column.id];
-          const canEdit = !isRowSelector && onCellEdit && colMeta;
+          const canEdit = !isRowSelector && (onCellEdit || onCellCommit || onActiveCellChange) && colMeta;
           const overrideValue = isRowSelector ? undefined : overrideForRow?.[cell.column.id];
           const cellDirty = !isRowSelector && overrideValue !== undefined && rowDirty;
           const rawValue = isRowSelector ? undefined : (overrideValue !== undefined ? overrideValue : cell.getValue());
+          const isInlineEditing =
+            !transposed &&
+            inlineEdit != null &&
+            inlineEdit.rowIndex === row.index &&
+            inlineEdit.column === cell.column.id;
           const fieldSortActive = isFieldCol && enableSort && sort?.column === fieldName;
           const fieldSortClass = fieldSortActive
             ? sort!.direction === "asc"
@@ -1554,7 +1872,7 @@ export const TableDataGrid = memo(function TableDataGrid({ columns, rows, totalR
               data-col-id={cell.column.id}
               data-col-index={cellIdx}
               style={buildColumnCellStyle(cell.column.id, baseSize, lastColumnId, fillDelta)}
-              className={`db-data-table-cell${isCustomHeight ? " db-data-table-cell--custom-h" : ""}${columnSizing[cell.column.id] !== undefined ? " db-data-table-cell--sized" : ""}${canEdit ? " db-cell--editable" : ""}${cellDirty ? " db-data-table-cell--dirty" : ""}${isRowNum ? " db-data-table-cell--rownum" : ""}${isFieldCol ? " db-data-table-cell--field db-data-table-cell--row-select" : ""}${fieldFiltered ? " db-data-table-cell--filtered" : ""}${fieldSortClass}${selected ? " db-data-table-cell--selected" : ""}`}
+              className={`db-data-table-cell${isCustomHeight ? " db-data-table-cell--custom-h" : ""}${columnSizing[cell.column.id] !== undefined ? " db-data-table-cell--sized" : ""}${canEdit ? " db-cell--editable" : ""}${cellDirty ? " db-data-table-cell--dirty" : ""}${isRowNum ? " db-data-table-cell--rownum" : ""}${isFieldCol ? " db-data-table-cell--field db-data-table-cell--row-select" : ""}${fieldFiltered ? " db-data-table-cell--filtered" : ""}${fieldSortClass}${selected ? " db-data-table-cell--selected" : ""}${isInlineEditing ? " db-data-table-cell--editing" : ""}`}
               onMouseDown={
                 isRowSelector
                   ? (event) => {
@@ -1687,9 +2005,32 @@ export const TableDataGrid = memo(function TableDataGrid({ columns, rows, totalR
                     }
                   : undefined
               }
-              title={!isRowSelector ? cellToText(rawValue) : undefined}
+              title={
+                !isRowSelector && !isInlineEditing
+                  ? formatCellDisplayText(rawValue, {
+                      row: cell.row.original,
+                      columnId: cell.column.id,
+                      colMeta,
+                      overrideForRow,
+                      pkCount,
+                      autoIncrementPlaceholder,
+                    })
+                  : undefined
+              }
             >
-              {flexRender(cell.column.columnDef.cell, cell.getContext())}
+              {isInlineEditing && inlineEdit ? (
+                <TableDataGridInlineCellEditor
+                  kind={inlineEdit.kind}
+                  value={inlineEdit.text}
+                  onChange={(text) =>
+                    setInlineEdit((prev) => (prev ? { ...prev, text } : null))
+                  }
+                  onCommit={commitInlineEdit}
+                  onCancel={cancelInlineEdit}
+                />
+              ) : (
+                flexRender(cell.column.columnDef.cell, cell.getContext())
+              )}
             </td>
           );
         })}
@@ -1956,6 +2297,45 @@ export const TableDataGrid = memo(function TableDataGrid({ columns, rows, totalR
         </div>
       </div>
       {footerExtra ? <div className="db-pagination-extra">{footerExtra}</div> : null}
+      {onCellEditorCollapsedChange ? (
+        <Button
+          variant={!cellEditorCollapsed ? "default" : "ghost"}
+          size="sm"
+          className="db-cell-editor-footer-toggle"
+          title={
+            cellEditorCollapsed
+              ? t("database.results.cellEditorExpand")
+              : t("database.results.cellEditorCollapse")
+          }
+          aria-label={
+            cellEditorCollapsed
+              ? t("database.results.cellEditorExpand")
+              : t("database.results.cellEditorCollapse")
+          }
+          aria-expanded={!cellEditorCollapsed}
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={onCellEditorCollapsedChange}
+        >
+          <svg
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.6"
+            width="14"
+            height="14"
+            aria-hidden
+            className={cellEditorCollapsed ? undefined : "db-cell-editor-footer-toggle-icon--expanded"}
+          >
+            <rect x="1.5" y="2.5" width="13" height="11" rx="1.5" />
+            <path d="M2 9h12" />
+            <path
+              d={cellEditorCollapsed ? "M8 10.5V6M6 8.5l2-2 2 2" : "M8 7.5v4.5M6 9.5l2 2 2-2"}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </Button>
+      ) : null}
       <div className="db-pagination-controls">
         <Button
           variant="ghost"

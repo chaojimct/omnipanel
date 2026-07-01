@@ -4,6 +4,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -192,6 +193,21 @@ function editorWithFormattedJsonBody(editor: HttpEditorState): HttpEditorState {
   return { ...editor, body };
 }
 
+function responseSessionsEqual(
+  left: HttpResponseSession[],
+  right: HttpResponseSession[],
+): boolean {
+  if (left.length !== right.length) {
+    return false;
+  }
+  for (let index = 0; index < left.length; index += 1) {
+    if (left[index].id !== right[index].id) {
+      return false;
+    }
+  }
+  return true;
+}
+
 export function ProtocolHttpProvider({ children }: { children: ReactNode }) {
   const [history, setHistory] = useState<HttpHistoryEntry[]>([]);
   const [collections, setCollections] = useState<HttpCollection[]>([]);
@@ -205,6 +221,8 @@ export function ProtocolHttpProvider({ children }: { children: ReactNode }) {
   const [activeResponseSessionByRequest, setActiveResponseSessionByRequest] = useState<
     Record<string, string | null>
   >({});
+  const selectedRequestIdRef = useRef<string | null>(null);
+  selectedRequestIdRef.current = selectedRequestId;
 
   const responseRequestKey = resolveResponseRequestKey(selectedRequestId);
 
@@ -223,14 +241,30 @@ export function ProtocolHttpProvider({ children }: { children: ReactNode }) {
       const request = req ?? savedRequests.find((item) => item.id === requestId) ?? null;
       const entries = filterHistoryForRequest(history, request);
       const sessions = buildSessionsFromHistory(entries);
-      setResponseSessionsByRequest((prev) => ({ ...prev, [requestId]: sessions }));
-      setActiveResponseSessionByRequest((prev) => ({
-        ...prev,
-        [requestId]: sessions[sessions.length - 1]?.id ?? null,
-      }));
+      const nextActiveId = sessions[sessions.length - 1]?.id ?? null;
+
+      setResponseSessionsByRequest((prev) => {
+        const existing = prev[requestId];
+        if (existing && responseSessionsEqual(existing, sessions)) {
+          return prev;
+        }
+        return { ...prev, [requestId]: sessions };
+      });
+      setActiveResponseSessionByRequest((prev) => {
+        if (prev[requestId] === nextActiveId) {
+          return prev;
+        }
+        return { ...prev, [requestId]: nextActiveId };
+      });
     },
     [history, savedRequests],
   );
+
+  useEffect(() => {
+    const requestId = selectedRequestIdRef.current;
+    if (!requestId) return;
+    syncResponseSessionsForRequest(requestId);
+  }, [history, syncResponseSessionsForRequest]);
 
   const setActiveResponseSession = useCallback(
     (sessionId: string) => {
@@ -474,8 +508,11 @@ export function ProtocolHttpProvider({ children }: { children: ReactNode }) {
 
   const selectRequest = useCallback(
     (req: SavedHttpRequest) => {
-      applySavedRequest(req);
-      setSelectedRequestId(req.id);
+      const alreadySelected = selectedRequestIdRef.current === req.id;
+      if (!alreadySelected) {
+        applySavedRequest(req);
+        setSelectedRequestId(req.id);
+      }
       syncResponseSessionsForRequest(req.id, req);
     },
     [applySavedRequest, syncResponseSessionsForRequest],

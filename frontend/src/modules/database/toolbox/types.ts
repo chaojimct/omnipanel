@@ -1,6 +1,12 @@
 import type { DbColumnMeta, DbConnectionConfig, DbIndexMeta } from "../api";
+import type { SchemaTableDiff } from "./schemaDiff";
 
 export type ToolboxTabId = "dataSync" | "schemaSync";
+
+/** 结构同步新建表时的表名大小写规则 */
+export type SchemaTableNameCase = "upper" | "lower";
+
+export const DEFAULT_SCHEMA_TABLE_NAME_CASE: SchemaTableNameCase = "lower";
 
 /** 源表在目标库中的存在状态（仅数据同步、已勾选时展示） */
 export type TableTargetStatus = "checking" | "new" | "conflict";
@@ -88,6 +94,55 @@ export function connectionWithDatabase(
   return { ...conn, database: database.trim() };
 }
 
+/** 结构同步目标侧单行状态 */
+export type SchemaTargetRowStatus = "new" | "diff" | "targetOnly" | "match";
+
+/** @deprecated 单选遗留值，读取时会 normalize 为数组 */
+export type SchemaTargetStatusFilter = "all" | SchemaTargetRowStatus;
+
+export const ALL_SCHEMA_TARGET_ROW_STATUSES: SchemaTargetRowStatus[] = [
+  "new",
+  "diff",
+  "targetOnly",
+  "match",
+];
+
+/** 将持久化配置 normalize 为多选数组；空数组表示全部状态 */
+export function normalizeSchemaTargetStatusFilters(
+  raw?: SchemaTargetStatusFilter | SchemaTargetRowStatus[] | null,
+): SchemaTargetRowStatus[] {
+  if (!raw) {
+    return [];
+  }
+  if (Array.isArray(raw)) {
+    return raw.filter((item): item is SchemaTargetRowStatus =>
+      ALL_SCHEMA_TARGET_ROW_STATUSES.includes(item as SchemaTargetRowStatus),
+    );
+  }
+  if (raw === "all") {
+    return [];
+  }
+  return ALL_SCHEMA_TARGET_ROW_STATUSES.includes(raw) ? [raw] : [];
+}
+
+/** 是否处于「显示全部状态」 */
+export function isSchemaTargetStatusFilterShowAll(filters: SchemaTargetRowStatus[]): boolean {
+  return (
+    filters.length === 0 || filters.length >= ALL_SCHEMA_TARGET_ROW_STATUSES.length
+  );
+}
+
+/** 同步任务分析结果缓存（随任务配置持久化） */
+export interface SyncTaskAnalysisCache {
+  /** 分析完成时间戳 */
+  analyzedAt: number;
+  /** 分析时的连接/库/选项指纹，用于判断缓存是否仍有效 */
+  configKey: string;
+  schemaDiffs?: Record<string, SchemaTableDiff>;
+  tableAnalysis?: Record<string, DataAnalysisResult>;
+  targetRowCounts?: Record<string, number | null>;
+}
+
 /** 可持久化的同步任务配置快照 */
 export interface SyncTaskConfig {
   sourceConnId: string;
@@ -97,6 +152,20 @@ export interface SyncTaskConfig {
   selectedTables: string[];
   expandedTables?: string[];
   tableSyncStrategies?: Record<string, DataSyncStrategy>;
+  /** 结构同步：比较表名时是否区分大小写，默认 true */
+  schemaCaseSensitive?: boolean;
+  /** 结构同步：新建表时的表名大小写（大写 / 小写） */
+  schemaTableNameCase?: SchemaTableNameCase;
+  /** 结构同步：目标库不存在时是否新建表，默认 true */
+  schemaCreateMissingTables?: boolean;
+  /** 结构同步：目标侧表状态筛选（空数组表示全部） */
+  schemaTargetStatusFilter?: SchemaTargetRowStatus[] | SchemaTargetStatusFilter;
+  /** 结构同步：表名搜索过滤 */
+  schemaTableSearch?: string;
+  /** @deprecated 已由 schemaTargetStatusFilter 替代 */
+  showMatchingTables?: boolean;
+  /** 上次分析结果缓存 */
+  analysisCache?: SyncTaskAnalysisCache;
 }
 
 export interface SyncTask {
@@ -106,4 +175,36 @@ export interface SyncTask {
   config: SyncTaskConfig;
   createdAt: number;
   updatedAt: number;
+}
+
+/** 同步任务单次执行记录（提交后台同步后持久化） */
+export type SyncTaskRunStatus = "pending" | "running" | "completed" | "failed" | "cancelled";
+
+export interface SyncTaskRunRecord {
+  id: string;
+  bgTaskId: string;
+  kind: ToolboxTabId;
+  status: SyncTaskRunStatus;
+  tableCount: number;
+  tableNames: string[];
+  startedAt: number;
+  finishedAt?: number | null;
+  progress?: string;
+  error?: string | null;
+}
+
+/** 同步任务单次分析记录（分析完成后持久化） */
+export type SyncTaskAnalysisStatus = "completed" | "partial" | "failed";
+
+export interface SyncTaskAnalysisRecord {
+  id: string;
+  kind: ToolboxTabId;
+  status: SyncTaskAnalysisStatus;
+  tableCount: number;
+  tableNames: string[];
+  startedAt: number;
+  finishedAt: number;
+  /** 差异/一致等摘要 */
+  summary?: string;
+  configKey?: string;
 }

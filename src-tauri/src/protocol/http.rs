@@ -3,6 +3,9 @@ use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 
+use crate::commands::proxy::{build_http_client_for_url, normalize_localhost_url};
+use crate::state::ProxyConfig;
+
 /// HTTP request configuration from the frontend.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HttpRequestConfig {
@@ -30,22 +33,23 @@ pub struct HttpResponse {
 }
 
 /// Execute an HTTP request and return the response.
-pub async fn execute_request(config: HttpRequestConfig) -> Result<HttpResponse, String> {
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_millis(config.timeout_ms.unwrap_or(30_000)))
-        .redirect(reqwest::redirect::Policy::limited(10))
-        .build()
-        .map_err(|e| format!("Failed to create HTTP client: {e}"))?;
+pub async fn execute_request(
+    config: HttpRequestConfig,
+    proxy_config: &ProxyConfig,
+) -> Result<HttpResponse, String> {
+    let url = normalize_localhost_url(&config.url);
+    let timeout = Duration::from_millis(config.timeout_ms.unwrap_or(30_000));
+    let client = build_http_client_for_url(&url, proxy_config, timeout)?;
 
     let method = config.method.to_uppercase();
     let mut req = match method.as_str() {
-        "GET" => client.get(&config.url),
-        "POST" => client.post(&config.url),
-        "PUT" => client.put(&config.url),
-        "PATCH" => client.patch(&config.url),
-        "DELETE" => client.delete(&config.url),
-        "HEAD" => client.head(&config.url),
-        "OPTIONS" => client.request(reqwest::Method::OPTIONS, &config.url),
+        "GET" => client.get(&url),
+        "POST" => client.post(&url),
+        "PUT" => client.put(&url),
+        "PATCH" => client.patch(&url),
+        "DELETE" => client.delete(&url),
+        "HEAD" => client.head(&url),
+        "OPTIONS" => client.request(reqwest::Method::OPTIONS, &url),
         _ => return Err(format!("Unsupported HTTP method: {method}")),
     };
 

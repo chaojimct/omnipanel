@@ -1,5 +1,65 @@
 export type CellEditorKind = "text" | "number" | "boolean" | "date" | "datetime" | "time" | "json" | "binary";
 
+/** 短字符串列 varchar/char 等待 inline 编辑的最大声明长度 */
+export const INLINE_TEXT_MAX_LENGTH = 256;
+
+export function parseColumnCharLength(rawType: string): number | null {
+  const match = rawType.toLowerCase().match(/\(\s*(\d+)\s*\)/);
+  return match ? Number.parseInt(match[1]!, 10) : null;
+}
+
+/** 是否为适合单元格内联编辑的短字符串列（排除 text/json/binary 等长内容类型） */
+export function isShortTextColumn(rawType: string): boolean {
+  const lower = rawType.toLowerCase();
+  const kind = detectCellEditorKind(rawType);
+  if (kind !== "text") return false;
+  if (
+    lower.includes("text") ||
+    lower.includes("clob") ||
+    lower.includes("json") ||
+    lower.includes("blob") ||
+    lower.includes("binary")
+  ) {
+    return false;
+  }
+  const length = parseColumnCharLength(rawType);
+  if (length != null) {
+    return length <= INLINE_TEXT_MAX_LENGTH;
+  }
+  if (lower.includes("enum") || lower.includes("set")) {
+    return true;
+  }
+  return (
+    lower.startsWith("varchar") ||
+    lower.startsWith("char") ||
+    lower.includes("character varying") ||
+    lower.includes("nvarchar") ||
+    lower.includes("nchar")
+  );
+}
+
+/** 是否应在表格单元格内直接编辑（不走表单弹窗） */
+export function shouldUseInlineCellEdit(rawType: string): boolean {
+  const kind = detectCellEditorKind(rawType);
+  if (kind === "number") return true;
+  return isShortTextColumn(rawType);
+}
+
+/** 内联编辑器初始文本（日期类需规范化以匹配 input 控件） */
+export function formatInlineEditText(kind: CellEditorKind, value: unknown): string {
+  const raw = formatCellValue(value);
+  switch (kind) {
+    case "date":
+      return normalizeDate(raw);
+    case "datetime":
+      return normalizeDatetime(raw);
+    case "time":
+      return normalizeTime(raw);
+    default:
+      return raw;
+  }
+}
+
 /**
  * Map a raw database column type string to a CellEditorKind.
  * Examples: "int" → "number", "varchar(255)" → "text", "timestamp" → "datetime", "date" → "date", "time" → "time", "json" → "json"

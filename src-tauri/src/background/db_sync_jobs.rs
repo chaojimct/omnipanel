@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use specta::Type;
 use tauri::{AppHandle, Emitter};
 
-use crate::background::worker_pool::DEFAULT_WORKER_COUNT;
+use crate::background::worker_pool::default_worker_count;
 use crate::commands::database::{self, DbColumnMeta, DbIndexMeta};
 
 const PAGE_SIZE: i64 = 500;
@@ -18,6 +18,8 @@ const MAX_DIFF_DETAIL_ROWS: usize = 100;
 #[serde(rename_all = "camelCase")]
 pub struct DbSyncTableSpec {
     pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target_name: Option<String>,
     pub columns: Vec<DbColumnMeta>,
     #[serde(default)]
     pub indexes: Vec<DbIndexMeta>,
@@ -463,7 +465,10 @@ async fn compare_table_rows(
 }
 
 fn column_signature(col: &DbColumnMeta) -> String {
-    format!("{}|{}|{}", col.column_type, col.is_pk, col.is_fk)
+    format!(
+        "{}|{}|{}|{}",
+        col.column_type, col.is_pk, col.is_fk, col.is_auto_increment
+    )
 }
 
 fn compare_table_columns(
@@ -739,7 +744,7 @@ pub async fn run_db_schema_sync_analysis(
         return Ok(());
     }
 
-    let concurrency = DEFAULT_WORKER_COUNT.max(1) as usize;
+    let concurrency = default_worker_count().max(1) as usize;
     let completed = Arc::new(AtomicU32::new(0));
 
     stream::iter(tables.into_iter())
@@ -871,6 +876,23 @@ fn normalize_create_table_ddl(ddl: &str, db_type: &str) -> String {
     sql
 }
 
+fn rewrite_create_table_ddl_name(
+    ddl: &str,
+    source_table: &str,
+    target_table: &str,
+    db_type: &str,
+) -> String {
+    if source_table == target_table {
+        return ddl.to_string();
+    }
+    let source_quoted = quote_ident(db_type, source_table);
+    let target_quoted = quote_ident(db_type, target_table);
+    if ddl.contains(&source_quoted) {
+        return ddl.replacen(&source_quoted, &target_quoted, 1);
+    }
+    ddl.to_string()
+}
+
 async fn target_table_exists(
     target: &DbConnectionConfig,
     target_db: &str,
@@ -882,23 +904,29 @@ async fn target_table_exists(
         .is_some_and(|names| names.iter().any(|name| name == table))
 }
 
+fn spec_target_table_name(spec: &DbSyncTableSpec) -> &str {
+    spec.target_name.as_deref().unwrap_or(spec.name.as_str())
+}
+
 async fn ensure_table_from_source(
     source: &DbConnectionConfig,
     source_db: &str,
     target: &DbConnectionConfig,
     target_db: &str,
-    table: &str,
+    source_table: &str,
+    target_table: &str,
 ) -> Result<(), String> {
-    if target_table_exists(target, target_db, table).await {
+    if target_table_exists(target, target_db, target_table).await {
         return Ok(());
     }
     let ddl = database::db_table_ddl(
         source.clone(),
         Some(source_db.to_string()),
-        table.to_string(),
+        source_table.to_string(),
     )
     .await?;
     let sql = normalize_create_table_ddl(&ddl, &target.db_type);
+    let sql = rewrite_create_table_ddl_name(&sql, source_table, target_table, &target.db_type);
     database::db_run_sql(target.clone(), Some(target_db.to_string()), sql).await?;
     Ok(())
 }
@@ -1118,8 +1146,15 @@ async fn execute_data_sync_table(
         };
     }
 
-    if let Err(err) =
-        ensure_table_from_source(source, source_db, target, target_db, &spec.name).await
+    if let Err(err) = ensure_table_from_source(
+        source,
+        source_db,
+        target,
+        target_db,
+        &spec.name,
+        &spec.name,
+    )
+    .await
     {
         return SyncExecResultEvent {
             table,
@@ -1243,10 +1278,11 @@ async fn apply_schema_diff(
     target_db: &str,
     spec: &DbSyncTableSpec,
 ) -> Result<String, String> {
+    let target_table_name = spec_target_table_name(spec);
     let target_table = database::db_introspect_table(
         target.clone(),
         Some(target_db.to_string()),
-        spec.name.clone(),
+        target_table_name.to_string(),
     )
     .await?;
     let col_diffs = compare_table_columns(&spec.columns, &target_table.columns);
@@ -1258,8 +1294,8 @@ async fn apply_schema_diff(
             continue;
         };
         let sql = match diff.kind.as_str() {
-            "added" => build_add_column_sql(&target.db_type, &spec.name, col),
-            "changed" => build_modify_column_sql(&target.db_type, &spec.name, col),
+            "added" => build_add_column_sql(&target.db_type, target_table_name, col),
+            "changed" => build_modify_column_sql(&target.db_type, target_table_name, col),
             _ => continue,
         };
         if sql.is_empty() {
@@ -1273,7 +1309,7 @@ async fn apply_schema_diff(
         match diff.kind.as_str() {
             "added" => {
                 if let Some(idx) = spec.indexes.iter().find(|i| i.name == diff.name) {
-                    let sql = build_create_index_sql(&target.db_type, &spec.name, idx);
+                    let sql = build_create_index_sql(&target.db_type, target_table_name, idx);
                     database::db_run_sql(target.clone(), Some(target_db.to_string()), sql)
                         .await?;
                     applied += 1;
@@ -1281,7 +1317,7 @@ async fn apply_schema_diff(
             }
             "changed" => {
                 if let Some(idx) = spec.indexes.iter().find(|i| i.name == diff.name) {
-                    let drop_sql = build_drop_index_sql(&target.db_type, &spec.name, idx);
+                    let drop_sql = build_drop_index_sql(&target.db_type, target_table_name, idx);
                     if !drop_sql.is_empty() {
                         database::db_run_sql(
                             target.clone(),
@@ -1290,7 +1326,7 @@ async fn apply_schema_diff(
                         )
                         .await?;
                     }
-                    let create_sql = build_create_index_sql(&target.db_type, &spec.name, idx);
+                    let create_sql = build_create_index_sql(&target.db_type, target_table_name, idx);
                     database::db_run_sql(
                         target.clone(),
                         Some(target_db.to_string()),
@@ -1333,8 +1369,19 @@ async fn execute_schema_sync_table(
         };
     }
 
-    if !target_table_exists(target, target_db, &spec.name).await {
-        match ensure_table_from_source(source, source_db, target, target_db, &spec.name).await {
+    let target_table_name = spec_target_table_name(spec);
+
+    if !target_table_exists(target, target_db, target_table_name).await {
+        match ensure_table_from_source(
+            source,
+            source_db,
+            target,
+            target_db,
+            &spec.name,
+            target_table_name,
+        )
+        .await
+        {
             Ok(()) => {
                 return SyncExecResultEvent {
                     table,

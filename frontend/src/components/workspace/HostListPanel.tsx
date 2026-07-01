@@ -25,7 +25,6 @@ import { HostStatusIndicator } from "../../modules/server/ssh/components/HostSta
 import { loadSshPoolStatuses } from "../../stores/sshConnectionStore";
 import { useSshHostStore } from "../../stores/sshHostStore";
 import { ContextMenu, type ContextMenuItem } from "../ui/ContextMenu";
-import { WarnAlert } from "../ui/WarnAlert";
 import { SshConnectionDialog } from "../../modules/server/ssh/components/SshConnectionDialog";
 import {
   findPanelForSsh,
@@ -185,7 +184,6 @@ export function HostListPanel({
   const [deleting, setDeleting] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
   const [syncing, setSyncing] = useState(false);
-  const [syncWarnOpen, setSyncWarnOpen] = useState(false);
 
   const grouped = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -465,7 +463,19 @@ export function HostListPanel({
           variant="icon"
           title={t("ssh.sidebar.syncConfig")}
           disabled={syncing}
-          onClick={() => setSyncWarnOpen(true)}
+          onClick={() => {
+            void (async () => {
+              if (
+                await appConfirm(
+                  t("ssh.sidebar.syncConfigConfirmMessage"),
+                  t("ssh.sidebar.syncConfigConfirmTitle"),
+                  { confirmLabel: t("common.continue"), cancelLabel: t("common.cancel") },
+                )
+              ) {
+                await performSyncConfig();
+              }
+            })();
+          }}
         >
           <svg
             viewBox="0 0 24 24"
@@ -570,16 +580,6 @@ export function HostListPanel({
           onClose={() => setListCtxMenu(null)}
         />
       )}
-
-      <WarnAlert
-        open={syncWarnOpen}
-        title={t("ssh.sidebar.syncConfigConfirmTitle")}
-        message={t("ssh.sidebar.syncConfigConfirmMessage")}
-        confirmLabel={t("common.continue")}
-        cancelLabel={t("common.cancel")}
-        onConfirm={() => void performSyncConfig()}
-        onClose={() => setSyncWarnOpen(false)}
-      />
 
       <SshConnectionDialog
         open={showDialog}

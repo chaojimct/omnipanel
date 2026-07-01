@@ -32,6 +32,7 @@ export interface DbWorkspaceSharedContextValue {
   goToQueryResultPage: (tabId: string, page: number, sessionId?: string) => Promise<void>;
   updateSqlTabState: (id: string, patch: Partial<SqlTabState>) => void;
   closeSqlResultSession: (sqlTabId: string, sessionId: string) => void;
+  setSqlResultSessionPinned: (sqlTabId: string, sessionId: string, pinned: boolean) => void;
   refreshTablePreview: (
     tabId: string,
     connId: string,
@@ -52,9 +53,10 @@ export interface DbWorkspaceSharedContextValue {
     tabId: string,
     patch: Partial<Pick<TablePreviewState, "hiddenColumns" | "transposed">>,
   ) => void;
-  handleCellEdit: (
+  handleCellCommit: (
     tabId: string,
     cellInfo: { rowIndex: number; column: string; row: Record<string, unknown> },
+    value: unknown,
   ) => void;
   handleRowEdit: (
     tabId: string,
@@ -65,6 +67,10 @@ export interface DbWorkspaceSharedContextValue {
     cellInfo: { rowIndex: number; column: string; row: Record<string, unknown> },
   ) => void;
   handleRowNew: (tabId: string) => void;
+  handleRowPaste: (
+    tabId: string,
+    payload: { values: Record<string, unknown> },
+  ) => void;
   resolveConnection: (connId: string) => DbConnectionConfig | null;
   connectionsLoading: boolean;
   selectTable: (selection: SchemaTableSelection) => void;

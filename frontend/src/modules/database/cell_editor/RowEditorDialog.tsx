@@ -18,6 +18,7 @@ import {
   normalizeDatetime,
   normalizeTime,
   parseCellValue,
+  shouldUseInlineCellEdit,
   type CellEditorKind,
 } from "./types";
 
@@ -160,16 +161,26 @@ export function RowEditorDialog({
     return () => cancelAnimationFrame(frame);
   }, [open, columnMeta, row, overrides, focusColumn, mode]);
 
+  const formColumns = useMemo(
+    () => columnMeta.filter((col) => !shouldUseInlineCellEdit(col.type)),
+    [columnMeta],
+  );
+  const focusColName = useMemo(() => {
+    if (!focusColumn) return null;
+    if (formColumns.some((col) => col.name === focusColumn)) return focusColumn;
+    return formColumns[0]?.name ?? null;
+  }, [focusColumn, formColumns]);
+
   const initialTexts = useMemo(() => {
     const texts: Record<string, string> = {};
-    for (const col of columnMeta) {
+    for (const col of formColumns) {
       const raw = overrides?.[col.name] !== undefined ? overrides[col.name] : row[col.name];
       const kind = detectCellEditorKind(col.type);
       const formatted = formatCellValue(raw);
       texts[col.name] = normalizeForKind(kind, formatted);
     }
     return texts;
-  }, [columnMeta, overrides, row]);
+  }, [formColumns, overrides, row]);
 
   const [editTexts, setEditTexts] = useState(initialTexts);
 
@@ -181,13 +192,13 @@ export function RowEditorDialog({
 
   const handleSave = useCallback(() => {
     const changes: Record<string, unknown> = {};
-    for (const col of columnMeta) {
+    for (const col of formColumns) {
       const kind = detectCellEditorKind(col.type);
       const parsed = parseCellValue(kind, editTexts[col.name] ?? "");
       changes[col.name] = parsed;
     }
     onSave(changes);
-  }, [columnMeta, editTexts, mode, onSave]);
+  }, [formColumns, editTexts, onSave]);
 
   const updateField = useCallback((name: string, value: string) => {
     setEditTexts((prev) => ({ ...prev, [name]: value }));
@@ -204,16 +215,22 @@ export function RowEditorDialog({
     >
       <div className="row-editor-fields">
         {fieldsReady ? (
-          columnMeta.map((col) => (
-            <RowEditorField
-              key={col.name}
-              column={col}
-              value={editTexts[col.name] ?? ""}
-              onChange={(value) => updateField(col.name, value)}
-              readOnly={false}
-              autoFocus={Boolean(focusColumn && col.name === focusColumn)}
-            />
-          ))
+          formColumns.length > 0 ? (
+            formColumns.map((col) => (
+              <RowEditorField
+                key={col.name}
+                column={col}
+                value={editTexts[col.name] ?? ""}
+                onChange={(value) => updateField(col.name, value)}
+                readOnly={false}
+                autoFocus={Boolean(focusColName && col.name === focusColName)}
+              />
+            ))
+          ) : (
+            <div className="empty-state compact row-editor-inline-hint">
+              {t("database.rowEditor.inlineFieldsHint")}
+            </div>
+          )
         ) : (
           <div className="empty-state compact" style={{ padding: "var(--sp-4)" }}>
             {t("common.loading")}

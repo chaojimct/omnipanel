@@ -23,7 +23,6 @@ import {
 } from "@codemirror/language";
 import { sql } from "@codemirror/lang-sql";
 import { autocompletion, completionKeymap, closeBrackets } from "@codemirror/autocomplete";
-import { lintGutter } from "@codemirror/lint";
 import type { DatabaseSchema } from "../../types";
 import { resolveSqlDialect } from "../../sqlIntel/sqlDialect";
 import { getSearchHighlightExtension } from "../../sqlSearchHighlight";
@@ -35,7 +34,7 @@ import {
 } from "../language/autocomplete";
 import { createSqlLinter } from "../language/lint";
 import { createSqlHoverTooltip } from "../language/hover";
-import { activeStatementPlugin } from "../language/activeStatement";
+import { createSqlLintRunGutter } from "../language/runStatementGutter";
 import { createFunctionSignaturePlugin } from "../language/signature";
 import { resolveSqlToRun } from "../language/selection";
 
@@ -75,7 +74,7 @@ export function createSqlEditorExtensions(options: SqlEditorExtensionOptions): E
     drawSelection(),
     dropCursor(),
     history(),
-    lintGutter(),
+    ...createSqlLintRunGutter(getOnRun ?? (() => undefined), getReadOnly),
     EditorState.tabSize.of(2),
     indentOnInput(),
     bracketMatching(),
@@ -86,7 +85,6 @@ export function createSqlEditorExtensions(options: SqlEditorExtensionOptions): E
     ),
     EditorView.lineWrapping,
     getSearchHighlightExtension(),
-    activeStatementPlugin,
     createFunctionSignaturePlugin(getDbType),
     createSqlLinter(getDbType),
     createSqlHoverTooltip(getSchemas, getDbType),
