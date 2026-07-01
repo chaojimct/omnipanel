@@ -1,10 +1,14 @@
 import { fetchTableDdl } from "../api";
 import type { DbColumnMeta, DbConnectionConfig, DbIndexMeta } from "../api";
-import { resolveTargetTableName } from "./schemaSyncAlignedTables";
+import {
+  isSchemaSyncSourceTableMissingInTarget,
+  resolveSchemaSyncTargetTableName,
+} from "./schemaSyncAlignedTables";
 import type { SchemaTableDiff } from "./schemaDiff";
 import { formatIndexDetail } from "./schemaDiff";
 import type {
   DataSyncStrategy,
+  SchemaTableNameCase,
   SyncTableInfo,
   TableTargetStatus,
   ToolboxTabId,
@@ -25,6 +29,8 @@ export interface SyncTaskSqlPreviewInput {
   sourceRowCounts: Record<string, number | null>;
   targetTables: SyncTableInfo[];
   schemaCaseSensitive: boolean;
+  schemaTableNameCase: SchemaTableNameCase;
+  schemaCreateMissingTables: boolean;
 }
 
 function isMysqlEngine(dbType: string): boolean {
@@ -65,6 +71,34 @@ function normalizeCreateTableDdl(ddl: string, dbType: string): string {
     }
   }
   return sql;
+}
+
+function rewriteCreateTableDdlName(
+  ddl: string,
+  sourceTable: string,
+  targetTable: string,
+  dbType: string,
+): string {
+  if (sourceTable === targetTable) {
+    return ddl;
+  }
+  const sourceQuoted = quoteIdent(dbType, sourceTable);
+  const targetQuoted = quoteIdent(dbType, targetTable);
+  if (ddl.includes(sourceQuoted)) {
+    return ddl.replace(sourceQuoted, targetQuoted);
+  }
+  const sourcePattern = new RegExp(
+    `(\\bCREATE\\s+TABLE\\s+(?:IF\\s+NOT\\s+EXISTS\\s+)?)(${escapeRegExp(sourceTable)})\\b`,
+    "i",
+  );
+  if (sourcePattern.test(ddl)) {
+    return ddl.replace(sourcePattern, `$1${targetTable}`);
+  }
+  return ddl;
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function strategyLabel(strategy: DataSyncStrategy): string {
@@ -171,17 +205,45 @@ async function buildSchemaTablePreview(
 ): Promise<string[]> {
   const lines: string[] = [];
   const dbType = input.targetConn.db_type;
-  const targetName =
-    resolveTargetTableName(tableName, input.targetTables, input.schemaCaseSensitive) ?? tableName;
+  const targetName = resolveSchemaSyncTargetTableName(
+    tableName,
+    input.targetTables,
+    input.schemaCaseSensitive,
+    input.schemaTableNameCase,
+  );
   const diff = input.schemaAnalysisDiffs[tableName];
   const columns = input.sourceTableColumns[tableName] ?? [];
   const indexes = input.sourceTableIndexes[tableName] ?? [];
-  const targetExists = input.targetTables.some((t) => t.name === targetName);
+  const missingInTarget = isSchemaSyncSourceTableMissingInTarget(
+    tableName,
+    input.targetTables,
+    input.schemaCaseSensitive,
+  );
 
-  if (!targetExists || diff?.status === "new") {
+  if (missingInTarget) {
+    if (!input.schemaCreateMissingTables) {
+      lines.push(`-- 已关闭「新增表」，跳过: ${tableName}`);
+      return lines;
+    }
     try {
       const ddl = await fetchTableDdl(input.sourceConn, input.sourceDb, tableName);
-      lines.push(`${normalizeCreateTableDdl(ddl, dbType)};`);
+      const normalized = normalizeCreateTableDdl(ddl, dbType);
+      lines.push(
+        `${rewriteCreateTableDdlName(normalized, tableName, targetName, dbType)};`,
+      );
+    } catch (e) {
+      lines.push(`-- 无法获取建表语句: ${String(e)}`);
+    }
+    return lines;
+  }
+
+  if (diff?.status === "new") {
+    try {
+      const ddl = await fetchTableDdl(input.sourceConn, input.sourceDb, tableName);
+      const normalized = normalizeCreateTableDdl(ddl, dbType);
+      lines.push(
+        `${rewriteCreateTableDdlName(normalized, tableName, targetName, dbType)};`,
+      );
     } catch (e) {
       lines.push(`-- 无法获取建表语句: ${String(e)}`);
     }

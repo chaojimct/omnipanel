@@ -235,6 +235,8 @@ export interface DbColumnMeta {
   isFk: boolean;
   nullable?: boolean;
   comment?: string | null;
+  /** 是否为自增列（来自 schema 反射；缺省时由类型串推断） */
+  isAutoIncrement?: boolean;
 }
 
 export interface DbIndexMeta {
@@ -301,6 +303,29 @@ export async function fetchTableDdl(
   table: string,
 ): Promise<string> {
   return invoke<string>("db_table_ddl", {
+    connection,
+    schema: database.trim() ? database.trim() : null,
+    table,
+  });
+}
+
+export interface DbTableDetails {
+  rowCount?: number | null;
+  dataLength?: number | null;
+  rowFormat?: string | null;
+  engine?: string | null;
+  createTime?: string | null;
+  updateTime?: string | null;
+  comment?: string | null;
+  collation?: string | null;
+}
+
+export async function fetchTableDetails(
+  connection: DbConnectionConfig,
+  database: string,
+  table: string,
+): Promise<DbTableDetails> {
+  return invoke<DbTableDetails>("db_get_table_details", {
     connection,
     schema: database.trim() ? database.trim() : null,
     table,

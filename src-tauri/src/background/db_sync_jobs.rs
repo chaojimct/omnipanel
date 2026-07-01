@@ -465,7 +465,10 @@ async fn compare_table_rows(
 }
 
 fn column_signature(col: &DbColumnMeta) -> String {
-    format!("{}|{}|{}", col.column_type, col.is_pk, col.is_fk)
+    format!(
+        "{}|{}|{}|{}",
+        col.column_type, col.is_pk, col.is_fk, col.is_auto_increment
+    )
 }
 
 fn compare_table_columns(
@@ -873,6 +876,23 @@ fn normalize_create_table_ddl(ddl: &str, db_type: &str) -> String {
     sql
 }
 
+fn rewrite_create_table_ddl_name(
+    ddl: &str,
+    source_table: &str,
+    target_table: &str,
+    db_type: &str,
+) -> String {
+    if source_table == target_table {
+        return ddl.to_string();
+    }
+    let source_quoted = quote_ident(db_type, source_table);
+    let target_quoted = quote_ident(db_type, target_table);
+    if ddl.contains(&source_quoted) {
+        return ddl.replacen(&source_quoted, &target_quoted, 1);
+    }
+    ddl.to_string()
+}
+
 async fn target_table_exists(
     target: &DbConnectionConfig,
     target_db: &str,
@@ -893,18 +913,20 @@ async fn ensure_table_from_source(
     source_db: &str,
     target: &DbConnectionConfig,
     target_db: &str,
-    table: &str,
+    source_table: &str,
+    target_table: &str,
 ) -> Result<(), String> {
-    if target_table_exists(target, target_db, table).await {
+    if target_table_exists(target, target_db, target_table).await {
         return Ok(());
     }
     let ddl = database::db_table_ddl(
         source.clone(),
         Some(source_db.to_string()),
-        table.to_string(),
+        source_table.to_string(),
     )
     .await?;
     let sql = normalize_create_table_ddl(&ddl, &target.db_type);
+    let sql = rewrite_create_table_ddl_name(&sql, source_table, target_table, &target.db_type);
     database::db_run_sql(target.clone(), Some(target_db.to_string()), sql).await?;
     Ok(())
 }
@@ -1124,8 +1146,15 @@ async fn execute_data_sync_table(
         };
     }
 
-    if let Err(err) =
-        ensure_table_from_source(source, source_db, target, target_db, &spec.name).await
+    if let Err(err) = ensure_table_from_source(
+        source,
+        source_db,
+        target,
+        target_db,
+        &spec.name,
+        &spec.name,
+    )
+    .await
     {
         return SyncExecResultEvent {
             table,
@@ -1343,7 +1372,16 @@ async fn execute_schema_sync_table(
     let target_table_name = spec_target_table_name(spec);
 
     if !target_table_exists(target, target_db, target_table_name).await {
-        match ensure_table_from_source(source, source_db, target, target_db, &spec.name).await {
+        match ensure_table_from_source(
+            source,
+            source_db,
+            target,
+            target_db,
+            &spec.name,
+            target_table_name,
+        )
+        .await
+        {
             Ok(()) => {
                 return SyncExecResultEvent {
                     table,

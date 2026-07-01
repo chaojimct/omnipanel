@@ -37,6 +37,8 @@ import {
   findTableByName,
   isSchemaCaseSensitive,
   tableNameExistsInSet,
+  isSchemaSyncSourceTableMissingInTarget,
+  resolveSchemaTableNameCase,
 } from "./schemaSyncAlignedTables";
 import {
   buildSyncAnalysisCache,
@@ -61,6 +63,7 @@ import {
   type SyncSideSnapshot,
   type SyncTableInfo,
   type SyncTaskAnalysisStatus,
+  type SchemaTableNameCase,
   type SyncTaskConfig,
   type TableTargetStatus,
   type ToolboxTabId,
@@ -125,6 +128,8 @@ export function DatabaseToolbox({
 
   const [sourceExpanded, setSourceExpanded] = useState<Set<string>>(() => new Set());
   const [schemaCaseSensitive, setSchemaCaseSensitive] = useState(true);
+  const [schemaTableNameCase, setSchemaTableNameCase] = useState<SchemaTableNameCase>("lower");
+  const [schemaCreateMissingTables, setSchemaCreateMissingTables] = useState(true);
   const [schemaTargetStatusFilters, setSchemaTargetStatusFilters] = useState<
     SchemaTargetRowStatus[]
   >([]);
@@ -200,6 +205,7 @@ export function DatabaseToolbox({
 
   const targetConfigured = Boolean(targetConnId && targetDb.trim());
   const schemaCompareCaseSensitive = isSchemaCaseSensitive(schemaCaseSensitive);
+  const resolvedSchemaTableNameCase = resolveSchemaTableNameCase(schemaTableNameCase);
 
   const analysisConfigKey = useMemo(
     () =>
@@ -210,8 +216,19 @@ export function DatabaseToolbox({
         targetConnId,
         targetDb,
         schemaCaseSensitive,
+        schemaTableNameCase: resolvedSchemaTableNameCase,
+        schemaCreateMissingTables,
       }),
-    [tab, sourceConnId, sourceDb, targetConnId, targetDb, schemaCaseSensitive],
+    [
+      tab,
+      sourceConnId,
+      sourceDb,
+      targetConnId,
+      targetDb,
+      schemaCaseSensitive,
+      resolvedSchemaTableNameCase,
+      schemaCreateMissingTables,
+    ],
   );
 
   const restoreAnalysisFromConfig = useCallback(
@@ -223,6 +240,8 @@ export function DatabaseToolbox({
         targetConnId: config.targetConnId,
         targetDb: config.targetDb,
         schemaCaseSensitive: config.schemaCaseSensitive,
+        schemaTableNameCase: resolveSchemaTableNameCase(config.schemaTableNameCase),
+        schemaCreateMissingTables: config.schemaCreateMissingTables,
       });
       const cached = pickAnalysisCacheForRestore(config.analysisCache, key);
       if (!cached) {
@@ -556,6 +575,8 @@ export function DatabaseToolbox({
         targetConnId: config.targetConnId,
         targetDb: config.targetDb,
         schemaCaseSensitive: config.schemaCaseSensitive,
+        schemaTableNameCase: resolveSchemaTableNameCase(config.schemaTableNameCase),
+        schemaCreateMissingTables: config.schemaCreateMissingTables,
       });
       if (!pickAnalysisCacheForRestore(config.analysisCache, key)) {
         return;
@@ -1580,6 +1601,8 @@ export function DatabaseToolbox({
     setSourceExpanded(new Set());
     setTableSyncStrategies({});
     setSchemaCaseSensitive(config.schemaCaseSensitive ?? true);
+    setSchemaTableNameCase(resolveSchemaTableNameCase(config.schemaTableNameCase));
+    setSchemaCreateMissingTables(config.schemaCreateMissingTables !== false);
     setSchemaTargetStatusFilters(normalizeSchemaTargetStatusFilters(config.schemaTargetStatusFilter));
     setSchemaTableSearch(config.schemaTableSearch ?? "");
     restoreAnalysisFromConfig(config);
@@ -1590,6 +1613,8 @@ export function DatabaseToolbox({
       targetConnId: config.targetConnId,
       targetDb: config.targetDb,
       schemaCaseSensitive: config.schemaCaseSensitive,
+      schemaTableNameCase: resolveSchemaTableNameCase(config.schemaTableNameCase),
+      schemaCreateMissingTables: config.schemaCreateMissingTables,
     });
     taskLoadRef.current = { config, runAfterLoad };
     prevSourceConnIdRef.current = config.sourceConnId;
@@ -1782,7 +1807,13 @@ export function DatabaseToolbox({
       expandedTables: Array.from(sourceExpanded),
       tableSyncStrategies: { ...tableSyncStrategies },
       ...(tab === "schemaSync"
-        ? { schemaCaseSensitive, schemaTargetStatusFilter: schemaTargetStatusFilters, schemaTableSearch }
+        ? {
+            schemaCaseSensitive,
+            schemaTableNameCase: resolvedSchemaTableNameCase,
+            schemaCreateMissingTables,
+            schemaTargetStatusFilter: schemaTargetStatusFilters,
+            schemaTableSearch,
+          }
         : {}),
       ...(analysisCache ? { analysisCache } : {}),
     };
@@ -1796,6 +1827,8 @@ export function DatabaseToolbox({
     tableSyncStrategies,
     tab,
     schemaCaseSensitive,
+    resolvedSchemaTableNameCase,
+    schemaCreateMissingTables,
     schemaTargetStatusFilters,
     schemaTableSearch,
     analysisAnalyzedAt,
@@ -2126,6 +2159,8 @@ export function DatabaseToolbox({
       sourceRowCounts: sourceRowCountsForPreview,
       targetTables: targetSnapshot.tables,
       schemaCaseSensitive: schemaCompareCaseSensitive,
+      schemaTableNameCase: resolvedSchemaTableNameCase,
+      schemaCreateMissingTables,
     };
   }, [
     connections,
@@ -2144,6 +2179,8 @@ export function DatabaseToolbox({
     sourceRowCountsForPreview,
     targetSnapshot.tables,
     schemaCompareCaseSensitive,
+    resolvedSchemaTableNameCase,
+    schemaCreateMissingTables,
   ]);
 
   const conflictDetailSourceConn = useMemo(() => {
@@ -2252,6 +2289,8 @@ export function DatabaseToolbox({
   const handleApplyTaskSettings = useCallback((settings: SyncTaskSettings) => {
     setTaskName(settings.taskName);
     setSchemaCaseSensitive(settings.schemaCaseSensitive);
+    setSchemaTableNameCase(settings.schemaTableNameCase);
+    setSchemaCreateMissingTables(settings.schemaCreateMissingTables);
   }, []);
 
   const handleSubmit = useCallback(async (): Promise<boolean> => {
@@ -2269,6 +2308,23 @@ export function DatabaseToolbox({
     setSubmitNotice(null);
 
     const tableNames = Array.from(sourceSelected).sort((a, b) => a.localeCompare(b));
+
+    if (tab === "schemaSync") {
+      const executableNames = tableNames.filter(
+        (name) =>
+          schemaCreateMissingTables ||
+          !isSchemaSyncSourceTableMissingInTarget(
+            name,
+            targetSnapshot.tables,
+            schemaCompareCaseSensitive,
+          ),
+      );
+      if (executableNames.length === 0) {
+        setSubmitNotice(t("database.toolbox.submitHintSchemaNoExecutable"));
+        setSubmitting(false);
+        return false;
+      }
+    }
 
     try {
       let bgTaskId: string;
@@ -2297,6 +2353,8 @@ export function DatabaseToolbox({
           sourceTableIndexes,
           targetSnapshot.tables,
           schemaCompareCaseSensitive,
+          resolvedSchemaTableNameCase,
+          schemaCreateMissingTables,
         );
       }
       recordSyncTaskRun(tableNames, bgTaskId);
@@ -2326,6 +2384,10 @@ export function DatabaseToolbox({
     canSaveTask,
     persistTask,
     t,
+    schemaCreateMissingTables,
+    schemaCompareCaseSensitive,
+    resolvedSchemaTableNameCase,
+    targetSnapshot.tables,
   ]);
 
   useEffect(() => {
@@ -2515,6 +2577,8 @@ export function DatabaseToolbox({
         tab={tab}
         taskName={taskName}
         schemaCaseSensitive={schemaCaseSensitive}
+        schemaTableNameCase={resolvedSchemaTableNameCase}
+        schemaCreateMissingTables={schemaCreateMissingTables}
         onApply={handleApplyTaskSettings}
       />
 

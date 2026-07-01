@@ -1,4 +1,5 @@
-import type { SyncSideSnapshot, SyncTableInfo, SchemaTargetRowStatus } from "./types";
+import type { SyncSideSnapshot, SyncTableInfo, SchemaTargetRowStatus, SchemaTableNameCase } from "./types";
+import { DEFAULT_SCHEMA_TABLE_NAME_CASE } from "./types";
 import { isSchemaTargetStatusFilterShowAll } from "./types";
 import type { SchemaTableDiff } from "./schemaDiff";
 import { buildSchemaTableDiffFromSnapshots } from "./schemaDiff";
@@ -46,6 +47,41 @@ export function resolveTargetTableName(
   caseSensitive: boolean,
 ): string | undefined {
   return findTableByName(targetTables, sourceName, caseSensitive)?.name;
+}
+
+export function applySchemaTableNameCase(
+  name: string,
+  nameCase: SchemaTableNameCase = DEFAULT_SCHEMA_TABLE_NAME_CASE,
+): string {
+  return nameCase === "upper" ? name.toUpperCase() : name.toLowerCase();
+}
+
+export function resolveSchemaTableNameCase(
+  raw?: SchemaTableNameCase | null,
+): SchemaTableNameCase {
+  return raw === "upper" ? "upper" : DEFAULT_SCHEMA_TABLE_NAME_CASE;
+}
+
+/** 解析结构同步在目标库使用的表名（已存在则沿用目标侧名称，否则按大小写规则生成新表名）。 */
+export function resolveSchemaSyncTargetTableName(
+  sourceName: string,
+  targetTables: SyncTableInfo[],
+  caseSensitive: boolean,
+  nameCase: SchemaTableNameCase = DEFAULT_SCHEMA_TABLE_NAME_CASE,
+): string {
+  const existing = resolveTargetTableName(sourceName, targetTables, caseSensitive);
+  if (existing) {
+    return existing;
+  }
+  return applySchemaTableNameCase(sourceName, nameCase);
+}
+
+export function isSchemaSyncSourceTableMissingInTarget(
+  sourceName: string,
+  targetTables: SyncTableInfo[],
+  caseSensitive: boolean,
+): boolean {
+  return findTableByName(targetTables, sourceName, caseSensitive) === undefined;
 }
 
 function collectAlignedDisplayNames(

@@ -1,4 +1,5 @@
-import { useMemo, memo, useCallback } from "react";
+import { useMemo, memo, useCallback, useRef, useState } from "react";
+import type { PanelImperativeHandle } from "react-resizable-panels";
 import {
   useDbWorkspace,
   useDbTabWorkspaceSliceOrMirror,
@@ -6,9 +7,16 @@ import {
 import type { TablePreviewWorkspaceTab } from "./workspaceTabs";
 import { Button } from "../../components/ui/Button";
 import { IconPlus } from "../../components/ui/Icons";
-import { TableDataGrid } from "./TableDataGrid";
+import { DockHandle, DockLayout, DockPanel } from "../../components/dock";
+import { TableDataGrid, type TableDataGridActiveCell } from "./TableDataGrid";
+import { CellEditorPanel, type CellEditorPanelHandle } from "./cell_editor";
 import { useI18n } from "../../i18n";
-import { NEW_ROW_KEY_PREFIX, PENDING_INSERT_ROW_KEY, type SortState } from "./dbWorkspaceState";
+import {
+  NEW_ROW_KEY_PREFIX,
+  PENDING_INSERT_ROW_KEY,
+  resolvePreviewRowKey,
+  type SortState,
+} from "./dbWorkspaceState";
 import type { RuleGroupType } from "react-querybuilder";
 import { connectionHasTableSchemaChildren } from "./api";
 
@@ -21,6 +29,10 @@ export const DbTablePreviewSurface = memo(function DbTablePreviewSurface({
 }: DbTablePreviewSurfaceProps) {
   const { t } = useI18n();
   const ws = useDbWorkspace();
+  const cellEditorRef = useRef<CellEditorPanelHandle>(null);
+  const cellEditorPanelRef = useRef<PanelImperativeHandle | null>(null);
+  const [cellEditorCollapsed, setCellEditorCollapsed] = useState(false);
+  const [activeCell, setActiveCell] = useState<TableDataGridActiveCell | null>(null);
   const {
     tablePreview: preview,
     tableColumnMeta: colMeta,
@@ -70,11 +82,39 @@ export const DbTablePreviewSurface = memo(function DbTablePreviewSurface({
   );
   const previewCellOverrides = tabDirtyRowsForTab;
 
-  const handlePreviewCellEdit = useCallback(
-    (cellInfo: { rowIndex: number; column: string; row: Record<string, unknown> }) => {
-      ws.handleCellEdit(tab.id, cellInfo);
+  const pkCols = useMemo(() => colMeta?.filter((col) => col.isPk) ?? [], [colMeta]);
+
+  const activeCellKey = useMemo(() => {
+    if (!activeCell) return null;
+    const rowKey = resolvePreviewRowKey(activeCell.row, pkCols);
+    return `${rowKey}:${activeCell.column}`;
+  }, [activeCell, pkCols]);
+
+  const activeColumnMeta = useMemo(
+    () => (activeCell ? colMeta?.find((col) => col.name === activeCell.column) : undefined),
+    [activeCell, colMeta],
+  );
+
+  const activeCellValue = useMemo(() => {
+    if (!activeCell) return undefined;
+    const rowKey = resolvePreviewRowKey(activeCell.row, pkCols);
+    const override = rowKey ? previewCellOverrides[rowKey]?.[activeCell.column] : undefined;
+    return override !== undefined ? override : activeCell.row[activeCell.column];
+  }, [activeCell, pkCols, previewCellOverrides]);
+
+  const handleActiveCellChange = useCallback((cell: TableDataGridActiveCell | null) => {
+    cellEditorRef.current?.commitIfDirty();
+    setActiveCell(cell);
+  }, []);
+
+  const handlePreviewCellCommit = useCallback(
+    (
+      cellInfo: { rowIndex: number; column: string; row: Record<string, unknown> },
+      value: unknown,
+    ) => {
+      ws.handleCellCommit(tab.id, cellInfo, value);
     },
-    [ws.handleCellEdit, tab.id],
+    [ws.handleCellCommit, tab.id],
   );
   const handlePreviewRowEdit = useCallback(
     (cellInfo: { rowIndex: number; column: string; row: Record<string, unknown> }) => {
@@ -87,6 +127,23 @@ export const DbTablePreviewSurface = memo(function DbTablePreviewSurface({
       ws.handleCellSetNull(tab.id, cellInfo);
     },
     [ws.handleCellSetNull, tab.id],
+  );
+  const handlePreviewCellApply = useCallback(
+    (value: unknown) => {
+      if (!activeCell) return;
+      ws.handleCellCommit(tab.id, activeCell, value);
+    },
+    [activeCell, ws.handleCellCommit, tab.id],
+  );
+  const handlePreviewCellSetNullActive = useCallback(() => {
+    if (!activeCell) return;
+    ws.handleCellSetNull(tab.id, activeCell);
+  }, [activeCell, ws.handleCellSetNull, tab.id]);
+  const handlePreviewRowPaste = useCallback(
+    (payload: { values: Record<string, unknown> }) => {
+      ws.handleRowPaste(tab.id, payload);
+    },
+    [ws.handleRowPaste, tab.id],
   );
   const handlePreviewPageChange = useCallback(
     (page: number) => {
@@ -118,6 +175,28 @@ export const DbTablePreviewSurface = memo(function DbTablePreviewSurface({
     },
     [ws.setTableGridView, tab.id],
   );
+
+  const handleCellEditorCollapsedChange = useCallback(() => {
+    const handle = cellEditorPanelRef.current;
+    if (!handle) return;
+    if (handle.isCollapsed()) {
+      handle.expand();
+      setCellEditorCollapsed(false);
+    } else {
+      cellEditorRef.current?.commitIfDirty();
+      handle.collapse();
+      setCellEditorCollapsed(true);
+    }
+  }, []);
+
+  const handleCellEditorFocusRequest = useCallback(() => {
+    cellEditorRef.current?.focusEditor();
+  }, []);
+
+  const handleCellEditorPanelResize = useCallback(() => {
+    const collapsed = cellEditorPanelRef.current?.isCollapsed() ?? false;
+    setCellEditorCollapsed(collapsed);
+  }, []);
 
   const showPreviewGrid = Boolean(
     preview?.data && canRefresh && !preview.loading && !preview.error,
@@ -216,52 +295,83 @@ export const DbTablePreviewSurface = memo(function DbTablePreviewSurface({
     ws,
   ]);
 
+  const previewGrid = preview?.data && canRefresh && showPreviewGrid ? (
+    <TableDataGrid
+      columns={previewColumns}
+      rows={previewDisplayRows}
+      totalRows={preview.totalRows + (previewDisplayRows.length - preview.data.rows.length)}
+      page={preview.page}
+      pageSize={preview.pageSize}
+      loading={preview.loading}
+      columnMeta={colMeta}
+      enableTranspose
+      enableSort
+      sort={preview.sort ?? null}
+      onSortChange={handlePreviewSortChange}
+      enableFilter={Boolean(previewConnection && previewConnection.db_type !== "redis")}
+      filter={preview.filter ?? null}
+      onFilterChange={handlePreviewFilterChange}
+      toolbar={previewToolbar}
+      onCellCommit={handlePreviewCellCommit}
+      onActiveCellChange={handleActiveCellChange}
+      onRowEdit={handlePreviewRowEdit}
+      onCellSetNull={handlePreviewCellSetNull}
+      onRowPaste={canInsertRow ? handlePreviewRowPaste : undefined}
+      dirtyRowKeys={previewDirtyRowKeys}
+      cellOverrides={previewCellOverrides}
+      onPageChange={handlePreviewPageChange}
+      dbType={previewConnection?.db_type}
+      tableName={tab.tableName}
+      hiddenColumns={preview.hiddenColumns}
+      onHiddenColumnsChange={handleHiddenColumnsChange}
+      transposed={preview.transposed}
+      onTransposedChange={handleTransposedChange}
+      cellEditorCollapsed={cellEditorCollapsed}
+      onCellEditorCollapsedChange={handleCellEditorCollapsedChange}
+      onCellEditorFocusRequest={handleCellEditorFocusRequest}
+    />
+  ) : null;
+
   return (
     <div className="db-workspace-pane db-workspace-pane--data">
-      <div className="results-area db-sql-results">
-        {preview?.error ? (
-          <div
-            className="empty-state compact text-danger"
-            style={{ padding: "var(--sp-4)", whiteSpace: "pre-wrap" }}
+      {preview?.error ? (
+        <div
+          className="empty-state compact text-danger"
+          style={{ padding: "var(--sp-4)", whiteSpace: "pre-wrap" }}
+        >
+          {preview.error}
+        </div>
+      ) : !preview?.data && preview?.loading ? (
+        <div className="empty-state compact" style={{ flex: 1, padding: "var(--sp-4)" }}>
+          {t("common.loading")}
+        </div>
+      ) : previewGrid ? (
+        <DockLayout direction="vertical" className="db-table-preview-split">
+          <DockPanel defaultSize={68} minSize={160}>
+            <div className="results-area db-sql-results">{previewGrid}</div>
+          </DockPanel>
+          <DockHandle direction="vertical" />
+          <DockPanel
+            defaultSize={32}
+            minSize={120}
+            collapsible
+            collapsedSize={0}
+            panelRef={cellEditorPanelRef}
+            onResize={handleCellEditorPanelResize}
+            className="dock-panel-bottom"
           >
-            {preview.error}
-          </div>
-        ) : !preview?.data && preview?.loading ? (
-          <div className="empty-state compact" style={{ flex: 1, padding: "var(--sp-4)" }}>
-            {t("common.loading")}
-          </div>
-        ) : preview?.data && canRefresh ? (
-          <TableDataGrid
-            columns={previewColumns}
-            rows={previewDisplayRows}
-            totalRows={preview.totalRows + (previewDisplayRows.length - preview.data.rows.length)}
-            page={preview.page}
-            pageSize={preview.pageSize}
-            loading={preview.loading}
-            columnMeta={colMeta}
-            enableTranspose
-            enableSort
-            sort={preview.sort ?? null}
-            onSortChange={handlePreviewSortChange}
-            enableFilter={Boolean(previewConnection && previewConnection.db_type !== "redis")}
-            filter={preview.filter ?? null}
-            onFilterChange={handlePreviewFilterChange}
-            toolbar={previewToolbar}
-            onCellEdit={handlePreviewCellEdit}
-            onRowEdit={handlePreviewRowEdit}
-            onCellSetNull={handlePreviewCellSetNull}
-            dirtyRowKeys={previewDirtyRowKeys}
-            cellOverrides={previewCellOverrides}
-            onPageChange={handlePreviewPageChange}
-            dbType={previewConnection?.db_type}
-            tableName={tab.tableName}
-            hiddenColumns={preview.hiddenColumns}
-            onHiddenColumnsChange={handleHiddenColumnsChange}
-            transposed={preview.transposed}
-            onTransposedChange={handleTransposedChange}
-          />
-        ) : null}
-      </div>
+            <CellEditorPanel
+              ref={cellEditorRef}
+              cellKey={activeCellKey}
+              columnName={activeCell?.column ?? null}
+              columnType={activeColumnMeta?.type ?? "text"}
+              currentValue={activeCellValue}
+              onApply={handlePreviewCellApply}
+              onSetNull={activeCell ? handlePreviewCellSetNullActive : undefined}
+            />
+          </DockPanel>
+        </DockLayout>
+      ) : null}
     </div>
   );
 });

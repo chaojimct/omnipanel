@@ -12,6 +12,8 @@ export function buildSyncAnalysisConfigKey(input: {
   targetConnId: string;
   targetDb: string;
   schemaCaseSensitive?: boolean;
+  schemaTableNameCase?: string;
+  schemaCreateMissingTables?: boolean;
 }): string {
   return [
     input.tab,
@@ -20,6 +22,8 @@ export function buildSyncAnalysisConfigKey(input: {
     input.targetConnId,
     input.targetDb.trim(),
     input.tab === "schemaSync" ? (input.schemaCaseSensitive !== false ? "1" : "0") : "",
+    input.tab === "schemaSync" ? (input.schemaTableNameCase ?? "lower") : "",
+    input.tab === "schemaSync" ? (input.schemaCreateMissingTables !== false ? "1" : "0") : "",
   ].join("|");
 }
 

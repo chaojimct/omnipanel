@@ -69,6 +69,8 @@ import {
 import { buildDatabaseSchema, introspectToTableSchemas } from "./lsp/sqlCompletion";
 import { formatSql } from "./sqlIntel/sqlFormat";
 import { toCsv } from "./csvExport";
+import { isAutoIncrementColumn } from "./columnMetaUtils";
+import { shouldUseInlineCellEdit } from "./cell_editor";
 import { buildRedisColumnMeta, buildRedisUpdateCommands } from "./redisTableMeta";
 import { getCachedDatabaseNames, getCachedTableColumns } from "./schemaCacheMerge";
 import { snapshotToFilterStates } from "./schemaFilters";
@@ -118,6 +120,8 @@ import {
   createDefaultSqlTabState,
   createDefaultTablePreviewState,
   createSqlResultSession,
+  findTemporarySqlResultSession,
+  reuseTemporarySqlResultSession,
   type SqlResultSession,
   estimateTablePreviewTotalRows,
   buildOrderByClause,
@@ -525,11 +529,6 @@ export function DatabasePanel() {
   const [databasesByConnId, setDatabasesByConnId] = useState<Record<string, string[]>>({});
   const [schemaByKey, setSchemaByKey] = useState<Record<string, DatabaseSchema>>({});
   const [schemaLoadingKey] = useState<string | null>(null);
-  const [cellEdit, setCellEdit] = useState<{
-    tabId: string;
-    column: string;
-    row: Record<string, unknown>;
-  } | null>(null);
   const [rowEdit, setRowEdit] = useState<{
     tabId: string;
     column: string;
@@ -884,6 +883,41 @@ export function DatabasePanel() {
             ...tab,
             resultSessions: sessions,
             activeResultSessionId,
+          },
+        };
+      });
+    },
+    [setSqlTabStates],
+  );
+
+  const setSqlResultSessionPinned = useCallback(
+    (sqlTabId: string, sessionId: string, pinned: boolean) => {
+      setSqlTabStates((prev) => {
+        const tab = prev[sqlTabId] ?? createDefaultSqlTabState();
+        let sessions = tab.resultSessions ?? [];
+        const target = sessions.find((item) => item.id === sessionId);
+        if (!target || Boolean(target.pinned) === pinned) {
+          return prev;
+        }
+
+        if (!pinned) {
+          const otherTemp = sessions.find((item) => !item.pinned && item.id !== sessionId);
+          if (otherTemp) {
+            sessions = sessions.map((item) =>
+              item.id === otherTemp.id ? { ...item, pinned: true } : item,
+            );
+          }
+        }
+
+        sessions = sessions.map((item) =>
+          item.id === sessionId ? { ...item, pinned } : item,
+        );
+
+        return {
+          ...prev,
+          [sqlTabId]: {
+            ...tab,
+            resultSessions: sessions,
           },
         };
       });
@@ -2187,13 +2221,6 @@ export function DatabasePanel() {
     executeTabAction(action);
   }, [pendingTabAction, rollbackTabDirty, executeTabAction]);
 
-  const handleCellEdit = useCallback(
-    (tabId: string, cellInfo: { rowIndex: number; column: string; row: Record<string, unknown> }) => {
-      setCellEdit({ tabId, column: cellInfo.column, row: cellInfo.row });
-    },
-    [],
-  );
-
   const handleRowEdit = useCallback(
     (tabId: string, cellInfo: { rowIndex: number; column: string; row: Record<string, unknown> }) => {
       const pendingKey = cellInfo.row[PENDING_INSERT_ROW_KEY];
@@ -2207,11 +2234,51 @@ export function DatabasePanel() {
     [],
   );
 
+  const handleRowPaste = useCallback(
+    (tabId: string, payload: { values: Record<string, unknown> }) => {
+      const colMeta = useDbWorkspaceTabStore.getState().tableColumnMeta[tabId];
+      if (!colMeta?.length) return;
+      const pkCols = colMeta.filter((c) => c.isPk);
+      const pkCount = pkCols.length;
+      const rowKey = `${NEW_ROW_KEY_PREFIX}${crypto.randomUUID()}`;
+      const changes: Record<string, unknown> = {};
+
+      for (const col of colMeta) {
+        if (isAutoIncrementColumn(col, pkCount)) {
+          continue;
+        }
+        const raw = payload.values[col.name];
+        if (raw === undefined) continue;
+        if (col.isPk && (raw === null || raw === "")) continue;
+        changes[col.name] = raw;
+      }
+
+      if (Object.keys(changes).length === 0) return;
+
+      setTabDirtyRows((prev) => {
+        const cur = { ...(prev[tabId] ?? {}) };
+        cur[rowKey] = changes;
+        return { ...prev, [tabId]: cur };
+      });
+    },
+    [],
+  );
+
   const handleRowNew = useCallback(
     (tabId: string) => {
       const colMeta = useDbWorkspaceTabStore.getState().tableColumnMeta[tabId];
       if (!colMeta?.length) return;
-      const firstEditable = colMeta.find((c) => !c.isPk) ?? colMeta[0];
+      const formColumns = colMeta.filter((col) => !shouldUseInlineCellEdit(col.type));
+      if (formColumns.length === 0) {
+        const rowKey = `${NEW_ROW_KEY_PREFIX}${crypto.randomUUID()}`;
+        setTabDirtyRows((prev) => {
+          const cur = { ...(prev[tabId] ?? {}) };
+          cur[rowKey] = {};
+          return { ...prev, [tabId]: cur };
+        });
+        return;
+      }
+      const firstEditable = formColumns.find((c) => !c.isPk) ?? formColumns[0];
       setRowEdit({
         tabId,
         column: firstEditable.name,
@@ -2248,9 +2315,18 @@ export function DatabasePanel() {
       const colMeta = useDbWorkspaceTabStore.getState().tableColumnMeta[tabId];
       if (!colMeta) return;
       const meta = colMeta.find((c) => c.name === column);
-      if (!meta || meta.isPk) return;
+      if (!meta) return;
 
       const pendingKey = row[PENDING_INSERT_ROW_KEY];
+      const isPendingInsert = typeof pendingKey === "string";
+      const pkCols = colMeta.filter((c) => c.isPk);
+      const pkCount = pkCols.length;
+
+      if (meta.isPk) {
+        if (!isPendingInsert) return;
+        if (isAutoIncrementColumn(meta, pkCount)) return;
+      }
+
       if (typeof pendingKey === "string") {
         setTabDirtyRows((prev) => {
           const cur = { ...(prev[tabId] ?? {}) };
@@ -2278,7 +2354,6 @@ export function DatabasePanel() {
         return;
       }
 
-      const pkCols = colMeta.filter((c) => c.isPk);
       if (pkCols.length === 0) return;
       const originalValue = row[column];
       if (isSameCellValue(originalValue, value)) return;
@@ -2317,6 +2392,17 @@ export function DatabasePanel() {
       cellInfo: { rowIndex: number; column: string; row: Record<string, unknown> },
     ) => {
       commitCellDirtyChange(tabId, cellInfo.column, cellInfo.row, null);
+    },
+    [commitCellDirtyChange],
+  );
+
+  const handleCellCommit = useCallback(
+    (
+      tabId: string,
+      cellInfo: { rowIndex: number; column: string; row: Record<string, unknown> },
+      value: unknown,
+    ) => {
+      commitCellDirtyChange(tabId, cellInfo.column, cellInfo.row, value);
     },
     [commitCellDirtyChange],
   );
@@ -2385,15 +2471,6 @@ export function DatabasePanel() {
       setRowEdit(null);
     },
     [rowEdit, isSameCellValue],
-  );
-
-  const handleCellSave = useCallback(
-    (value: unknown) => {
-      if (!cellEdit) return;
-      commitCellDirtyChange(cellEdit.tabId, cellEdit.column, cellEdit.row, value);
-      setCellEdit(null);
-    },
-    [cellEdit, commitCellDirtyChange],
   );
 
   const toggleConnectionEnabled = useCallback(
@@ -3535,12 +3612,27 @@ export function DatabasePanel() {
     }
 
     const runId = makeQueryRunId();
-    const session = createSqlResultSession(sql);
+    const tempSession = findTemporarySqlResultSession(sessions);
+    if (tempSession && tabState.activeQueryRunId) {
+      try {
+        await invoke("db_cancel_query", { runId: tabState.activeQueryRunId });
+      } catch {
+        // 查询可能已结束
+      }
+    }
+
+    const session = tempSession
+      ? reuseTemporarySqlResultSession(tempSession, sql)
+      : createSqlResultSession(sql);
+    const nextSessions = tempSession
+      ? sessions.map((item) => (item.id === tempSession.id ? session : item))
+      : [...sessions, session];
+
     updateSqlTabState(resolvedTabId, {
       running: true,
       activeQueryRunId: runId,
       error: null,
-      resultSessions: [...sessions, session],
+      resultSessions: nextSessions,
       activeResultSessionId: session.id,
     });
 
@@ -3752,16 +3844,18 @@ export function DatabasePanel() {
         goToQueryResultPage,
         updateSqlTabState,
         closeSqlResultSession,
+        setSqlResultSessionPinned,
         refreshTablePreview,
         goToPage,
         requestTabAction,
         setTableSort,
         setTableFilter,
         setTableGridView,
-        handleCellEdit,
+        handleCellCommit,
         handleRowEdit,
         handleCellSetNull,
         handleRowNew,
+        handleRowPaste,
         resolveConnection,
         connectionsLoading,
         selectTable: handleSelectTable,
@@ -3792,14 +3886,16 @@ export function DatabasePanel() {
     cancelQuery,
     updateSqlTabState,
     closeSqlResultSession,
+    setSqlResultSessionPinned,
     refreshTablePreview,
     goToPage,
     setTableFilter,
     setTableGridView,
-    handleCellEdit,
+    handleCellCommit,
     handleRowEdit,
     handleCellSetNull,
     handleRowNew,
+    handleRowPaste,
     resolveConnection,
     connectionsLoading,
     handleSelectTable,
@@ -4188,7 +4284,7 @@ export function DatabasePanel() {
     );
   }, [connections, activeConnId, activeWorkspaceTab, activeSqlSidebarSeed]);
 
-  const editorHostTabId = cellEdit?.tabId ?? rowEdit?.tabId ?? null;
+  const editorHostTabId = rowEdit?.tabId ?? null;
   const editorTableColumnMeta = useDbWorkspaceTabStore((state) =>
     editorHostTabId ? state.tableColumnMeta[editorHostTabId] : undefined,
   );
@@ -4333,12 +4429,9 @@ export function DatabasePanel() {
     </DbWorkspaceProviders>
     </DbSidebarLinkageProvider>
     <DatabaseTableEditorHost
-      cellEdit={cellEdit}
       rowEdit={rowEdit}
       tableColumnMeta={editorTableColumnMeta ? { [editorHostTabId!]: editorTableColumnMeta } : {}}
       tabDirtyRows={editorHostTabId ? { [editorHostTabId]: editorTabDirtyRows } : {}}
-      onCellSave={handleCellSave}
-      onCellCancel={() => setCellEdit(null)}
       onRowSave={handleRowSave}
       onRowCancel={() => setRowEdit(null)}
     />

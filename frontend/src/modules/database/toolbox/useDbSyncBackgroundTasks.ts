@@ -1,9 +1,10 @@
 import { useEffect } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { resolveTargetTableName } from "./schemaSyncAlignedTables";
+import { resolveSchemaSyncTargetTableName, isSchemaSyncSourceTableMissingInTarget } from "./schemaSyncAlignedTables";
 import type { SyncTableInfo } from "./types";
 import type { DataAnalysisResult } from "./types";
 import type { SchemaTableDiff } from "./schemaDiff";
+import type { SchemaTableNameCase } from "./types";
 import { sourceTableSchemaSignature } from "./schemaDiff";
 import type { DbColumnMeta, DbConnectionConfig, DbIndexMeta } from "../api";
 import {
@@ -257,17 +258,30 @@ export async function startDbSchemaSyncExecute(
   sourceTableIndexes: Record<string, DbIndexMeta[]>,
   targetTables: SyncTableInfo[],
   caseSensitive = true,
+  tableNameCase: SchemaTableNameCase = "lower",
+  createMissingTables = true,
 ): Promise<string> {
-  const specs = tables.map((name) => {
-    const targetName = caseSensitive
-      ? undefined
-      : resolveTargetTableName(name, targetTables, false);
-    return {
+  const specs = tables.flatMap((name) => {
+    if (
+      !createMissingTables &&
+      isSchemaSyncSourceTableMissingInTarget(name, targetTables, caseSensitive)
+    ) {
+      return [];
+    }
+    const targetName = resolveSchemaSyncTargetTableName(
       name,
-      ...(targetName && targetName !== name ? { targetName } : {}),
-      columns: sourceTableColumns[name] ?? [],
-      indexes: sourceTableIndexes[name] ?? [],
-    };
+      targetTables,
+      caseSensitive,
+      tableNameCase,
+    );
+    return [
+      {
+        name,
+        ...(targetName !== name ? { targetName } : {}),
+        columns: sourceTableColumns[name] ?? [],
+        indexes: sourceTableIndexes[name] ?? [],
+      },
+    ];
   });
   return submitDbSchemaSyncExecute(
     { ...sourceConn, database: sourceDb },

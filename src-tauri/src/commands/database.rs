@@ -343,8 +343,19 @@ pub struct DbColumnMeta {
     pub is_fk: bool,
     #[serde(default)]
     pub nullable: bool,
+    #[serde(default)]
+    pub is_auto_increment: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub comment: Option<String>,
+}
+
+fn mysql_extra_is_auto_increment(extra: &str) -> bool {
+    extra.to_ascii_lowercase().contains("auto_increment")
+}
+
+fn type_implies_auto_increment(column_type: &str) -> bool {
+    let t = column_type.to_ascii_lowercase();
+    t.contains("auto_increment") || t.contains("serial") || t.contains("identity")
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
@@ -378,6 +389,29 @@ pub struct DbTableSchema {
     pub indexes: Vec<DbIndexMeta>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub comment: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct DbTableDetails {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(type = Option<f64>)]
+    pub row_count: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(type = Option<f64>)]
+    pub data_length: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub row_format: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub engine: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub create_time: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub update_time: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub comment: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub collation: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
@@ -800,6 +834,215 @@ pub async fn db_table_ddl(
     }
 }
 
+#[tauri::command]
+#[specta::specta]
+pub async fn db_get_table_details(
+    connection: DbConnectionConfig,
+    schema: Option<String>,
+    table: String,
+) -> Result<DbTableDetails, String> {
+    let db_name = schema
+        .filter(|name| !name.trim().is_empty())
+        .unwrap_or_else(|| connection.database.clone());
+    if db_name.trim().is_empty() {
+        return Err("未指定数据库".to_string());
+    }
+    if table.trim().is_empty() {
+        return Err("未指定数据表".to_string());
+    }
+
+    match connection.db_type.to_lowercase().as_str() {
+        "mysql" | "mariadb" => mysql_table_details(&connection, &db_name, table.trim()).await,
+        "postgresql" | "postgres" => pg_table_details(&connection, &db_name, table.trim()).await,
+        "sqlite" => sqlite_table_details(&connection, table.trim()).await,
+        _ => Err(format!("不支持的数据库类型: {}", connection.db_type)),
+    }
+}
+
+fn mysql_row_opt_i64(row: &MySqlRow, index: usize) -> Option<i64> {
+    if let Ok(v) = row.try_get::<i64, _>(index) {
+        return Some(v);
+    }
+    if let Ok(v) = row.try_get::<u64, _>(index) {
+        return Some(v as i64);
+    }
+    if let Ok(v) = row.try_get::<Option<i64>, _>(index) {
+        return v;
+    }
+    if let Ok(v) = row.try_get::<Option<u64>, _>(index) {
+        return v.map(|n| n as i64);
+    }
+    None
+}
+
+fn mysql_row_opt_string(row: &MySqlRow, index: usize) -> Option<String> {
+    let value = mysql_row_string(row, index);
+    if value.trim().is_empty() {
+        None
+    } else {
+        Some(value)
+    }
+}
+
+fn mysql_row_timestamp(row: &MySqlRow, index: usize) -> Option<String> {
+    mysql_row_opt_string(row, index)
+}
+
+async fn mysql_table_details(
+    connection: &DbConnectionConfig,
+    db_name: &str,
+    table_name: &str,
+) -> Result<DbTableDetails, String> {
+    let pool = mysql_pool(connection).await?;
+    let row = sqlx::query(
+        "SELECT TABLE_ROWS, DATA_LENGTH, ENGINE, ROW_FORMAT, CREATE_TIME, UPDATE_TIME, \
+         TABLE_COMMENT, TABLE_COLLATION \
+         FROM information_schema.TABLES \
+         WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? \
+         LIMIT 1",
+    )
+    .bind(db_name)
+    .bind(table_name)
+    .fetch_optional(&pool)
+    .await
+    .map_err(|e| format!("查询表信息失败: {e}"))?;
+    pool.close().await;
+
+    let Some(row) = row else {
+        return Err(format!("表 {table_name} 不存在"));
+    };
+
+    Ok(DbTableDetails {
+        row_count: mysql_row_opt_i64(&row, 0),
+        data_length: mysql_row_opt_i64(&row, 1),
+        row_format: mysql_row_opt_string(&row, 3),
+        engine: mysql_row_opt_string(&row, 2),
+        create_time: mysql_row_timestamp(&row, 4),
+        update_time: mysql_row_timestamp(&row, 5),
+        comment: normalize_table_comment(&mysql_row_string(&row, 6)),
+        collation: mysql_row_opt_string(&row, 7),
+    })
+}
+
+async fn pg_table_details(
+    connection: &DbConnectionConfig,
+    db_name: &str,
+    table_name: &str,
+) -> Result<DbTableDetails, String> {
+    let pool = pg_pool(connection).await?;
+    let schema = if db_name.trim().is_empty() {
+        "public".to_string()
+    } else {
+        db_name.to_string()
+    };
+
+    let row = sqlx::query(
+        "SELECT c.reltuples::bigint, pg_relation_size(c.oid)::bigint, \
+         obj_description(c.oid, 'pg_class'), \
+         COALESCE( \
+           (SELECT collcollate FROM pg_collation WHERE oid = c.relcollate AND c.relcollate <> 0), \
+           (SELECT datcollate FROM pg_database WHERE datname = current_database()) \
+         ) \
+         FROM pg_class c \
+         JOIN pg_namespace n ON n.oid = c.relnamespace \
+         WHERE n.nspname = $1 AND c.relname = $2 AND c.relkind IN ('r', 'p') \
+         LIMIT 1",
+    )
+    .bind(&schema)
+    .bind(table_name)
+    .fetch_optional(&pool)
+    .await
+    .map_err(|e| format!("查询表信息失败: {e}"))?;
+    pool.close().await;
+
+    let Some(row) = row else {
+        return Err(format!("表 {table_name} 不存在"));
+    };
+
+    let row_count = row.try_get::<i64, _>(0).ok().filter(|v| *v >= 0);
+    let data_length = row.try_get::<i64, _>(1).ok().filter(|v| *v >= 0);
+    let comment: Option<String> = row
+        .try_get::<Option<String>, _>(2)
+        .ok()
+        .flatten()
+        .and_then(|c| normalize_table_comment(&c));
+    let collation: Option<String> = row.try_get::<Option<String>, _>(3).ok().flatten();
+
+    Ok(DbTableDetails {
+        row_count,
+        data_length,
+        row_format: None,
+        engine: Some("Heap".to_string()),
+        create_time: None,
+        update_time: None,
+        comment,
+        collation,
+    })
+}
+
+async fn sqlite_table_details(
+    connection: &DbConnectionConfig,
+    table_name: &str,
+) -> Result<DbTableDetails, String> {
+    let conn = connection.clone();
+    let table = table_name.to_string();
+    tokio::task::spawn_blocking(move || sqlite_table_details_inner(&conn, &table))
+        .await
+        .map_err(|e| format!("SQLite task failed: {e}"))?
+}
+
+fn sqlite_quote_ident(name: &str) -> String {
+    format!("\"{}\"", name.replace('"', "\"\""))
+}
+
+fn sqlite_table_details_inner(
+    connection: &DbConnectionConfig,
+    table_name: &str,
+) -> Result<DbTableDetails, String> {
+    let path = connection.database.trim();
+    if path.is_empty() {
+        return Err("SQLite database path is empty".into());
+    }
+    let conn = rusqlite::Connection::open(path).map_err(|e| format!("SQLite open failed: {e}"))?;
+
+    let exists: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?1",
+            [table_name],
+            |row| row.get(0),
+        )
+        .map_err(|e| format!("SQLite table lookup failed: {e}"))?;
+    if exists == 0 {
+        return Err(format!("表 {table_name} 不存在"));
+    }
+
+    let row_count: i64 = conn
+        .query_row(
+            &format!("SELECT COUNT(*) FROM {}", sqlite_quote_ident(table_name)),
+            [],
+            |row| row.get(0),
+        )
+        .map_err(|e| format!("统计行数失败: {e}"))?;
+
+    let page_count: i64 = conn
+        .query_row("PRAGMA page_count", [], |row| row.get(0))
+        .unwrap_or(0);
+    let page_size: i64 = conn
+        .query_row("PRAGMA page_size", [], |row| row.get(0))
+        .unwrap_or(0);
+
+    Ok(DbTableDetails {
+        row_count: Some(row_count),
+        data_length: Some(page_count.saturating_mul(page_size)),
+        row_format: None,
+        engine: Some("SQLite".to_string()),
+        create_time: None,
+        update_time: None,
+        comment: None,
+        collation: None,
+    })
+}
+
 /// MySQL / MariaDB: `SHOW CREATE TABLE` 直接返回原始建表语句。
 async fn mysql_table_ddl(
     connection: &DbConnectionConfig,
@@ -961,7 +1204,7 @@ async fn introspect_mysql_schema(
     let pool = mysql_pool(connection).await?;
 
     let col_rows = sqlx::query(
-        "SELECT TABLE_NAME, COLUMN_NAME, DATA_TYPE, COLUMN_KEY, IS_NULLABLE, COLUMN_COMMENT \
+        "SELECT TABLE_NAME, COLUMN_NAME, DATA_TYPE, COLUMN_KEY, IS_NULLABLE, COLUMN_COMMENT, EXTRA \
          FROM information_schema.COLUMNS \
          WHERE TABLE_SCHEMA = ? \
          ORDER BY TABLE_NAME, ORDINAL_POSITION",
@@ -997,6 +1240,7 @@ async fn introspect_mysql_schema(
         let is_fk = column_key == "MUL";
         let nullable = mysql_row_string(row, 4).eq_ignore_ascii_case("yes");
         let comment = normalize_table_comment(&mysql_row_string(row, 5));
+        let is_auto_increment = mysql_extra_is_auto_increment(&mysql_row_string(row, 6));
 
         if let Some(table) = all_objects.iter_mut().find(|t| t.name == table_name) {
             table.columns.push(DbColumnMeta {
@@ -1005,6 +1249,7 @@ async fn introspect_mysql_schema(
                 is_pk,
                 is_fk,
                 nullable,
+                is_auto_increment,
                 comment,
             });
         } else {
@@ -1016,6 +1261,7 @@ async fn introspect_mysql_schema(
                     is_pk,
                     is_fk,
                     nullable,
+                    is_auto_increment,
                     comment,
                 }],
                 indexes: Vec::new(),
@@ -1044,7 +1290,7 @@ async fn introspect_mysql_table(
     let pool = mysql_pool(connection).await?;
 
     let col_rows = sqlx::query(
-        "SELECT COLUMN_NAME, DATA_TYPE, COLUMN_KEY, IS_NULLABLE, COLUMN_COMMENT \
+        "SELECT COLUMN_NAME, DATA_TYPE, COLUMN_KEY, IS_NULLABLE, COLUMN_COMMENT, EXTRA \
          FROM information_schema.COLUMNS \
          WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? \
          ORDER BY ORDINAL_POSITION",
@@ -1082,6 +1328,7 @@ async fn introspect_mysql_table(
                 is_pk: column_key == "PRI",
                 is_fk: column_key == "MUL",
                 nullable: mysql_row_string(row, 3).eq_ignore_ascii_case("yes"),
+                is_auto_increment: mysql_extra_is_auto_increment(&mysql_row_string(row, 5)),
                 comment: normalize_table_comment(&mysql_row_string(row, 4)),
             }
         })
@@ -1715,7 +1962,9 @@ async fn introspect_pg_schema(
     let col_rows = sqlx::query(
         "SELECT c.table_name, c.column_name, c.data_type, \
          CASE WHEN pk.column_name IS NOT NULL THEN true ELSE false END AS is_pk, \
-         c.is_nullable = 'YES' AS nullable, pgd.description AS column_comment \
+         c.is_nullable = 'YES' AS nullable, \
+         (c.is_identity = 'YES' OR COALESCE(c.column_default, '') LIKE 'nextval%') AS is_auto_increment, \
+         pgd.description AS column_comment \
          FROM information_schema.columns c \
          LEFT JOIN ( \
              SELECT ku.column_name, ku.table_name \
@@ -1761,8 +2010,9 @@ async fn introspect_pg_schema(
         let data_type: String = row.try_get(2).unwrap_or_default();
         let is_pk: bool = row.try_get(3).unwrap_or(false);
         let nullable: bool = row.try_get(4).unwrap_or(false);
+        let is_auto_increment: bool = row.try_get(5).unwrap_or(false);
         let comment: Option<String> = row
-            .try_get::<Option<String>, _>(5)
+            .try_get::<Option<String>, _>(6)
             .ok()
             .flatten()
             .and_then(|c| normalize_table_comment(&c));
@@ -1774,6 +2024,7 @@ async fn introspect_pg_schema(
                 is_pk,
                 is_fk: false,
                 nullable,
+                is_auto_increment,
                 comment,
             });
         } else {
@@ -1785,6 +2036,7 @@ async fn introspect_pg_schema(
                     is_pk,
                     is_fk: false,
                     nullable,
+                    is_auto_increment,
                     comment,
                 }],
                 indexes: Vec::new(),
@@ -1833,7 +2085,9 @@ async fn introspect_pg_table(
     let col_rows = sqlx::query(
         "SELECT c.column_name, c.data_type, \
          CASE WHEN pk.column_name IS NOT NULL THEN true ELSE false END AS is_pk, \
-         c.is_nullable = 'YES' AS nullable, pgd.description AS column_comment \
+         c.is_nullable = 'YES' AS nullable, \
+         (c.is_identity = 'YES' OR COALESCE(c.column_default, '') LIKE 'nextval%') AS is_auto_increment, \
+         pgd.description AS column_comment \
          FROM information_schema.columns c \
          LEFT JOIN ( \
              SELECT ku.column_name, ku.table_name \
@@ -1879,8 +2133,9 @@ async fn introspect_pg_table(
             is_pk: row.try_get(2).unwrap_or(false),
             is_fk: false,
             nullable: row.try_get(3).unwrap_or(false),
+            is_auto_increment: row.try_get(4).unwrap_or(false),
             comment: row
-                .try_get::<Option<String>, _>(4)
+                .try_get::<Option<String>, _>(5)
                 .ok()
                 .flatten()
                 .and_then(|c| normalize_table_comment(&c)),
@@ -2027,12 +2282,14 @@ fn sqlite_pragma_columns(
     let rows = stmt
         .query_map([], |row| {
             let notnull: i32 = row.get(3)?;
+            let column_type: String = row.get(2)?;
             Ok(DbColumnMeta {
                 name: row.get::<_, String>(1)?,
-                column_type: row.get::<_, String>(2)?,
+                column_type: column_type.clone(),
                 is_pk: row.get::<_, i32>(5)? > 0,
                 is_fk: false,
                 nullable: notnull == 0,
+                is_auto_increment: type_implies_auto_increment(&column_type),
                 comment: None,
             })
         })

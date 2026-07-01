@@ -3,6 +3,11 @@ import type { SchemaTableDiff } from "./schemaDiff";
 
 export type ToolboxTabId = "dataSync" | "schemaSync";
 
+/** 结构同步新建表时的表名大小写规则 */
+export type SchemaTableNameCase = "upper" | "lower";
+
+export const DEFAULT_SCHEMA_TABLE_NAME_CASE: SchemaTableNameCase = "lower";
+
 /** 源表在目标库中的存在状态（仅数据同步、已勾选时展示） */
 export type TableTargetStatus = "checking" | "new" | "conflict";
 
@@ -149,6 +154,10 @@ export interface SyncTaskConfig {
   tableSyncStrategies?: Record<string, DataSyncStrategy>;
   /** 结构同步：比较表名时是否区分大小写，默认 true */
   schemaCaseSensitive?: boolean;
+  /** 结构同步：新建表时的表名大小写（大写 / 小写） */
+  schemaTableNameCase?: SchemaTableNameCase;
+  /** 结构同步：目标库不存在时是否新建表，默认 true */
+  schemaCreateMissingTables?: boolean;
   /** 结构同步：目标侧表状态筛选（空数组表示全部） */
   schemaTargetStatusFilter?: SchemaTargetRowStatus[] | SchemaTargetStatusFilter;
   /** 结构同步：表名搜索过滤 */

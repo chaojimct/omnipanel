@@ -7582,6 +7582,37 @@ a {
         gap: var(--sp-1);
     }
 
+    .form-field--horizontal {
+        display: grid;
+        grid-template-columns: 132px minmax(0, 1fr);
+        column-gap: var(--sp-4);
+        row-gap: var(--sp-1);
+        align-items: center;
+    }
+
+    .form-field--horizontal .form-label-row {
+        grid-column: 1;
+        align-self: center;
+        justify-self: start;
+    }
+
+    .form-field--horizontal .form-field__control {
+        grid-column: 2;
+        justify-self: start;
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
+    }
+
+    .form-field--horizontal .form-field-hint {
+        grid-column: 2;
+        margin: 0;
+    }
+
+    .form-field__control {
+        min-width: 0;
+    }
+
     .form-field.full {
         grid-column: 1 / -1;
     }
@@ -13900,6 +13931,41 @@ a {
 
 .docker-toast {
     animation: toastIn 0.3s ease-out;
+}
+
+/* ====== Global App Toast (center-top) ====== */
+.app-toast-host {
+    position: fixed;
+    top: 56px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 10000;
+    pointer-events: none;
+    display: flex;
+    justify-content: center;
+    width: min(92vw, 480px);
+}
+
+.app-toast {
+    max-width: 100%;
+    padding: var(--sp-2) var(--sp-4);
+    border-radius: var(--r-sm);
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--fg);
+    font-size: 13px;
+    line-height: 1.45;
+    text-align: center;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+    pointer-events: auto;
+}
+
+.app-toast--visible {
+    animation: toastIn 0.28s ease-out forwards;
+}
+
+.app-toast--hidden {
+    animation: toastOut 0.28s ease-in forwards;
 }
 
 /* ====== Connection Switch Overlay ====== */
