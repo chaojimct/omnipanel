@@ -30,7 +30,7 @@ pub struct ProxyConfig {
 
 use omnipanel_ai::provider::AiProviderRegistry;
 
-use crate::background::{BackgroundWorkerPool, DEFAULT_WORKER_COUNT, SshPool};
+use crate::background::{BackgroundWorkerPool, default_worker_count, SshPool};
 use crate::commands::ssh::SshTunnelInfo;
 use crate::log_store::LogStore;
 use crate::output_buffer::{self, OutputBuffers};
@@ -160,7 +160,7 @@ impl AppState {
             proxy_config: Arc::new(Mutex::new(ProxyConfig::default())),
             mcp_manager,
             acp_state: Arc::new(Mutex::new(crate::commands::acp::AcpState::default())),
-            worker_pool: Arc::new(BackgroundWorkerPool::new(DEFAULT_WORKER_COUNT)),
+            worker_pool: Arc::new(BackgroundWorkerPool::new(default_worker_count())),
         }
     }
 }

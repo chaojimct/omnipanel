@@ -146,3 +146,57 @@ export function buildNewTableDiff(
 export function hasSchemaDiff(diff: Pick<SchemaTableDiff, "columns" | "indexes">): boolean {
   return diff.columns.length > 0 || diff.indexes.length > 0;
 }
+
+/** 根据源/目标快照本地计算表结构差异（结构同步对齐列表用）。 */
+export function buildSchemaTableDiffFromSnapshots(
+  tableName: string,
+  sourceTable: { columns: DbColumnMeta[]; indexes: DbIndexMeta[] } | undefined,
+  targetTable: { columns: DbColumnMeta[]; indexes: DbIndexMeta[] } | undefined,
+  targetKey: string,
+): SchemaTableDiff {
+  if (!sourceTable && targetTable) {
+    return {
+      tableName,
+      status: "diff",
+      columns: targetTable.columns.map((c) => ({
+        name: c.name,
+        kind: "removed" as const,
+        targetType: c.type,
+      })),
+      indexes: targetTable.indexes.map((idx) => ({
+        name: idx.name,
+        kind: "removed" as const,
+        targetDetail: formatIndexDetail(idx),
+      })),
+      targetKey,
+      sourceKey: "",
+    };
+  }
+  if (sourceTable && !targetTable) {
+    return {
+      ...buildNewTableDiff(tableName, sourceTable.columns, sourceTable.indexes),
+      targetKey,
+    };
+  }
+  if (sourceTable && targetTable) {
+    const columns = compareTableColumns(sourceTable.columns, targetTable.columns);
+    const indexes = compareTableIndexes(sourceTable.indexes, targetTable.indexes);
+    const status = columns.length === 0 && indexes.length === 0 ? "match" : "diff";
+    return {
+      tableName,
+      status,
+      columns,
+      indexes,
+      targetKey,
+      sourceKey: sourceTableSchemaSignature(sourceTable.columns, sourceTable.indexes),
+    };
+  }
+  return {
+    tableName,
+    status: "error",
+    columns: [],
+    indexes: [],
+    error: "missing",
+    targetKey,
+  };
+}

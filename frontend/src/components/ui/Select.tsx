@@ -50,7 +50,7 @@ export interface SelectProps {
   title?: string;
 }
 
-function normalizeOptions(options: SelectOptionsInput): SelectOption[] {
+export function normalizeOptions(options: SelectOptionsInput): SelectOption[] {
   if (options.length === 0) return [];
   const first = options[0];
   if (typeof first === "string") {

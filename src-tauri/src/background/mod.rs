@@ -11,7 +11,7 @@ use std::sync::Arc;
 
 use omnipanel_store::Storage;
 pub use ssh_pool::{PoolStatusEvent, SshHostOverview, SshPool};
-pub use worker_pool::{BackgroundWorkerPool, DEFAULT_WORKER_COUNT};
+pub use worker_pool::{BackgroundWorkerPool, default_worker_count};
 pub use omnipanel_ssh::HostSystemStats;
 
 /// Background scheduler — SSH 连接池初始化。

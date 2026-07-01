@@ -260,7 +260,10 @@ export function sanitizeWorkspaceSession(
       return Boolean(tab.connId);
     }
     if (tab.kind === "toolbox") {
-      return tab.toolboxTab === "dataSync" || tab.toolboxTab === "schemaSync";
+      return (
+        Boolean(tab.syncTaskId) &&
+        (tab.toolboxTab === "dataSync" || tab.toolboxTab === "schemaSync")
+      );
     }
     return false;
   });

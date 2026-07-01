@@ -6,6 +6,7 @@ import {
   initKnowledgeVectorizeBackgroundTasks,
 } from "../modules/knowledge/knowledgeVectorize";
 import { initSchemaCacheBackgroundTasks } from "../modules/database/schemaCacheBackgroundTasks";
+import { initDbSyncTaskRunTracking } from "./dbSyncTaskRunTracking";
 
 export type BackgroundTaskStatus = "pending" | "running" | "completed" | "failed" | "cancelled";
 
@@ -149,6 +150,7 @@ export function initBackgroundTasks() {
   void useBackgroundTaskStore.getState().refreshRunning();
   initKnowledgeVectorizeBackgroundTasks();
   initSchemaCacheBackgroundTasks();
+  initDbSyncTaskRunTracking();
 
   const unsubs: Array<() => void> = [];
 

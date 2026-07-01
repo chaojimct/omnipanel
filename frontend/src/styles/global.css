@@ -14255,7 +14255,6 @@ a {
     display: flex;
     align-items: center;
     gap: 0;
-    padding-right: var(--sp-1);
     flex-shrink: 0;
 }
 

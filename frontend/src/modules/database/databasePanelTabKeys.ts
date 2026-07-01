@@ -97,8 +97,8 @@ export function buildDatabasePanelContentKeysByTab(params: {
     if (tab.kind === "toolbox") {
       keys[tab.id] = [
         connectionsFingerprint,
+        tab.syncTaskId,
         tab.toolboxTab,
-        tab.label,
       ].join(":");
       continue;
     }

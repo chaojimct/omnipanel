@@ -22,7 +22,6 @@ import { AiDockView } from "./components/ai/AiDockView";
 import { AiRuntimeProvider } from "./components/ai/assistant-ui/AiRuntimeProvider";
 import { DangerConfirmDialog } from "./components/terminal/DangerConfirmDialog";
 import { QuickInputHost } from "./components/ui/QuickInputHost";
-import { AppDialogHost } from "./components/ui/AppDialogHost";
 import { Button } from "./components/ui/Button";
 import { SuspendedModulePanel } from "./components/ui/SuspendedModulePanel";
 import { WorkspaceHost } from "./components/workspace/WorkspaceHost";
@@ -505,7 +504,6 @@ function AppShell() {
       <NotificationDrawer />
       <WindowResize />
       <QuickInputHost />
-      <AppDialogHost />
       <SettingsWindow />
       <SubWindowMinimizedStack />
       {pendingRiskActionId && pendingRiskAction && riskResult && (

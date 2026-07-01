@@ -193,6 +193,10 @@ export async function saveConnection(connection: DbConnectionConfig): Promise<Db
   return invoke<DbConnectionConfig>("db_save_connection", { connection });
 }
 
+export async function deleteConnection(id: string): Promise<void> {
+  return invoke<void>("db_delete_connection", { id });
+}
+
 export async function testConnection(connection: DbConnectionConfig): Promise<string> {
   return invoke<string>("db_test_connection", { connection });
 }

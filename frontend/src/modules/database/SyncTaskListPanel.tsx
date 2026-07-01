@@ -1,11 +1,14 @@
 import { useMemo, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { useI18n } from "../../i18n";
+import { Button } from "../../components/ui/Button";
 import { ContextMenu } from "../../components/ui/ContextMenu";
-import { WarnAlert } from "../../components/ui/WarnAlert";
+import { appConfirm } from "../../lib/appConfirm";
+import { quickInput } from "../../lib/quickInput";
 import { useDbSyncTaskStore } from "../../stores/dbSyncTaskStore";
 import type { SyncTask } from "./toolbox/types";
 import type { SchemaSidebarSectionConfig } from "./SchemaSidebarSection";
 import { SchemaSidebarSection } from "./SchemaSidebarSection";
+import { CreateSyncTaskDialog } from "./CreateSyncTaskDialog";
 
 interface SyncTaskListPanelProps {
   onOpenTask: (task: SyncTask) => void;
@@ -18,16 +21,64 @@ export function SyncTaskListPanel({ onOpenTask, onRunTask, section }: SyncTaskLi
   const tasks = useDbSyncTaskStore((s) => s.tasks);
   const activeTaskId = useDbSyncTaskStore((s) => s.activeTaskId);
   const deleteTask = useDbSyncTaskStore((s) => s.deleteTask);
+  const updateTask = useDbSyncTaskStore((s) => s.updateTask);
+  const addTask = useDbSyncTaskStore((s) => s.addTask);
 
+  const [createOpen, setCreateOpen] = useState(false);
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; task: SyncTask } | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<SyncTask | null>(null);
 
   const sortedTasks = useMemo(
     () => [...tasks].sort((a, b) => b.updatedAt - a.updatedAt),
     [tasks],
   );
 
-  const panelBody = (
+  const handleDeleteTask = async (task: SyncTask) => {
+    if (
+      !(await appConfirm(
+        t("database.syncTasks.deleteConfirm", { name: task.name }),
+        t("database.syncTasks.deleteTitle"),
+        {
+          confirmLabel: t("database.syncTasks.delete"),
+          cancelLabel: t("common.cancel"),
+        },
+      ))
+    ) {
+      return;
+    }
+    deleteTask(task.id);
+  };
+
+  const handleRenameTask = async (task: SyncTask) => {
+    const name = await quickInput({
+      title: t("database.syncTasks.renameTitle"),
+      placeholder: t("database.syncTasks.namePlaceholder"),
+      defaultValue: task.name,
+      validate: (value) => (value.trim() ? null : t("database.syncTasks.nameRequired")),
+    });
+    if (!name) {
+      return;
+    }
+    updateTask(task.id, { name: name.trim() });
+  };
+
+  const toolbar = (
+    <div className="schema-toolbar schema-toolbar--inline">
+      <Button
+        variant="icon"
+        title={t("database.syncTasks.newTask")}
+        onClick={(event) => {
+          event.stopPropagation();
+          setCreateOpen(true);
+        }}
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
+          <path d="M12 5v14M5 12h14" />
+        </svg>
+      </Button>
+    </div>
+  );
+
+  const taskListBody = (
     <div className="db-sync-task-panel">
       {sortedTasks.length === 0 ? (
         <div className="db-sync-task-empty">{t("database.syncTasks.empty")}</div>
@@ -73,39 +124,47 @@ export function SyncTaskListPanel({ onOpenTask, onRunTask, section }: SyncTaskLi
               onClick: () => onRunTask(ctxMenu.task),
             },
             {
+              id: "rename",
+              label: t("database.syncTasks.rename"),
+              onClick: () => {
+                const task = ctxMenu.task;
+                setCtxMenu(null);
+                void handleRenameTask(task);
+              },
+            },
+            {
               id: "delete",
               label: t("database.syncTasks.delete"),
               danger: true,
-              onClick: () => setDeleteTarget(ctxMenu.task),
+              onClick: () => {
+                const task = ctxMenu.task;
+                setCtxMenu(null);
+                void handleDeleteTask(task);
+              },
             },
           ]}
           onClose={() => setCtxMenu(null)}
         />
       ) : null}
-
-      <WarnAlert
-        open={deleteTarget !== null}
-        title={t("database.syncTasks.deleteTitle")}
-        confirmLabel={t("database.syncTasks.delete")}
-        cancelLabel={t("shell.topbar.cancel", { defaultValue: "取消" })}
-        onConfirm={() => {
-          if (deleteTarget) {
-            deleteTask(deleteTarget.id);
-          }
-          setDeleteTarget(null);
-        }}
-        onClose={() => setDeleteTarget(null)}
-      >
-        {deleteTarget
-          ? t("database.syncTasks.deleteConfirm", { name: deleteTarget.name })
-          : null}
-      </WarnAlert>
     </div>
   );
 
-  if (section) {
-    return <SchemaSidebarSection {...section}>{panelBody}</SchemaSidebarSection>;
-  }
+  return (
+    <>
+      {section ? (
+        <SchemaSidebarSection {...section} actions={toolbar}>
+          {taskListBody}
+        </SchemaSidebarSection>
+      ) : (
+        taskListBody
+      )}
 
-  return panelBody;
+      <CreateSyncTaskDialog
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        createTask={addTask}
+        onCreated={onOpenTask}
+      />
+    </>
+  );
 }

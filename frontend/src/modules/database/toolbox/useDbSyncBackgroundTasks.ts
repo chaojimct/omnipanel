@@ -1,9 +1,11 @@
 import { useEffect } from "react";
 import { listen } from "@tauri-apps/api/event";
-import type { DbColumnMeta, DbConnectionConfig, DbIndexMeta } from "../api";
+import { resolveTargetTableName } from "./schemaSyncAlignedTables";
+import type { SyncTableInfo } from "./types";
 import type { DataAnalysisResult } from "./types";
 import type { SchemaTableDiff } from "./schemaDiff";
 import { sourceTableSchemaSignature } from "./schemaDiff";
+import type { DbColumnMeta, DbConnectionConfig, DbIndexMeta } from "../api";
 import {
   cancelBackgroundTask,
   submitDbDataSyncAnalysis,
@@ -253,12 +255,20 @@ export async function startDbSchemaSyncExecute(
   tables: string[],
   sourceTableColumns: Record<string, DbColumnMeta[]>,
   sourceTableIndexes: Record<string, DbIndexMeta[]>,
+  targetTables: SyncTableInfo[],
+  caseSensitive = true,
 ): Promise<string> {
-  const specs = tables.map((name) => ({
-    name,
-    columns: sourceTableColumns[name] ?? [],
-    indexes: sourceTableIndexes[name] ?? [],
-  }));
+  const specs = tables.map((name) => {
+    const targetName = caseSensitive
+      ? undefined
+      : resolveTargetTableName(name, targetTables, false);
+    return {
+      name,
+      ...(targetName && targetName !== name ? { targetName } : {}),
+      columns: sourceTableColumns[name] ?? [],
+      indexes: sourceTableIndexes[name] ?? [],
+    };
+  });
   return submitDbSchemaSyncExecute(
     { ...sourceConn, database: sourceDb },
     { ...targetConn, database: targetDb },
