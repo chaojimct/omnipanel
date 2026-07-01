@@ -79,6 +79,10 @@ export function Bootstrap() {
 
         await pushLog(t("app.splash.logs.mcpTools"));
         await initMcpToolStore();
+        const { registerToolHandlers } = await import("./lib/ai/toolHost");
+        registerToolHandlers();
+        const { syncGatewayConfig } = await import("./lib/ai/gatewayConfig");
+        void syncGatewayConfig();
 
         await pushLog(t("app.splash.logs.connections"));
         initConnections();

@@ -79,22 +79,36 @@ export function useStickyAiBlockId(
       return;
     }
 
+    let rafId = 0;
+    let disposed = false;
+
     const update = () => {
+      rafId = 0;
+      if (disposed) return;
       const next = resolveStickyAiBlockId(container, list, visibleBlocks) ?? fallbackId;
       setStickyAiBlockId((prev) => (prev === next ? prev : next));
     };
 
-    update();
-    container.addEventListener("scroll", update, { passive: true });
-    window.addEventListener("resize", update);
+    // 用 rAF 合并 scroll/resize 触发，避免 ResizeObserver 同步回灌 setState
+    // 造成「Maximum update depth exceeded」的无限渲染环。
+    const schedule = () => {
+      if (rafId) return;
+      rafId = requestAnimationFrame(update);
+    };
 
-    const observer = new ResizeObserver(update);
+    update();
+    container.addEventListener("scroll", schedule, { passive: true });
+    window.addEventListener("resize", schedule);
+
+    const observer = new ResizeObserver(schedule);
     observer.observe(list);
     observer.observe(container);
 
     return () => {
-      container.removeEventListener("scroll", update);
-      window.removeEventListener("resize", update);
+      disposed = true;
+      if (rafId) cancelAnimationFrame(rafId);
+      container.removeEventListener("scroll", schedule);
+      window.removeEventListener("resize", schedule);
       observer.disconnect();
     };
   }, [activitySignature, fallbackId, listRef, scrollRef, visibleBlocks]);

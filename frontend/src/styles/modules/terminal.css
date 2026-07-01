@@ -1856,6 +1856,22 @@
         color: #ffa8a8;
     }
 
+    .term-warp-block--ai.term-warp-block--collapsed {
+        display: flex;
+        align-items: center;
+    }
+
+    .term-warp-block--ai.term-warp-block--collapsed .term-warp-block__summary {
+        flex: 1;
+        min-width: 0;
+        width: auto;
+    }
+
+    .term-warp-block--ai.term-warp-block--collapsed .term-warp-block__stop {
+        margin-left: 0;
+        margin-right: 12px;
+    }
+
     .term-warp-block__summary .term-warp-block__stop {
         margin-left: 8px;
     }

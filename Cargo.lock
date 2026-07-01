@@ -3648,6 +3648,7 @@ name = "omnipanel-app"
 version = "0.0.5"
 dependencies = [
  "anyhow",
+ "async-trait",
  "base64 0.22.1",
  "fontdb",
  "futures",
@@ -3660,6 +3661,7 @@ dependencies = [
  "omnipanel-docker",
  "omnipanel-error",
  "omnipanel-exec",
+ "omnipanel-gateway",
  "omnipanel-mcp",
  "omnipanel-ssh",
  "omnipanel-store",
@@ -3771,12 +3773,31 @@ dependencies = [
 ]
 
 [[package]]
-name = "omnipanel-mcp"
+name = "omnipanel-gateway"
 version = "0.0.5"
 dependencies = [
  "anyhow",
  "axum",
+ "futures",
+ "omnipanel-ai",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tokio-stream",
+ "tower",
+ "tower-http",
+ "tracing",
+]
+
+[[package]]
+name = "omnipanel-mcp"
+version = "0.0.5"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "axum",
  "http 1.4.1",
+ "omnipanel-ai",
  "omnipanel-error",
  "omnipanel-store",
  "rmcp",
@@ -7275,6 +7296,7 @@ dependencies = [
  "tower",
  "tower-layer",
  "tower-service",
+ "tracing",
  "url",
 ]
 

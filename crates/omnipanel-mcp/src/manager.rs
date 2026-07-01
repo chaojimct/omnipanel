@@ -16,6 +16,7 @@ use omnipanel_store::Storage;
 use crate::builtin::OmniMcpHandler;
 use crate::omni_module::omni_tool_module_key;
 use crate::process::stdio_command;
+use crate::registry::ToolRegistry;
 use crate::store::{
     delete_custom_service, load_services_file, set_service_enabled, upsert_custom_service,
 };
@@ -40,6 +41,7 @@ pub struct McpManager {
     builtin: Option<BuiltinServerRuntime>,
     stdio_runtimes: HashMap<String, StdioServiceRuntime>,
     storage: Arc<Mutex<Storage>>,
+    pub tool_registry: ToolRegistry,
 }
 
 impl McpManager {
@@ -49,7 +51,8 @@ impl McpManager {
             file,
             builtin: None,
             stdio_runtimes: HashMap::new(),
-            storage,
+            storage: storage.clone(),
+            tool_registry: ToolRegistry::new(storage),
         };
         manager.start_builtin().await?;
         manager.sync_custom_services().await?;

@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 /// 开发态：`src-tauri/../agent`（git submodule OmniAgent）。
+/// @deprecated 内置 AI 已迁移至 InternalOrchestrator + ACP lazy connect；OmniAgent Node 路径仅作 legacy 回退。
 pub fn resolve_repo_agent_dir() -> Option<PathBuf> {
     let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let agent_dir = manifest.join("../agent");

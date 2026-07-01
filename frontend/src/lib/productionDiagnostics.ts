@@ -92,6 +92,22 @@ function renderPanel() {
       void openDevtools();
     };
 
+    const copyBtn = document.createElement("button");
+    copyBtn.type = "button";
+    copyBtn.textContent = "复制";
+    Object.assign(copyBtn.style, {
+      background: "#ff6b6b22",
+      color: "#fff",
+      border: "1px solid #ff6b6b66",
+      borderRadius: "4px",
+      padding: "2px 8px",
+      cursor: "pointer",
+      fontSize: "11px",
+    } as CSSStyleDeclaration);
+    copyBtn.onclick = () => {
+      void copyErrorsToClipboard(copyBtn);
+    };
+
     const clearBtn = document.createElement("button");
     clearBtn.type = "button";
     clearBtn.textContent = "清除";
@@ -109,7 +125,7 @@ function renderPanel() {
       renderPanel();
     };
 
-    toolbar.append(title, devtoolsBtn, clearBtn);
+    toolbar.append(title, devtoolsBtn, copyBtn, clearBtn);
     panel.append(toolbar);
 
     const body = document.createElement("div");
@@ -122,6 +138,37 @@ function renderPanel() {
   if (body) {
     body.textContent = errors.join("\n\n— — —\n\n");
   }
+}
+
+async function copyErrorsToClipboard(button: HTMLButtonElement): Promise<void> {
+  const text = errors.join("\n\n— — —\n\n");
+  if (!text) return;
+
+  let ok = false;
+  try {
+    await navigator.clipboard.writeText(text);
+    ok = true;
+  } catch {
+    // WebView 下 navigator.clipboard 可能不可用，降级到 execCommand。
+    try {
+      const textarea = document.createElement("textarea");
+      textarea.value = text;
+      textarea.style.position = "fixed";
+      textarea.style.opacity = "0";
+      document.body.append(textarea);
+      textarea.select();
+      ok = document.execCommand("copy");
+      textarea.remove();
+    } catch {
+      ok = false;
+    }
+  }
+
+  const original = button.textContent;
+  button.textContent = ok ? "已复制" : "复制失败";
+  window.setTimeout(() => {
+    button.textContent = original;
+  }, 1500);
 }
 
 function pushError(message: string) {

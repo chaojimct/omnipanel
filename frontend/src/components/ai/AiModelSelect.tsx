@@ -1,12 +1,9 @@
 import { useMemo } from "react";
 
 import { useI18n } from "../../i18n";
+import { useBackendSelectOptions } from "../../lib/ai/backendSelectOptions";
 import { useAssistantScenarioModelSelectionId } from "../../lib/aiScenarioModels";
-import {
-  listModelSelections,
-  parseModelSelectionId,
-  useAiModelsStore,
-} from "../../stores/aiModelsStore";
+import { useAiModelsStore } from "../../stores/aiModelsStore";
 import { useAiStore } from "../../stores/aiStore";
 import { Select } from "../ui/Select";
 
@@ -15,7 +12,7 @@ export interface AiModelSelectProps {
   className?: string;
 }
 
-/** AI 助手模型选择（数据来自设置 → AI 模型） */
+/** AI 助手模型选择（HTTP 模型 + 外部 ACP Agent） */
 export function AiModelSelect({ disabled = false, className }: AiModelSelectProps) {
   const { t } = useI18n();
   const providers = useAiModelsStore((s) => s.providers);
@@ -23,20 +20,17 @@ export function AiModelSelect({ disabled = false, className }: AiModelSelectProp
   const scenarioDefaultModelId = useAssistantScenarioModelSelectionId();
   const setCurrentModelSelectionId = useAiStore((s) => s.setCurrentModelSelectionId);
 
-  const options = useMemo(() => {
-    return listModelSelections(providers).map(({ id }) => {
-      const parsed = parseModelSelectionId(id);
-      const provider = providers.find((p) => p.id === parsed?.providerId);
-      const modelName = parsed?.modelName ?? id;
-      const standard =
-        provider?.apiStandard === "anthropic" ? "Anthropic" : "OpenAI";
-      return {
-        value: id,
-        label: modelName,
-        subtitle: provider ? `${provider.providerName} · ${standard}` : undefined,
-      };
-    });
-  }, [providers]);
+  const backendOptions = useBackendSelectOptions(providers);
+
+  const options = useMemo(
+    () =>
+      backendOptions.map((opt) => ({
+        value: opt.value,
+        label: opt.group === "acp" ? `[Agent] ${opt.label}` : opt.label,
+        subtitle: opt.subtitle,
+      })),
+    [backendOptions],
+  );
 
   if (options.length === 0) {
     return (
@@ -70,13 +64,11 @@ export function AiModelSelect({ disabled = false, className }: AiModelSelectProp
 export function useSelectedModelLabel(): string | null {
   const providers = useAiModelsStore((s) => s.providers);
   const currentModelSelectionId = useAiStore((s) => s.currentModelSelectionId);
+  const backendOptions = useBackendSelectOptions(providers);
 
   return useMemo(() => {
     if (!currentModelSelectionId) return null;
-    const parsed = parseModelSelectionId(currentModelSelectionId);
-    if (!parsed) return null;
-    const provider = providers.find((p) => p.id === parsed.providerId);
-    if (!provider) return null;
-    return parsed.modelName;
-  }, [currentModelSelectionId, providers]);
+    const match = backendOptions.find((o) => o.value === currentModelSelectionId);
+    return match?.label ?? null;
+  }, [currentModelSelectionId, backendOptions]);
 }

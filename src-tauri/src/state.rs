@@ -4,6 +4,7 @@ use std::sync::{Arc, Mutex as StdMutex};
 use tauri::AppHandle;
 use tokio::sync::Mutex;
 
+use crate::agent::AgentRegistry;
 use crate::protocol::grpc::GrpcSession;
 use crate::protocol::modbus::ModbusSession;
 use crate::protocol::mqtt::MqttSession;
@@ -101,8 +102,18 @@ pub struct AppState {
     pub mcp_manager: SharedMcpManager,
     /// ACP agent 连接与会话管理。
     pub acp_state: Arc<Mutex<crate::commands::acp::AcpState>>,
+    /// Internal AI chat 取消标记（conversation_id → cancel flag）。
+    pub internal_chat_cancel_flags: crate::commands::ai_chat::InternalChatCancelFlags,
+    /// 外部 Agent（ACP）多 profile 注册表。
+    pub agent_registry: Arc<AgentRegistry>,
     /// 全局后台任务线程池（对比分析等 CPU/IO 密集型任务）。
     pub worker_pool: Arc<BackgroundWorkerPool>,
+    /// Internal AI UiDelegated 工具审批/执行等待（conversation_id:tool_call_id → oneshot）。
+    /// 统一通道：终端与数据库等所有 UiDelegated 工具都挂在这里，由前端 dispatchTool 回传。
+    pub pending_internal_tool_results:
+        Arc<Mutex<HashMap<String, tokio::sync::oneshot::Sender<(String, bool)>>>>,
+    /// Agent Router 句柄（可选）。
+    pub gateway_handle: Arc<Mutex<Option<omnipanel_gateway::GatewayHandle>>>,
 }
 
 impl AppState {
@@ -160,7 +171,11 @@ impl AppState {
             proxy_config: Arc::new(Mutex::new(ProxyConfig::default())),
             mcp_manager,
             acp_state: Arc::new(Mutex::new(crate::commands::acp::AcpState::default())),
+            internal_chat_cancel_flags: Arc::new(Mutex::new(HashMap::new())),
+            agent_registry: Arc::new(AgentRegistry::default()),
             worker_pool: Arc::new(BackgroundWorkerPool::new(DEFAULT_WORKER_COUNT)),
+            pending_internal_tool_results: Arc::new(Mutex::new(HashMap::new())),
+            gateway_handle: Arc::new(Mutex::new(None)),
         }
     }
 }

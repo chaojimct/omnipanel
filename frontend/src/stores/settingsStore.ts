@@ -205,6 +205,18 @@ interface SettingsState {
   aiScenarioAssistantModelSelectionId: string | null;
   /** 终端内联 AI 默认模型 */
   aiScenarioTerminalModelSelectionId: string | null;
+  /** 使用 InternalOrchestrator（ai_chat_stream）替代 ACP 直连 */
+  useUnifiedAiChat: boolean;
+  /** Agent Router 是否启用 */
+  aiGatewayEnabled: boolean;
+  /** Agent Router 端口 */
+  aiGatewayPort: number;
+  /** Agent Router API Key（空表示不校验） */
+  aiGatewayApiKey: string;
+  /** 绑定 0.0.0.0（LAN）而非 127.0.0.1 */
+  aiGatewayBindLan: boolean;
+  /** 外部 MCP 调用终端工具是否需审批 */
+  mcpExternalRequireApproval: boolean;
   /** 终端命令审批档位：严格 / 查看 / 宽松 */
   terminalApprovalMode: import("../modules/terminal/terminalApprovalPolicy").TerminalApprovalMode;
   databaseQueryPageSize: DatabaseQueryPageSize;
@@ -238,6 +250,9 @@ interface SettingsState {
   >>) => void;
   setAiScenarioSettings: (patch: Partial<Pick<SettingsState,
     "aiScenarioFormFillModelSelectionId" | "aiScenarioAssistantModelSelectionId" | "aiScenarioTerminalModelSelectionId"
+  >>) => void;
+  setAiGatewaySettings: (patch: Partial<Pick<SettingsState,
+    "aiGatewayEnabled" | "aiGatewayPort" | "aiGatewayApiKey" | "aiGatewayBindLan" | "mcpExternalRequireApproval"
   >>) => void;
   setTerminalApprovalMode: (
     mode: import("../modules/terminal/terminalApprovalPolicy").TerminalApprovalMode,
@@ -329,6 +344,12 @@ export const useSettingsStore = create<SettingsState>()(
       aiScenarioFormFillModelSelectionId: null,
       aiScenarioAssistantModelSelectionId: null,
       aiScenarioTerminalModelSelectionId: null,
+      useUnifiedAiChat: true,
+      aiGatewayEnabled: true,
+      aiGatewayPort: 8765,
+      aiGatewayApiKey: "",
+      aiGatewayBindLan: false,
+      mcpExternalRequireApproval: true,
       terminalApprovalMode: "view",
       databaseQueryPageSize: DEFAULT_DATABASE_QUERY_PAGE_SIZE,
       sqlEditorFontFamily: DEFAULT_SQL_EDITOR_FONT_FAMILY,
@@ -380,6 +401,7 @@ export const useSettingsStore = create<SettingsState>()(
           };
         }),
       setAiScenarioSettings: (patch) => set(patch),
+      setAiGatewaySettings: (patch) => set(patch),
       setTerminalApprovalMode: (terminalApprovalMode) => set({ terminalApprovalMode }),
       setDatabaseSettings: (patch) =>
         set((state) => ({
@@ -471,6 +493,12 @@ export const useSettingsStore = create<SettingsState>()(
         aiScenarioFormFillModelSelectionId: state.aiScenarioFormFillModelSelectionId,
         aiScenarioAssistantModelSelectionId: state.aiScenarioAssistantModelSelectionId,
         aiScenarioTerminalModelSelectionId: state.aiScenarioTerminalModelSelectionId,
+        useUnifiedAiChat: state.useUnifiedAiChat,
+        aiGatewayEnabled: state.aiGatewayEnabled,
+        aiGatewayPort: state.aiGatewayPort,
+        aiGatewayApiKey: state.aiGatewayApiKey,
+        aiGatewayBindLan: state.aiGatewayBindLan,
+        mcpExternalRequireApproval: state.mcpExternalRequireApproval,
         terminalApprovalMode: state.terminalApprovalMode,
         databaseQueryPageSize: state.databaseQueryPageSize,
         sqlEditorFontFamily: state.sqlEditorFontFamily,

@@ -177,63 +177,88 @@ fn convert_tools(tools: &[ToolDef]) -> Vec<serde_json::Value> {
 struct AnthropicStreamParser {
     /// Accumulated tool call data: index -> (id, name, accumulated_json_args)
     tool_calls: HashMap<usize, (String, String, String)>,
+    /// 跨网络分片缓冲：一行 `data: {...}` 可能被 TCP 切成两半分两个分片到达，
+    /// 只解析以换行结束的完整行，剩余不完整片段留在这里。
+    line_buffer: String,
+    /// 是否已经根据 `message_delta.stop_reason` 产生过 Done。
+    /// 若已产生，`message_stop` 不再覆盖（否则 tool_use 会被 EndTurn 覆盖，工具永不触发）。
+    done_emitted: bool,
+    /// message_start 记录的输入 token，最终在 message_delta 补齐输出 token。
+    input_tokens: u32,
 }
 
 impl AnthropicStreamParser {
     fn new() -> Self {
         Self {
             tool_calls: HashMap::new(),
+            line_buffer: String::new(),
+            done_emitted: false,
+            input_tokens: 0,
         }
     }
 
     fn parse(&mut self, raw: &str) -> Vec<Result<StreamEvent>> {
         let mut results = Vec::new();
 
-        for line in raw.lines() {
-            let line = line.trim();
-            if !line.starts_with("data: ") {
-                continue;
+        self.line_buffer.push_str(raw);
+        while let Some(pos) = self.line_buffer.find('\n') {
+            let line: String = self.line_buffer.drain(..=pos).collect();
+            self.parse_line(line.trim(), &mut results);
+        }
+
+        results
+    }
+
+    fn parse_line(&mut self, line: &str, results: &mut Vec<Result<StreamEvent>>) {
+        let data = match line.strip_prefix("data:") {
+            Some(rest) => rest.trim(),
+            None => return,
+        };
+        if data.is_empty() {
+            return;
+        }
+
+        let evt: serde_json::Value = match serde_json::from_str(data) {
+            Ok(v) => v,
+            Err(err) => {
+                tracing::warn!(target: "omni_sse", error = %err, line = %data, "Anthropic SSE 行解析失败");
+                return;
             }
-            let data = &line[6..];
+        };
 
-            let evt: serde_json::Value = match serde_json::from_str(data) {
-                Ok(v) => v,
-                Err(_) => continue,
-            };
+        let event_type = evt.get("type").and_then(|v| v.as_str()).unwrap_or("");
 
-            let event_type = evt.get("type").and_then(|v| v.as_str()).unwrap_or("");
-
-            match event_type {
-                "content_block_start" => {
-                    if let Some(block) = evt.get("content_block") {
-                        let block_type = block.get("type").and_then(|v| v.as_str()).unwrap_or("");
-                        if block_type == "tool_use" {
-                            let index =
-                                evt.get("index").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
-                            let id = block
-                                .get("id")
-                                .and_then(|v| v.as_str())
-                                .unwrap_or("")
-                                .to_string();
-                            let name = block
-                                .get("name")
-                                .and_then(|v| v.as_str())
-                                .unwrap_or("")
-                                .to_string();
-                            self.tool_calls
-                                .insert(index, (id.clone(), name.clone(), String::new()));
-                            results.push(Ok(StreamEvent::ToolCall {
-                                id,
-                                name,
-                                arguments: String::new(),
-                            }));
-                        }
+        match event_type {
+            "content_block_start" => {
+                if let Some(block) = evt.get("content_block") {
+                    let block_type = block.get("type").and_then(|v| v.as_str()).unwrap_or("");
+                    if block_type == "tool_use" {
+                        let index = evt.get("index").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
+                        let id = block
+                            .get("id")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .to_string();
+                        let name = block
+                            .get("name")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .to_string();
+                        self.tool_calls
+                            .insert(index, (id.clone(), name.clone(), String::new()));
+                        results.push(Ok(StreamEvent::ToolCall {
+                            id,
+                            name,
+                            arguments: String::new(),
+                        }));
                     }
                 }
-                "content_block_delta" => {
-                    if let Some(delta) = evt.get("delta") {
-                        let delta_type = delta.get("type").and_then(|v| v.as_str()).unwrap_or("");
-                        if delta_type == "input_json_delta" {
+            }
+            "content_block_delta" => {
+                if let Some(delta) = evt.get("delta") {
+                    let delta_type = delta.get("type").and_then(|v| v.as_str()).unwrap_or("");
+                    match delta_type {
+                        "input_json_delta" => {
                             let index =
                                 evt.get("index").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
                             let partial = delta
@@ -249,7 +274,8 @@ impl AnthropicStreamParser {
                                 name: String::new(),
                                 arguments: partial.to_string(),
                             }));
-                        } else if delta_type == "text_delta" {
+                        }
+                        "text_delta" => {
                             if let Some(text) = delta.get("text").and_then(|v| v.as_str()) {
                                 if !text.is_empty() {
                                     results.push(Ok(StreamEvent::ContentDelta {
@@ -258,44 +284,80 @@ impl AnthropicStreamParser {
                                 }
                             }
                         }
+                        // Claude 3.7+ extended thinking：思考内容以 thinking_delta 流式返回。
+                        "thinking_delta" => {
+                            if let Some(text) = delta.get("thinking").and_then(|v| v.as_str()) {
+                                if !text.is_empty() {
+                                    results.push(Ok(StreamEvent::ReasoningDelta {
+                                        text: text.to_string(),
+                                    }));
+                                }
+                            }
+                        }
+                        _ => {}
                     }
                 }
-                "message_stop" => {
+            }
+            // message_stop 只作结束标记；Done 已由 message_delta 的 stop_reason 精确产生。
+            // 仅当整个流程从未产出 Done 时兜底一个 EndTurn。
+            "message_stop" => {
+                if !self.done_emitted {
+                    self.done_emitted = true;
                     results.push(Ok(StreamEvent::Done {
                         stop_reason: StopReason::EndTurn,
                     }));
                 }
-                "message_delta" => {
-                    if let Some(delta) = evt.get("delta") {
-                        if let Some(reason) = delta.get("stop_reason").and_then(|v| v.as_str()) {
-                            let stop = match reason {
-                                "tool_use" => StopReason::ToolUse,
-                                "max_tokens" => StopReason::MaxTokens,
-                                _ => StopReason::EndTurn,
-                            };
-                            results.push(Ok(StreamEvent::Done { stop_reason: stop }));
-                        }
-                    }
-                }
-                "message_start" => {
-                    if let Some(message) = evt.get("message") {
-                        if let Some(usage) = message.get("usage") {
-                            let input = usage
-                                .get("input_tokens")
-                                .and_then(|v| v.as_u64())
-                                .unwrap_or(0) as u32;
-                            results.push(Ok(StreamEvent::Usage {
-                                input_tokens: input,
-                                output_tokens: 0,
-                            }));
-                        }
-                    }
-                }
-                _ => {}
             }
+            "message_delta" => {
+                if let Some(delta) = evt.get("delta") {
+                    if let Some(reason) = delta.get("stop_reason").and_then(|v| v.as_str()) {
+                        let stop = match reason {
+                            "tool_use" => StopReason::ToolUse,
+                            "max_tokens" => StopReason::MaxTokens,
+                            "refusal" => StopReason::Refusal,
+                            // end_turn / stop_sequence / pause_turn 等归为正常结束
+                            _ => StopReason::EndTurn,
+                        };
+                        self.done_emitted = true;
+                        results.push(Ok(StreamEvent::Done { stop_reason: stop }));
+                    }
+                }
+                // 输出 token 在 message_delta.usage 中给出，补齐 Usage。
+                if let Some(usage) = evt.get("usage") {
+                    if let Some(output) = usage.get("output_tokens").and_then(|v| v.as_u64()) {
+                        results.push(Ok(StreamEvent::Usage {
+                            input_tokens: self.input_tokens,
+                            output_tokens: output as u32,
+                        }));
+                    }
+                }
+            }
+            "message_start" => {
+                if let Some(message) = evt.get("message") {
+                    if let Some(usage) = message.get("usage") {
+                        let input =
+                            usage.get("input_tokens").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+                        self.input_tokens = input;
+                        results.push(Ok(StreamEvent::Usage {
+                            input_tokens: input,
+                            output_tokens: 0,
+                        }));
+                    }
+                }
+            }
+            // Anthropic 在流中以独立 error 事件报告错误，不能落入 `_` 被吞掉。
+            "error" => {
+                let msg = evt
+                    .get("error")
+                    .and_then(|e| e.get("message"))
+                    .and_then(|m| m.as_str())
+                    .unwrap_or("Anthropic 流错误");
+                results.push(Ok(StreamEvent::Error {
+                    message: msg.to_string(),
+                }));
+            }
+            _ => {}
         }
-
-        results
     }
 }
 

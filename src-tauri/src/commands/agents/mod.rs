@@ -223,7 +223,16 @@ fn detect_qwen_sync() -> AgentInstallStatus {
     AgentInstallStatus::from_detection(AgentKind::Qwen, vec!["--acp"], installed, path, version)
 }
 
-fn detect_all_agents_sync() -> Vec<AgentInstallStatus> {
+pub fn agent_kind_key(kind: AgentKind) -> &'static str {
+    match kind {
+        AgentKind::Omniagent => "omniagent",
+        AgentKind::Cursor => "cursor",
+        AgentKind::Opencode => "opencode",
+        AgentKind::Qwen => "qwen",
+    }
+}
+
+pub fn detect_all_agents_sync() -> Vec<AgentInstallStatus> {
     vec![
         detect_omniagent_sync(),
         detect_cursor_sync(),

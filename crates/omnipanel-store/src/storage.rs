@@ -304,6 +304,51 @@ const MIGRATIONS: &[&str] = &[
         ('omni_knowledge_remove_document', 'knowledge', '按 ID 删除知识库文档。', 1),
         ('omni_knowledge_list_documents', 'knowledge', '列出知识库文档，可按类型或标签过滤。', 1);
     "#,
+    // v15 — AI session / trace 持久化
+    r#"
+    CREATE TABLE IF NOT EXISTS ai_sessions (
+        id TEXT PRIMARY KEY NOT NULL,
+        backend_id TEXT NOT NULL,
+        source TEXT NOT NULL,
+        workspace_id TEXT,
+        terminal_session_id TEXT,
+        env_tag TEXT,
+        title TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS ai_traces (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        session_id TEXT NOT NULL REFERENCES ai_sessions(id),
+        turn_index INTEGER NOT NULL,
+        event_type TEXT NOT NULL,
+        payload TEXT NOT NULL,
+        ts INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS ai_turn_stats (
+        session_id TEXT NOT NULL,
+        turn_index INTEGER NOT NULL,
+        input_tokens INTEGER DEFAULT 0,
+        output_tokens INTEGER DEFAULT 0,
+        tool_calls INTEGER DEFAULT 0,
+        duration_ms INTEGER DEFAULT 0,
+        PRIMARY KEY (session_id, turn_index)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_ai_traces_session ON ai_traces(session_id, turn_index);
+
+    CREATE TABLE IF NOT EXISTS mcp_tool_audit (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        source TEXT NOT NULL,
+        tool_name TEXT NOT NULL,
+        duration_ms INTEGER NOT NULL,
+        success INTEGER NOT NULL,
+        detail TEXT NOT NULL DEFAULT '',
+        ts INTEGER NOT NULL
+    );
+    "#,
 ];
 
 /// 审计日志条目。所有高风险操作经执行引擎写入此表。

@@ -7,8 +7,15 @@ import type {
 } from "@assistant-ui/react";
 import { useExternalStoreRuntime } from "@assistant-ui/react";
 
-import { runAcpPrompt, type AcpStreamEvent } from "../../../lib/acp/acpStream";
+import type { AcpStreamEvent } from "../../../lib/acp/acpStream";
+import { commands } from "../../../ipc/bindings";
+import { resolveBackendFromSelection } from "../../../lib/ai/inferenceBackend";
+import { runInternalAiChat } from "../../../lib/ai/orchestrator";
 import { isTauriRuntime } from "../../../lib/isTauriRuntime";
+import { resolveTerminalModelSelectionId } from "../../../lib/terminalScenarioModels";
+import { useAiModelsStore } from "../../../stores/aiModelsStore";
+import { useSettingsStore } from "../../../stores/settingsStore";
+import { useTerminalStore } from "../../../stores/terminalStore";
 import { registerAiPromptSubmit, type InlineTerminalAiTarget } from "../../../lib/ai/submitAiPrompt";
 import { registerAiGenerationCancel } from "../../../lib/ai/cancelAiGeneration";
 import { useBlocksStore, isAiThreadMessage } from "../../../stores/blocksStore";
@@ -18,6 +25,7 @@ import {
   pushAssistantErrorMessage,
 } from "../../../modules/terminal/aiThreadBridge";
 import { cancelPendingInlineTools } from "../../../modules/terminal/inlineToolBridge";
+import { dispatchPendingTool } from "../../../lib/ai/internalToolBridge";
 import { useAiStore, type ToolCallState } from "../../../stores/aiStore";
 
 import {
@@ -36,6 +44,88 @@ function extractUserContent(message: ThreadMessage | AppendMessage): string {
 const EMPTY_MESSAGE_LIST: ThreadMessage[] = [];
 
 type PermissionEvent = Extract<AcpStreamEvent, { type: "permission_request" }>;
+type StreamEventHandler = AcpStreamEvent;
+
+function buildHistoryJson(convId: string): string | undefined {
+  const conv = useAiStore.getState().conversations.find((c) => c.id === convId);
+  if (!conv) return undefined;
+  let messages = conv.messages.filter((m) => m.role === "user" || m.role === "assistant");
+  if (messages.length > 0 && messages[messages.length - 1]?.role === "user") {
+    messages = messages.slice(0, -1);
+  }
+  if (messages.length === 0) return undefined;
+  return JSON.stringify(
+    messages.map((m) => ({
+      role: m.role,
+      content: m.content,
+    })),
+  );
+}
+
+function resolveBackendForGeneration(inline?: InlineTerminalAiTarget) {
+  const providers = useAiModelsStore.getState().providers;
+  const selectionId = inline
+    ? resolveTerminalModelSelectionId(providers)
+    : useSettingsStore.getState().aiScenarioAssistantModelSelectionId ??
+      resolveTerminalModelSelectionId(providers);
+  return resolveBackendFromSelection(providers, selectionId);
+}
+
+function buildAiContext(inline?: InlineTerminalAiTarget) {
+  const tab = inline
+    ? useTerminalStore.getState().tabs.find((t) => t.id === inline.sessionId)
+    : useTerminalStore.getState().tabs.find((t) => t.id === useTerminalStore.getState().activeTabId);
+  return {
+    cwd: tab?.session.cwd ?? null,
+    workspaceId: null,
+    terminalSessionId: inline?.sessionId ?? tab?.id ?? null,
+    envTag: null,
+    resourceId: tab?.session.resourceId ?? null,
+  };
+}
+
+function handleStreamEvent(
+  event: StreamEventHandler,
+  handlers: {
+    appendText: (chunk: string) => void;
+    appendReasoning: (chunk: string) => void;
+    upsertToolCall: (id: string, name: string, args: string) => void;
+    updateToolCall: (id: string, status: string, result?: string) => void;
+    enqueuePermission: (event: PermissionEvent) => void;
+    finishGeneration: (failed?: boolean) => void;
+    setIsGenerating: (v: boolean) => void;
+  },
+  signal: AbortSignal,
+): boolean {
+  if (signal.aborted) return true;
+  switch (event.type) {
+    case "content_delta":
+      handlers.appendText(event.text);
+      break;
+    case "reasoning_delta":
+      handlers.appendReasoning(event.text);
+      break;
+    case "tool_call":
+      handlers.upsertToolCall(event.id, event.name, event.arguments);
+      break;
+    case "tool_call_update":
+      handlers.updateToolCall(event.id, event.status, event.result ?? undefined);
+      break;
+    case "permission_request":
+      handlers.enqueuePermission(event);
+      break;
+    case "error":
+      handlers.appendText(`\n\nError: ${event.message}`);
+      break;
+    case "done":
+      handlers.finishGeneration();
+      handlers.setIsGenerating(false);
+      return true;
+    default:
+      break;
+  }
+  return false;
+}
 
 function inlineHasAssistantContent(blockId: string): boolean {
   const block = useBlocksStore.getState().findBlockById(blockId);
@@ -86,6 +176,8 @@ export function AiRuntimeProvider({ children }: { children: ReactNode }) {
 
   const abortRef = useRef<AbortController | null>(null);
   const permissionQueueRef = useRef<PermissionEvent[]>([]);
+  const toolMetaRef = useRef(new Map<string, { name: string; args: string }>());
+  const pendingToolBridgeRef = useRef(new Set<string>());
   const [permissionRequest, setPermissionRequest] = useState<PermissionEvent | null>(null);
 
   const activeConversation = conversations.find((c) => c.id === activeConversationId);
@@ -162,28 +254,71 @@ export function AiRuntimeProvider({ children }: { children: ReactNode }) {
       }
     };
 
+    const aiContext = buildAiContext(inline);
+
     const upsertToolCall = (id: string, name: string, args: string) => {
+      if (!name.trim()) return;
+      toolMetaRef.current.set(id, { name, args });
       if (inline) {
-        useBlocksStore.getState().pushAiThreadItem(inline.blockId, {
-          kind: "tool_call",
-          id,
-          toolName: name,
-          args,
-          status: "running",
-        });
+        const block = useBlocksStore.getState().findBlockById(inline.blockId);
+        const exists =
+          block &&
+          getResolvedAiThread(block).some(
+            (item) => item.kind === "tool_call" && item.id === id,
+          );
+        if (exists) {
+          // 完整 arguments 重播：更新已存在的 tool call，供 dock 解析完整命令。
+          useBlocksStore.getState().updateAiThreadItem(inline.blockId, id, {
+            toolName: name,
+            args,
+          });
+        } else {
+          useBlocksStore.getState().pushAiThreadItem(inline.blockId, {
+            kind: "tool_call",
+            id,
+            toolName: name,
+            args,
+            status: "running",
+          });
+        }
         return;
       }
       if (!assistantMsgId) return;
       const conv = useAiStore.getState().conversations.find((c) => c.id === convId);
       const msg = conv?.messages.find((m) => m.id === assistantMsgId);
       const existing = msg?.toolCalls ?? [];
-      if (existing.some((tc) => tc.id === id)) return;
+      if (existing.some((tc) => tc.id === id)) {
+        updateMessage(convId, assistantMsgId, {
+          toolCalls: existing.map((tc) =>
+            tc.id === id ? { ...tc, name, arguments: args } : tc,
+          ),
+        });
+        return;
+      }
       updateMessage(convId, assistantMsgId, {
         toolCalls: [...existing, { id, name, arguments: args, status: "running" }],
       });
     };
 
     const updateToolCall = (id: string, status: string, result?: string) => {
+      // 工具进入 pending：统一分派——终端走内联审批 dock / 侧栏执行桥，
+      // 其余 UiDelegated 工具走注册的 handler，全部回传 ai_chat_tool_result。
+      if (status === "pending") {
+        const meta = toolMetaRef.current.get(id);
+        if (meta && !pendingToolBridgeRef.current.has(id)) {
+          pendingToolBridgeRef.current.add(id);
+          const done = () => pendingToolBridgeRef.current.delete(id);
+          void dispatchPendingTool({
+            conversationId: convId,
+            toolCallId: id,
+            toolName: meta.name,
+            argsJson: meta.args,
+            inline: inline ? { blockId: inline.blockId, sessionId: inline.sessionId } : null,
+            terminalSessionId: aiContext.terminalSessionId,
+          }).finally(done);
+        }
+      }
+
       if (inline) {
         useBlocksStore.getState().updateAiThreadItem(inline.blockId, id, {
           status: mapToolStatus(status),
@@ -243,38 +378,39 @@ export function AiRuntimeProvider({ children }: { children: ReactNode }) {
     };
 
     try {
-      await runAcpPrompt({
-        conversationId: convId,
-        userText,
-        signal,
-        onEvent: (event) => {
-          if (signal.aborted) return;
-          switch (event.type) {
-            case "content_delta":
-              appendText(event.text);
-              break;
-            case "reasoning_delta":
-              appendReasoning(event.text);
-              break;
-            case "tool_call":
-              upsertToolCall(event.id, event.name, event.arguments);
-              break;
-            case "tool_call_update":
-              updateToolCall(event.id, event.status, event.result ?? undefined);
-              break;
-            case "permission_request":
-              enqueuePermission(event);
-              break;
-            case "error":
-              appendText(`\n\nError: ${event.message}`);
-              break;
-            case "done":
-              finishGeneration();
-              setIsGenerating(false);
-              break;
-          }
-        },
-      });
+        const backend = resolveBackendForGeneration(inline);
+        if (!backend) {
+          throw new Error("请先在设置中配置并选择 AI 模型或 Agent");
+        }
+
+        await runInternalAiChat({
+          request: {
+            conversationId: convId,
+            userText,
+            backendId: backend.backendId,
+            httpProvider: backend.kind === "http" ? backend.httpProvider : null,
+            context: aiContext,
+            historyJson: buildHistoryJson(convId),
+            toolsMode: backend.kind === "http" ? { directInject: { moduleFilter: "master" } } : "none",
+          },
+          signal,
+          onEvent: (event) => {
+            const done = handleStreamEvent(
+              event,
+              {
+                appendText,
+                appendReasoning,
+                upsertToolCall,
+                updateToolCall,
+                enqueuePermission,
+                finishGeneration,
+                setIsGenerating,
+              },
+              signal,
+            );
+            if (done) return;
+          },
+        });
       finishGeneration();
     } catch (err) {
       if (signal.aborted) {
@@ -369,7 +505,7 @@ export function AiRuntimeProvider({ children }: { children: ReactNode }) {
       addMessage(convId, { role: "user", content: userText });
       addMessage(convId, {
         role: "assistant",
-        content: "AI 助手需要在 Tauri 桌面环境中运行，并先在设置中连接 ACP Agent。",
+        content: "AI 助手需要在 Tauri 桌面环境中运行，并先在设置中配置 AI 模型。",
       });
       return;
     }
@@ -418,8 +554,22 @@ export function AiRuntimeProvider({ children }: { children: ReactNode }) {
 
   const handleCancel = useCallback(async () => {
     abortRef.current?.abort();
+    const convId = useAiStore.getState().activeConversationId;
+    if (convId) {
+      void commands.aiChatCancel(convId).catch(() => {});
+      const conv = useAiStore.getState().conversations.find((c) => c.id === convId);
+      for (const msg of conv?.messages ?? []) {
+        if (msg.role === "assistant" && msg.isStreaming) {
+          updateMessage(convId, msg.id, {
+            isStreaming: false,
+            isReasoningStreaming: false,
+          });
+        }
+      }
+    }
+    cancelPendingInlineTools();
     setIsGenerating(false);
-  }, [setIsGenerating]);
+  }, [setIsGenerating, updateMessage]);
 
   useEffect(() => {
     return registerAiPromptSubmit((prompt, options) => runUserPromptRef.current!(prompt, options));

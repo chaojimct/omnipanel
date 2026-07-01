@@ -63,3 +63,40 @@ impl AiProviderRegistry {
         self.providers.iter().flat_map(|p| p.models()).collect()
     }
 }
+
+/// Wrap any provider with a custom registry id (e.g. user-configured provider id).
+pub struct RenamedProvider<P> {
+    id: String,
+    inner: P,
+}
+
+impl<P> RenamedProvider<P> {
+    pub fn new(id: impl Into<String>, inner: P) -> Self {
+        Self {
+            id: id.into(),
+            inner,
+        }
+    }
+}
+
+#[async_trait]
+impl<P: AiProvider + Send + Sync> AiProvider for RenamedProvider<P> {
+    fn name(&self) -> &str {
+        &self.id
+    }
+
+    fn models(&self) -> Vec<ModelInfo> {
+        self.inner.models()
+    }
+
+    async fn chat(&self, request: ChatRequest) -> Result<ChatResponse> {
+        self.inner.chat(request).await
+    }
+
+    async fn chat_stream(
+        &self,
+        request: ChatRequest,
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<StreamEvent>> + Send>>> {
+        self.inner.chat_stream(request).await
+    }
+}

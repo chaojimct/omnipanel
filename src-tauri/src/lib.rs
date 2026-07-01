@@ -1,3 +1,4 @@
+mod agent;
 mod agent_paths;
 mod background;
 mod commands;
@@ -305,6 +306,13 @@ fn export_ipc_bindings() {
         commands::acp::acp_respond_permission,
         commands::acp::acp_save_agent_config,
         commands::acp::acp_get_default_command,
+        // Internal AI orchestrator (cancel/tool_result only in specta; stream uses Channel)
+        commands::ai_chat::ai_chat_cancel,
+        commands::ai_chat::ai_chat_tool_result,
+        commands::ai_chat::ai_list_backends,
+        commands::ai_chat::ai_list_sessions,
+        commands::ai_chat::ai_list_session_traces,
+        commands::ai_chat::ai_gateway_configure,
         
     ]);
 
@@ -393,7 +401,21 @@ pub fn run() {
             let pool_storage = app_state.storage.clone();
             let ssh_pool = app_state.ssh_pool.clone();
             let ai_registry = app_state.ai_registry.clone();
+            let app_handle = app.handle().clone();
             app.manage(app_state);
+
+            tauri::async_runtime::spawn(async move {
+                let state = app_handle.state::<AppState>();
+                let bind = "127.0.0.1:8765".to_string();
+                let handle = omnipanel_gateway::spawn_gateway(
+                    omnipanel_gateway::GatewayConfig {
+                        bind_addr: bind,
+                        api_key: None,
+                    },
+                    state.ai_registry.clone(),
+                );
+                *state.gateway_handle.lock().await = Some(handle);
+            });
 
             // Try to auto-register Ollama provider (silent skip if unavailable)
             tauri::async_runtime::spawn(async move {
@@ -446,6 +468,13 @@ pub fn run() {
             commands::ai::ai_get_active,
             commands::ai::ai_add_custom_provider,
             commands::ai::ai_http_stream_post,
+            commands::ai_chat::ai_chat_stream,
+            commands::ai_chat::ai_chat_cancel,
+            commands::ai_chat::ai_chat_tool_result,
+            commands::ai_chat::ai_list_backends,
+            commands::ai_chat::ai_list_sessions,
+            commands::ai_chat::ai_list_session_traces,
+            commands::ai_chat::ai_gateway_configure,
             // ACP agent
             commands::acp::acp_connect,
             commands::acp::acp_connect_default,

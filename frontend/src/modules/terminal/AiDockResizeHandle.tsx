@@ -1,4 +1,4 @@
-import { useCallback, type PointerEvent as ReactPointerEvent } from "react";
+import { useCallback, useRef, type PointerEvent as ReactPointerEvent } from "react";
 import { useTerminalUiStore } from "./terminalUiStore";
 import {
   clampAiDockHeight,
@@ -10,36 +10,40 @@ type AiDockResizeHandleProps = {
 };
 
 export function AiDockResizeHandle({ sessionId }: AiDockResizeHandleProps) {
-  const dockHeight = useTerminalUiStore(
-    (state) => state.aiDockHeights[sessionId] ?? DEFAULT_AI_DOCK_HEIGHT,
-  );
   const setAiDockHeight = useTerminalUiStore((state) => state.setAiDockHeight);
+  // 用 ref 读取起始高度并挂 window 级监听，避免拖拽期间频繁重渲染打断手势。
+  const dragRef = useRef<{ startY: number; startHeight: number } | null>(null);
 
   const onPointerDown = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>) => {
       event.preventDefault();
-      const startY = event.clientY;
-      const startHeight = dockHeight;
-      const handle = event.currentTarget;
-      handle.setPointerCapture(event.pointerId);
+      const startHeight =
+        useTerminalUiStore.getState().aiDockHeights[sessionId] ?? DEFAULT_AI_DOCK_HEIGHT;
+      dragRef.current = { startY: event.clientY, startHeight };
 
       const onMove = (moveEvent: globalThis.PointerEvent) => {
-        const next = clampAiDockHeight(startHeight + (moveEvent.clientY - startY));
+        const drag = dragRef.current;
+        if (!drag) return;
+        const next = clampAiDockHeight(drag.startHeight + (moveEvent.clientY - drag.startY));
         setAiDockHeight(sessionId, next);
       };
 
-      const onUp = (upEvent: globalThis.PointerEvent) => {
-        handle.releasePointerCapture(upEvent.pointerId);
-        handle.removeEventListener("pointermove", onMove);
-        handle.removeEventListener("pointerup", onUp);
-        handle.removeEventListener("pointercancel", onUp);
+      const onUp = () => {
+        dragRef.current = null;
+        window.removeEventListener("pointermove", onMove);
+        window.removeEventListener("pointerup", onUp);
+        window.removeEventListener("pointercancel", onUp);
+        document.body.style.userSelect = "";
+        document.body.style.cursor = "";
       };
 
-      handle.addEventListener("pointermove", onMove);
-      handle.addEventListener("pointerup", onUp);
-      handle.addEventListener("pointercancel", onUp);
+      document.body.style.userSelect = "none";
+      document.body.style.cursor = "row-resize";
+      window.addEventListener("pointermove", onMove);
+      window.addEventListener("pointerup", onUp);
+      window.addEventListener("pointercancel", onUp);
     },
-    [dockHeight, sessionId, setAiDockHeight],
+    [sessionId, setAiDockHeight],
   );
 
   return (

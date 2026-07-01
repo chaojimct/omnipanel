@@ -1,16 +1,12 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 
 import { useI18n } from "../../i18n";
-import { connectAgentByKind } from "../../lib/agents/connect";
 import { statusByKind } from "../../lib/agents/detect";
-import { AGENT_ADAPTERS, getAgentAdapter } from "../../lib/agents/registry";
+import { AGENT_ADAPTERS } from "../../lib/agents/registry";
 import type { AgentKind } from "../../lib/agents/types";
 import { formatLaunchCommand } from "../../lib/agents/types";
-import { getAcpStatus } from "../../lib/acp/acpStream";
-import { syncAndReconnectActiveAcpAgent } from "../../lib/acp/syncAgentConfig";
 import {
   getActiveAgentKind,
-  resolveAcpModelSelectionId,
   useAcpServicesStore,
 } from "../../stores/acpServicesStore";
 import { isTauriRuntime } from "../../lib/isTauriRuntime";
@@ -25,87 +21,36 @@ export function AgentsSection() {
   const setActive = useAcpServicesStore((s) => s.setActive);
   const refreshDetection = useAcpServicesStore((s) => s.refreshDetection);
 
-  const [connected, setConnected] = useState(false);
-  const [statusText, setStatusText] = useState("");
-  const [connecting, setConnecting] = useState(false);
-
   const activeKind = getActiveAgentKind(services);
 
-  const refreshStatus = useCallback(async () => {
-    if (!isTauriRuntime()) {
-      setConnected(false);
-      setStatusText(t("settings.acpServices.connection.browserMode"));
-      return;
-    }
-    try {
-      const status = await getAcpStatus();
-      setConnected(status.connected);
-      if (status.connected) {
-        setStatusText(
-          status.agentName
-            ? t("settings.acpServices.connection.connectedWithName", { name: status.agentName })
-            : t("settings.acpServices.connection.connected"),
-        );
-      } else {
-        setStatusText(t("settings.acpServices.connection.disconnected"));
-      }
-    } catch {
-      setConnected(false);
-      setStatusText(t("settings.acpServices.connection.disconnected"));
-    }
-  }, [t]);
-
   useEffect(() => {
-    void refreshStatus();
-  }, [refreshStatus, services, activeKind]);
-
-  const handleConnect = useCallback(async () => {
-    if (!isTauriRuntime()) return;
-    setConnecting(true);
-    try {
-      const installStatus = statusByKind(installStatuses, activeKind);
-      if (!installStatus?.installed) {
-        throw new Error(t("settings.agents.notInstalled", { name: t(getAgentAdapter(activeKind).nameKey) }));
-      }
-      const adapter = getAgentAdapter(activeKind);
-      const modelSelectionId = adapter.requiresOmniPanelConfig()
-        ? resolveAcpModelSelectionId(services.find((s) => s.isActive) ?? null)
-        : null;
-      if (adapter.requiresOmniPanelConfig() && !modelSelectionId) {
-        throw new Error(t("settings.acpServices.connection.modelRequired"));
-      }
-      await connectAgentByKind(activeKind, installStatus, modelSelectionId);
-      await refreshStatus();
-    } catch (error) {
-      setConnected(false);
-      setStatusText(error instanceof Error ? error.message : String(error));
-    } finally {
-      setConnecting(false);
-    }
-  }, [activeKind, installStatuses, refreshStatus, services, t]);
+    void refreshDetection();
+  }, [refreshDetection]);
 
   const handleSelectAgent = useCallback(
     (kind: AgentKind) => {
       setActive(kind);
-      void syncAndReconnectActiveAcpAgent().catch(() => {});
     },
     [setActive],
   );
 
-  const statusClassName = useMemo(() => {
-    if (connected) return "opencode-detect-status opencode-detect-status--installed";
-    if (statusText && !connecting) {
-      return "opencode-detect-status opencode-detect-status--missing";
+  const statusSummary = useMemo(() => {
+    const active = statusByKind(installStatuses, activeKind);
+    if (!active?.installed) {
+      return t("settings.agents.notFound");
     }
-    return "opencode-detect-status";
-  }, [connected, statusText, connecting]);
+    return t("settings.agents.installed");
+  }, [activeKind, installStatuses, t]);
 
   return (
     <div className="settings-section">
       <div className="settings-section-header">
         <div>
           <h2>{t("settings.agents.title")}</h2>
-          <p className="section-desc">{t("settings.agents.description")}</p>
+          <p className="section-desc">
+            {t("settings.agents.description")} 外部 Agent 通过模型选择器中的{" "}
+            <code>acp:*</code> backend 按需连接，无需手动 Connect。
+          </p>
         </div>
         <Button
           variant="secondary"
@@ -117,22 +62,8 @@ export function AgentsSection() {
         </Button>
       </div>
 
-      <div className={statusClassName}>
-        <span
-          className={`opencode-detect-status__text${connected ? "" : " opencode-detect-status__text--error"}`}
-        >
-          {statusText || t("settings.acpServices.connection.disconnected")}
-        </span>
-        <Button
-          variant="secondary"
-          size="sm"
-          disabled={connecting || !isTauriRuntime()}
-          onClick={() => void handleConnect()}
-        >
-          {connecting
-            ? t("settings.acpServices.connection.connecting")
-            : t("settings.acpServices.connection.connect")}
-        </Button>
+      <div className="opencode-detect-status">
+        <span className="opencode-detect-status__text">{statusSummary}</span>
       </div>
 
       <ul className="ai-models-list">

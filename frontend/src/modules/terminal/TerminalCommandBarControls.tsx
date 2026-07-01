@@ -1,11 +1,8 @@
 import { useMemo } from "react";
 
 import { useI18n } from "../../i18n";
-import {
-  listModelSelections,
-  parseModelSelectionId,
-  useAiModelsStore,
-} from "../../stores/aiModelsStore";
+import { useBackendSelectOptions } from "../../lib/ai/backendSelectOptions";
+import { useAiModelsStore } from "../../stores/aiModelsStore";
 import { useSettingsStore } from "../../stores/settingsStore";
 import { useTerminalModelSelectionId } from "../../lib/terminalScenarioModels";
 import { Select } from "../../components/ui/Select";
@@ -27,6 +24,7 @@ export function TerminalCommandBarControls({
   const setGlobalApprovalMode = useSettingsStore((s) => s.setTerminalApprovalMode);
   const setGlobalTerminalModel = useSettingsStore((s) => s.setAiScenarioSettings);
   const modelSelectionId = useTerminalModelSelectionId();
+  const backendOptions = useBackendSelectOptions(providers);
 
   const approvalOptions = useMemo(
     () =>
@@ -40,17 +38,12 @@ export function TerminalCommandBarControls({
 
   const modelOptions = useMemo(
     () =>
-      listModelSelections(providers).map(({ id }) => {
-        const parsed = parseModelSelectionId(id);
-        const provider = providers.find((p) => p.id === parsed?.providerId);
-        const modelName = parsed?.modelName ?? id;
-        return {
-          value: id,
-          label: modelName,
-          title: provider ? `${modelName} · ${provider.providerName}` : modelName,
-        };
-      }),
-    [providers],
+      backendOptions.map((opt) => ({
+        value: opt.value,
+        label: opt.group === "acp" ? `[Agent] ${opt.label}` : opt.label,
+        title: opt.subtitle ?? opt.label,
+      })),
+    [backendOptions],
   );
 
   const modelValue =

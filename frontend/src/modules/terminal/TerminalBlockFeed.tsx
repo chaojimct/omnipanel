@@ -3,7 +3,6 @@ import {
   EMPTY_TERMINAL_BLOCKS,
   useBlocksStore,
   type TerminalBlock,
-  isAiThreadToolCall,
 } from "../../stores/blocksStore";
 import { extractCommandOutput, isEchoOnlyTerminalOutput, normalizeBlockCommand, stripTerminalControlSequences } from "./terminalOutputText";
 import { isResidualShellNoise } from "./terminalCommandEcho";
@@ -188,7 +187,9 @@ function AiBlockCard({
     (state) => state.aiDockHeights[sessionId] ?? DEFAULT_AI_DOCK_HEIGHT,
   );
   const stickyHostRef = useRef<HTMLDivElement>(null);
+  const spacerRef = useRef<HTMLDivElement>(null);
   const [naturalHeight, setNaturalHeight] = useState(0);
+  const [stickyFlowSpacerHeight, setStickyFlowSpacerHeight] = useState(0);
   const prevStickyActiveRef = useRef(false);
   const threadSignature = useMemo(() => {
     const thread = getResolvedAiThread(block);
@@ -242,6 +243,44 @@ function AiBlockCard({
     feed.scrollTop = savedScrollTop;
   }, [isStickyActive, expanded, feedScrollRef, naturalHeight]);
 
+  // 吸顶时，占位块只补足「防止 Feed 滚动区间塌陷」所差的高度：
+  // need = 视口高 - 吸顶高 - 下方已有内容高。
+  // 下方内容（本段 shells + 后续段）足够时 need<=0 → 不产生多余空白；
+  // 仅当 AI 处于末尾、下方内容不足时才补少量，避免 scrollTop 被夹回引发抖动。
+  useLayoutEffect(() => {
+    const feed = feedScrollRef.current;
+    const host = stickyHostRef.current;
+    if (!isStickyActive || !expanded || !feed || !host) {
+      setStickyFlowSpacerHeight(0);
+      return;
+    }
+
+    // 一次性测量（随依赖变化重跑），不挂常驻 ResizeObserver：
+    // 否则占位块改高度→触发 resize→再改高度，会与吸顶解析器互相回灌成死循环。
+    const spacerEl = spacerRef.current;
+    let below = 0;
+    for (let sib = host.nextElementSibling; sib; sib = sib.nextElementSibling) {
+      if (sib !== spacerEl && sib instanceof HTMLElement) below += sib.offsetHeight;
+    }
+    const segment = host.closest(".term-warp-sticky-segment");
+    for (
+      let seg = segment?.nextElementSibling ?? null;
+      seg;
+      seg = seg.nextElementSibling
+    ) {
+      if (seg instanceof HTMLElement) below += seg.offsetHeight;
+    }
+    const need = Math.max(0, feed.clientHeight - dockMaxHeight - below);
+    setStickyFlowSpacerHeight((prev) => (Math.abs(prev - need) < 1 ? prev : need));
+  }, [
+    isStickyActive,
+    expanded,
+    dockMaxHeight,
+    naturalHeight,
+    threadSignature,
+    feedScrollRef,
+  ]);
+
   if (!isStickyCandidate) {
     if (!expanded) {
       return (
@@ -255,11 +294,11 @@ function AiBlockCard({
             </span>
             <AiStatusIcon block={block} />
             <span className="term-warp-block__title">{blockTitle(block)}</span>
-            <AiBlockStopButton block={block} sessionId={sessionId} />
             <span className="term-warp-block__chevron" aria-hidden>
               ›
             </span>
           </button>
+          <AiBlockStopButton block={block} sessionId={sessionId} />
         </article>
       );
     }
@@ -315,11 +354,11 @@ function AiBlockCard({
             </span>
             <AiStatusIcon block={block} />
             <span className="term-warp-block__title">{blockTitle(block)}</span>
-            <AiBlockStopButton block={block} sessionId={sessionId} />
             <span className="term-warp-block__chevron" aria-hidden>
               ›
             </span>
           </button>
+          <AiBlockStopButton block={block} sessionId={sessionId} />
         </article>
       </>
     );
@@ -369,6 +408,14 @@ function AiBlockCard({
         {article}
         {isStickyActive ? <AiDockResizeHandle sessionId={sessionId} /> : null}
       </div>
+      {stickyFlowSpacerHeight > 0 ? (
+        <div
+          ref={spacerRef}
+          className="term-warp-ai-sticky-flow-spacer"
+          style={{ height: stickyFlowSpacerHeight }}
+          aria-hidden
+        />
+      ) : null}
     </>
   );
 }
@@ -470,17 +517,7 @@ function resolveAiExpanded(
   block: TerminalBlock,
   expandedAiBlockId: string | null,
 ): boolean {
-  const thread = getResolvedAiThread(block);
-  const hasActiveTool = thread.some(
-    (item) =>
-      isAiThreadToolCall(item) &&
-      (item.status === "pending" || item.status === "running"),
-  );
-  return (
-    block.status === "running" ||
-    hasActiveTool ||
-    expandedAiBlockId === block.id
-  );
+  return expandedAiBlockId === block.id;
 }
 
 function FeedAiRunSegmentView({
@@ -511,17 +548,10 @@ function FeedAiRunSegmentView({
   sessionUser?: string | null;
 }) {
   const { ai, shells } = segment;
-  const thread = getResolvedAiThread(ai);
-  const hasActiveTool = thread.some(
-    (item) =>
-      isAiThreadToolCall(item) &&
-      (item.status === "pending" || item.status === "running"),
-  );
   const expanded = resolveAiExpanded(ai, expandedAiBlockId);
   const isStickyCandidate = ai.id === stickyAiBlockId;
 
   const onToggle = () => {
-    if (ai.status === "running" || hasActiveTool) return;
     if (expanded) {
       setExpandedAiBlock(sessionId, null);
     } else {

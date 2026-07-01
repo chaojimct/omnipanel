@@ -134,7 +134,14 @@ export async function approveInlineTerminalTool(
 
   const command = (commandOverride ?? pending.command).trim();
   if (!command) {
-    rejectInlineTerminalTool(blockId, toolCallId);
+    const result =
+      '工具调用缺少必填参数 command。请在 arguments 中提供 JSON，例如 {"command":"date"}，然后重试。';
+    useBlocksStore.getState().updateAiThreadItem(blockId, toolCallId, {
+      status: "failed",
+      result,
+    } as Partial<AiThreadToolCall>);
+    pending.resolve({ approved: false, result });
+    pendingByToolCallId.delete(toolCallId);
     return;
   }
 

@@ -159,18 +159,18 @@ fn parse_command_line(command_line: &str) -> Result<(String, Vec<String>), Strin
     Ok((binary, args))
 }
 
-fn default_cwd() -> String {
+pub fn default_cwd() -> String {
     env::current_dir()
         .ok()
         .map(|p| p.to_string_lossy().into_owned())
         .unwrap_or_else(|| ".".to_string())
 }
 
-struct AgentLaunchSpec {
-    binary: String,
-    args: Vec<String>,
-    cwd: Option<PathBuf>,
-    display_command: String,
+pub struct AgentLaunchSpec {
+    pub binary: String,
+    pub args: Vec<String>,
+    pub cwd: Option<PathBuf>,
+    pub display_command: String,
 }
 
 fn resolve_default_agent_launch(app: &AppHandle) -> Option<AgentLaunchSpec> {
@@ -218,7 +218,7 @@ fn resolve_default_agent_command(app: &AppHandle) -> Option<String> {
     resolve_default_agent_launch(app).map(|spec| spec.display_command)
 }
 
-async fn build_mcp_servers(state: &AppState) -> Vec<serde_json::Value> {
+pub async fn build_mcp_servers(state: &AppState) -> Vec<serde_json::Value> {
     let manager = state.mcp_manager.lock().await;
     let mut servers = Vec::new();
 
@@ -366,9 +366,9 @@ pub async fn acp_save_agent_config(
     Ok(path.to_string_lossy().into_owned())
 }
 
-async fn connect_agent(
+pub async fn connect_agent(
     app: &AppHandle,
-    state: &State<'_, AppState>,
+    state: &AppState,
     spec: AgentLaunchSpec,
 ) -> Result<AcpStatus, String> {
     let config_path = agent_config_path(app)?;

@@ -1,10 +1,10 @@
 use anyhow::{Result, bail};
 use async_trait::async_trait;
-use futures::Stream;
+use futures::{Stream, StreamExt};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::pin::Pin;
-use tokio_stream::StreamExt;
+use std::sync::{Arc, Mutex};
 
 use crate::ir::{StopReason, StreamEvent};
 use crate::provider::AiProvider;
@@ -111,11 +111,18 @@ struct StreamChoice {
 struct StreamDelta {
     role: Option<String>,
     content: Option<String>,
+    /// 推理模型思考内容：DeepSeek 用 `reasoning_content`，
+    /// OpenRouter/部分兼容端用 `reasoning`。
+    #[serde(default)]
+    reasoning_content: Option<String>,
+    #[serde(default)]
+    reasoning: Option<String>,
     tool_calls: Option<Vec<StreamToolCall>>,
 }
 
 #[derive(Deserialize)]
 struct StreamToolCall {
+    #[serde(default)]
     index: usize,
     id: Option<String>,
     function: Option<StreamFunction>,
@@ -245,70 +252,112 @@ impl AiProvider for OpenAiProvider {
         }
 
         let stream = resp.bytes_stream();
-        let event_stream = stream.filter_map(|chunk| match chunk {
-            Ok(bytes) => {
-                let text = String::from_utf8_lossy(&bytes);
-                parse_sse_chunk(&text)
-            }
-            Err(e) => Some(Err(anyhow::anyhow!("Stream error: {}", e))),
+        // 每个网络分片可能包含多行 SSE、多个 delta（content/tool_call/finish_reason），
+        // 必须全部展开为事件，绝不能只保留最后一个（否则会丢失 Done{ToolUse} 或
+        // tool_call 的 arguments 分片，导致工具永不执行）。
+        // 同时：一行 `data: {...}` 可能被 TCP 切成两半分两个分片到达，
+        // 必须跨分片缓冲，只解析以换行结束的完整行，否则半行 JSON 会被静默丢弃。
+        let buffer = Arc::new(Mutex::new(String::new()));
+        let event_stream = stream.flat_map(move |chunk| {
+            let events = match chunk {
+                Ok(bytes) => {
+                    let mut buf = buffer.lock().unwrap();
+                    buf.push_str(&String::from_utf8_lossy(&bytes));
+                    let mut events = Vec::new();
+                    // 逐个完整行（含换行符）取出解析，最后不完整的一行留在 buffer 里。
+                    while let Some(pos) = buf.find('\n') {
+                        let line: String = buf.drain(..=pos).collect();
+                        parse_sse_line(line.trim(), &mut events);
+                    }
+                    events
+                }
+                Err(e) => vec![Err(anyhow::anyhow!("Stream error: {}", e))],
+            };
+            futures::stream::iter(events)
         });
 
         Ok(Box::pin(event_stream))
     }
 }
 
-fn parse_sse_chunk(raw: &str) -> Option<Result<StreamEvent>> {
-    let mut result = None;
-
-    for line in raw.lines() {
-        let line = line.trim();
-        if !line.starts_with("data: ") {
-            continue;
-        }
-        let data = &line[6..];
-        if data == "[DONE]" {
-            result = Some(Ok(StreamEvent::Done {
-                stop_reason: StopReason::EndTurn,
-            }));
-            continue;
-        }
-
-        match serde_json::from_str::<StreamChunk>(data) {
-            Ok(chunk) => {
-                for choice in chunk.choices {
-                    if let Some(reason) = &choice.finish_reason
-                        && reason == "tool_calls"
-                    {
-                        result = Some(Ok(StreamEvent::Done {
-                            stop_reason: StopReason::ToolUse,
-                        }));
-                    }
-                    if let Some(content) = &choice.delta.content
-                        && !content.is_empty()
-                    {
-                        result = Some(Ok(StreamEvent::ContentDelta {
-                            text: content.clone(),
-                        }));
-                    }
-                    if let Some(tool_calls) = &choice.delta.tool_calls {
-                        for tc in tool_calls {
-                            if let Some(func) = &tc.function {
-                                result = Some(Ok(StreamEvent::ToolCall {
-                                    id: tc
-                                        .id
-                                        .clone()
-                                        .unwrap_or_else(|| format!("call_{}", tc.index)),
-                                    name: func.name.clone().unwrap_or_default(),
-                                    arguments: func.arguments.clone().unwrap_or_default(),
-                                }));
-                            }
-                        }
-                    }
-                }
-            }
-            Err(_) => continue,
-        }
+/// 解析单行 SSE（已去除首尾空白），把产生的事件追加到 `events`。
+fn parse_sse_line(line: &str, events: &mut Vec<Result<StreamEvent>>) {
+    let data = match line.strip_prefix("data:") {
+        Some(rest) => rest.trim(),
+        None => return,
+    };
+    // [DONE] 仅为终止信号；stop_reason 由 finish_reason 决定，
+    // 此处不再 emit Done，避免覆盖已产生的 Done{ToolUse}。
+    if data.is_empty() || data == "[DONE]" {
+        return;
     }
 
-    result
+    let chunk = match serde_json::from_str::<StreamChunk>(data) {
+        Ok(chunk) => chunk,
+        Err(err) => {
+            // 完整行仍解析失败：可能是 API 返回的错误对象或非法 JSON。
+            // 检测 error 字段映射为 IR Error，否则记日志（不再静默吞掉）。
+            if let Ok(val) = serde_json::from_str::<serde_json::Value>(data) {
+                if let Some(msg) = val
+                    .get("error")
+                    .and_then(|e| e.get("message"))
+                    .and_then(|m| m.as_str())
+                {
+                    events.push(Ok(StreamEvent::Error {
+                        message: msg.to_string(),
+                    }));
+                    return;
+                }
+            }
+            tracing::warn!(target: "omni_sse", error = %err, line = %data, "OpenAI SSE 行解析失败");
+            return;
+        }
+    };
+
+    for choice in chunk.choices {
+        // 顺序：先 reasoning/content/tool_call 分片，最后才是 finish_reason 的 Done，
+        // 确保同一分片内的 arguments 尾段先于 Done 被消费。
+        let reasoning = choice
+            .delta
+            .reasoning_content
+            .as_deref()
+            .or(choice.delta.reasoning.as_deref());
+        if let Some(reasoning) = reasoning {
+            if !reasoning.is_empty() {
+                events.push(Ok(StreamEvent::ReasoningDelta {
+                    text: reasoning.to_string(),
+                }));
+            }
+        }
+        if let Some(content) = &choice.delta.content {
+            if !content.is_empty() {
+                events.push(Ok(StreamEvent::ContentDelta {
+                    text: content.clone(),
+                }));
+            }
+        }
+        if let Some(tool_calls) = &choice.delta.tool_calls {
+            for tc in tool_calls {
+                if let Some(func) = &tc.function {
+                    events.push(Ok(StreamEvent::ToolCall {
+                        id: tc
+                            .id
+                            .clone()
+                            .unwrap_or_else(|| format!("call_{}", tc.index)),
+                        name: func.name.clone().unwrap_or_default(),
+                        arguments: func.arguments.clone().unwrap_or_default(),
+                    }));
+                }
+            }
+        }
+        if let Some(reason) = &choice.finish_reason {
+            let stop_reason = match reason.as_str() {
+                "tool_calls" | "function_call" => StopReason::ToolUse,
+                "length" => StopReason::MaxTokens,
+                "content_filter" => StopReason::Refusal,
+                _ => StopReason::EndTurn,
+            };
+            events.push(Ok(StreamEvent::Done { stop_reason }));
+        }
+    }
 }

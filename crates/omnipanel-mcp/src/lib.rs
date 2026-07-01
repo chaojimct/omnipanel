@@ -3,10 +3,12 @@ mod client;
 mod manager;
 mod omni_module;
 mod process;
+mod registry;
 mod store;
 mod types;
 
 pub use manager::{McpManager, SharedMcpManager};
+pub use registry::{RegisteredTool, ToolExecutionKind, ToolRegistry};
 pub use types::{
     McpServiceConfig, McpServiceRuntimeStatus, McpServiceView, McpServicesFile, McpSseTransport,
     McpStdioTransport, McpToolCallResult, McpToolInfo, McpTransport, McpTransportKind,

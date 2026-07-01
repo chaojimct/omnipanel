@@ -31,6 +31,7 @@ omnipanel-ssh = { path = "../crates/omnipanel-ssh" }
 omnipanel-db = { path = "../crates/omnipanel-db" }
 omnipanel-docker = { path = "../crates/omnipanel-docker" }
 omnipanel-mcp = { path = "../crates/omnipanel-mcp" }
+omnipanel-gateway = { path = "../crates/omnipanel-gateway" }
 tokio.workspace = true
 serde.workspace = true
 serde_json.workspace = true
@@ -41,6 +42,7 @@ sqlx.workspace = true
 redis.workspace = true
 rusqlite = { version = "0.32", features = ["bundled"] }
 futures = "0.3"
+async-trait = "0.1"
 
 # Protocol Lab
 reqwest.workspace = true

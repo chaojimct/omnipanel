@@ -1,4 +1,5 @@
 pub mod acp;
+pub mod ai_chat;
 pub mod bg_task;
 pub mod agents;
 pub mod ai;

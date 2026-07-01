@@ -1,6 +1,8 @@
 import { submitAiPrompt } from "../../lib/ai/submitAiPrompt";
 import { cancelAiGeneration } from "../../lib/ai/cancelAiGeneration";
-import { createBlockId, isAiThreadMessage, useBlocksStore } from "../../stores/blocksStore";
+import { commands } from "../../ipc/bindings";
+import { createBlockId, isAiThreadMessage, isAiThreadToolCall, useBlocksStore } from "../../stores/blocksStore";
+import { useAiStore } from "../../stores/aiStore";
 import { useTerminalUiStore } from "./terminalUiStore";
 import { buildNaturalLanguagePrompt } from "./warpExperience";
 import { cancelPendingInlineTools } from "./inlineToolBridge";
@@ -43,8 +45,27 @@ const INLINE_AI_STOPPED = "已手动停止";
 
 /** 强制停止卡住的终端内联 AI 卡片 */
 export function cancelInlineAiBlock(sessionId: string, blockId: string): void {
+  const convId = useAiStore.getState().activeConversationId;
+  if (convId) {
+    void commands.aiChatCancel(convId).catch(() => {});
+  }
   cancelAiGeneration();
   cancelPendingInlineTools(blockId);
+
+  const block = useBlocksStore.getState().findBlockById(blockId);
+  if (block) {
+    for (const item of getResolvedAiThread(block)) {
+      if (
+        isAiThreadToolCall(item) &&
+        (item.status === "pending" || item.status === "running")
+      ) {
+        useBlocksStore.getState().updateAiThreadItem(blockId, item.id, {
+          status: "rejected",
+          result: INLINE_AI_STOPPED,
+        });
+      }
+    }
+  }
 
   const forceStopStuckBlock = () => {
     const block = useBlocksStore.getState().findBlockById(blockId);

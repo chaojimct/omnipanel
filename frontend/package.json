@@ -48,6 +48,7 @@
     "dockview-react": "^6.6.1",
     "lucide-react": "^1.21.0",
     "node-sql-parser": "^5.4.0",
+    "omnipanel": "file:..",
     "pinyin-pro": "^3.28.1",
     "radix-ui": "^1.6.0",
     "react": "^19.2.6",

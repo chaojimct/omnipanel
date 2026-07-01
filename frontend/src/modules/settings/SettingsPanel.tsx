@@ -54,6 +54,7 @@ import { ModulesSettingsSection } from "../../components/settings/ModulesSetting
 import { McpToolsSettingsSection } from "../../components/settings/McpToolsSettingsSection";
 import { AiScenarioSection } from "../../components/settings/AiScenarioSection";
 import { AgentsSection as AgentSectionContent } from "../../components/settings/AgentsSection";
+import { AiGatewaySettings } from "../ai-gateway/AiGatewaySettings";
 import { Button } from "../../components/ui/Button";
 import { ModuleEmptyState } from "../../components/ui/ModuleEmptyState";
 import { Select } from "../../components/ui/Select";
@@ -750,6 +751,8 @@ function AgentSection() {
   return (
     <div className="settings-panel active">
       <AgentSectionContent />
+      <div className="settings-section-divider" />
+      <AiGatewaySettings />
     </div>
   );
 }

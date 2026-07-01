@@ -224,6 +224,18 @@ omnipanel/
 | macOS 12+ | POSIX PTY | 支持 Retina 显示屏 |
 | Linux (Ubuntu 20.04+, Fedora 36+) | POSIX PTY | 支持 Wayland & X11 |
 
+### 🤖 AI 三条能力线
+
+OmniPanel AI 架构分为三条**相互独立**的能力线：
+
+| 能力线 | 入口 | 用途 |
+|--------|------|------|
+| **InternalOrchestrator** | Tauri IPC `ai_chat_stream` | 内置 UI：HTTP/ACP 多 backend、直接注入 `omni_*` 工具、终端审批 |
+| **Agent Router** | `http://127.0.0.1:8765/v1/*` | 纯 LLM 路由（OpenAI 兼容 SSE），供 curl / 外部脚本，**零 MCP 耦合** |
+| **OmniMCP** | `http://127.0.0.1:12756/mcp` | Cursor / Claude Code 等外部 Agent 接入 DevOps 工具 |
+
+内置对话走 InternalOrchestrator + ToolRegistry 直注入，不绕 MCP HTTP。Trace 按 `internal` / `gateway` / `mcp_external` 三分源持久化，可在 **设置 → Agent → AI 服务 → Trace 分析** 查看。
+
 ---
 
 ## 📄 License
