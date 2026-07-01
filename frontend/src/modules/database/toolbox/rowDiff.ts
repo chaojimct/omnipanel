@@ -66,12 +66,78 @@ export interface TableRowCompareResult {
   truncated?: boolean;
 }
 
-export async function compareTableRows(
+function buildTableRowDiffs(
+  sourceMap: Map<string, Record<string, unknown>>,
+  targetMap: Map<string, Record<string, unknown>>,
+  pkColumns: string[],
+  allColumnNames: string[],
+  maxDetailRows: number | null,
+): TableRowCompareResult {
+  const diffs: TableRowDiff[] = [];
+  let diffCount = 0;
+
+  for (const [key, sourceRow] of sourceMap) {
+    const targetRow = targetMap.get(key);
+    if (!targetRow) {
+      diffCount += 1;
+      if (maxDetailRows === null || diffs.length < maxDetailRows) {
+        diffs.push({
+          rowKey: key,
+          kind: "sourceOnly",
+          sourceRow,
+          displayKey: formatRowDisplayKey(sourceRow, pkColumns, allColumnNames),
+        });
+      }
+      continue;
+    }
+
+    const changedFields = compareRowFields(sourceRow, targetRow, allColumnNames);
+    if (changedFields.length > 0) {
+      diffCount += 1;
+      if (maxDetailRows === null || diffs.length < maxDetailRows) {
+        diffs.push({
+          rowKey: key,
+          kind: "changed",
+          changedFields,
+          sourceRow,
+          targetRow,
+          displayKey: formatRowDisplayKey(sourceRow, pkColumns, allColumnNames),
+        });
+      }
+    }
+  }
+
+  for (const [key, targetRow] of targetMap) {
+    if (sourceMap.has(key)) continue;
+    diffCount += 1;
+    if (maxDetailRows === null || diffs.length < maxDetailRows) {
+      diffs.push({
+        rowKey: key,
+        kind: "targetOnly",
+        targetRow,
+        displayKey: formatRowDisplayKey(targetRow, pkColumns, allColumnNames),
+      });
+    }
+  }
+
+  if (diffCount === 0) {
+    return { status: "match", diffRows: 0, diffs: [] };
+  }
+
+  return {
+    status: "diff",
+    diffRows: diffCount,
+    diffs,
+    truncated: maxDetailRows !== null && diffCount > maxDetailRows,
+  };
+}
+
+async function loadTableRowCompareMaps(
   sourceConn: DbConnectionConfig,
   targetConn: DbConnectionConfig,
   tableName: string,
   columns: DbColumnMeta[],
-): Promise<TableRowCompareResult> {
+) {
   const pkColumns = columns.filter((col) => col.isPk).map((col) => col.name);
   const allColumnNames = columns.map((col) => col.name);
 
@@ -90,61 +156,36 @@ export async function compareTableRows(
     targetMap.set(buildRowKey(row, pkColumns, allColumnNames), row);
   }
 
-  const diffs: TableRowDiff[] = [];
-  let diffCount = 0;
+  return { sourceMap, targetMap, pkColumns, allColumnNames };
+}
 
-  for (const [key, sourceRow] of sourceMap) {
-    const targetRow = targetMap.get(key);
-    if (!targetRow) {
-      diffCount += 1;
-      if (diffs.length < MAX_DIFF_DETAIL_ROWS) {
-        diffs.push({
-          rowKey: key,
-          kind: "sourceOnly",
-          sourceRow,
-          displayKey: formatRowDisplayKey(sourceRow, pkColumns, allColumnNames),
-        });
-      }
-      continue;
-    }
+export async function compareTableRows(
+  sourceConn: DbConnectionConfig,
+  targetConn: DbConnectionConfig,
+  tableName: string,
+  columns: DbColumnMeta[],
+): Promise<TableRowCompareResult> {
+  const { sourceMap, targetMap, pkColumns, allColumnNames } = await loadTableRowCompareMaps(
+    sourceConn,
+    targetConn,
+    tableName,
+    columns,
+  );
+  return buildTableRowDiffs(sourceMap, targetMap, pkColumns, allColumnNames, MAX_DIFF_DETAIL_ROWS);
+}
 
-    const changedFields = compareRowFields(sourceRow, targetRow, allColumnNames);
-    if (changedFields.length > 0) {
-      diffCount += 1;
-      if (diffs.length < MAX_DIFF_DETAIL_ROWS) {
-        diffs.push({
-          rowKey: key,
-          kind: "changed",
-          changedFields,
-          sourceRow,
-          targetRow,
-          displayKey: formatRowDisplayKey(sourceRow, pkColumns, allColumnNames),
-        });
-      }
-    }
-  }
-
-  for (const [key, targetRow] of targetMap) {
-    if (sourceMap.has(key)) continue;
-    diffCount += 1;
-    if (diffs.length < MAX_DIFF_DETAIL_ROWS) {
-      diffs.push({
-        rowKey: key,
-        kind: "targetOnly",
-        targetRow,
-        displayKey: formatRowDisplayKey(targetRow, pkColumns, allColumnNames),
-      });
-    }
-  }
-
-  if (diffCount === 0) {
-    return { status: "match", diffRows: 0, diffs: [] };
-  }
-
-  return {
-    status: "diff",
-    diffRows: diffCount,
-    diffs,
-    truncated: diffCount > MAX_DIFF_DETAIL_ROWS,
-  };
+/** 冲突详情：加载全部差异行（不截断） */
+export async function fetchAllTableRowDiffs(
+  sourceConn: DbConnectionConfig,
+  targetConn: DbConnectionConfig,
+  tableName: string,
+  columns: DbColumnMeta[],
+): Promise<TableRowCompareResult> {
+  const { sourceMap, targetMap, pkColumns, allColumnNames } = await loadTableRowCompareMaps(
+    sourceConn,
+    targetConn,
+    tableName,
+    columns,
+  );
+  return buildTableRowDiffs(sourceMap, targetMap, pkColumns, allColumnNames, null);
 }

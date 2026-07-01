@@ -20,7 +20,11 @@ function ProtocolPanelInner() {
   const location = useLocation();
   const isActiveRoute = location.pathname === "/module/protocol";
   const protocolLabTabs = useSettingsStore((s) => s.protocolLabTabs);
-  const savedRequests = useProtocolHttpOptional()?.savedRequests ?? [];
+  const http = useProtocolHttpOptional();
+  const savedRequests = http?.savedRequests ?? [];
+  const selectedRequestId = http?.selectedRequestId ?? null;
+  const selectRequest = http?.selectRequest;
+  const clearSelectedRequest = http?.clearSelectedRequest;
   const labEntries = useProtocolLabEntryStore((s) => s.entries);
 
   const tabs = useProtocolWorkspaceStore((s) => s.tabs);
@@ -42,24 +46,58 @@ function ProtocolPanelInner() {
   );
 
   useEffect(() => {
-    for (const tab of tabs) {
+    const workspaceTabs = useProtocolWorkspaceStore.getState().tabs;
+    for (const tab of workspaceTabs) {
       if (tab.protocol !== "http" || !tab.resourceId) continue;
       const req = savedRequests.find((entry) => entry.id === tab.resourceId);
       if (req && req.name !== tab.label) {
         updateTabLabel(tab.id, req.name);
       }
     }
-  }, [savedRequests, tabs, updateTabLabel]);
+  }, [savedRequests, updateTabLabel]);
 
   useEffect(() => {
-    for (const tab of tabs) {
+    const workspaceTabs = useProtocolWorkspaceStore.getState().tabs;
+    for (const tab of workspaceTabs) {
       if (tab.protocol === "http" || !tab.resourceId) continue;
       const entry = labEntries.find((item) => item.id === tab.resourceId);
       if (entry && entry.name !== tab.label) {
         updateTabLabel(tab.id, entry.name);
       }
     }
-  }, [labEntries, tabs, updateTabLabel]);
+  }, [labEntries, updateTabLabel]);
+
+  useEffect(() => {
+    if (!selectRequest || !clearSelectedRequest || !isActiveRoute || !activeTabId) {
+      return;
+    }
+    const tab = useProtocolWorkspaceStore
+      .getState()
+      .tabs.find((item) => item.id === activeTabId);
+    if (!tab || tab.protocol !== "http") {
+      return;
+    }
+    if (!tab.resourceId) {
+      if (selectedRequestId !== null) {
+        clearSelectedRequest();
+      }
+      return;
+    }
+    if (selectedRequestId === tab.resourceId) {
+      return;
+    }
+    const req = savedRequests.find((entry) => entry.id === tab.resourceId);
+    if (req) {
+      selectRequest(req);
+    }
+  }, [
+    activeTabId,
+    clearSelectedRequest,
+    isActiveRoute,
+    savedRequests,
+    selectRequest,
+    selectedRequestId,
+  ]);
 
   useEffect(() => {
     if (!activeTabId) return;

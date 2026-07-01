@@ -1,7 +1,13 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 
-import type { SyncTask, SyncTaskConfig, SyncTaskRunRecord, ToolboxTabId } from "../modules/database/toolbox/types";
+import type {
+  SyncTask,
+  SyncTaskAnalysisRecord,
+  SyncTaskConfig,
+  SyncTaskRunRecord,
+  ToolboxTabId,
+} from "../modules/database/toolbox/types";
 
 const STORAGE_KEY = "omnipanel-db-sync-tasks.v1";
 const MAX_RUNS_PER_TASK = 100;
@@ -19,13 +25,16 @@ export interface PendingSyncTaskLoad {
 interface DbSyncTaskState {
   tasks: SyncTask[];
   runHistory: Record<string, SyncTaskRunRecord[]>;
+  analysisHistory: Record<string, SyncTaskAnalysisRecord[]>;
   activeTaskId: string | null;
   pendingLoad: PendingSyncTaskLoad | null;
   addTask: (input: { name: string; kind: ToolboxTabId; config: SyncTaskConfig }) => SyncTask;
   updateTask: (id: string, patch: { name?: string; kind?: ToolboxTabId; config?: SyncTaskConfig }) => void;
   addRunRecord: (taskId: string, record: SyncTaskRunRecord) => void;
+  addAnalysisRecord: (taskId: string, record: SyncTaskAnalysisRecord) => void;
   updateRunByBgTaskId: (bgTaskId: string, patch: Partial<SyncTaskRunRecord>) => void;
   getRunsForTask: (taskId: string) => SyncTaskRunRecord[];
+  getAnalysisForTask: (taskId: string) => SyncTaskAnalysisRecord[];
   deleteTask: (id: string) => void;
   setActiveTaskId: (id: string | null) => void;
   requestLoad: (taskId: string, runAfterLoad?: boolean) => void;
@@ -37,6 +46,7 @@ export const useDbSyncTaskStore = create<DbSyncTaskState>()(
     (set, get) => ({
       tasks: [],
       runHistory: {},
+      analysisHistory: {},
       activeTaskId: null,
       pendingLoad: null,
       addTask: ({ name, kind, config }) => {
@@ -95,6 +105,15 @@ export const useDbSyncTaskStore = create<DbSyncTaskState>()(
           };
         });
       },
+      addAnalysisRecord: (taskId, record) => {
+        set((state) => {
+          const prev = state.analysisHistory[taskId] ?? [];
+          const next = [record, ...prev].slice(0, MAX_RUNS_PER_TASK);
+          return {
+            analysisHistory: { ...state.analysisHistory, [taskId]: next },
+          };
+        });
+      },
       updateRunByBgTaskId: (bgTaskId, patch) => {
         set((state) => {
           let changed = false;
@@ -114,12 +133,15 @@ export const useDbSyncTaskStore = create<DbSyncTaskState>()(
         });
       },
       getRunsForTask: (taskId) => get().runHistory[taskId] ?? [],
+      getAnalysisForTask: (taskId) => get().analysisHistory[taskId] ?? [],
       deleteTask: (id) => {
         set((state) => {
-          const { [id]: _removed, ...runHistory } = state.runHistory;
+          const { [id]: _removedRuns, ...runHistory } = state.runHistory;
+          const { [id]: _removedAnalysis, ...analysisHistory } = state.analysisHistory;
           return {
             tasks: state.tasks.filter((task) => task.id !== id),
             runHistory,
+            analysisHistory,
             activeTaskId: state.activeTaskId === id ? null : state.activeTaskId,
             pendingLoad: state.pendingLoad?.taskId === id ? null : state.pendingLoad,
           };
@@ -147,6 +169,7 @@ export const useDbSyncTaskStore = create<DbSyncTaskState>()(
       partialize: (state) => ({
         tasks: state.tasks,
         runHistory: state.runHistory,
+        analysisHistory: state.analysisHistory,
       }),
     },
   ),

@@ -244,6 +244,57 @@
         overflow: auto;
     }
 
+    .db-sync-task-history {
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        height: 100%;
+        overflow: hidden;
+    }
+
+    .db-sync-task-history__tabs {
+        display: flex;
+        gap: var(--sp-1);
+        padding: var(--sp-3) var(--sp-4) var(--sp-2);
+        border-bottom: 1px solid var(--border);
+        flex-shrink: 0;
+    }
+
+    .db-sync-task-history .db-sync-run-history__list,
+    .db-sync-task-history .db-sync-run-history__empty {
+        flex: 1;
+        min-height: 0;
+        overflow: auto;
+    }
+
+    .db-sync-task-history .db-sync-run-history__empty {
+        padding: var(--sp-6) var(--sp-4);
+    }
+
+    .db-sync-task-history .db-sync-run-history__list {
+        padding: var(--sp-3) var(--sp-4);
+    }
+
+    .db-sync-script-preview {
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        height: 100%;
+        overflow: hidden;
+    }
+
+    .db-sync-script-preview__error {
+        margin: 0;
+        padding: var(--sp-4);
+        color: var(--danger);
+        font-size: 13px;
+    }
+
+    .db-sync-script-preview .table-ddl-viewer {
+        flex: 1;
+        min-height: 0;
+    }
+
     .db-sync-run-history__empty {
         margin: 0;
         padding: var(--sp-6) var(--sp-4);
@@ -2396,15 +2447,71 @@
         border-top: none;
     }
 
-    .db-toolbox-conflict-subwindow .db-toolbox-row-diff-scroll {
-        flex: 1;
-        min-height: 0;
-        max-height: none;
-    }
-
     .db-toolbox-row-diff-panel {
         padding: 0 var(--sp-3) var(--sp-3);
         border-top: 1px dashed var(--border-soft);
+    }
+
+    .db-toolbox-row-diff-panel__toolbar {
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        gap: var(--sp-2);
+        padding: var(--sp-2) 0;
+    }
+
+    .db-toolbox-row-diff-kind-filters {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--sp-3);
+        margin: 0;
+        padding: 0;
+        border: none;
+        min-width: 0;
+    }
+
+    .db-toolbox-row-diff-kind-filters__legend {
+        flex: 0 0 auto;
+        padding: 0;
+        margin: 0;
+        font-size: 11px;
+        font-weight: 500;
+        color: var(--meta);
+    }
+
+    .db-toolbox-row-diff-kind-check {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 11px;
+        color: var(--fg-2);
+        cursor: pointer;
+        user-select: none;
+        white-space: nowrap;
+    }
+
+    .db-toolbox-row-diff-kind-check input[type="checkbox"] {
+        margin: 0;
+        accent-color: var(--accent);
+        cursor: pointer;
+    }
+
+    .db-toolbox-row-diff-kind-filter {
+        flex: 0 1 220px;
+        min-width: 140px;
+    }
+
+    .db-toolbox-row-diff-panel__filter-empty {
+        border-top: none;
+        padding-top: var(--sp-4);
+    }
+
+    .db-toolbox-row-diff-pagination {
+        margin-top: 0;
+        border-top: 1px solid var(--border-soft);
+        border-radius: 0 0 var(--r-sm) var(--r-sm);
+        background: var(--surface);
     }
 
     .db-toolbox-row-diff-panel--loading,
@@ -2426,11 +2533,17 @@
     }
 
     .db-toolbox-row-diff-scroll {
+        flex: 1;
+        min-height: 0;
         max-height: 220px;
         overflow: auto;
         border: 1px solid var(--border-soft);
-        border-radius: var(--r-sm);
+        border-radius: var(--r-sm) var(--r-sm) 0 0;
         background: var(--surface);
+    }
+
+    .db-toolbox-conflict-subwindow .db-toolbox-row-diff-scroll {
+        max-height: none;
     }
 
     .db-toolbox-row-diff-table {
@@ -2454,10 +2567,15 @@
     .db-toolbox-row-diff-table th {
         position: sticky;
         top: 0;
-        z-index: 1;
-        background: var(--bg-2);
+        z-index: 2;
+        background-color: var(--surface);
         color: var(--muted);
         font-weight: 600;
+        box-shadow: 0 1px 0 var(--border-soft);
+    }
+
+    .db-toolbox-row-diff-table thead {
+        background-color: var(--surface);
     }
 
     .db-toolbox-row-diff-key {
@@ -2475,26 +2593,27 @@
     }
 
     .db-toolbox-row-diff-kind--changed {
-        color: var(--warn);
-        background: var(--warn-soft);
-    }
-
-    .db-toolbox-row-diff-kind--sourceOnly {
-        color: var(--accent);
-        background: color-mix(in srgb, var(--accent) 12%, transparent);
-    }
-
-    .db-toolbox-row-diff-kind--targetOnly {
         color: var(--danger);
         background: color-mix(in srgb, var(--danger) 12%, transparent);
     }
 
+    .db-toolbox-row-diff-kind--sourceOnly {
+        color: var(--success);
+        background: var(--success-soft);
+    }
+
+    .db-toolbox-row-diff-kind--targetOnly {
+        color: var(--muted);
+        background: var(--surface);
+        border: 1px solid var(--border-soft);
+    }
+
     .db-toolbox-row-diff-row--changed {
-        background: color-mix(in srgb, var(--warn) 6%, transparent);
+        background: color-mix(in srgb, var(--danger) 6%, transparent);
     }
 
     .db-toolbox-row-diff-row--sourceOnly {
-        background: color-mix(in srgb, var(--accent) 5%, transparent);
+        background: color-mix(in srgb, var(--success) 6%, transparent);
     }
 
     .db-toolbox-row-diff-row--targetOnly {

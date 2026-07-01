@@ -135,8 +135,12 @@ pub async fn serial_set_rts(
 // ──────────────────────────────────────────────
 
 #[tauri::command]
-pub async fn http_request(config: HttpRequestConfig) -> Result<HttpResponse, String> {
-    http::execute_request(config).await
+pub async fn http_request(
+    state: State<'_, AppState>,
+    config: HttpRequestConfig,
+) -> Result<HttpResponse, String> {
+    let proxy_config = state.proxy_config.lock().await.clone();
+    http::execute_request(config, &proxy_config).await
 }
 
 // ──────────────────────────────────────────────

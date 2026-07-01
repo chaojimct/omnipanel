@@ -183,3 +183,19 @@ export interface SyncTaskRunRecord {
   progress?: string;
   error?: string | null;
 }
+
+/** 同步任务单次分析记录（分析完成后持久化） */
+export type SyncTaskAnalysisStatus = "completed" | "partial" | "failed";
+
+export interface SyncTaskAnalysisRecord {
+  id: string;
+  kind: ToolboxTabId;
+  status: SyncTaskAnalysisStatus;
+  tableCount: number;
+  tableNames: string[];
+  startedAt: number;
+  finishedAt: number;
+  /** 差异/一致等摘要 */
+  summary?: string;
+  configKey?: string;
+}

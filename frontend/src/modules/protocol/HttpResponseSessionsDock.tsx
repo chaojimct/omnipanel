@@ -52,9 +52,14 @@ export const HttpResponseSessionsDock = memo(function HttpResponseSessionsDock({
     (sessionId: string) => {
       const session = sessions.find((item) => item.id === sessionId);
       if (!session) return null;
-      return <HttpResponseSessionPanel session={session} />;
+      return (
+        <HttpResponseSessionPanel
+          session={session}
+          isActive={sessionId === resolvedActiveId}
+        />
+      );
     },
-    [sessions],
+    [resolvedActiveId, sessions],
   );
 
   const handleLayoutChange = useCallback((layout: SerializedDockview | null) => {

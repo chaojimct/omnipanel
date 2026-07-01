@@ -56,6 +56,18 @@ export function buildSyncAnalysisCache(input: {
   return cache;
 }
 
+export function pickPersistableTableAnalysis(
+  tableAnalysis: Record<string, DataAnalysisResult>,
+): Record<string, DataAnalysisResult> {
+  const next: Record<string, DataAnalysisResult> = {};
+  for (const [name, result] of Object.entries(tableAnalysis)) {
+    if (result.status !== "analyzing") {
+      next[name] = result;
+    }
+  }
+  return next;
+}
+
 export function pickAnalysisCacheForRestore(
   cache: SyncTaskAnalysisCache | undefined,
   configKey: string,

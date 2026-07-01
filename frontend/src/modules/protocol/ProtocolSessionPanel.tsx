@@ -1,4 +1,3 @@
-import { useEffect } from "react";
 import { useI18n } from "../../i18n";
 import { WorkspaceEmptyPage } from "../../components/ui/WorkspaceEmptyPage";
 import type { ProtocolTabKey } from "../../lib/protocolLabConfig";
@@ -7,7 +6,6 @@ import { ModbusPanel } from "./ModbusPanel";
 import { MqttPanel } from "./MqttPanel";
 import { MqttProvider } from "./MqttContext";
 import { HttpPanel } from "./HttpPanel";
-import { useProtocolHttp } from "./ProtocolHttpContext";
 import { RedisPubSubPanel } from "./RedisPubSubPanel";
 import { SerialPanel } from "./SerialPanel";
 import { SnifferPanel } from "./SnifferPanel";
@@ -19,30 +17,6 @@ interface ProtocolHttpSessionPanelProps {
 
 function ProtocolHttpSessionPanel({ resourceId, enabled }: ProtocolHttpSessionPanelProps) {
   const { t } = useI18n();
-  const { selectRequest, clearSelectedRequest, savedRequests, selectedRequestId } =
-    useProtocolHttp();
-
-  useEffect(() => {
-    if (!enabled) return;
-    if (!resourceId) {
-      if (selectedRequestId !== null) {
-        clearSelectedRequest();
-      }
-      return;
-    }
-    if (selectedRequestId === resourceId) return;
-    const req = savedRequests.find((entry) => entry.id === resourceId);
-    if (req) {
-      selectRequest(req);
-    }
-  }, [
-    enabled,
-    resourceId,
-    selectedRequestId,
-    savedRequests,
-    selectRequest,
-    clearSelectedRequest,
-  ]);
 
   if (!enabled) {
     return <div className="http-panel http-panel--inactive" aria-hidden />;
