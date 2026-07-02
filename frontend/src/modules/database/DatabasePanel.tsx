@@ -71,7 +71,7 @@ import { buildDatabaseSchema, introspectToTableSchemas } from "./lsp/sqlCompleti
 import { formatSql } from "./sqlIntel/sqlFormat";
 import { toCsv } from "./csvExport";
 import { fetchAndApplyTableColumnMeta, isAutoIncrementColumn } from "./columnMetaUtils";
-import { shouldUseInlineCellEdit } from "./cell_editor";
+import { isSameCellValue, shouldUseInlineCellEdit } from "./cell_editor";
 import { buildRedisColumnMeta, buildRedisUpdateCommands } from "./redisTableMeta";
 import { getCachedDatabaseNames, getCachedTableColumns } from "./schemaCacheMerge";
 import { snapshotToFilterStates } from "./schemaFilters";
@@ -2356,17 +2356,6 @@ export function DatabasePanel() {
     [connections],
   );
 
-  const isSameCellValue = useCallback((originalValue: unknown, value: unknown) => {
-    return (
-      originalValue === value ||
-      (originalValue == null && value === "") ||
-      (originalValue === "" && value == null) ||
-      (typeof originalValue === "number" &&
-        typeof value === "string" &&
-        String(originalValue) === value)
-    );
-  }, []);
-
   const commitCellDirtyChange = useCallback(
     (
       tabId: string,
@@ -2445,7 +2434,7 @@ export function DatabasePanel() {
         return { ...prev, [tabId]: cur };
       });
     },
-    [isSameCellValue],
+    [],
   );
 
   const handleCellSetNull = useCallback(
@@ -2532,7 +2521,7 @@ export function DatabasePanel() {
       });
       setRowEdit(null);
     },
-    [rowEdit, isSameCellValue],
+    [rowEdit],
   );
 
   const toggleConnectionEnabled = useCallback(

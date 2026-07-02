@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "./fonts.css";
 @import "./tokens.css";
 
 @theme {
@@ -38,7 +39,8 @@
     --color-border: var(--border);
     --color-border-soft: var(--border-soft);
     --color-border-focus: var(--border-focus);
-    --font-mono: "Berkeley Mono", "IBM Plex Mono", "Cascadia Code", "JetBrains Mono", Consolas, "Liberation Mono", ui-monospace, monospace;
+    --font-sans: var(--font-ui);
+    --font-mono: "Maple Mono NF CN", "Berkeley Mono", "IBM Plex Mono", "Cascadia Code", "JetBrains Mono", Consolas, "Liberation Mono", ui-monospace, monospace;
     --spacing-sidebar: var(--sidebar-w);
 }
 

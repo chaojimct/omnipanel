@@ -34,8 +34,8 @@ import { isAutoIncrementColumn } from "./columnMetaUtils";
 import { showToast } from "../../stores/toastStore";
 import {
   detectCellEditorKind,
-  formatCellValue,
   formatInlineEditText,
+  isSameCellValue,
   parseCellValue,
   shouldUseInlineCellEdit,
   type CellEditorKind,
@@ -130,9 +130,9 @@ function resolveRowKey(row: Record<string, unknown>, pkCols: { name: string }[])
 }
 
 const MIN_ROW_HEIGHT = 28;
-const DEFAULT_ROW_HEIGHT = 36;
-const ROW_RESIZE_ZONE_PX = 8;
-const COLUMN_MIN_WIDTH = 60;
+const DEFAULT_ROW_HEIGHT = 32;
+const ROW_RESIZE_ZONE_PX = 6;
+const COLUMN_MIN_WIDTH = 52;
 const ROW_NUM_COL_ID = '__row_num__';
 
 type CellPos = { row: number; col: number };
@@ -291,6 +291,10 @@ function cellToText(value: unknown): string {
   if (value === null || value === undefined) return "NULL";
   if (typeof value === "object") return JSON.stringify(value);
   return String(value);
+}
+
+function isNullCellValue(value: unknown): boolean {
+  return value === null || value === undefined;
 }
 
 function isFullRowSelection(range: CellRange, leafColumnCount: number): boolean {
@@ -1011,6 +1015,37 @@ export const TableDataGrid = memo(function TableDataGrid({ columns, rows, totalR
   const copiedRowRef = useRef<Record<string, unknown> | null>(null);
   const autoIncrementPlaceholder = t("database.rowEditor.autoIncrementPlaceholder");
 
+  const clearGridSelection = useCallback(() => {
+    if (!cellRangeRef.current && selectedRowsRef.current.size === 0) return;
+    setCellRange(null);
+    setSelectedRows(new Set());
+    rowAnchorRef.current = null;
+    cellAnchorRef.current = null;
+    cellDragRef.current = null;
+  }, []);
+
+  useEffect(() => {
+    const onDocumentMouseDown = (event: MouseEvent) => {
+      const wrap = wrapRef.current;
+      if (!wrap) return;
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (wrap.contains(target)) return;
+      if (target instanceof Element) {
+        if (
+          target.closest(
+            ".db-data-table-inline-editor-host, .db-query-filter-popover, .context-menu-panel, .detail-panel-subwindow, .drawer-overlay",
+          )
+        ) {
+          return;
+        }
+      }
+      clearGridSelection();
+    };
+    document.addEventListener("mousedown", onDocumentMouseDown, true);
+    return () => document.removeEventListener("mousedown", onDocumentMouseDown, true);
+  }, [clearGridSelection]);
+
   useEffect(() => {
     if (loading) {
       setInlineEdit(null);
@@ -1242,7 +1277,17 @@ export const TableDataGrid = memo(function TableDataGrid({ columns, rows, totalR
       setInlineEdit(null);
       return;
     }
+    const rowKey = resolveRowKey(prev.row, pkCols);
+    const overrides = rowKey ? displayCellOverrides?.[rowKey] : undefined;
+    const raw =
+      overrides?.[prev.column] !== undefined
+        ? overrides[prev.column]
+        : prev.row[prev.column];
     const parsed = parseCellValue(prev.kind, prev.text);
+    if (isSameCellValue(raw, parsed)) {
+      setInlineEdit(null);
+      return;
+    }
     onCellCommit(
       {
         rowIndex: prev.rowIndex,
@@ -1252,7 +1297,7 @@ export const TableDataGrid = memo(function TableDataGrid({ columns, rows, totalR
       parsed,
     );
     setInlineEdit(null);
-  }, [onCellCommit]);
+  }, [onCellCommit, pkCols, displayCellOverrides]);
 
   const commitInlineEdit = useCallback(() => {
     commitPreviousInlineEdit();
@@ -1444,7 +1489,11 @@ export const TableDataGrid = memo(function TableDataGrid({ columns, rows, totalR
               ? String(row.original[TRANSPOSE_FIELD_COL] ?? "")
               : resolveRowKey(row.original, pkCols);
             const overrideForRow = rowKey ? displayCellOverrides?.[rowKey] : undefined;
-            const displayText = formatCellDisplayText(value, {
+            const resolvedValue =
+              overrideForRow?.[column.id] !== undefined
+                ? overrideForRow[column.id]
+                : value;
+            const displayText = formatCellDisplayText(resolvedValue, {
               row: row.original,
               columnId: column.id,
               colMeta: colMetaForCell,
@@ -1454,7 +1503,34 @@ export const TableDataGrid = memo(function TableDataGrid({ columns, rows, totalR
             });
             const isAutoIncrementPlaceholder =
               displayText === autoIncrementPlaceholder;
+            const isNullValue =
+              !isAutoIncrementPlaceholder && isNullCellValue(resolvedValue);
             return (
+              isNullValue ? (
+                <span
+                  className="db-data-table-cell-null-tag"
+                  onDoubleClick={
+                    canEditCell
+                      ? (event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          handleCellEdit(
+                            {
+                              rowIndex: row.index,
+                              column: column.id,
+                              row: row.original,
+                            },
+                            transposed && displayColIndex >= 0
+                              ? { displayColIndex }
+                              : undefined,
+                          );
+                        }
+                      : undefined
+                  }
+                >
+                  {t("database.results.columnNullableShort")}
+                </span>
+              ) : (
               <span
                 className={`db-data-table-cell-text${isAutoIncrementPlaceholder ? " db-data-table-cell-text--placeholder" : ""}`}
                 onDoubleClick={
@@ -1478,10 +1554,11 @@ export const TableDataGrid = memo(function TableDataGrid({ columns, rows, totalR
               >
                 {displayText}
               </span>
+              )
             );
           },
-          minSize: isFieldCol ? 100 : COLUMN_MIN_WIDTH,
-          size: isFieldCol ? 140 : 150,
+          minSize: isFieldCol ? 80 : COLUMN_MIN_WIDTH,
+          size: isFieldCol ? 108 : 120,
         };
       });
       if (!transposed) {
@@ -1492,8 +1569,8 @@ export const TableDataGrid = memo(function TableDataGrid({ columns, rows, totalR
           cell: ({ row: r }) => (
             <span className="db-row-num-cell">{page * pageSize + r.index + 1}</span>
           ),
-          minSize: 36,
-          size: 44,
+          minSize: 28,
+          size: 36,
           enableResizing: false,
           enableSorting: false,
         });
@@ -1613,11 +1690,7 @@ export const TableDataGrid = memo(function TableDataGrid({ columns, rows, totalR
 
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape" && (cellRangeRef.current || selectedRowsRef.current.size > 0)) {
-        setCellRange(null);
-        setSelectedRows(new Set());
-        rowAnchorRef.current = null;
-        cellAnchorRef.current = null;
-        cellDragRef.current = null;
+        clearGridSelection();
       }
     };
     window.addEventListener("mousemove", onMouseMove);
@@ -1628,7 +1701,7 @@ export const TableDataGrid = memo(function TableDataGrid({ columns, rows, totalR
       window.removeEventListener("mouseup", endResize);
       window.removeEventListener("keydown", onKeyDown);
     };
-  }, []);
+  }, [clearGridSelection]);
 
   const totalTableWidth = table.getTotalSize();
   const leafColumns = table.getAllLeafColumns();
@@ -2030,7 +2103,7 @@ export const TableDataGrid = memo(function TableDataGrid({ columns, rows, totalR
       <tr
         key={row.id}
         data-row-index={row.index}
-        className={`db-data-table-row${row.index % 2 === 1 ? " db-data-table-row--even" : ""}${isCustomHeight ? " db-data-table-row--custom-h" : ""}${rowDirty ? " db-data-table-row--dirty" : ""}`}
+        className={`db-data-table-row${Math.floor(row.index / 2) % 2 === 1 ? " db-data-table-row--striped" : ""}${isCustomHeight ? " db-data-table-row--custom-h" : ""}${rowDirty ? " db-data-table-row--dirty" : ""}`}
         style={isCustomHeight ? { height: rowHeight } : undefined}
         onMouseDown={(event) => {
           if (!isNearRowBottom(event.currentTarget, event.clientY)) {
@@ -2348,23 +2421,27 @@ export const TableDataGrid = memo(function TableDataGrid({ columns, rows, totalR
                       <span className="db-data-table-th-label">
                         {flexRender(header.column.columnDef.header, header.getContext())}
                       </span>
-                      {canSort && (
-                        <ColumnSortIndicator
-                          active={sortActive}
-                          direction={sortActive ? sortDirection : null}
-                          title={t("database.results.sortHint")}
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            handleHeaderClick(colId);
-                          }}
-                        />
-                      )}
-                      {canFilter && colId !== ROW_NUM_COL_ID && !transposed && (
-                        <ColumnFilterButton
-                          columnName={colId}
-                          active={filterColumnNames.has(colId)}
-                          onOpen={openFilterPopover}
-                        />
+                      {(canSort || (canFilter && colId !== ROW_NUM_COL_ID && !transposed)) && (
+                        <span className="db-data-table-th-actions">
+                          {canSort && (
+                            <ColumnSortIndicator
+                              active={sortActive}
+                              direction={sortActive ? sortDirection : null}
+                              title={t("database.results.sortHint")}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                handleHeaderClick(colId);
+                              }}
+                            />
+                          )}
+                          {canFilter && colId !== ROW_NUM_COL_ID && !transposed && (
+                            <ColumnFilterButton
+                              columnName={colId}
+                              active={filterColumnNames.has(colId)}
+                              onOpen={openFilterPopover}
+                            />
+                          )}
+                        </span>
                       )}
                     </span>
                   )}
