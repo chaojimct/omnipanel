@@ -529,7 +529,14 @@ export function ProtocolHttpSidebar() {
         id: "delete-request",
         label: t("protocol.sidebar.deleteRequest"),
         danger: true,
-        onClick: () => void http.deleteSavedRequest(target.requestId),
+        onClick: () => {
+          void appConfirm(
+            t("protocol.sidebar.deleteRequestConfirm"),
+            t("protocol.sidebar.deleteRequestTitle"),
+          ).then((ok) => {
+            if (ok) void http.deleteSavedRequest(target.requestId);
+          });
+        },
       });
     }
 
@@ -561,12 +568,18 @@ export function ProtocolHttpSidebar() {
         label: t("protocol.sidebar.deleteRequest"),
         danger: true,
         onClick: () => {
-          deleteLabEntry(target.entryId);
-          for (const tab of workspaceTabsForClose) {
-            if (tab.resourceId === target.entryId) {
-              closeWorkspaceTab(tab.id);
+          void appConfirm(
+            t("protocol.sidebar.deleteRequestConfirm"),
+            t("protocol.sidebar.deleteRequestTitle"),
+          ).then((ok) => {
+            if (!ok) return;
+            deleteLabEntry(target.entryId);
+            for (const tab of workspaceTabsForClose) {
+              if (tab.resourceId === target.entryId) {
+                closeWorkspaceTab(tab.id);
+              }
             }
-          }
+          });
         },
       });
     }

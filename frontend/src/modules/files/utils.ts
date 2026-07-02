@@ -64,14 +64,11 @@ export function formatFileSize(bytes: number | null | undefined): string {
   return `${(bytes / 1024 ** i).toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
 }
 
-/** 远程 read 会先拉取整文件再校验 maxBytes，需按文件大小与预览阈值取上限。 */
+/** 预览读取时传给后端的 max_bytes，与设置中的预览阈值一致。 */
 export function resolvePreviewReadMaxBytes(
-  fileSize: number | null | undefined,
+  _fileSize: number | null | undefined,
   thresholdBytes: number,
 ): number {
-  if (fileSize != null && fileSize > 0) {
-    return Math.min(fileSize, thresholdBytes);
-  }
   return thresholdBytes;
 }
 

@@ -76,7 +76,7 @@ export function TopbarStyleDockTabHeader({
   return (
     <div ref={rootRef} className="dock-tab-header-root">
       <DockTabChrome
-      {...props}
+      api={props.api}
       closable={closable}
       tooltip={tooltip}
       isPreview={preview}

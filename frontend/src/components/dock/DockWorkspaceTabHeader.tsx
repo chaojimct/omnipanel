@@ -6,6 +6,7 @@ import type { DockTabIconKind } from "./DockTabIcon";
 import type { DockTabPageType } from "./dockableTab";
 import { useDockTabHeaderRuntime } from "./dockTabHeaderRuntime";
 import { useDockTabLiveMeta } from "./dockTabLiveMeta";
+import { omitReactKey } from "./omitReactKey";
 import type { TopbarTabDef } from "../../stores/topbarStore";
 
 interface PanelParams {
@@ -72,13 +73,16 @@ export function DockWorkspaceTabHeader(
       }
     : undefined;
 
-  const headerProps = { ...props, params: mergedParams };
+  const headerProps = omitReactKey(props);
   const tabStyle = runtime?.tabStyleRef.current ?? "default";
 
   if (tabStyle === "topbar") {
     return (
       <TopbarStyleDockTabHeader
-        {...headerProps}
+        api={headerProps.api}
+        containerApi={headerProps.containerApi}
+        tabLocation={headerProps.tabLocation}
+        params={mergedParams}
         closable={closable}
         onContextMenu={handleContextMenu}
       />
@@ -87,7 +91,10 @@ export function DockWorkspaceTabHeader(
 
   return (
     <DockTabHeader
-      {...headerProps}
+      api={headerProps.api}
+      containerApi={headerProps.containerApi}
+      tabLocation={headerProps.tabLocation}
+      params={mergedParams}
       closable={closable}
       onContextMenu={handleContextMenu}
     />
