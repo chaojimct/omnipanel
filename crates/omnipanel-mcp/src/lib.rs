@@ -8,7 +8,7 @@ mod store;
 mod types;
 
 pub use manager::{McpManager, SharedMcpManager};
-pub use registry::{RegisteredTool, ToolExecutionKind, ToolRegistry};
+pub use registry::{external, RegisteredTool, ToolExecutionKind, ToolRegistry};
 pub use types::{
     McpServiceConfig, McpServiceRuntimeStatus, McpServiceView, McpServicesFile, McpSseTransport,
     McpStdioTransport, McpToolCallResult, McpToolInfo, McpTransport, McpTransportKind,

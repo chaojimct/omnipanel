@@ -1,4 +1,3 @@
-import { Channel } from "@tauri-apps/api/core";
 import type { AcpStreamEvent } from "../../ipc/bindings";
 import { commands } from "../../ipc/bindings";
 import { connectAgentByKind } from "../agents/connect";
@@ -14,37 +13,6 @@ export interface AcpPromptOptions {
   cwd?: string | null;
   signal?: AbortSignal;
   onEvent: (event: AcpStreamEvent) => void;
-}
-
-/** 通过 Tauri ACP 后端发起一轮 prompt，流式接收 ACP 事件。 */
-export async function runAcpPrompt(options: AcpPromptOptions): Promise<void> {
-  if (!isTauriRuntime()) {
-    throw new Error("ACP 助手需要在 Tauri 桌面环境中运行");
-  }
-
-  const onEvent = new Channel<AcpStreamEvent>();
-  onEvent.onmessage = (event) => {
-    options.onEvent(event);
-  };
-
-  const abortListener = () => {
-    void commands.acpCancel(options.conversationId).catch(() => {});
-  };
-  options.signal?.addEventListener("abort", abortListener);
-
-  try {
-    const result = await commands.acpPrompt(
-      options.conversationId,
-      options.userText,
-      options.cwd ?? null,
-      onEvent,
-    );
-    if (result.status === "error") {
-      throw new Error(result.error);
-    }
-  } finally {
-    options.signal?.removeEventListener("abort", abortListener);
-  }
 }
 
 export async function respondAcpPermission(

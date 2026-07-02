@@ -166,7 +166,7 @@ impl ServerHandler for OmniMcpHandler {
         let tools = filter_tools_for_request(
             self.tool_router.list_all(),
             &scope,
-            |name| storage.mcp_tool_is_available(name).unwrap_or(false),
+            |name| storage.mcp_tool_is_exposed_available(name).unwrap_or(false),
         );
         Ok(ListToolsResult {
             tools,
@@ -186,7 +186,7 @@ impl ServerHandler for OmniMcpHandler {
 
         {
             let storage = self.storage.lock().await;
-            if !storage.mcp_tool_is_available(tool_name).unwrap_or(false) {
+            if !storage.mcp_tool_is_exposed_available(tool_name).unwrap_or(false) {
                 return Err(ErrorData::invalid_params(
                     format!("MCP 工具不可用: {tool_name}"),
                     None,

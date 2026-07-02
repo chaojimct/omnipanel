@@ -1,3 +1,4 @@
+pub mod external;
 pub mod native;
 
 use std::sync::Arc;
@@ -14,6 +15,8 @@ pub enum ToolExecutionKind {
     /// 需要前端上下文执行（终端 / 数据库等），统一走 pending 回传通道，
     /// 由前端在 `AiRuntimeProvider` 的 dispatchTool 中分派。
     UiDelegated,
+    /// 外部 MCP 服务提供的工具，由 McpManager 桥接调用。
+    ExternalMcp,
 }
 
 #[derive(Debug, Clone)]
@@ -23,12 +26,16 @@ pub struct RegisteredTool {
     pub description: String,
     pub input_schema: Value,
     pub kind: ToolExecutionKind,
+    /// 外部 MCP：`service_id` + 原始工具名。
+    pub mcp_service_id: Option<String>,
+    pub mcp_tool_name: Option<String>,
 }
 
 const NATIVE_TOOL_NAMES: &[&str] = &[
     "omni_knowledge_create_document",
     "omni_knowledge_remove_document",
     "omni_knowledge_list_documents",
+    "load_skill",
 ];
 
 pub struct ToolRegistry {
@@ -55,7 +62,7 @@ impl ToolRegistry {
             .mcp_tool_list()
             .map_err(|e| e.to_string())?
             .into_iter()
-            .filter(|r| r.enabled && storage.mcp_tool_is_available(&r.tool_name).unwrap_or(false))
+            .filter(|r| r.internal_enabled && storage.mcp_tool_is_available(&r.tool_name).unwrap_or(false))
             .collect::<Vec<_>>();
 
         let mut tools = Vec::new();
@@ -76,6 +83,8 @@ impl ToolRegistry {
                 description: record.description.clone(),
                 input_schema: native::input_schema_for(&record.tool_name),
                 kind,
+                mcp_service_id: None,
+                mcp_tool_name: None,
             });
         }
         Ok(tools)
@@ -86,15 +95,19 @@ impl ToolRegistry {
             .list_enabled(module_filter)
             .await?
             .into_iter()
-            .map(|tool| ToolDef {
-                tool_type: "function".to_string(),
-                function: FunctionDef {
-                    name: tool.name,
-                    description: tool.description,
-                    parameters: tool.input_schema,
-                },
-            })
+            .map(Self::registered_to_tool_def)
             .collect())
+    }
+
+    pub fn registered_to_tool_def(tool: RegisteredTool) -> ToolDef {
+        ToolDef {
+            tool_type: "function".to_string(),
+            function: FunctionDef {
+                name: tool.name,
+                description: tool.description,
+                parameters: tool.input_schema,
+            },
+        }
     }
 
     /// 在不持有 `McpManager` 锁的情况下执行 Native 工具（后端直执）。
@@ -116,6 +129,12 @@ impl ToolRegistry {
 
         if Self::is_native_tool(name) {
             return native::execute(name, arguments, storage).await;
+        }
+
+        if external::is_external_mcp_registry_name(name) {
+            return Err(format!(
+                "工具 {name} 为 ExternalMcp，应由 McpManager 桥接执行，不应走 execute_isolated"
+            ));
         }
 
         Err(format!(

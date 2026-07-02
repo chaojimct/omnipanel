@@ -35,6 +35,16 @@ pub fn input_schema_for(tool_name: &str) -> Value {
                 "tag": { "type": "string" }
             }
         }),
+        "load_skill" => serde_json::json!({
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "description": "Skill 的 name 或 id（见系统提示中的 Skills 列表）"
+                }
+            },
+            "required": ["name"]
+        }),
         _ => serde_json::json!({
             "type": "object",
             "properties": {}

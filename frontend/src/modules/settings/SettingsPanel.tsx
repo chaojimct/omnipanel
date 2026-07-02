@@ -51,7 +51,7 @@ import { AddModelDialog } from "../../components/settings/AddModelDialog";
 import { ProviderModelList } from "../../components/settings/ProviderModelList";
 import { DataBackupSection } from "../../components/settings/DataBackupSection";
 import { ModulesSettingsSection } from "../../components/settings/ModulesSettingsSection";
-import { McpToolsSettingsSection } from "../../components/settings/McpToolsSettingsSection";
+import { AiToolsSection } from "../../components/settings/AiToolsSection";
 import { AiScenarioSection } from "../../components/settings/AiScenarioSection";
 import { AgentsSection as AgentSectionContent } from "../../components/settings/AgentsSection";
 import { AiGatewaySettings } from "../ai-gateway/AiGatewaySettings";
@@ -65,7 +65,7 @@ import type { FileIndexStorageInfo, UpdateInfo } from "../../ipc/bindings";
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import { formatFileSize } from "../files/utils";
 
-type Section = "general" | "system" | "appearance" | "keybindings" | "ai" | "agent" | "security" | "terminal" | "database" | "files" | "protocol" | "knowledge" | "data";
+type Section = "general" | "system" | "appearance" | "keybindings" | "ai" | "aiTools" | "aiServices" | "security" | "terminal" | "database" | "files" | "protocol" | "knowledge" | "data";
 
 interface NavItem {
   id: Section;
@@ -126,13 +126,21 @@ const NAV_ITEMS: NavItem[] = [
     ),
   },
   {
-    id: "agent",
-    label: "Agent",
+    id: "aiTools",
+    label: "AI 工具",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <path d="M12 8V4H8" />
-        <rect x="8" y="8" width="8" height="12" rx="2" />
-        <path d="M2 14h2M20 14h2M12 2v2" />
+        <path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z" />
+      </svg>
+    ),
+  },
+  {
+    id: "aiServices",
+    label: "AI 服务",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <rect x="2" y="3" width="20" height="14" rx="2" />
+        <path d="M8 21h8M12 17v4" />
       </svg>
     ),
   },
@@ -747,11 +755,9 @@ function AiOtherSection() {
   );
 }
 
-function AgentSection() {
+function AiServicesSection() {
   return (
     <div className="settings-panel active">
-      <AgentSectionContent />
-      <div className="settings-section-divider" />
       <AiGatewaySettings />
     </div>
   );
@@ -761,6 +767,8 @@ function AiSection() {
   return (
     <div className="settings-panel active">
       <ModelsSection />
+      <div className="settings-section-divider" />
+      <AgentSectionContent />
       <div className="settings-section-divider" />
       <AiScenarioSection />
       <div className="settings-section-divider" />
@@ -1247,12 +1255,6 @@ export function SettingsPanel() {
               <div className="settings-subsection-title">{t("settings.modules.label")}</div>
               <p className="setting-hint settings-subsection-desc">{t("settings.modules.desc")}</p>
               <ModulesSettingsSection />
-
-              <div className="settings-section-divider" />
-
-              <div className="settings-subsection-title">{t("settings.mcpTools.label")}</div>
-              <p className="setting-hint settings-subsection-desc">{t("settings.mcpTools.desc")}</p>
-              <McpToolsSettingsSection />
             </div>
           </div>
         )}
@@ -1346,8 +1348,13 @@ export function SettingsPanel() {
         {/* AI (Models / Scenarios / Other) */}
         {activeSection === "ai" && <AiSection />}
 
-        {/* Agent (ACP / MCP) */}
-        {activeSection === "agent" && <AgentSection />}
+        {activeSection === "aiTools" && (
+          <div className="settings-panel active">
+            <AiToolsSection />
+          </div>
+        )}
+
+        {activeSection === "aiServices" && <AiServicesSection />}
 
         {/* Security */}
         {activeSection === "security" && (

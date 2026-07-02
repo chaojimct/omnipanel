@@ -11,12 +11,15 @@ import {
 } from "./aiModelsStore";
 import { useSettingsStore } from "./settingsStore";
 
-/** @deprecated 使用 AgentKind */
+/** CLI 对话提供者（原 ACP Agent）。 */
 export type AcpService = {
   id: AgentKind;
   name: string;
   executablePath: string;
   modelSelectionId: string | null;
+  /** 多启用：是否开启该 CLI 提供者 */
+  enabled: boolean;
+  /** @deprecated 兼容旧数据，等同首个 enabled */
   isActive: boolean;
   builtin?: boolean;
   createdAt: number;
@@ -26,6 +29,8 @@ interface AcpServicesState {
   services: AcpService[];
   installStatuses: AgentInstallStatus[];
   detecting: boolean;
+  toggleEnabled: (kind: AgentKind) => void;
+  /** @deprecated 使用 toggleEnabled */
   setActive: (kind: AgentKind) => void;
   updateService: (id: AgentKind, patch: Partial<Pick<AcpService, "modelSelectionId">>) => void;
   setInstallStatuses: (statuses: AgentInstallStatus[]) => void;
@@ -37,41 +42,42 @@ function defaultModelId(): string | null {
   return resolveAcpModelSelectionId(null);
 }
 
-function createService(kind: AgentKind, isActive: boolean, status?: AgentInstallStatus): AcpService {
+function createService(
+  kind: AgentKind,
+  enabled: boolean,
+  status?: AgentInstallStatus,
+): AcpService {
   return {
     id: kind,
     name: kind,
     executablePath: status?.executablePath ?? "",
     modelSelectionId: defaultModelId(),
-    isActive,
+    enabled,
+    isActive: enabled,
     createdAt: 0,
     builtin: kind === DEFAULT_AGENT_KIND,
   };
 }
 
 function buildDefaultServices(
-  activeKind: AgentKind,
+  enabledKinds: Set<AgentKind>,
   statuses: AgentInstallStatus[],
 ): AcpService[] {
   return SUPPORTED_AGENT_KINDS.map((kind) => {
     const status = statuses.find((item) => item.kind === kind);
-    return createService(kind, kind === activeKind, status);
+    const enabled = enabledKinds.has(kind);
+    return createService(kind, enabled, status);
   });
 }
 
-function normalizeActiveKind(services: AcpService[]): AgentKind {
-  const active = services.find((s) => s.isActive);
-  if (active && isSupportedAgentKind(active.id)) {
-    return active.id;
+function normalizeEnabledKinds(services: AcpService[]): Set<AgentKind> {
+  const enabled = new Set<AgentKind>();
+  for (const s of services) {
+    if ((s.enabled ?? s.isActive) && isSupportedAgentKind(s.id)) {
+      enabled.add(s.id);
+    }
   }
-  if (services.some((s) => s.id === DEFAULT_AGENT_KIND)) {
-    return DEFAULT_AGENT_KIND;
-  }
-  const installed = services.find((s) => s.executablePath.trim());
-  if (installed && isSupportedAgentKind(installed.id)) {
-    return installed.id;
-  }
-  return DEFAULT_AGENT_KIND;
+  return enabled;
 }
 
 export function resolveAcpModelSelectionId(active: AcpService | null): string | null {
@@ -89,7 +95,6 @@ export function resolveAcpModelSelectionId(active: AcpService | null): string | 
   return firstModelSelectionId(providers);
 }
 
-/** 内置 Agent（OmniAgent）。 */
 export function isBuiltinAcpService(service: AcpService): boolean {
   return service.id === "omniagent";
 }
@@ -97,17 +102,22 @@ export function isBuiltinAcpService(service: AcpService): boolean {
 export const useAcpServicesStore = create<AcpServicesState>()(
   persist(
     (set, get) => ({
-      services: buildDefaultServices(DEFAULT_AGENT_KIND, []),
+      services: buildDefaultServices(new Set(), []),
       installStatuses: [],
       detecting: false,
 
-      setActive: (kind) => {
+      toggleEnabled: (kind) => {
         set({
-          services: get().services.map((s) => ({
-            ...s,
-            isActive: s.id === kind,
-          })),
+          services: get().services.map((s) => {
+            if (s.id !== kind) return s;
+            const enabled = !s.enabled;
+            return { ...s, enabled, isActive: enabled };
+          }),
         });
+      },
+
+      setActive: (kind) => {
+        get().toggleEnabled(kind);
       },
 
       updateService: (id, patch) => {
@@ -131,15 +141,16 @@ export const useAcpServicesStore = create<AcpServicesState>()(
       },
 
       setInstallStatuses: (statuses) => {
-        const activeKind = normalizeActiveKind(get().services);
+        const enabledKinds = normalizeEnabledKinds(get().services);
         set({
           installStatuses: statuses,
-          services: buildDefaultServices(activeKind, statuses).map((service) => {
+          services: buildDefaultServices(enabledKinds, statuses).map((service) => {
             const prev = get().services.find((s) => s.id === service.id);
             return {
               ...service,
               modelSelectionId: prev?.modelSelectionId ?? service.modelSelectionId,
-              isActive: service.id === activeKind,
+              enabled: prev?.enabled ?? service.enabled,
+              isActive: prev?.enabled ?? service.enabled,
             };
           }),
         });
@@ -157,7 +168,7 @@ export const useAcpServicesStore = create<AcpServicesState>()(
 
       resetServices: () => {
         set({
-          services: buildDefaultServices(DEFAULT_AGENT_KIND, []),
+          services: buildDefaultServices(new Set(), []),
           installStatuses: [],
         });
       },
@@ -169,25 +180,40 @@ export const useAcpServicesStore = create<AcpServicesState>()(
         services: state.services.map((s) => ({
           id: s.id,
           modelSelectionId: s.modelSelectionId,
-          isActive: s.isActive,
+          enabled: s.enabled ?? s.isActive,
+          isActive: s.enabled ?? s.isActive,
         })),
       }),
       merge: (persisted, current) => {
-        const raw = persisted as { services?: Array<{ id?: string; modelSelectionId?: string | null; isActive?: boolean }> } | undefined;
-        const savedActive =
-          raw?.services?.find((s) => s.isActive && isSupportedAgentKind(s.id ?? ""))?.id ??
-          DEFAULT_AGENT_KIND;
-        const activeKind = isSupportedAgentKind(savedActive) ? savedActive : DEFAULT_AGENT_KIND;
-        const services = buildDefaultServices(activeKind as AgentKind, current.installStatuses);
+        const raw = persisted as {
+          services?: Array<{
+            id?: string;
+            modelSelectionId?: string | null;
+            enabled?: boolean;
+            isActive?: boolean;
+          }>;
+        } | undefined;
+        const enabledKinds = new Set<AgentKind>();
+        if (raw?.services) {
+          for (const saved of raw.services) {
+            if (!saved.id || !isSupportedAgentKind(saved.id)) continue;
+            if (saved.enabled ?? saved.isActive) {
+              enabledKinds.add(saved.id as AgentKind);
+            }
+          }
+        }
+        const services = buildDefaultServices(enabledKinds, current.installStatuses);
         if (raw?.services) {
           for (const saved of raw.services) {
             if (!saved.id || !isSupportedAgentKind(saved.id)) continue;
             const idx = services.findIndex((s) => s.id === saved.id);
             if (idx >= 0) {
+              const enabled = saved.enabled ?? saved.isActive ?? false;
               services[idx] = {
                 ...services[idx],
                 modelSelectionId: saved.modelSelectionId ?? services[idx].modelSelectionId,
-                isActive: saved.id === activeKind,
+                enabled,
+                isActive: enabled,
               };
             }
           }
@@ -203,28 +229,28 @@ export async function initAcpServicesStore(): Promise<void> {
   let { services, installStatuses } = useAcpServicesStore.getState();
 
   if (!services.some((s) => isSupportedAgentKind(s.id))) {
-    services = buildDefaultServices(DEFAULT_AGENT_KIND, installStatuses);
+    services = buildDefaultServices(new Set(), installStatuses);
   }
 
   services = services
     .filter((s) => isSupportedAgentKind(s.id))
     .map((s) => ({
-      ...createService(s.id, s.isActive, installStatuses.find((st) => st.kind === s.id)),
+      ...createService(s.id, s.enabled ?? s.isActive, installStatuses.find((st) => st.kind === s.id)),
       modelSelectionId: s.modelSelectionId ?? defaultModelId,
-      isActive: s.isActive,
+      enabled: s.enabled ?? s.isActive,
+      isActive: s.enabled ?? s.isActive,
     }));
-
-  if (!services.some((s) => s.isActive)) {
-    const fallback = normalizeActiveKind(services);
-    services = services.map((s) => ({ ...s, isActive: s.id === fallback }));
-  }
 
   useAcpServicesStore.setState({ services });
   await useAcpServicesStore.getState().refreshDetection();
 }
 
+export function getEnabledAcpServices(services: AcpService[]): AcpService[] {
+  return services.filter((s) => s.enabled ?? s.isActive);
+}
+
 export function getActiveAcpService(services: AcpService[]): AcpService | null {
-  return services.find((s) => s.isActive) ?? services[0] ?? null;
+  return getEnabledAcpServices(services)[0] ?? services[0] ?? null;
 }
 
 export function getActiveAgentKind(services: AcpService[]): AgentKind {

@@ -114,6 +114,8 @@ pub struct AppState {
         Arc<Mutex<HashMap<String, tokio::sync::oneshot::Sender<(String, bool)>>>>,
     /// Agent Router 句柄（可选）。
     pub gateway_handle: Arc<Mutex<Option<omnipanel_gateway::GatewayHandle>>>,
+    /// 外部 MCP 工具调用是否需用户审批（由设置同步）。
+    pub mcp_external_require_approval: Arc<std::sync::atomic::AtomicBool>,
 }
 
 impl AppState {
@@ -176,6 +178,7 @@ impl AppState {
             worker_pool: Arc::new(BackgroundWorkerPool::new(default_worker_count())),
             pending_internal_tool_results: Arc::new(Mutex::new(HashMap::new())),
             gateway_handle: Arc::new(Mutex::new(None)),
+            mcp_external_require_approval: Arc::new(std::sync::atomic::AtomicBool::new(true)),
         }
     }
 }

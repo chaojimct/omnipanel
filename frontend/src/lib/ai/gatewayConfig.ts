@@ -9,7 +9,7 @@ let applying = false;
 async function apply(): Promise<void> {
   if (!isTauriRuntime() || applying) return;
   const s = useSettingsStore.getState();
-  const key = `${s.aiGatewayEnabled}|${s.aiGatewayPort}|${s.aiGatewayApiKey}|${s.aiGatewayBindLan}`;
+  const key = `${s.aiGatewayEnabled}|${s.aiGatewayPort}|${s.aiGatewayApiKey}|${s.aiGatewayBindLan}|${s.mcpExternalRequireApproval}`;
   if (key === lastKey) return;
   lastKey = key;
   applying = true;
@@ -19,6 +19,7 @@ async function apply(): Promise<void> {
       s.aiGatewayPort || 8765,
       s.aiGatewayApiKey.trim() ? s.aiGatewayApiKey.trim() : null,
       s.aiGatewayBindLan,
+      s.mcpExternalRequireApproval,
     );
   } catch (err) {
     console.error("[gateway] configure failed:", err);

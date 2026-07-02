@@ -57,7 +57,10 @@ pub struct McpToolRecord {
     pub tool_name: String,
     pub module_key: String,
     pub description: String,
-    pub enabled: bool,
+    /// 内部编排 ToolRegistry 是否加载
+    pub internal_enabled: bool,
+    /// 是否经 OmniMCP 对外暴露
+    pub external_exposed: bool,
 }
 
 /// 从前端目录同步时的输入（不覆盖用户已设置的 enabled）。
@@ -69,13 +72,49 @@ pub struct McpToolCatalogEntry {
 }
 
 impl Storage {
-    /// 补种默认 MCP 工具（不覆盖已有行的 enabled）。
+    /// 补种默认 MCP 工具（不覆盖已有行的开关）。
     pub fn repair_mcp_tools(&self) -> OmniResult<()> {
+        self.ensure_mcp_tool_columns()?;
         for (name, module, desc) in DEFAULT_MCP_TOOLS {
             self.conn()
                 .execute(
-                    "INSERT OR IGNORE INTO mcp_tools (tool_name, module_key, description, enabled) VALUES (?1, ?2, ?3, 1)",
+                    "INSERT OR IGNORE INTO mcp_tools (tool_name, module_key, description, enabled, internal_enabled, external_exposed) VALUES (?1, ?2, ?3, 1, 1, 1)",
                     params![name, module, desc],
+                )
+                .map_err(map_sqlite)?;
+        }
+        Ok(())
+    }
+
+    fn ensure_mcp_tool_columns(&self) -> OmniResult<()> {
+        let mut stmt = self
+            .conn()
+            .prepare("PRAGMA table_info(mcp_tools)")
+            .map_err(map_sqlite)?;
+        let cols: Vec<String> = stmt
+            .query_map([], |row| row.get::<_, String>(1))
+            .map_err(map_sqlite)?
+            .collect::<Result<_, _>>()
+            .map_err(map_sqlite)?;
+        if !cols.iter().any(|c| c == "internal_enabled") {
+            self.conn()
+                .execute(
+                    "ALTER TABLE mcp_tools ADD COLUMN internal_enabled INTEGER NOT NULL DEFAULT 1",
+                    [],
+                )
+                .map_err(map_sqlite)?;
+            self.conn()
+                .execute(
+                    "UPDATE mcp_tools SET internal_enabled = enabled",
+                    [],
+                )
+                .ok();
+        }
+        if !cols.iter().any(|c| c == "external_exposed") {
+            self.conn()
+                .execute(
+                    "ALTER TABLE mcp_tools ADD COLUMN external_exposed INTEGER NOT NULL DEFAULT 1",
+                    [],
                 )
                 .map_err(map_sqlite)?;
         }
@@ -88,7 +127,7 @@ impl Storage {
         let mut stmt = self
             .conn()
             .prepare(
-                "SELECT tool_name, module_key, description, enabled FROM mcp_tools ORDER BY module_key ASC, tool_name ASC",
+                "SELECT tool_name, module_key, description, internal_enabled, external_exposed FROM mcp_tools ORDER BY module_key ASC, tool_name ASC",
             )
             .map_err(map_sqlite)?;
 
@@ -98,7 +137,8 @@ impl Storage {
                     tool_name: row.get(0)?,
                     module_key: row.get(1)?,
                     description: row.get(2)?,
-                    enabled: row.get::<_, i32>(3)? != 0,
+                    internal_enabled: row.get::<_, i32>(3)? != 0,
+                    external_exposed: row.get::<_, i32>(4)? != 0,
                 })
             })
             .map_err(map_sqlite)?;
@@ -112,7 +152,7 @@ impl Storage {
         for entry in entries {
             self.conn()
                 .execute(
-                    "INSERT INTO mcp_tools (tool_name, module_key, description, enabled) VALUES (?1, ?2, ?3, 1)
+                    "INSERT INTO mcp_tools (tool_name, module_key, description, enabled, internal_enabled, external_exposed) VALUES (?1, ?2, ?3, 1, 1, 1)
                      ON CONFLICT(tool_name) DO UPDATE SET
                        module_key = excluded.module_key,
                        description = excluded.description",
@@ -123,8 +163,12 @@ impl Storage {
         Ok(())
     }
 
-    /// 设置 MCP 工具启用状态（模块未打开时不允许启用）。
-    pub fn mcp_tool_set_enabled(&self, tool_name: &str, enabled: bool) -> OmniResult<McpToolRecord> {
+    /// 设置内置工具「内部可用」状态。
+    pub fn mcp_tool_set_internal_enabled(
+        &self,
+        tool_name: &str,
+        enabled: bool,
+    ) -> OmniResult<McpToolRecord> {
         self.repair_mcp_tools()?;
         let tool = self.mcp_tool_get(tool_name)?;
 
@@ -134,34 +178,62 @@ impl Storage {
             if module.status != AppModuleStatus::Open {
                 return Err(OmniError::new(
                     ErrorCode::InvalidInput,
-                    format!("模块 {} 未打开，无法启用 MCP 工具", tool.module_key),
+                    format!("模块 {} 未打开，无法启用内置工具", tool.module_key),
                 ));
             }
         }
 
-        let updated = self
-            .conn()
+        self.conn()
             .execute(
-                "UPDATE mcp_tools SET enabled = ?1 WHERE tool_name = ?2",
+                "UPDATE mcp_tools SET internal_enabled = ?1, enabled = ?1 WHERE tool_name = ?2",
                 params![i32::from(enabled), tool_name],
             )
             .map_err(map_sqlite)?;
 
-        if updated == 0 {
-            return Err(OmniError::new(
-                ErrorCode::NotFound,
-                format!("未知 MCP 工具: {tool_name}"),
-            ));
-        }
-
         self.mcp_tool_get(tool_name)
     }
 
-    /// 查询工具在 DB 中是否标记为启用。
+    /// 设置内置工具「对外暴露」状态。
+    pub fn mcp_tool_set_external_exposed(
+        &self,
+        tool_name: &str,
+        exposed: bool,
+    ) -> OmniResult<McpToolRecord> {
+        self.repair_mcp_tools()?;
+        self.conn()
+            .execute(
+                "UPDATE mcp_tools SET external_exposed = ?1 WHERE tool_name = ?2",
+                params![i32::from(exposed), tool_name],
+            )
+            .map_err(map_sqlite)?;
+        self.mcp_tool_get(tool_name)
+    }
+
+    /// 设置 MCP 工具启用状态（兼容旧 API，等同 internal_enabled）。
+    pub fn mcp_tool_set_enabled(&self, tool_name: &str, enabled: bool) -> OmniResult<McpToolRecord> {
+        self.mcp_tool_set_internal_enabled(tool_name, enabled)
+    }
+
+    /// 查询工具在 DB 中是否标记为内部可用。
     pub fn mcp_tool_is_enabled(&self, tool_name: &str) -> OmniResult<bool> {
         self.repair_mcp_tools()?;
         let result: Result<i32, _> = self.conn().query_row(
-            "SELECT enabled FROM mcp_tools WHERE tool_name = ?1",
+            "SELECT internal_enabled FROM mcp_tools WHERE tool_name = ?1",
+            [tool_name],
+            |row| row.get(0),
+        );
+        match result {
+            Ok(v) => Ok(v != 0),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(false),
+            Err(e) => Err(map_sqlite(e)),
+        }
+    }
+
+    /// 查询工具是否对外暴露。
+    pub fn mcp_tool_is_exposed(&self, tool_name: &str) -> OmniResult<bool> {
+        self.repair_mcp_tools()?;
+        let result: Result<i32, _> = self.conn().query_row(
+            "SELECT external_exposed FROM mcp_tools WHERE tool_name = ?1",
             [tool_name],
             |row| row.get(0),
         );
@@ -180,14 +252,29 @@ impl Storage {
             Ok(t) => t,
             Err(_) => return Ok(false),
         };
-        if !tool.enabled {
+        if !tool.internal_enabled {
             return Ok(false);
         }
         let module = self.app_module_get(&tool.module_key)?;
         Ok(module.status == AppModuleStatus::Open)
     }
 
-    /// 按模块批量设置 MCP 工具启用状态。
+    /// 工具是否可经 OmniMCP 对外暴露：external_exposed 且模块打开。
+    pub fn mcp_tool_is_exposed_available(&self, tool_name: &str) -> OmniResult<bool> {
+        self.repair_mcp_tools()?;
+        self.repair_app_modules()?;
+        let tool = match self.mcp_tool_get(tool_name) {
+            Ok(t) => t,
+            Err(_) => return Ok(false),
+        };
+        if !tool.external_exposed {
+            return Ok(false);
+        }
+        let module = self.app_module_get(&tool.module_key)?;
+        Ok(module.status == AppModuleStatus::Open)
+    }
+
+    /// 按模块批量设置内置工具内部可用状态。
     pub fn mcp_tool_set_enabled_for_module(
         &self,
         module_key: &str,
@@ -196,7 +283,7 @@ impl Storage {
         self.repair_mcp_tools()?;
         self.conn()
             .execute(
-                "UPDATE mcp_tools SET enabled = ?1 WHERE module_key = ?2",
+                "UPDATE mcp_tools SET internal_enabled = ?1, enabled = ?1 WHERE module_key = ?2",
                 params![i32::from(enabled), module_key],
             )
             .map_err(map_sqlite)?;
@@ -225,14 +312,15 @@ impl Storage {
     fn mcp_tool_get(&self, tool_name: &str) -> OmniResult<McpToolRecord> {
         self.conn()
             .query_row(
-                "SELECT tool_name, module_key, description, enabled FROM mcp_tools WHERE tool_name = ?1",
+                "SELECT tool_name, module_key, description, internal_enabled, external_exposed FROM mcp_tools WHERE tool_name = ?1",
                 [tool_name],
                 |row| {
                     Ok(McpToolRecord {
                         tool_name: row.get(0)?,
                         module_key: row.get(1)?,
                         description: row.get(2)?,
-                        enabled: row.get::<_, i32>(3)? != 0,
+                        internal_enabled: row.get::<_, i32>(3)? != 0,
+                        external_exposed: row.get::<_, i32>(4)? != 0,
                     })
                 },
             )

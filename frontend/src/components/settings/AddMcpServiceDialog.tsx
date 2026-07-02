@@ -2,7 +2,9 @@ import { useEffect, useState } from "react";
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import { FormDialog, FormField } from "../ui/FormDialog";
 import { TextInput } from "../ui/TextInput";
+import { Button } from "../ui/Button";
 import { useI18n } from "../../i18n";
+import { parseMcpConfigJson } from "../../lib/mcp/parseMcpConfigJson";
 import type { McpServiceView, UpsertMcpServiceInput } from "../../stores/mcpServicesStore";
 import type { McpTransportKind } from "../../ipc/bindings";
 
@@ -54,6 +56,8 @@ export function AddMcpServiceDialog({
   const [error, setError] = useState<string | null>(null);
   const [picking, setPicking] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [jsonText, setJsonText] = useState("");
+  const [showJsonImport, setShowJsonImport] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -86,6 +90,8 @@ export function AddMcpServiceDialog({
     setError(null);
     setPicking(false);
     setSubmitting(false);
+    setJsonText("");
+    setShowJsonImport(false);
   }, [open, editService]);
 
   const updateField = <K extends keyof FormState>(key: K, value: FormState[K]) => {
@@ -112,6 +118,45 @@ export function AddMcpServiceDialog({
       );
     } finally {
       setPicking(false);
+    }
+  };
+
+  const handleFillFromJson = () => {
+    setError(null);
+    try {
+      const servers = parseMcpConfigJson(jsonText);
+      if (servers.length > 1) {
+        setError(t("settings.mcpServices.import.useBulkImport", { count: servers.length }));
+        return;
+      }
+      const server = servers[0];
+      setForm({
+        name: server.name,
+        enabled: server.enabled,
+        transportKind: server.transportKind,
+        command: server.command ?? "",
+        argsText: (server.args ?? []).join("\n"),
+        url: server.url ?? "",
+        cwd: server.cwd ?? "",
+      });
+      setShowJsonImport(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t("settings.mcpServices.import.parseFailed"));
+    }
+  };
+
+  const handlePasteJsonClipboard = async () => {
+    setError(null);
+    try {
+      const text = await navigator.clipboard.readText();
+      if (!text.trim()) {
+        setError(t("settings.mcpServices.import.clipboardEmpty"));
+        return;
+      }
+      setJsonText(text);
+      setShowJsonImport(true);
+    } catch {
+      setError(t("settings.mcpServices.import.clipboardFailed"));
     }
   };
 
@@ -181,6 +226,45 @@ export function AddMcpServiceDialog({
         disabled: submitting,
       }}
     >
+      {!isEdit ? (
+        <div className="add-mcp-json-quick">
+          <div className="add-mcp-json-quick-head">
+            <span className="setting-hint">{t("settings.mcpServices.import.quickFillHint")}</span>
+            <div className="settings-section-actions">
+              <Button variant="secondary" size="sm" onClick={() => void handlePasteJsonClipboard()}>
+                {t("settings.mcpServices.import.pasteClipboard")}
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowJsonImport((v) => !v)}
+              >
+                {showJsonImport
+                  ? t("settings.mcpServices.import.hideJson")
+                  : t("settings.mcpServices.import.showJson")}
+              </Button>
+            </div>
+          </div>
+          {showJsonImport ? (
+            <>
+              <textarea
+                className="settings-textarea import-mcp-json-textarea"
+                rows={6}
+                value={jsonText}
+                onChange={(e) => setJsonText(e.target.value)}
+                placeholder={t("settings.mcpServices.import.placeholder")}
+                spellCheck={false}
+              />
+              <div className="add-mcp-json-quick-actions">
+                <Button variant="secondary" size="sm" onClick={handleFillFromJson}>
+                  {t("settings.mcpServices.import.fillForm")}
+                </Button>
+              </div>
+            </>
+          ) : null}
+        </div>
+      ) : null}
+
       <FormField label={t("settings.mcpServices.fields.name")} htmlFor="add-mcp-name">
         <TextInput
           id="add-mcp-name"

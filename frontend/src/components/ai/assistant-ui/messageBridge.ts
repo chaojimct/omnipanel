@@ -80,9 +80,11 @@ export function aiMessageToThreadMessage(msg: AiMessage): ThreadMessage {
   }
   if (msg.toolCalls?.length) {
     for (const tc of msg.toolCalls) {
+      const toolCallId =
+        tc.id === msg.id ? `${msg.id}::tool::${tc.id}` : tc.id;
       parts.push({
         type: "tool-call",
-        toolCallId: tc.id,
+        toolCallId,
         toolName: tc.name,
         args: safeParseJson(tc.arguments),
         argsText: tc.arguments,
@@ -149,9 +151,36 @@ export function threadMessagesToAiMessages(messages: readonly ThreadMessage[]): 
 }
 
 export function aiMessagesToThreadMessages(messages: readonly AiMessage[]): ThreadMessage[] {
+  const seenMessageIds = new Set<string>();
+  const seenToolCallIds = new Set<string>();
+
   return messages
     .filter((msg) => msg.role === "user" || msg.role === "assistant")
-    .map(aiMessageToThreadMessage);
+    .map((msg, index) => {
+      let messageId = msg.id;
+      if (seenMessageIds.has(messageId)) {
+        messageId = `${messageId}__${index}`;
+      }
+      seenMessageIds.add(messageId);
+
+      const threadMsg = aiMessageToThreadMessage({ ...msg, id: messageId });
+      if (threadMsg.role !== "assistant" || !msg.toolCalls?.length) {
+        return threadMsg;
+      }
+
+      const content = threadMsg.content.map((part) => {
+        if (part.type !== "tool-call") return part;
+        const tc = part as { type: "tool-call"; toolCallId: string };
+        let toolCallId = tc.toolCallId;
+        if (seenMessageIds.has(toolCallId) || seenToolCallIds.has(toolCallId)) {
+          toolCallId = `${messageId}::tool::${toolCallId}`;
+        }
+        seenToolCallIds.add(toolCallId);
+        return { ...part, toolCallId } as typeof part;
+      });
+
+      return { ...threadMsg, content };
+    });
 }
 
 function safeParseJson(text: string): Record<string, unknown> {

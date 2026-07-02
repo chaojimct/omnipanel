@@ -7,6 +7,7 @@ import { commands } from "./ipc/bindings";
 import { initAiModelsStore } from "./stores/aiModelsStore";
 import { initDbSqlFilesStore } from "./stores/dbSqlFileStore";
 import { initAcpServicesStore } from "./stores/acpServicesStore";
+import { initCliProvidersStore } from "./stores/cliProvidersStore";
 import { initConnections } from "./stores/connectionStore";
 import { initConnectionPool } from "./stores/connectionPoolStore";
 import { initBackgroundTasks } from "./stores/backgroundTaskStore";
@@ -102,6 +103,7 @@ export function Bootstrap() {
 
         await pushLog(t("app.splash.logs.acpServices"));
         await initAcpServicesStore();
+        await initCliProvidersStore();
 
         advance(3);
         await pushLog(t("app.splash.logs.xterm"));

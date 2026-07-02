@@ -7,7 +7,7 @@ use std::sync::LazyLock;
 use std::sync::Mutex;
 
 use omnipanel_ai::ir::{StopReason, StreamEvent, ToolStatus};
-use omnipanel_ai::providers::acp::AcpManager;
+use omnipanel_ai::providers::acp::{AcpManager, PromptOptions};
 use omnipanel_mcp::{McpServiceRuntimeStatus, McpTransport};
 use serde::{Deserialize, Serialize};
 use specta::Type;
@@ -218,6 +218,8 @@ fn resolve_default_agent_command(app: &AppHandle) -> Option<String> {
     resolve_default_agent_launch(app).map(|spec| spec.display_command)
 }
 
+/// @deprecated MCP 不再注入 ACP Agent；保留供遗留路径参考。
+#[allow(dead_code)]
 pub async fn build_mcp_servers(state: &AppState) -> Vec<serde_json::Value> {
     let manager = state.mcp_manager.lock().await;
     let mut servers = Vec::new();
@@ -330,7 +332,7 @@ fn stop_reason_str(reason: StopReason) -> String {
 #[specta::specta]
 pub async fn acp_save_agent_config(
     app: AppHandle,
-    state: State<'_, AppState>,
+    _state: State<'_, AppState>,
     config: AcpAgentConfigInput,
 ) -> Result<String, String> {
     let model = config.model.trim();
@@ -351,7 +353,7 @@ pub async fn acp_save_agent_config(
         return Err("apiStandard 必须为 openai 或 anthropic".to_string());
     }
 
-    let mcp_servers = build_mcp_servers(&state).await;
+    let mcp_servers: Vec<serde_json::Value> = Vec::new();
 
     let file = AcpAgentConfigFile {
         version: 2,
@@ -488,7 +490,7 @@ pub async fn acp_prompt(
     on_event: Channel<AcpStreamEvent>,
 ) -> Result<(), String> {
     let cwd = cwd.filter(|s| !s.trim().is_empty()).unwrap_or_else(default_cwd);
-    let mcp_servers = build_mcp_servers(&state).await;
+    let mcp_servers: Vec<serde_json::Value> = Vec::new();
 
     let session_id = {
         let acp = state.acp_state.lock().await;
@@ -498,7 +500,7 @@ pub async fn acp_prompt(
             .ok_or_else(|| "ACP agent 未连接，请先在设置中配置并连接".to_string())?
             .clone();
         manager
-            .ensure_session(&conversation_id, &cwd, mcp_servers)
+            .ensure_session(&conversation_id, &cwd, mcp_servers, None)
             .await
             .map_err(|e| e.to_string())?
     };
@@ -518,7 +520,7 @@ pub async fn acp_prompt(
         let user_text = user_text.clone();
         tokio::spawn(async move {
             manager
-                .prompt(&session_id, &user_text, tx)
+                .prompt(&session_id, &user_text, tx, PromptOptions::default())
                 .await
                 .map_err(|e| e.to_string())
         })

@@ -14,6 +14,7 @@ export interface AiContextBundle {
   terminalSessionId?: string | null;
   envTag?: string | null;
   resourceId?: string | null;
+  terminalContextAppend?: string | null;
 }
 
 export interface InternalChatRequestPayload {
@@ -68,6 +69,7 @@ export async function runInternalAiChat(options: RunInternalAiChatOptions): Prom
           terminalSessionId: options.request.context.terminalSessionId ?? null,
           envTag: options.request.context.envTag ?? null,
           resourceId: options.request.context.resourceId ?? null,
+          terminalContextAppend: options.request.context.terminalContextAppend ?? null,
         },
         historyJson: options.request.historyJson ?? null,
         toolsMode,

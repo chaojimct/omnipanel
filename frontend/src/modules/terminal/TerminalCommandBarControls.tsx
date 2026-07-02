@@ -38,18 +38,23 @@ export function TerminalCommandBarControls({
 
   const modelOptions = useMemo(
     () =>
-      backendOptions.map((opt) => ({
-        value: opt.value,
-        label: opt.group === "acp" ? `[Agent] ${opt.label}` : opt.label,
-        title: opt.subtitle ?? opt.label,
-      })),
+      backendOptions
+        .filter((opt) => opt.installed !== false)
+        .map((opt) => ({
+          value: opt.value,
+          label: opt.group === "cli" ? `[CLI] ${opt.label}` : opt.label,
+          title: opt.subtitle ?? opt.label,
+        })),
     [backendOptions],
   );
 
+  const savedModelId = useSettingsStore((s) => s.aiScenarioTerminalModelSelectionId);
   const modelValue =
-    modelSelectionId && modelOptions.some((o) => o.value === modelSelectionId)
-      ? modelSelectionId
-      : modelOptions[0]?.value ?? "";
+    savedModelId && modelOptions.some((o) => o.value === savedModelId)
+      ? savedModelId
+      : modelSelectionId && modelOptions.some((o) => o.value === modelSelectionId)
+        ? modelSelectionId
+        : modelOptions[0]?.value ?? "";
 
   return (
     <div className="term-cmd-toolbar">

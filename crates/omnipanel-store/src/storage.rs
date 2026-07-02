@@ -349,6 +349,12 @@ const MIGRATIONS: &[&str] = &[
         ts INTEGER NOT NULL
     );
     "#,
+    // v16 — 内置工具双维度开关（内部可用 / 对外暴露）
+    r#"
+    ALTER TABLE mcp_tools ADD COLUMN internal_enabled INTEGER NOT NULL DEFAULT 1;
+    ALTER TABLE mcp_tools ADD COLUMN external_exposed INTEGER NOT NULL DEFAULT 1;
+    UPDATE mcp_tools SET internal_enabled = enabled WHERE internal_enabled IS NULL OR internal_enabled = enabled;
+    "#,
 ];
 
 /// 审计日志条目。所有高风险操作经执行引擎写入此表。

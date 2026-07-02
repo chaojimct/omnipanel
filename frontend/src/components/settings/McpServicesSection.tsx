@@ -1,13 +1,13 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useI18n } from "../../i18n";
-import { syncAndReconnectActiveAcpAgent } from "../../lib/acp/syncAgentConfig";
 import {
   formatMcpTransportSummary,
   useMcpServicesStore,
   type McpServiceView,
 } from "../../stores/mcpServicesStore";
 import { AddMcpServiceDialog } from "./AddMcpServiceDialog";
+import { ImportMcpJsonDialog } from "./ImportMcpJsonDialog";
 import { McpServiceToolList } from "./McpServiceToolList";
 import { Button } from "../ui/Button";
 import { ModuleEmptyState } from "../ui/ModuleEmptyState";
@@ -15,9 +15,17 @@ import { ModuleEmptyState } from "../ui/ModuleEmptyState";
 export interface McpServicesSectionProps {
   /** 嵌入 Agent 卡片内时使用更紧凑的标题样式 */
   embedded?: boolean;
+  /** 父级已提供标题与描述时，仅渲染工具栏与服务列表 */
+  contentOnly?: boolean;
+  /** 仅展示用户添加的外部 MCP 服务（排除内置 OmniMCP） */
+  externalOnly?: boolean;
 }
 
-export function McpServicesSection({ embedded = false }: McpServicesSectionProps) {
+export function McpServicesSection({
+  embedded = false,
+  contentOnly = false,
+  externalOnly = false,
+}: McpServicesSectionProps) {
   const { t } = useI18n();
   const services = useMcpServicesStore((s) => s.services);
   const loading = useMcpServicesStore((s) => s.loading);
@@ -28,6 +36,7 @@ export function McpServicesSection({ embedded = false }: McpServicesSectionProps
   const setServiceRunning = useMcpServicesStore((s) => s.setServiceRunning);
 
   const [showDialog, setShowDialog] = useState(false);
+  const [showImportDialog, setShowImportDialog] = useState(false);
   const [editingService, setEditingService] = useState<McpServiceView | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
@@ -40,9 +49,60 @@ export function McpServicesSection({ embedded = false }: McpServicesSectionProps
     void refresh();
   }, [refresh]);
 
-  const syncAgentMcpConfig = useCallback(() => {
-    void syncAndReconnectActiveAcpAgent().catch(() => {});
-  }, []);
+  const visibleServices = useMemo(
+    () => (externalOnly ? services.filter((s) => !s.builtin) : services),
+    [externalOnly, services],
+  );
+
+  const closeImportDialog = () => {
+    setShowImportDialog(false);
+  };
+
+  const renderToolbar = () => (
+    <div className="settings-section-actions settings-subsection-toolbar">
+      <Button
+        variant="secondary"
+        size="sm"
+        onClick={() => setShowImportDialog(true)}
+        title={t("settings.mcpServices.import.title")}
+      >
+        {t("settings.mcpServices.import.title")}
+      </Button>
+      <Button
+        variant="primary"
+        size="sm"
+        className="ai-models-add-btn"
+        onClick={openAddDialog}
+        title={t("settings.mcpServices.add.title")}
+        aria-label={t("settings.mcpServices.add.title")}
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
+          <path d="M12 5v14M5 12h14" />
+        </svg>
+        <span>{t("settings.mcpServices.add.title")}</span>
+      </Button>
+    </div>
+  );
+
+  const renderDialogs = () => (
+    <>
+      <AddMcpServiceDialog
+        open={showDialog}
+        onClose={closeDialog}
+        editService={editingService}
+        onSubmit={upsertService}
+        onSaved={(serviceId) => {
+          setExpandedIds((prev) => new Set(prev).add(serviceId));
+        }}
+      />
+      <ImportMcpJsonDialog
+        open={showImportDialog}
+        onClose={closeImportDialog}
+        onSubmit={upsertService}
+        onImported={() => void refresh()}
+      />
+    </>
+  );
 
   const openAddDialog = () => {
     setEditingService(null);
@@ -107,7 +167,6 @@ export function McpServicesSection({ embedded = false }: McpServicesSectionProps
       } else {
         handleRefreshTools(service.id);
       }
-      syncAgentMcpConfig();
     } finally {
       setTogglingId(null);
     }
@@ -245,9 +304,7 @@ export function McpServicesSection({ embedded = false }: McpServicesSectionProps
                   variant="danger"
                   size="sm"
                   onClick={() => {
-                    void removeService(service.id).then(() => {
-                      syncAgentMcpConfig();
-                    });
+                    void removeService(service.id);
                     setConfirmDeleteId(null);
                   }}
                 >
@@ -299,6 +356,44 @@ export function McpServicesSection({ embedded = false }: McpServicesSectionProps
     );
   };
 
+  const listBody = (
+    <>
+      {storeError && (
+        <div className="ai-provider-refresh-notice ai-provider-refresh-notice--err">
+          {storeError}
+        </div>
+      )}
+
+      {loading && visibleServices.length === 0 && services.length === 0 ? (
+        <div className="ai-models-empty">
+          <ModuleEmptyState preset="inbox" title={t("settings.mcpServices.loading")} desc="" />
+        </div>
+      ) : visibleServices.length === 0 ? (
+        <div className="ai-models-empty">
+          <ModuleEmptyState
+            preset="inbox"
+            title={t("settings.mcpServices.externalEmpty")}
+            desc={t("settings.mcpServices.externalEmptyDesc")}
+          />
+        </div>
+      ) : (
+        <ul className="ai-models-list">
+          {visibleServices.map(renderServiceCard)}
+        </ul>
+      )}
+    </>
+  );
+
+  if (contentOnly) {
+    return (
+      <div className="mcp-services-content-only">
+        {renderToolbar()}
+        {listBody}
+        {renderDialogs()}
+      </div>
+    );
+  }
+
   return (
     <div className={embedded ? "settings-section settings-section--embedded" : "settings-section"}>
       <div className="settings-section-header">
@@ -308,53 +403,13 @@ export function McpServicesSection({ embedded = false }: McpServicesSectionProps
           ) : (
             <h2>{t("settings.mcpServices.title")}</h2>
           )}
-          <p className="section-desc">
-            {embedded
-              ? t("settings.acpServices.mcpEmbeddedDesc")
-              : t("settings.mcpServices.description")}
-          </p>
+          <p className="section-desc">{t("settings.mcpServices.description")}</p>
         </div>
-        <Button
-          variant="primary"
-          size="sm"
-          className="ai-models-add-btn"
-          onClick={openAddDialog}
-          title={t("settings.mcpServices.add.title")}
-          aria-label={t("settings.mcpServices.add.title")}
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
-            <path d="M12 5v14M5 12h14" />
-          </svg>
-          <span>{t("settings.mcpServices.add.title")}</span>
-        </Button>
+        {renderToolbar()}
       </div>
 
-      {storeError && (
-        <div className="ai-provider-refresh-notice ai-provider-refresh-notice--err">
-          {storeError}
-        </div>
-      )}
-
-      {loading && services.length === 0 ? (
-        <div className="ai-models-empty">
-          <ModuleEmptyState preset="inbox" title={t("settings.mcpServices.loading")} desc="" />
-        </div>
-      ) : (
-        <ul className="ai-models-list">
-          {services.map(renderServiceCard)}
-        </ul>
-      )}
-
-      <AddMcpServiceDialog
-        open={showDialog}
-        onClose={closeDialog}
-        editService={editingService}
-        onSubmit={upsertService}
-        onSaved={(serviceId) => {
-          setExpandedIds((prev) => new Set(prev).add(serviceId));
-          syncAgentMcpConfig();
-        }}
-      />
+      {listBody}
+      {renderDialogs()}
     </div>
   );
 }

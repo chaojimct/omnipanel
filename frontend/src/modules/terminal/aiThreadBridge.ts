@@ -30,7 +30,17 @@ function normalizeItem(raw: AiThreadItem | (Omit<AiThreadMessage, "kind"> & { ki
 }
 
 export function normalizeAiThread(thread: AiThreadItem[] | undefined): AiThreadItem[] {
-  return (thread ?? []).map((item) => normalizeItem(item));
+  const items = (thread ?? []).map((item) => normalizeItem(item));
+  const seen = new Set<string>();
+  return items.map((item, index) => {
+    if (!seen.has(item.id)) {
+      seen.add(item.id);
+      return item;
+    }
+    const nextId = `${item.id}__${index}`;
+    seen.add(nextId);
+    return { ...item, id: nextId };
+  });
 }
 
 export function getResolvedAiThread(block: TerminalBlock): AiThreadItem[] {
@@ -39,10 +49,11 @@ export function getResolvedAiThread(block: TerminalBlock): AiThreadItem[] {
   if (block.kind !== "ai") return thread;
 
   const migrated: AiThreadItem[] = [];
+  const legacyPrefix = block.id;
   if (block.title?.trim()) {
     migrated.push({
       kind: "message",
-      id: `legacy-user`,
+      id: `${legacyPrefix}-legacy-user`,
       role: "user",
       content: block.title.trim(),
       timestamp: block.timestamp,
@@ -51,7 +62,7 @@ export function getResolvedAiThread(block: TerminalBlock): AiThreadItem[] {
   if (block.reasoning?.trim() || block.output.trim()) {
     migrated.push({
       kind: "message",
-      id: `legacy-assistant`,
+      id: `${legacyPrefix}-legacy-assistant`,
       role: "assistant",
       content: block.output.trim(),
       reasoning: block.reasoning?.trim(),

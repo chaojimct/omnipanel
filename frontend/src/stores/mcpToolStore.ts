@@ -9,11 +9,10 @@ interface McpToolStore {
   hydrated: boolean;
   hydrate: () => Promise<void>;
   refresh: () => Promise<void>;
-  /** DB 中是否标记为启用 */
-  isEnabled: (toolName: string) => boolean;
-  /** 是否可注册/可调用：DB 启用且所属模块为打开 */
+  isInternalEnabled: (toolName: string) => boolean;
   isAvailable: (toolName: string) => boolean;
-  setEnabled: (toolName: string, enabled: boolean) => Promise<void>;
+  setInternalEnabled: (toolName: string, enabled: boolean) => Promise<void>;
+  setExternalExposed: (toolName: string, exposed: boolean) => Promise<void>;
 }
 
 export const useMcpToolStore = create<McpToolStore>((set, get) => ({
@@ -38,30 +37,36 @@ export const useMcpToolStore = create<McpToolStore>((set, get) => ({
     }
   },
 
-  isEnabled: (toolName) => {
+  isInternalEnabled: (toolName) => {
     const tool = get().tools.find((t) => t.tool_name === toolName);
-    return tool?.enabled ?? false;
+    return tool?.internal_enabled ?? false;
   },
 
   isAvailable: (toolName) => {
     const tool = get().tools.find((t) => t.tool_name === toolName);
-    if (!tool?.enabled) return false;
+    if (!tool?.internal_enabled) return false;
     return isModuleOpen(tool.module_key as ModuleKey);
   },
 
-  setEnabled: async (toolName, enabled) => {
-    const res = await commands.mcpToolSetEnabled(toolName, enabled);
+  setInternalEnabled: async (toolName, enabled) => {
+    const res = await commands.mcpToolSetInternalEnabled(toolName, enabled);
     if (res.status !== "ok") return;
     const updated = res.data;
     set((state) => ({
-      tools: state.tools.some((t) => t.tool_name === toolName)
-        ? state.tools.map((t) => (t.tool_name === toolName ? updated : t))
-        : [...state.tools, updated],
+      tools: state.tools.map((t) => (t.tool_name === toolName ? updated : t)),
+    }));
+  },
+
+  setExternalExposed: async (toolName, exposed) => {
+    const res = await commands.mcpToolSetExternalExposed(toolName, exposed);
+    if (res.status !== "ok") return;
+    const updated = res.data;
+    set((state) => ({
+      tools: state.tools.map((t) => (t.tool_name === toolName ? updated : t)),
     }));
   },
 }));
 
-/** 工具是否可注册/可调用 */
 export function isMcpToolAvailable(toolName: string): boolean {
   return useMcpToolStore.getState().isAvailable(toolName);
 }

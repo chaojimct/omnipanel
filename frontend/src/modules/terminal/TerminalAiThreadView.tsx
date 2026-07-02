@@ -59,7 +59,7 @@ function TerminalAiThreadRuntime({ block }: TerminalAiThreadRuntimeProps) {
   }
 
   return (
-    <AssistantRuntimeProvider runtime={runtime}>
+    <AssistantRuntimeProvider key={block.id} runtime={runtime}>
       <ThreadMessagesOnly
         components={{
           ToolFallback: toolFallback,

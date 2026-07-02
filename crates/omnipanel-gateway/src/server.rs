@@ -8,6 +8,7 @@ use axum::{
     Json, Router,
 };
 use omnipanel_ai::provider::AiProviderRegistry;
+use omnipanel_store::{AiSessionRecord, Storage};
 use serde::Deserialize;
 use tokio::sync::Mutex;
 
@@ -33,10 +34,11 @@ pub struct GatewayHandle {
 pub fn spawn_gateway(
     config: GatewayConfig,
     ai_registry: Arc<Mutex<AiProviderRegistry>>,
+    storage: Option<Arc<Mutex<Storage>>>,
 ) -> GatewayHandle {
     let (shutdown_tx, mut shutdown_rx) = tokio::sync::watch::channel(false);
     let ctx = AppCtx {
-        router: Arc::new(GatewayRouter::new(ai_registry)),
+        router: Arc::new(GatewayRouter::new(ai_registry, storage)),
         api_key: config.api_key.filter(|k| !k.trim().is_empty()),
     };
 

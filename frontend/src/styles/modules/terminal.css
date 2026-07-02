@@ -1313,6 +1313,9 @@
         flex-shrink: 0;
         pointer-events: none;
         overflow-anchor: none;
+        /* 排到 segment 末尾（命令 shell 之后），让 dock 下方紧跟命令输出、无空白；
+           占位仍在文档流补足 host 塌缩量，保持 scrollHeight 恒定防闪。 */
+        order: 10;
     }
 
     .term-warp-ai-sticky-host {

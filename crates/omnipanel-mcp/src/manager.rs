@@ -16,7 +16,7 @@ use omnipanel_store::Storage;
 use crate::builtin::OmniMcpHandler;
 use crate::omni_module::omni_tool_module_key;
 use crate::process::stdio_command;
-use crate::registry::ToolRegistry;
+use crate::registry::{external, native, RegisteredTool, ToolExecutionKind, ToolRegistry};
 use crate::store::{
     delete_custom_service, load_services_file, set_service_enabled, upsert_custom_service,
 };
@@ -25,6 +25,7 @@ use crate::types::{
     BUILTIN_MCP_ENDPOINT, BUILTIN_MCP_PORT, BUILTIN_SERVICE_ID, BUILTIN_SERVICE_NAME,
     OMNI_MODULE_MASTER,
 };
+use omnipanel_ai::types::ToolDef;
 
 struct BuiltinServerRuntime {
     endpoint: String,
@@ -66,6 +67,75 @@ impl McpManager {
             views.push(self.custom_view(service));
         }
         views
+    }
+
+    /// 聚合已启用且运行中的**非内置**外部 MCP 服务工具，供内部编排 ToolRegistry 注入。
+    pub async fn list_external_registry_tools(&self) -> Result<Vec<RegisteredTool>, String> {
+        let mut out = Vec::new();
+        for service in self.list_services() {
+            if service.builtin || !service.enabled {
+                continue;
+            }
+            if service.status != McpServiceRuntimeStatus::Running {
+                continue;
+            }
+            let tools = self
+                .list_service_tools(&service.id)
+                .await
+                .map_err(|e| e.to_string())?;
+            for tool in tools {
+                let schema = tool.input_schema.unwrap_or_else(|| {
+                    serde_json::json!({
+                        "type": "object",
+                        "properties": {}
+                    })
+                });
+                let desc = tool
+                    .description
+                    .filter(|d| !d.trim().is_empty())
+                    .unwrap_or_else(|| format!("外部 MCP 工具（{}）", service.name));
+                out.push(RegisteredTool {
+                    name: external::registry_tool_name(&service.id, &tool.name),
+                    module_key: "external_mcp".to_string(),
+                    description: desc,
+                    input_schema: schema,
+                    kind: ToolExecutionKind::ExternalMcp,
+                    mcp_service_id: Some(service.id.clone()),
+                    mcp_tool_name: Some(tool.name),
+                });
+            }
+        }
+        Ok(out)
+    }
+
+    /// 内置 omni_* + 外部 MCP 工具合并为内部编排可用的 ToolDef 列表。
+    pub async fn to_internal_tool_defs(
+        &self,
+        module_filter: Option<&str>,
+    ) -> Result<Vec<ToolDef>, String> {
+        let mut defs = self
+            .tool_registry
+            .to_tool_defs(module_filter)
+            .await?;
+        let external = self.list_external_registry_tools().await?;
+        defs.extend(
+            external
+                .into_iter()
+                .map(ToolRegistry::registered_to_tool_def),
+        );
+        defs.push(Self::load_skill_tool_def());
+        Ok(defs)
+    }
+
+    fn load_skill_tool_def() -> ToolDef {
+        ToolDef {
+            tool_type: "function".to_string(),
+            function: omnipanel_ai::types::FunctionDef {
+                name: "load_skill".to_string(),
+                description: "加载指定 Skill 的完整 SKILL.md 正文（渐进式披露）".to_string(),
+                parameters: native::input_schema_for("load_skill"),
+            },
+        }
     }
 
     pub async fn upsert_service(&mut self, service: McpServiceConfig) -> anyhow::Result<McpServiceView> {
@@ -143,7 +213,7 @@ impl McpManager {
         if id == BUILTIN_SERVICE_ID {
             {
                 let storage = self.storage.lock().await;
-                if !storage.mcp_tool_is_available(tool_name).unwrap_or(false) {
+                if !storage.mcp_tool_is_exposed_available(tool_name).unwrap_or(false) {
                     anyhow::bail!("MCP 工具不可用: {tool_name}");
                 }
             }
@@ -197,7 +267,7 @@ impl McpManager {
                 crate::client::list_tools_http_for_module(&endpoint, Some(OMNI_MODULE_MASTER))
                     .await?;
             let storage = self.storage.lock().await;
-            tools.retain(|tool| storage.mcp_tool_is_available(&tool.name).unwrap_or(false));
+            tools.retain(|tool| storage.mcp_tool_is_exposed_available(&tool.name).unwrap_or(false));
             return Ok(tools);
         }
 

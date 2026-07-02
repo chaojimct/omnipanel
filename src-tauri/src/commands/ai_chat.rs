@@ -13,14 +13,13 @@ use omnipanel_ai::providers::openai::OpenAiProvider;
 use omnipanel_ai::routing::BackendKind;
 use omnipanel_ai::types::ChatMessage;
 use omnipanel_ai::RenamedProvider;
-use omnipanel_mcp::ToolRegistry;
+use omnipanel_mcp::{external, ToolRegistry};
 use serde::{Deserialize, Serialize};
 use specta::Type;
 use tauri::{ipc::Channel, AppHandle, State};
 use tokio::sync::{oneshot, Mutex};
 
 use crate::agent::agent_kind_label;
-use crate::commands::acp::build_mcp_servers;
 use crate::commands::agents::{agent_kind_key, detect_all_agents_sync};
 use crate::state::AppState;
 
@@ -28,6 +27,7 @@ struct RegistryToolExecutor {
     mcp_manager: omnipanel_mcp::SharedMcpManager,
     conversation_id: String,
     pending_internal: Arc<Mutex<HashMap<String, oneshot::Sender<(String, bool)>>>>,
+    mcp_external_require_approval: Arc<std::sync::atomic::AtomicBool>,
 }
 
 #[async_trait::async_trait]
@@ -40,6 +40,17 @@ impl ToolExecutor for RegistryToolExecutor {
         if ToolRegistry::is_native_tool(name) {
             let args: serde_json::Value =
                 serde_json::from_str(arguments).unwrap_or_else(|_| serde_json::json!({}));
+            if name == "load_skill" {
+                let skill_name = args
+                    .get("name")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .trim();
+                return match crate::commands::skills::load_skill_body(skill_name) {
+                    Ok(body) => (body, true),
+                    Err(err) => (format!("Error: {err}"), false),
+                };
+            }
             // 克隆 storage 句柄后立即释放 McpManager 锁。
             let storage = {
                 let manager = self.mcp_manager.lock().await;
@@ -49,6 +60,40 @@ impl ToolExecutor for RegistryToolExecutor {
                 Ok(pair) => pair,
                 Err(err) => (format!("Error: {err}"), false),
             };
+        }
+
+        if let Some((service_id, tool_name)) = external::parse_registry_tool_name(name) {
+            if !self
+                .mcp_external_require_approval
+                .load(std::sync::atomic::Ordering::Relaxed)
+            {
+                let args: serde_json::Value =
+                    serde_json::from_str(arguments).unwrap_or_else(|_| serde_json::json!({}));
+                let start = std::time::Instant::now();
+                let manager = self.mcp_manager.lock().await;
+                let storage = manager.tool_registry.storage_handle();
+                let audit_name = format!("{service_id}::{tool_name}");
+                let outcome = manager
+                    .call_service_tool(&service_id, &tool_name, args)
+                    .await;
+                drop(manager);
+                let elapsed = start.elapsed().as_millis() as i64;
+                let ts = now_ms();
+                let (content, success) = match &outcome {
+                    Ok(result) => (result.content.clone(), !result.is_error),
+                    Err(err) => (format!("Error: {err}"), false),
+                };
+                let _ = storage.lock().await.mcp_tool_audit_append(
+                    "mcp_external",
+                    &audit_name,
+                    elapsed,
+                    success,
+                    "",
+                    ts,
+                );
+                return (content, success);
+            }
+            // 需审批时走 UiDelegated pending 通道（与终端/数据库工具一致）
         }
 
         let key = format!("{}:{}", self.conversation_id, tool_call_id);
@@ -90,6 +135,8 @@ pub struct AiContextBundleDto {
     pub terminal_session_id: Option<String>,
     pub env_tag: Option<String>,
     pub resource_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub terminal_context_append: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
@@ -132,6 +179,7 @@ impl TryFrom<InternalChatRequestDto> for InternalChatRequest {
                 terminal_session_id: dto.context.terminal_session_id,
                 env_tag: dto.context.env_tag,
                 resource_id: dto.context.resource_id,
+                terminal_context_append: dto.context.terminal_context_append,
             },
             history,
             tools_mode: match dto.tools_mode {
@@ -146,6 +194,7 @@ impl TryFrom<InternalChatRequestDto> for InternalChatRequest {
                 base_url: p.base_url,
                 api_key: p.api_key,
             }),
+            system_append: None,
         })
     }
 }
@@ -210,18 +259,39 @@ pub async fn ai_chat_stream(
     request: InternalChatRequestDto,
     on_event: Channel<StreamEvent>,
 ) -> Result<(), String> {
-    let internal = InternalChatRequest::try_from(request)?;
+    let mut internal = InternalChatRequest::try_from(request)?;
+    if matches!(
+        internal.tools_mode,
+        InternalToolsMode::DirectInject { .. }
+    ) {
+        let skills_text = crate::commands::skills::build_skills_system_append()
+            .unwrap_or_default();
+        if !skills_text.is_empty() {
+            internal.system_append = Some(skills_text);
+        }
+    }
+
     let conversation_id = internal.conversation_id.clone();
 
     let parsed = omnipanel_ai::routing::parse_backend_id(&internal.backend_id)?;
 
-    if parsed.kind == BackendKind::Acp {
+    if parsed.kind == BackendKind::Acp || parsed.kind == BackendKind::Cli {
+        let agent_kind = if parsed.kind == BackendKind::Cli {
+            omnipanel_ai::routing::normalize_cli_backend(&parsed)?.0
+        } else {
+            parsed.provider_id.clone()
+        };
         return run_acp_internal_turn(
             &app,
             &state,
             &internal,
             &conversation_id,
-            &parsed.provider_id,
+            &agent_kind,
+            if parsed.kind == BackendKind::Cli {
+                Some(parsed.model_id.clone())
+            } else {
+                None
+            },
             on_event,
         )
         .await;
@@ -245,8 +315,7 @@ pub async fn ai_chat_stream(
             let manager = state.mcp_manager.lock().await;
             let filter = module_filter.as_deref().or(Some("master"));
             let tool_defs = manager
-                .tool_registry
-                .to_tool_defs(filter)
+                .to_internal_tool_defs(filter)
                 .await
                 .map_err(|e| e.to_string())?;
             (Some(tool_defs), ())
@@ -265,6 +334,7 @@ pub async fn ai_chat_stream(
         mcp_manager: state.mcp_manager.clone(),
         conversation_id: conversation_id.clone(),
         pending_internal: state.pending_internal_tool_results.clone(),
+        mcp_external_require_approval: state.mcp_external_require_approval.clone(),
     };
     let exec_ref: Option<&dyn ToolExecutor> = match &internal.tools_mode {
         InternalToolsMode::DirectInject { .. } => Some(&tool_executor),
@@ -278,7 +348,7 @@ pub async fn ai_chat_stream(
         tools,
         exec_ref,
         |evt| {
-            record_internal_trace(&state, &conversation_id, &internal.backend_id, &evt);
+            record_internal_trace(&state, &conversation_id, &internal.backend_id, 0, &evt);
             let _ = on_event.send(evt);
         },
         cancel_flag.clone(),
@@ -347,8 +417,20 @@ async fn run_acp_internal_turn(
     internal: &InternalChatRequest,
     conversation_id: &str,
     agent_kind: &str,
+    model_id: Option<String>,
     on_event: Channel<StreamEvent>,
 ) -> Result<(), String> {
+    use omnipanel_ai::providers::acp::{
+        PromptOptions, build_client_tools_prompt, build_incremental_client_tools_prompt,
+        format_client_tool_result_prompt, looks_like_pending_tool_calls_json,
+        parse_client_tool_calls, pick_terminal_tool_call, prompt_expects_tool_retry,
+        prompt_has_tool_results,
+    };
+    use omnipanel_ai::providers::acp::native_tools::TERMINAL_CLIENT_TOOL;
+    use omnipanel_ai::ToolStatus;
+
+    let backend_id = internal.backend_id.clone();
+
     let cwd = internal
         .context
         .cwd
@@ -356,38 +438,283 @@ async fn run_acp_internal_turn(
         .filter(|s| !s.trim().is_empty())
         .unwrap_or_else(crate::commands::acp::default_cwd);
 
+    let client_tools = internal
+        .context
+        .terminal_session_id
+        .as_ref()
+        .is_some_and(|s| !s.trim().is_empty());
+
     let manager = state
         .agent_registry
         .get_or_connect(app, state, agent_kind)
         .await?;
 
-    let mcp_servers = build_mcp_servers(state).await;
+    let mcp_servers: Vec<serde_json::Value> = Vec::new();
     let session_id = manager
-        .ensure_session(conversation_id, &cwd, mcp_servers)
+        .ensure_session(
+            conversation_id,
+            &cwd,
+            mcp_servers,
+            model_id.as_deref(),
+        )
         .await
         .map_err(|e| e.to_string())?;
 
-    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<StreamEvent>();
-    let user_text = internal.user_text.clone();
-    let prompt_handle = tokio::spawn(async move {
-        manager
-            .prompt(&session_id, &user_text, tx)
-            .await
-            .map_err(|e| e.to_string())
-    });
+    let terminal_context = internal
+        .context
+        .terminal_context_append
+        .as_deref()
+        .filter(|s| !s.trim().is_empty());
 
-    while let Some(event) = rx.recv().await {
-        let is_terminal = matches!(&event, StreamEvent::Done { .. } | StreamEvent::Error { .. });
-        let _ = on_event.send(event);
-        if is_terminal {
-            break;
+    let is_first_user_prompt = if client_tools {
+        manager.mark_first_prompt_sent(conversation_id).await
+    } else {
+        true
+    };
+
+    let mut prompt_text = if client_tools {
+        if is_first_user_prompt {
+            build_client_tools_prompt(&internal.user_text, terminal_context)
+        } else {
+            build_incremental_client_tools_prompt(&internal.user_text, terminal_context)
         }
+    } else {
+        internal.user_text.clone()
+    };
+
+    const MAX_ACP_TOOL_ROUNDS: usize = 8;
+    let mut turn_index: i32 = 0;
+
+    for round in 0..MAX_ACP_TOOL_ROUNDS {
+        record_prompt_sent_trace(
+            state,
+            conversation_id,
+            &backend_id,
+            turn_index,
+            round,
+            &prompt_text,
+        );
+
+        let is_tool_continuation = client_tools && prompt_has_tool_results(&prompt_text);
+        let expects_tool_retry = client_tools && prompt_expects_tool_retry(&prompt_text);
+        let content_buffer: Option<Arc<std::sync::Mutex<String>>> = if client_tools
+            && (!is_tool_continuation || expects_tool_retry)
+        {
+            Some(Arc::new(std::sync::Mutex::new(String::new())))
+        } else {
+            None
+        };
+        let content_hold = content_buffer.is_some();
+
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<StreamEvent>();
+        let pending_tool: Arc<Mutex<Option<tokio::sync::oneshot::Receiver<(String, bool)>>>> =
+            Arc::new(Mutex::new(None));
+        let pending_tool_id: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
+
+        let manager_bg = manager.clone();
+        let session_id_bg = session_id.clone();
+        let prompt_text_bg = prompt_text.clone();
+        let prompt_options = PromptOptions {
+            client_tools,
+            emit_done: false,
+            content_hold,
+            content_buffer: content_buffer.clone(),
+        };
+
+        let prompt_handle = tokio::spawn(async move {
+            manager_bg
+                .prompt(&session_id_bg, &prompt_text_bg, tx, prompt_options)
+                .await
+                .map_err(|e| e.to_string())
+        });
+
+        while let Some(event) = rx.recv().await {
+            if client_tools {
+                if let StreamEvent::ToolCall { id, name, arguments } = &event {
+                    if name == TERMINAL_CLIENT_TOOL {
+                        let key = format!("{conversation_id}:{id}");
+                        let (tool_tx, tool_rx) = tokio::sync::oneshot::channel();
+                        state
+                            .pending_internal_tool_results
+                            .lock()
+                            .await
+                            .insert(key, tool_tx);
+                        *pending_tool.lock().await = Some(tool_rx);
+                        *pending_tool_id.lock().await = Some(id.clone());
+                        let _ = arguments;
+                    }
+                }
+            }
+
+            if matches!(&event, StreamEvent::Error { .. }) {
+                record_internal_trace(
+                    state,
+                    conversation_id,
+                    &backend_id,
+                    turn_index,
+                    &event,
+                );
+                let _ = on_event.send(event);
+                break;
+            }
+            record_internal_trace(state, conversation_id, &backend_id, turn_index, &event);
+            let _ = on_event.send(event);
+        }
+
+        let stop = prompt_handle
+            .await
+            .map_err(|e| e.to_string())?
+            .map_err(|e| e)?;
+
+        // 路径 B：ACP 原生 tool_call 已被 translate 映射并在流中注册 pending
+        if client_tools {
+            if pending_tool.lock().await.is_none() {
+                if let Some(buf) = &content_buffer {
+                    let text = buf.lock().map(|g| g.clone()).unwrap_or_default();
+                    if let Some(tc) = pick_terminal_tool_call(&parse_client_tool_calls(&text)) {
+                        // 路径 A：从模型文本解析 tool_calls JSON
+                        let tool_id = tc.id.clone();
+                        let args = tc.arguments.clone();
+                        let key = format!("{conversation_id}:{tool_id}");
+                        let (tool_tx, tool_rx) = tokio::sync::oneshot::channel();
+                        state
+                            .pending_internal_tool_results
+                            .lock()
+                            .await
+                            .insert(key, tool_tx);
+                        *pending_tool.lock().await = Some(tool_rx);
+                        *pending_tool_id.lock().await = Some(tool_id.clone());
+
+                        let tool_call = StreamEvent::ToolCall {
+                            id: tool_id.clone(),
+                            name: TERMINAL_CLIENT_TOOL.to_string(),
+                            arguments: args,
+                        };
+                        record_internal_trace(
+                            state,
+                            conversation_id,
+                            &backend_id,
+                            turn_index,
+                            &tool_call,
+                        );
+                        let _ = on_event.send(tool_call);
+
+                        let tool_pending = StreamEvent::ToolCallUpdate {
+                            id: tool_id,
+                            status: ToolStatus::Pending,
+                            result: None,
+                        };
+                        record_internal_trace(
+                            state,
+                            conversation_id,
+                            &backend_id,
+                            turn_index,
+                            &tool_pending,
+                        );
+                        let _ = on_event.send(tool_pending);
+                    } else if !text.trim().is_empty() && !looks_like_pending_tool_calls_json(&text)
+                    {
+                        // 纯文本回答：冲刷缓冲内容
+                        let content = StreamEvent::ContentDelta { text };
+                        record_internal_trace(
+                            state,
+                            conversation_id,
+                            &backend_id,
+                            turn_index,
+                            &content,
+                        );
+                        let _ = on_event.send(content);
+                    }
+                }
+            } else if let Some(buf) = &content_buffer {
+                // Path B 已注册 pending_tool：仍冲刷非 JSON 说明文字
+                flush_held_content(
+                    buf,
+                    &on_event,
+                    state,
+                    conversation_id,
+                    &backend_id,
+                    turn_index,
+                );
+            }
+
+            if let Some(tool_rx) = pending_tool.lock().await.take() {
+                match tokio::time::timeout(std::time::Duration::from_secs(300), tool_rx).await {
+                    Ok(Ok((result, approved))) => {
+                        prompt_text = format_client_tool_result_prompt(
+                            TERMINAL_CLIENT_TOOL,
+                            &result,
+                            approved,
+                        );
+                        if let Some(tool_id) = pending_tool_id.lock().await.take() {
+                            let update = StreamEvent::ToolCallUpdate {
+                                id: tool_id,
+                                status: ToolStatus::Completed,
+                                result: Some(result),
+                            };
+                            record_internal_trace(
+                                state,
+                                conversation_id,
+                                &backend_id,
+                                turn_index,
+                                &update,
+                            );
+                            let _ = on_event.send(update);
+                        }
+                        turn_index += 1;
+                        continue;
+                    }
+                    Ok(Err(_)) => {
+                        let err = StreamEvent::Error {
+                            message: "工具响应通道已关闭".to_string(),
+                        };
+                        record_internal_trace(
+                            state,
+                            conversation_id,
+                            &backend_id,
+                            turn_index,
+                            &err,
+                        );
+                        let _ = on_event.send(err);
+                        return Ok(());
+                    }
+                    Err(_) => {
+                        let err = StreamEvent::Error {
+                            message: "工具执行超时（300s）".to_string(),
+                        };
+                        record_internal_trace(
+                            state,
+                            conversation_id,
+                            &backend_id,
+                            turn_index,
+                            &err,
+                        );
+                        let _ = on_event.send(err);
+                        return Ok(());
+                    }
+                }
+            }
+        }
+
+        let done = StreamEvent::Done {
+            stop_reason: stop,
+        };
+        record_internal_trace(state, conversation_id, &backend_id, turn_index, &done);
+        let _ = on_event.send(done);
+        return Ok(());
     }
 
-    prompt_handle
-        .await
-        .map_err(|e| e.to_string())?
-        .map_err(|e| e)?;
+    let err = StreamEvent::Error {
+        message: "ACP 工具调用轮次超过上限".to_string(),
+    };
+    record_internal_trace(
+        state,
+        conversation_id,
+        &backend_id,
+        turn_index,
+        &err,
+    );
+    let _ = on_event.send(err);
     Ok(())
 }
 
@@ -420,14 +747,23 @@ pub async fn ai_list_backends(state: State<'_, AppState>) -> Result<Vec<BackendI
     }
     drop(registry);
 
-    for agent in detect_all_agents_sync() {
-        let kind = agent_kind_key(agent.kind);
-        backends.push(BackendInfo {
-            id: format!("acp:{kind}"),
-            label: agent_kind_label(kind),
-            kind: "acp".to_string(),
-            installed: agent.installed,
-        });
+    for provider in crate::commands::providers::cli_provider_list()? {
+        if !provider.enabled {
+            continue;
+        }
+        let models = crate::commands::providers::provider_list_models(&provider.id)
+            .unwrap_or_else(|_| vec!["default".to_string()]);
+        for model in models {
+            if provider.disabled_model_names.iter().any(|m| m == &model) {
+                continue;
+            }
+            backends.push(BackendInfo {
+                id: format!("cli:{}::{}", provider.id, model),
+                label: format!("{}/{}", provider.display_name, model),
+                kind: "cli".to_string(),
+                installed: provider.binary.as_deref().is_some_and(|b| !b.trim().is_empty()),
+            });
+        }
     }
 
     Ok(backends)
@@ -440,7 +776,13 @@ fn now_ms() -> i64 {
         .unwrap_or(0)
 }
 
-fn record_internal_trace(state: &AppState, session_id: &str, backend_id: &str, event: &StreamEvent) {
+fn record_internal_trace(
+    state: &AppState,
+    session_id: &str,
+    backend_id: &str,
+    turn_index: i32,
+    event: &StreamEvent,
+) {
     let ts = now_ms();
     let storage = state.storage.clone();
     let session_id = session_id.to_string();
@@ -470,8 +812,64 @@ fn record_internal_trace(state: &AppState, session_id: &str, backend_id: &str, e
             created_at: ts,
             updated_at: ts,
         });
-        let _ = storage.ai_trace_append(&session_id, 0, &event_type, &payload, ts);
+        let _ = storage.ai_trace_append(&session_id, turn_index, &event_type, &payload, ts);
     });
+}
+
+fn record_prompt_sent_trace(
+    state: &AppState,
+    session_id: &str,
+    backend_id: &str,
+    turn_index: i32,
+    round: usize,
+    prompt: &str,
+) {
+    let ts = now_ms();
+    let storage = state.storage.clone();
+    let session_id = session_id.to_string();
+    let backend_id = backend_id.to_string();
+    let payload = serde_json::json!({
+        "round": round,
+        "prompt": prompt,
+    })
+    .to_string();
+    tauri::async_runtime::spawn(async move {
+        let storage = storage.lock().await;
+        let _ = storage.ai_session_upsert(&omnipanel_store::AiSessionRecord {
+            id: session_id.clone(),
+            backend_id,
+            source: "internal".to_string(),
+            workspace_id: None,
+            terminal_session_id: None,
+            env_tag: None,
+            title: None,
+            created_at: ts,
+            updated_at: ts,
+        });
+        let _ = storage.ai_trace_append(&session_id, turn_index, "prompt_sent", &payload, ts);
+    });
+}
+
+fn flush_held_content(
+    content_buffer: &Arc<std::sync::Mutex<String>>,
+    on_event: &Channel<StreamEvent>,
+    state: &AppState,
+    conversation_id: &str,
+    backend_id: &str,
+    turn_index: i32,
+) {
+    use omnipanel_ai::providers::acp::looks_like_pending_tool_calls_json;
+
+    let text = content_buffer
+        .lock()
+        .map(|g| g.clone())
+        .unwrap_or_default();
+    if text.trim().is_empty() || looks_like_pending_tool_calls_json(&text) {
+        return;
+    }
+    let event = StreamEvent::ContentDelta { text };
+    record_internal_trace(state, conversation_id, backend_id, turn_index, &event);
+    let _ = on_event.send(event);
 }
 
 #[tauri::command]
@@ -508,7 +906,11 @@ pub async fn ai_gateway_configure(
     port: u16,
     api_key: Option<String>,
     bind_lan: bool,
+    mcp_external_require_approval: bool,
 ) -> Result<(), String> {
+    state
+        .mcp_external_require_approval
+        .store(mcp_external_require_approval, std::sync::atomic::Ordering::Relaxed);
     // 先停掉旧实例并等待端口释放，避免重绑同端口时 EADDRINUSE。
     let old = state.gateway_handle.lock().await.take();
     if let Some(handle) = old {
@@ -529,6 +931,7 @@ pub async fn ai_gateway_configure(
             api_key: api_key.filter(|k| !k.trim().is_empty()),
         },
         state.ai_registry.clone(),
+        Some(state.storage.clone()),
     );
     *state.gateway_handle.lock().await = Some(handle);
     Ok(())

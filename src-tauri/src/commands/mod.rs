@@ -30,4 +30,6 @@ pub mod system;
 pub mod task;
 pub mod terminal;
 pub mod updater;
+pub mod providers;
+pub mod skills;
 pub mod workflow;

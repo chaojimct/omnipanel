@@ -288,6 +288,8 @@ fn export_ipc_bindings() {
         commands::db_sql_files::db_sql_files_save,
         commands::mcp_tool::mcp_tool_list,
         commands::mcp_tool::mcp_tool_set_enabled,
+        commands::mcp_tool::mcp_tool_set_internal_enabled,
+        commands::mcp_tool::mcp_tool_set_external_exposed,
         commands::mcp_tool::mcp_tool_sync_catalog,
         // MCP 服务管理
         commands::mcp::mcp_list_services,
@@ -297,6 +299,22 @@ fn export_ipc_bindings() {
         commands::mcp::mcp_set_service_running,
         commands::mcp::mcp_list_service_tools,
         commands::mcp::mcp_call_tool,
+        // Skills
+        commands::skills::skill_list,
+        commands::skills::skill_get,
+        commands::skills::skill_create,
+        commands::skills::skill_update,
+        commands::skills::skill_remove,
+        commands::skills::skill_set_enabled,
+        commands::skills::skill_import,
+        // Providers
+        commands::providers::registry::provider_registry_load,
+        commands::providers::registry::provider_registry_save,
+        commands::providers::registry::cli_provider_list_cmd,
+        commands::providers::registry::cli_provider_upsert_cmd,
+        commands::providers::registry::cli_provider_remove_cmd,
+        commands::providers::registry::cli_provider_patch_cmd,
+        commands::providers::registry::provider_list_models_cmd,
         // ACP agent
         commands::acp::acp_connect,
         commands::acp::acp_connect_default,
@@ -405,19 +423,6 @@ pub fn run() {
             let app_handle = app.handle().clone();
             app.manage(app_state);
 
-            tauri::async_runtime::spawn(async move {
-                let state = app_handle.state::<AppState>();
-                let bind = "127.0.0.1:8765".to_string();
-                let handle = omnipanel_gateway::spawn_gateway(
-                    omnipanel_gateway::GatewayConfig {
-                        bind_addr: bind,
-                        api_key: None,
-                    },
-                    state.ai_registry.clone(),
-                );
-                *state.gateway_handle.lock().await = Some(handle);
-            });
-
             // Try to auto-register Ollama provider (silent skip if unavailable)
             tauri::async_runtime::spawn(async move {
                 match omnipanel_ai::providers::ollama::OllamaProvider::discover_default().await {
@@ -462,13 +467,6 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             // AI
-            commands::ai::ai_send_message,
-            commands::ai::ai_list_models,
-            commands::ai::ai_set_provider,
-            commands::ai::ai_list_providers,
-            commands::ai::ai_get_active,
-            commands::ai::ai_add_custom_provider,
-            commands::ai::ai_http_stream_post,
             commands::ai_chat::ai_chat_stream,
             commands::ai_chat::ai_chat_cancel,
             commands::ai_chat::ai_chat_tool_result,
@@ -793,6 +791,8 @@ pub fn run() {
             // MCP 工具配置
             commands::mcp_tool::mcp_tool_list,
             commands::mcp_tool::mcp_tool_set_enabled,
+            commands::mcp_tool::mcp_tool_set_internal_enabled,
+            commands::mcp_tool::mcp_tool_set_external_exposed,
             commands::mcp_tool::mcp_tool_sync_catalog,
             // MCP 服务管理
             commands::mcp::mcp_list_services,
@@ -802,6 +802,22 @@ pub fn run() {
             commands::mcp::mcp_set_service_running,
             commands::mcp::mcp_list_service_tools,
             commands::mcp::mcp_call_tool,
+            // Skills
+            commands::skills::skill_list,
+        commands::skills::skill_get,
+            commands::skills::skill_create,
+            commands::skills::skill_update,
+            commands::skills::skill_remove,
+            commands::skills::skill_set_enabled,
+            commands::skills::skill_import,
+            // Providers
+            commands::providers::registry::provider_registry_load,
+            commands::providers::registry::provider_registry_save,
+            commands::providers::registry::cli_provider_list_cmd,
+            commands::providers::registry::cli_provider_upsert_cmd,
+            commands::providers::registry::cli_provider_remove_cmd,
+            commands::providers::registry::cli_provider_patch_cmd,
+            commands::providers::registry::provider_list_models_cmd,
             // ACP agent
             commands::acp::acp_connect,
             commands::acp::acp_connect_default,

@@ -24,6 +24,7 @@ import {
   getResolvedAiThread,
   pushAssistantErrorMessage,
 } from "../../../modules/terminal/aiThreadBridge";
+import { buildTerminalAiContextAppend } from "../../../modules/terminal/buildTerminalAiContext";
 import { cancelPendingInlineTools } from "../../../modules/terminal/inlineToolBridge";
 import { dispatchPendingTool } from "../../../lib/ai/internalToolBridge";
 import { useAiStore, type ToolCallState } from "../../../stores/aiStore";
@@ -42,6 +43,24 @@ function extractUserContent(message: ThreadMessage | AppendMessage): string {
 }
 
 const EMPTY_MESSAGE_LIST: ThreadMessage[] = [];
+
+const TERMINAL_CLIENT_TOOL = "omni_terminal_run_terminal_command";
+
+function parseTerminalCommand(argsJson: string): string {
+  try {
+    const parsed = JSON.parse(argsJson || "{}") as { command?: string };
+    if (typeof parsed.command === "string" && parsed.command.trim()) {
+      return parsed.command.trim();
+    }
+  } catch {
+    // ignore
+  }
+  return "";
+}
+
+function isTerminalClientTool(toolName: string): boolean {
+  return toolName === TERMINAL_CLIENT_TOOL;
+}
 
 type PermissionEvent = Extract<AcpStreamEvent, { type: "permission_request" }>;
 type StreamEventHandler = AcpStreamEvent;
@@ -75,12 +94,15 @@ function buildAiContext(inline?: InlineTerminalAiTarget) {
   const tab = inline
     ? useTerminalStore.getState().tabs.find((t) => t.id === inline.sessionId)
     : useTerminalStore.getState().tabs.find((t) => t.id === useTerminalStore.getState().activeTabId);
+  const sessionId = inline?.sessionId ?? tab?.id ?? null;
+  const terminalContextAppend = sessionId ? buildTerminalAiContextAppend(sessionId) : null;
   return {
     cwd: tab?.session.cwd ?? null,
     workspaceId: null,
-    terminalSessionId: inline?.sessionId ?? tab?.id ?? null,
+    terminalSessionId: sessionId,
     envTag: null,
     resourceId: tab?.session.resourceId ?? null,
+    terminalContextAppend,
   };
 }
 
@@ -178,6 +200,7 @@ export function AiRuntimeProvider({ children }: { children: ReactNode }) {
   const permissionQueueRef = useRef<PermissionEvent[]>([]);
   const toolMetaRef = useRef(new Map<string, { name: string; args: string }>());
   const pendingToolBridgeRef = useRef(new Set<string>());
+  const waitingToolDispatchRef = useRef(new Set<string>());
   const [permissionRequest, setPermissionRequest] = useState<PermissionEvent | null>(null);
 
   const activeConversation = conversations.find((c) => c.id === activeConversationId);
@@ -256,6 +279,27 @@ export function AiRuntimeProvider({ children }: { children: ReactNode }) {
 
     const aiContext = buildAiContext(inline);
 
+    const tryDispatchTool = (id: string) => {
+      if (pendingToolBridgeRef.current.has(id)) return;
+      const meta = toolMetaRef.current.get(id);
+      if (!meta) return;
+      if (isTerminalClientTool(meta.name) && !parseTerminalCommand(meta.args)) {
+        waitingToolDispatchRef.current.add(id);
+        return;
+      }
+      waitingToolDispatchRef.current.delete(id);
+      pendingToolBridgeRef.current.add(id);
+      const done = () => pendingToolBridgeRef.current.delete(id);
+      void dispatchPendingTool({
+        conversationId: convId,
+        toolCallId: id,
+        toolName: meta.name,
+        argsJson: meta.args,
+        inline: inline ? { blockId: inline.blockId, sessionId: inline.sessionId } : null,
+        terminalSessionId: aiContext.terminalSessionId,
+      }).finally(done);
+    };
+
     const upsertToolCall = (id: string, name: string, args: string) => {
       if (!name.trim()) return;
       toolMetaRef.current.set(id, { name, args });
@@ -281,6 +325,9 @@ export function AiRuntimeProvider({ children }: { children: ReactNode }) {
             status: "running",
           });
         }
+        if (waitingToolDispatchRef.current.has(id)) {
+          tryDispatchTool(id);
+        }
         return;
       }
       if (!assistantMsgId) return;
@@ -298,6 +345,9 @@ export function AiRuntimeProvider({ children }: { children: ReactNode }) {
       updateMessage(convId, assistantMsgId, {
         toolCalls: [...existing, { id, name, arguments: args, status: "running" }],
       });
+      if (waitingToolDispatchRef.current.has(id)) {
+        tryDispatchTool(id);
+      }
     };
 
     const updateToolCall = (id: string, status: string, result?: string) => {
@@ -305,17 +355,15 @@ export function AiRuntimeProvider({ children }: { children: ReactNode }) {
       // 其余 UiDelegated 工具走注册的 handler，全部回传 ai_chat_tool_result。
       if (status === "pending") {
         const meta = toolMetaRef.current.get(id);
-        if (meta && !pendingToolBridgeRef.current.has(id)) {
-          pendingToolBridgeRef.current.add(id);
-          const done = () => pendingToolBridgeRef.current.delete(id);
-          void dispatchPendingTool({
-            conversationId: convId,
-            toolCallId: id,
-            toolName: meta.name,
-            argsJson: meta.args,
-            inline: inline ? { blockId: inline.blockId, sessionId: inline.sessionId } : null,
-            terminalSessionId: aiContext.terminalSessionId,
-          }).finally(done);
+        if (meta) {
+          if (
+            isTerminalClientTool(meta.name) &&
+            !parseTerminalCommand(meta.args)
+          ) {
+            waitingToolDispatchRef.current.add(id);
+          } else {
+            tryDispatchTool(id);
+          }
         }
       }
 
@@ -348,6 +396,9 @@ export function AiRuntimeProvider({ children }: { children: ReactNode }) {
     abortRef.current?.abort();
     abortRef.current = new AbortController();
     const signal = abortRef.current.signal;
+    toolMetaRef.current.clear();
+    pendingToolBridgeRef.current.clear();
+    waitingToolDispatchRef.current.clear();
 
     // 清理历史轮次遗留的 streaming 状态（此前 panic/中断时可能未复位）
     if (!inline && assistantMsgId) {

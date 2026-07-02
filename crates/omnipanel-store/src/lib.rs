@@ -43,8 +43,9 @@ pub use knowledge_vector::{
     KnowledgeVectorStatus, chunk_text,
 };
 pub use paths::{
-    database_connections_path, database_schema_cache_path, database_schema_filters_path,
-    database_schema_tree_expanded_path, mcp_services_path, meta_db_path, module_dir, omnipd_root,
+    ai_config_dir, ai_providers_path, cli_providers_path, database_connections_path,
+    database_schema_cache_path, database_schema_filters_path, database_schema_tree_expanded_path,
+    mcp_services_path, meta_db_path, module_dir, omnipd_root, skills_root,
 };
 pub use schema_cache::{
     SchemaCacheColumn, SchemaCacheConnection, SchemaCacheDatabase, SchemaCacheIndex,

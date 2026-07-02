@@ -60,9 +60,9 @@ pub struct ClientCapabilities {}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InitializeResult {
-    #[serde(rename = "protocolVersion")]
+    #[serde(rename = "protocolVersion", default)]
     pub protocol_version: u32,
-    #[serde(rename = "agentInfo")]
+    #[serde(rename = "agentInfo", default)]
     pub agent_info: AgentInfo,
     #[serde(rename = "authMethods", default)]
     pub auth_methods: Vec<AuthMethod>,
@@ -71,8 +71,16 @@ pub struct InitializeResult {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AuthenticateParams {
+    #[serde(rename = "methodId")]
+    pub method_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AgentInfo {
+    #[serde(default)]
     pub name: String,
+    #[serde(default)]
     pub version: String,
 }
 
@@ -94,6 +102,19 @@ fn default_auth_method_type() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn initialize_result_accepts_missing_agent_info() {
+        let json = serde_json::json!({
+            "protocolVersion": 1,
+            "authMethods": [],
+            "agentCapabilities": {}
+        });
+
+        let result: InitializeResult = serde_json::from_value(json).expect("deserialize initialize");
+        assert_eq!(result.agent_info.name, "");
+        assert_eq!(result.protocol_version, 1);
+    }
 
     #[test]
     fn initialize_result_accepts_auth_methods_without_type() {
@@ -128,6 +149,67 @@ pub struct SessionNewParams {
 pub struct SessionNewResult {
     #[serde(rename = "sessionId")]
     pub session_id: String,
+    #[serde(rename = "configOptions", default)]
+    pub config_options: Vec<ConfigOption>,
+    #[serde(default)]
+    pub models: Option<ModelList>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConfigOption {
+    pub id: String,
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub options: Vec<ConfigValue>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConfigValue {
+    #[serde(default)]
+    pub value: String,
+    #[serde(rename = "valueId", default)]
+    pub value_id: String,
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(rename = "isDefault", default)]
+    pub is_default: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ModelList {
+    #[serde(rename = "availableModels", default)]
+    pub available_models: Vec<ModelDescriptor>,
+    #[serde(rename = "currentModelId", default)]
+    pub current_model_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ModelDescriptor {
+    #[serde(rename = "modelId")]
+    pub model_id: String,
+    #[serde(default)]
+    pub name: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SetConfigOptionParams {
+    #[serde(rename = "sessionId")]
+    pub session_id: String,
+    #[serde(rename = "configId")]
+    pub config_id: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub value: String,
+    #[serde(rename = "valueId", default, skip_serializing_if = "String::is_empty")]
+    pub value_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SetModelParams {
+    #[serde(rename = "sessionId")]
+    pub session_id: String,
+    #[serde(rename = "modelId")]
+    pub model_id: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

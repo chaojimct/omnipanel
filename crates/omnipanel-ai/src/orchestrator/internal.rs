@@ -26,7 +26,11 @@ impl InternalOrchestrator {
         on_event: impl Fn(StreamEvent) + Send,
         cancel: Arc<AtomicBool>,
     ) -> Result<(), String> {
-        let mut messages = build_messages(&request.context, request.history.as_deref());
+        let mut messages = build_messages(
+            &request.context,
+            request.history.as_deref(),
+            request.system_append.as_deref(),
+        );
         messages.push(ChatMessage {
             role: Role::User,
             content: request.user_text.clone(),
@@ -204,10 +208,14 @@ impl InternalOrchestrator {
     }
 }
 
-fn build_messages(context: &AiContextBundle, history: Option<&[ChatMessage]>) -> Vec<ChatMessage> {
+fn build_messages(
+    context: &AiContextBundle,
+    history: Option<&[ChatMessage]>,
+    system_append: Option<&str>,
+) -> Vec<ChatMessage> {
     let mut messages = Vec::new();
 
-    if let Some(system) = build_system_message(context) {
+    if let Some(system) = build_system_message(context, system_append) {
         messages.push(system);
     }
 
@@ -218,7 +226,7 @@ fn build_messages(context: &AiContextBundle, history: Option<&[ChatMessage]>) ->
     messages
 }
 
-fn build_system_message(context: &AiContextBundle) -> Option<ChatMessage> {
+fn build_system_message(context: &AiContextBundle, system_append: Option<&str>) -> Option<ChatMessage> {
     let mut lines = Vec::new();
 
     if let Some(cwd) = context.cwd.as_deref().filter(|s| !s.trim().is_empty()) {
@@ -247,6 +255,13 @@ fn build_system_message(context: &AiContextBundle) -> Option<ChatMessage> {
         .filter(|s| !s.trim().is_empty())
     {
         lines.push(format!("Resource id: {resource}"));
+    }
+
+    if let Some(extra) = system_append.filter(|s| !s.trim().is_empty()) {
+        if !lines.is_empty() {
+            lines.push(String::new());
+        }
+        lines.push(extra.to_string());
     }
 
     if lines.is_empty() {

@@ -10,6 +10,9 @@ pub struct AiContextBundle {
     pub terminal_session_id: Option<String>,
     pub env_tag: Option<String>,
     pub resource_id: Option<String>,
+    /// 终端环境描述（shell/OS/主机等），注入 ACP client-tools prompt。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub terminal_context_append: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -41,4 +44,7 @@ pub struct InternalChatRequest {
     pub tools_mode: InternalToolsMode,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub http_provider: Option<HttpProviderSnapshot>,
+    /// 追加到系统提示的文本（如 Skills 目录）。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub system_append: Option<String>,
 }

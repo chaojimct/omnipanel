@@ -4,7 +4,7 @@ use tauri::State;
 
 use crate::state::AppState;
 
-/// 列出全部 MCP 工具配置。
+/// 列出全部内置工具配置。
 #[tauri::command]
 #[specta::specta]
 pub async fn mcp_tool_list(state: State<'_, AppState>) -> Result<Vec<McpToolRecord>, OmniError> {
@@ -12,7 +12,31 @@ pub async fn mcp_tool_list(state: State<'_, AppState>) -> Result<Vec<McpToolReco
     storage.mcp_tool_list()
 }
 
-/// 设置 MCP 工具启用状态。
+/// 设置内置工具「内部可用」。
+#[tauri::command]
+#[specta::specta]
+pub async fn mcp_tool_set_internal_enabled(
+    state: State<'_, AppState>,
+    tool_name: String,
+    enabled: bool,
+) -> Result<McpToolRecord, OmniError> {
+    let storage = state.storage.lock().await;
+    storage.mcp_tool_set_internal_enabled(&tool_name, enabled)
+}
+
+/// 设置内置工具「对外暴露」。
+#[tauri::command]
+#[specta::specta]
+pub async fn mcp_tool_set_external_exposed(
+    state: State<'_, AppState>,
+    tool_name: String,
+    exposed: bool,
+) -> Result<McpToolRecord, OmniError> {
+    let storage = state.storage.lock().await;
+    storage.mcp_tool_set_external_exposed(&tool_name, exposed)
+}
+
+/// 设置 MCP 工具启用状态（兼容旧 API，等同 internal_enabled）。
 #[tauri::command]
 #[specta::specta]
 pub async fn mcp_tool_set_enabled(
@@ -24,7 +48,7 @@ pub async fn mcp_tool_set_enabled(
     storage.mcp_tool_set_enabled(&tool_name, enabled)
 }
 
-/// 从前端目录同步 MCP 工具元数据（不覆盖 enabled）。
+/// 从前端目录同步 MCP 工具元数据（不覆盖开关）。
 #[tauri::command]
 #[specta::specta]
 pub async fn mcp_tool_sync_catalog(

@@ -69,9 +69,17 @@ async fn collect_tools(client: &mut RunningService<RoleClient, ToolListClient>) 
     let _ = client.close().await;
     Ok(tools
         .into_iter()
-        .map(|tool| McpToolInfo {
-            name: tool.name.to_string(),
-            description: tool.description.map(|d| d.to_string()),
+        .map(|tool| {
+            let input_schema = if tool.input_schema.is_empty() {
+                None
+            } else {
+                Some(serde_json::Value::Object((*tool.input_schema).clone()))
+            };
+            McpToolInfo {
+                name: tool.name.to_string(),
+                description: tool.description.map(|d| d.to_string()),
+                input_schema,
+            }
         })
         .collect())
 }

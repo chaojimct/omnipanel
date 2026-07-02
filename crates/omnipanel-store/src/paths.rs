@@ -18,6 +18,8 @@ pub mod modules {
     #[allow(dead_code)]
     pub const DOCKER: &str = "docker";
     pub const MCP: &str = "mcp";
+    pub const SKILLS: &str = "skills";
+    pub const AI: &str = "ai";
     pub const FILES: &str = "files";
 }
 
@@ -78,6 +80,26 @@ pub fn database_schema_cache_path() -> OmniResult<PathBuf> {
 /// MCP 服务配置：`~/.omnipd/mcp/services.json`。
 pub fn mcp_services_path() -> OmniResult<PathBuf> {
     Ok(module_dir(modules::MCP)?.join("services.json"))
+}
+
+/// 产品级 Skills 根目录：`~/.omnipd/skills/`。
+pub fn skills_root() -> OmniResult<PathBuf> {
+    module_dir(modules::SKILLS)
+}
+
+/// AI 配置目录：`~/.omnipd/ai/`。
+pub fn ai_config_dir() -> OmniResult<PathBuf> {
+    module_dir(modules::AI)
+}
+
+/// 对话提供者注册表：`~/.omnipd/ai/providers.json`。
+pub fn ai_providers_path() -> OmniResult<PathBuf> {
+    Ok(ai_config_dir()?.join("providers.json"))
+}
+
+/// CLI 自定义提供者：`~/.omnipd/ai/cli-providers.json`。
+pub fn cli_providers_path() -> OmniResult<PathBuf> {
+    Ok(ai_config_dir()?.join("cli-providers.json"))
 }
 
 /// 默认文件索引存储目录：`~/.omnipd/files/index`。

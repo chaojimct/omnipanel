@@ -205,8 +205,6 @@ interface SettingsState {
   aiScenarioAssistantModelSelectionId: string | null;
   /** 终端内联 AI 默认模型 */
   aiScenarioTerminalModelSelectionId: string | null;
-  /** 使用 InternalOrchestrator（ai_chat_stream）替代 ACP 直连 */
-  useUnifiedAiChat: boolean;
   /** Agent Router 是否启用 */
   aiGatewayEnabled: boolean;
   /** Agent Router 端口 */
@@ -344,7 +342,6 @@ export const useSettingsStore = create<SettingsState>()(
       aiScenarioFormFillModelSelectionId: null,
       aiScenarioAssistantModelSelectionId: null,
       aiScenarioTerminalModelSelectionId: null,
-      useUnifiedAiChat: true,
       aiGatewayEnabled: true,
       aiGatewayPort: 8765,
       aiGatewayApiKey: "",
@@ -493,7 +490,6 @@ export const useSettingsStore = create<SettingsState>()(
         aiScenarioFormFillModelSelectionId: state.aiScenarioFormFillModelSelectionId,
         aiScenarioAssistantModelSelectionId: state.aiScenarioAssistantModelSelectionId,
         aiScenarioTerminalModelSelectionId: state.aiScenarioTerminalModelSelectionId,
-        useUnifiedAiChat: state.useUnifiedAiChat,
         aiGatewayEnabled: state.aiGatewayEnabled,
         aiGatewayPort: state.aiGatewayPort,
         aiGatewayApiKey: state.aiGatewayApiKey,

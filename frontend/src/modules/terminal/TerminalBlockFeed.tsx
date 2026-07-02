@@ -187,9 +187,7 @@ function AiBlockCard({
     (state) => state.aiDockHeights[sessionId] ?? DEFAULT_AI_DOCK_HEIGHT,
   );
   const stickyHostRef = useRef<HTMLDivElement>(null);
-  const spacerRef = useRef<HTMLDivElement>(null);
   const [naturalHeight, setNaturalHeight] = useState(0);
-  const [stickyFlowSpacerHeight, setStickyFlowSpacerHeight] = useState(0);
   const prevStickyActiveRef = useRef(false);
   const threadSignature = useMemo(() => {
     const thread = getResolvedAiThread(block);
@@ -202,6 +200,11 @@ function AiBlockCard({
       })
       .join("|");
   }, [block]);
+
+  // 仅「流式输出中 + feed 贴底」时让 dock 自动跟随最新输出；其余（静态浏览）交给
+  // 下方的进度同步 effect，避免 autoScroll 把 thread 锁到底、覆盖用户浏览进度。
+  const dockAutoScroll =
+    isStickyActive && feedPinnedToBottom && block.status === "running";
 
   useLayoutEffect(() => {
     const host = stickyHostRef.current;
@@ -220,66 +223,75 @@ function AiBlockCard({
   }, [isStickyActive, threadSignature, dockMaxHeight, expanded]);
 
   useLayoutEffect(() => {
-    const feed = feedScrollRef.current;
     const host = stickyHostRef.current;
     const justActivated = isStickyActive && !prevStickyActiveRef.current;
     prevStickyActiveRef.current = isStickyActive;
 
-    if (!justActivated || !expanded || !feed || !host) return;
+    if (!justActivated || !expanded || !host) return;
 
+    // 吸顶瞬间补测一次完整高度，确保 spacer 占位（naturalHeight - dockMaxHeight）够。
     const measured = Math.max(naturalHeight, host.scrollHeight);
     if (measured > naturalHeight) {
       setNaturalHeight(measured);
     }
+  }, [isStickyActive, expanded, naturalHeight]);
 
-    const savedScrollTop = feed.scrollTop;
-    const thread = host.querySelector<HTMLElement>(".term-warp-ai-thread");
-    if (thread) {
-      const feedTop = feed.getBoundingClientRect().top;
-      const contentTop = thread.getBoundingClientRect().top;
-      thread.scrollTop = Math.max(0, feedTop - contentTop);
-    }
-
-    feed.scrollTop = savedScrollTop;
-  }, [isStickyActive, expanded, feedScrollRef, naturalHeight]);
-
-  // 吸顶时，占位块只补足「防止 Feed 滚动区间塌陷」所差的高度：
-  // need = 视口高 - 吸顶高 - 下方已有内容高。
-  // 下方内容（本段 shells + 后续段）足够时 need<=0 → 不产生多余空白；
-  // 仅当 AI 处于末尾、下方内容不足时才补少量，避免 scrollTop 被夹回引发抖动。
+  // 吸顶期间：dock 内 AI 进度按「不吸顶时视口底部所见」对齐——dock 底部显示的内容
+  // 等于你没吸顶时那一屏底部正在看的 AI 内容（按底部为准）。feed 滚动实时驱动，
+  // dock 内容跟随。命令 shell 已由 CSS order 紧跟在 dock 下方（spacer 排到末尾），
+  // 故 dock 底部对齐 + 命令紧跟可兼得、无中间空白。
+  // dockAutoScroll（流式贴底跟随）激活时跳过，避免与自动滚底互相打架。
   useLayoutEffect(() => {
     const feed = feedScrollRef.current;
     const host = stickyHostRef.current;
-    if (!isStickyActive || !expanded || !feed || !host) {
-      setStickyFlowSpacerHeight(0);
-      return;
-    }
+    if (!isStickyActive || !expanded || !feed || !host || !sentinelEl) return;
+    if (dockAutoScroll) return;
 
-    // 一次性测量（随依赖变化重跑），不挂常驻 ResizeObserver：
-    // 否则占位块改高度→触发 resize→再改高度，会与吸顶解析器互相回灌成死循环。
-    const spacerEl = spacerRef.current;
-    let below = 0;
-    for (let sib = host.nextElementSibling; sib; sib = sib.nextElementSibling) {
-      if (sib !== spacerEl && sib instanceof HTMLElement) below += sib.offsetHeight;
-    }
-    const segment = host.closest(".term-warp-sticky-segment");
-    for (
-      let seg = segment?.nextElementSibling ?? null;
-      seg;
-      seg = seg.nextElementSibling
-    ) {
-      if (seg instanceof HTMLElement) below += seg.offsetHeight;
-    }
-    const need = Math.max(0, feed.clientHeight - dockMaxHeight - below);
-    setStickyFlowSpacerHeight((prev) => (Math.abs(prev - need) < 1 ? prev : need));
-  }, [
-    isStickyActive,
-    expanded,
-    dockMaxHeight,
-    naturalHeight,
-    threadSignature,
-    feedScrollRef,
-  ]);
+    let raf = 0;
+    const sync = () => {
+      raf = 0;
+      const thread = host.querySelector<HTMLElement>(".term-warp-ai-thread");
+      if (!thread) return;
+      const feedRect = feed.getBoundingClientRect();
+      const sentinelTop = sentinelEl.getBoundingClientRect().top;
+      const hostTop = host.getBoundingClientRect().top;
+      const threadTop = thread.getBoundingClientRect().top;
+      // host 顶滚出 feed 顶部的量
+      const scrolledPast = feedRect.top - sentinelTop;
+      // dock 内 header 高度（thread 容器顶相对 host 顶）
+      const headerHeight = threadTop - hostTop;
+      // feed 视口底部落在 thread 内容坐标系中的位置
+      const viewportBottomInThread =
+        scrolledPast + feedRect.height - headerHeight;
+      // 让 dock 底部（可见区底）对齐该位置 → 按底部为准
+      const target = viewportBottomInThread - thread.clientHeight;
+      const max = Math.max(0, thread.scrollHeight - thread.clientHeight);
+      thread.scrollTop = Math.min(Math.max(0, target), max);
+    };
+    const onScroll = () => {
+      if (raf) return;
+      raf = requestAnimationFrame(sync);
+    };
+
+    sync();
+    feed.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      if (raf) cancelAnimationFrame(raf);
+      feed.removeEventListener("scroll", onScroll);
+    };
+  }, [isStickyActive, expanded, feedScrollRef, sentinelEl, dockAutoScroll]);
+
+  // 吸顶时 host 从自然高度 naturalHeight 塌缩到 dockMaxHeight，文档流骤减
+  // (naturalHeight - dockMaxHeight)。若占位补位晚于塌缩一帧（用 effect+setState 异步补），
+  // 中间那一帧 scrollHeight 骤减 → 浏览器夹回 scrollTop → 哨兵回视口 → 取消吸顶 →
+  // 高度恢复 → 再吸顶，形成闪烁。
+  //
+  // 修复：占位高度在「渲染期同步计算」，与 host 塌缩落在同一次 commit，无时序 gap。
+  // 占位 = 塌缩损失，使 segment 吸顶前后总高恒定 (dockMaxHeight + spacer == naturalHeight)，
+  // scrollHeight 不变 → scrollTop 不被夹 → 哨兵不回弹 → 不闪烁。
+  // 段内 host 下方若有 shell，会多补该高度（宁可略多空白也不可少补导致塌陷）。
+  const stickyFlowSpacerHeight =
+    isStickyActive && expanded ? Math.max(0, naturalHeight - dockMaxHeight) : 0;
 
   if (!isStickyCandidate) {
     if (!expanded) {
@@ -388,10 +400,7 @@ function AiBlockCard({
         <span className="term-warp-block__badge">助手</span>
         <AiBlockStopButton block={block} sessionId={sessionId} />
       </header>
-      <TerminalAiThreadView
-        blockId={block.id}
-        dockedAutoScroll={isStickyActive && feedPinnedToBottom}
-      />
+      <TerminalAiThreadView blockId={block.id} dockedAutoScroll={dockAutoScroll} />
     </article>
   );
 
@@ -410,7 +419,6 @@ function AiBlockCard({
       </div>
       {stickyFlowSpacerHeight > 0 ? (
         <div
-          ref={spacerRef}
           className="term-warp-ai-sticky-flow-spacer"
           style={{ height: stickyFlowSpacerHeight }}
           aria-hidden

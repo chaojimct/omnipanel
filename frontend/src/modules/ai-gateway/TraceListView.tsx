@@ -21,7 +21,13 @@ export function TraceListView() {
     setLoading(true);
     void commands
       .aiListSessions(source)
-      .then(setSessions)
+      .then((res) => {
+        if (res.status === "ok") {
+          setSessions(res.data);
+        } else {
+          setSessions([]);
+        }
+      })
       .catch(() => setSessions([]))
       .finally(() => setLoading(false));
   }, [source]);

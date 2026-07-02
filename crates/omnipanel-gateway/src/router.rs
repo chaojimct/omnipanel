@@ -8,19 +8,25 @@ use omnipanel_ai::ir::{StopReason, StreamEvent};
 use omnipanel_ai::provider::AiProviderRegistry;
 use omnipanel_ai::routing::{parse_backend_id, BackendKind};
 use omnipanel_ai::types::{ChatMessage, ChatRequest, Role};
+use omnipanel_store::{AiSessionRecord, Storage};
 use serde_json::json;
 use tokio::sync::Mutex;
 use tokio_stream::wrappers::ReceiverStream;
 
 pub struct GatewayRouter {
     ai_registry: Arc<Mutex<AiProviderRegistry>>,
+    storage: Option<Arc<Mutex<Storage>>>,
     sessions: Mutex<HashMap<String, Vec<ChatMessage>>>,
 }
 
 impl GatewayRouter {
-    pub fn new(ai_registry: Arc<Mutex<AiProviderRegistry>>) -> Self {
+    pub fn new(
+        ai_registry: Arc<Mutex<AiProviderRegistry>>,
+        storage: Option<Arc<Mutex<Storage>>>,
+    ) -> Self {
         Self {
             ai_registry,
+            storage,
             sessions: Mutex::new(HashMap::new()),
         }
     }
@@ -63,7 +69,30 @@ impl GatewayRouter {
         let parsed = parse_backend_id(backend_id)?;
 
         if parsed.kind != BackendKind::Http {
-            return Err(format!("Gateway 暂不支持 ACP model: {model}"));
+            return Err(format!("Gateway 暂不支持非 HTTP model: {model}"));
+        }
+
+        let ts = now_ms();
+        if let Some(storage) = &self.storage {
+            let session = AiSessionRecord {
+                id: conversation_id.clone(),
+                backend_id: backend_id.to_string(),
+                source: "gateway".to_string(),
+                workspace_id: None,
+                terminal_session_id: None,
+                env_tag: None,
+                title: None,
+                created_at: ts,
+                updated_at: ts,
+            };
+            let _ = storage.lock().await.ai_session_upsert(&session);
+            let _ = storage.lock().await.ai_trace_append(
+                &conversation_id,
+                0,
+                "gateway_request",
+                &serde_json::json!({ "model": model, "backend_id": backend_id }).to_string(),
+                ts,
+            );
         }
 
         let chat_messages = parse_openai_messages(messages)?;
@@ -209,4 +238,11 @@ fn parse_openai_messages(raw: Vec<serde_json::Value>) -> Result<Vec<ChatMessage>
         });
     }
     Ok(out)
+}
+
+fn now_ms() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as i64)
+        .unwrap_or(0)
 }
