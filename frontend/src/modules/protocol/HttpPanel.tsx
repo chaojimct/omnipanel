@@ -270,7 +270,7 @@ export function HttpPanel() {
   }, [renameSavedRequest, requestNameDraft, selectedRequest?.name, selectedRequestId]);
 
   const tabs: ReqTab[] = ["params", "headers", "body", "auth", "scripts"];
-  const bodyFill = !isWebSocket && activeTab === "body" && bodyType === "JSON";
+  const bodyFill = !isWebSocket && activeTab === "body";
   const hasResponsePanel = !isWebSocket && responseSessions.length > 0;
 
   const editorContent = (
@@ -490,7 +490,7 @@ export function HttpPanel() {
         ) : null}
 
         {!isWebSocket && activeTab === "body" ? (
-          <div className={`req-panel active${bodyType === "JSON" ? " req-panel--fill" : ""}`}>
+          <div className={`req-panel active${bodyFill ? " req-panel--fill" : ""}`}>
             <div className="http-body-type-row">
               {(["JSON", "Form", "Multipart", "Raw", "Binary"] as BodyType[]).map((bt) => (
                 <span
@@ -612,7 +612,7 @@ export function HttpPanel() {
   );
 
   if (!hasResponsePanel) {
-    return editorContent;
+    return <div className="http-editor-shell">{editorContent}</div>;
   }
 
   return (
