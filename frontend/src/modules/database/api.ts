@@ -60,15 +60,21 @@ export function formToConnection(form: ConnectionFormData, id = ""): DbConnectio
   const parsed = Number.parseInt(form.port, 10);
   const port =
     Number.isFinite(parsed) && parsed > 0 ? parsed : ENGINE_DEFAULT_PORTS[form.engine];
+  const database = form.database.trim();
+  const host = form.host.trim();
+  const nameFromPath =
+    form.engine === "sqlite" && database
+      ? (database.split(/[/\\]/).pop() ?? database)
+      : "";
   return {
     id,
-    name: form.name.trim() || form.host.trim() || "Untitled",
+    name: form.name.trim() || nameFromPath || host || "Untitled",
     db_type: form.engine,
-    host: form.host.trim(),
+    host,
     port,
     user: form.username.trim(),
     password: form.password,
-    database: form.database.trim(),
+    database,
     ssl: form.ssl,
     group: form.group.trim() || "默认",
     status: "unknown",
@@ -77,8 +83,13 @@ export function formToConnection(form: ConnectionFormData, id = ""): DbConnectio
 }
 
 export function connectionToForm(conn: DbConnectionConfig): ConnectionFormData {
+  const rawType = conn.db_type.toLowerCase();
+  const engine: ConnectionFormData["engine"] =
+    rawType === "sqlite3"
+      ? "sqlite"
+      : (conn.db_type as ConnectionFormData["engine"]);
   return {
-    engine: conn.db_type as ConnectionFormData["engine"],
+    engine,
     name: conn.name,
     host: conn.host,
     port: String(conn.port),
@@ -91,7 +102,12 @@ export function connectionToForm(conn: DbConnectionConfig): ConnectionFormData {
 }
 
 export function isSupportedEngine(engine: ConnectionFormData["engine"]): boolean {
-  return engine === "mysql" || engine === "redis";
+  return (
+    engine === "mysql" ||
+    engine === "postgresql" ||
+    engine === "sqlite" ||
+    engine === "redis"
+  );
 }
 
 /** Redis 等 KV 引擎的「表」节点无字段/索引子树。 */

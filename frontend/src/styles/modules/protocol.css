@@ -300,6 +300,15 @@
         height: 100%;
     }
 
+    .http-editor-shell {
+        flex: 1;
+        min-height: 0;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+    }
+
     .http-response-area {
         flex: 1;
         min-height: 0;
@@ -668,6 +677,16 @@
 
     .req-panel.active {
         display: block;
+    }
+
+    .req-panel.active.req-panel--fill {
+        display: flex;
+    }
+
+    .req-panel--fill .body-editor {
+        flex: 1;
+        min-height: 0;
+        resize: none;
     }
 
     .kv-editor {

@@ -32,8 +32,8 @@
   --danger-soft: rgba(255, 59, 48, 0.12);
 
   /* Typography */
-  --font-ui: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", sans-serif;
-  --font-mono: "Berkeley Mono", "IBM Plex Mono", "Cascadia Code", "JetBrains Mono", Consolas, "Liberation Mono", ui-monospace, monospace;
+  --font-ui: "Maple Mono NF CN", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", sans-serif;
+  --font-mono: "Maple Mono NF CN", "Berkeley Mono", "IBM Plex Mono", "Cascadia Code", "JetBrains Mono", Consolas, "Liberation Mono", ui-monospace, monospace;
   --font: var(--font-ui);
 
   /* Spacing */

@@ -1,6 +1,7 @@
 import mysqlDark from "../../assets/icons/mysql-dark.svg";
 import mysqlLight from "../../assets/icons/mysql-light.svg";
 import redis from "../../assets/icons/redis.svg";
+import sqlite from "../../assets/icons/sqlite.svg";
 
 export type DbEngine =
   | "postgresql"
@@ -15,13 +16,14 @@ export type DbEngine =
  *
  * - mysql：分别提供 light / dark 两套配色
  * - redis：只有一份 svg，light / dark 主题共用
- * - postgresql / sqlite / sqlserver / mongodb：暂无 logo，调用方需自行回退
+ * - postgresql / sqlserver / mongodb：暂无 logo，调用方需自行回退
+ * - sqlite：单份 svg，light / dark 共用
  */
 const ENGINE_ICONS: Record<DbEngine, { light: string; dark: string } | null> = {
   mysql: { light: mysqlLight, dark: mysqlDark },
   redis: { light: redis, dark: redis },
   postgresql: null,
-  sqlite: null,
+  sqlite: { light: sqlite, dark: sqlite },
   sqlserver: null,
   mongodb: null,
 };

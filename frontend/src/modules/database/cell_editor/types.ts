@@ -138,6 +138,43 @@ export function parseCellValue(kind: CellEditorKind, raw: string): unknown {
   return raw;
 }
 
+function coerceBooleanValue(value: unknown): boolean | undefined {
+  if (value === true || value === false) return value;
+  if (value === 1 || value === "1" || value === "true") return true;
+  if (value === 0 || value === "0" || value === "false") return false;
+  return undefined;
+}
+
+/** 判断单元格编辑后的值是否与原始值等价（避免误标脏） */
+export function isSameCellValue(originalValue: unknown, value: unknown): boolean {
+  if (originalValue === value) return true;
+  if (originalValue == null && value === "") return true;
+  if (originalValue === "" && value == null) return true;
+
+  const originalBool = coerceBooleanValue(originalValue);
+  const nextBool = coerceBooleanValue(value);
+  if (originalBool !== undefined && nextBool !== undefined) {
+    return originalBool === nextBool;
+  }
+
+  if (typeof originalValue === "number" && typeof value === "string") {
+    return String(originalValue) === value || String(originalValue) === value.trim();
+  }
+  if (typeof originalValue === "string" && typeof value === "number") {
+    return originalValue === String(value) || originalValue.trim() === String(value);
+  }
+  if (typeof originalValue === "string" && typeof value === "string") {
+    if (originalValue === value) return true;
+    const originalNumber = Number(originalValue);
+    const nextNumber = Number(value);
+    if (Number.isFinite(originalNumber) && Number.isFinite(nextNumber)) {
+      return originalNumber === nextNumber;
+    }
+  }
+
+  return false;
+}
+
 /** Normalize a raw DB date value to YYYY-MM-DD for <input type="date"> */
 export function normalizeDate(raw: string): string {
   const m = raw.match(/(\d{4})-(\d{2})-(\d{2})/);

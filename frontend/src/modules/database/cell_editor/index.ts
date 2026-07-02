@@ -8,6 +8,7 @@ export {
   detectCellEditorKind,
   formatCellValue,
   formatInlineEditText,
+  isSameCellValue,
   parseCellValue,
   shouldUseInlineCellEdit,
   isShortTextColumn,

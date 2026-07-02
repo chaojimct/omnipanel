@@ -744,7 +744,7 @@ pub async fn db_introspect_schema(
     match connection.db_type.to_lowercase().as_str() {
         "mysql" | "mariadb" => introspect_mysql_schema(&connection, &db_name).await,
         "postgresql" | "postgres" => introspect_pg_schema(&connection, &db_name).await,
-        "sqlite" => introspect_sqlite_schema(&connection).await,
+        "sqlite" | "sqlite3" => introspect_sqlite_schema(&connection).await,
         _ => {
             let params = with_schema(&connection, Some(db_name.clone()));
             let driver = omnipanel_db::connect(&params).await.map_err(err_msg)?;
@@ -799,7 +799,7 @@ pub async fn db_introspect_table(
     match connection.db_type.to_lowercase().as_str() {
         "mysql" | "mariadb" => introspect_mysql_table(&connection, &db_name, table.trim()).await,
         "postgresql" | "postgres" => introspect_pg_table(&connection, &db_name, table.trim()).await,
-        "sqlite" => introspect_sqlite_table(&connection, table.trim()).await,
+        "sqlite" | "sqlite3" => introspect_sqlite_table(&connection, table.trim()).await,
         _ => Ok(DbTableSchema {
             name: table,
             columns: Vec::new(),
@@ -829,7 +829,7 @@ pub async fn db_table_ddl(
     match connection.db_type.to_lowercase().as_str() {
         "mysql" | "mariadb" => mysql_table_ddl(&connection, &db_name, table.trim()).await,
         "postgresql" | "postgres" => pg_table_ddl(&connection, &db_name, table.trim()).await,
-        "sqlite" => sqlite_table_ddl(&connection, table.trim()),
+        "sqlite" | "sqlite3" => sqlite_table_ddl(&connection, table.trim()),
         _ => Err(format!("不支持的数据库类型: {}", connection.db_type)),
     }
 }
@@ -854,7 +854,7 @@ pub async fn db_get_table_details(
     match connection.db_type.to_lowercase().as_str() {
         "mysql" | "mariadb" => mysql_table_details(&connection, &db_name, table.trim()).await,
         "postgresql" | "postgres" => pg_table_details(&connection, &db_name, table.trim()).await,
-        "sqlite" => sqlite_table_details(&connection, table.trim()).await,
+        "sqlite" | "sqlite3" => sqlite_table_details(&connection, table.trim()).await,
         _ => Err(format!("不支持的数据库类型: {}", connection.db_type)),
     }
 }

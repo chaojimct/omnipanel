@@ -3647,9 +3647,12 @@ dependencies = [
 name = "omnipanel-app"
 version = "0.0.5"
 dependencies = [
+ "aes",
  "anyhow",
  "async-trait",
  "base64 0.22.1",
+ "blowfish",
+ "cbc",
  "fontdb",
  "futures",
  "futures-util",
@@ -3676,6 +3679,7 @@ dependencies = [
  "serde_json",
  "serde_yaml",
  "serialport",
+ "sha1",
  "specta",
  "specta-typescript",
  "sqlx",
@@ -3807,6 +3811,7 @@ dependencies = [
  "serde_json",
  "specta",
  "tokio",
+ "tower-http",
  "tracing",
 ]
 

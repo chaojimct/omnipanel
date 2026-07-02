@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import { useI18n } from "../../i18n";
 import { FormDialog, FormField } from "../../components/ui/FormDialog";
 import { PasswordInput } from "../../components/ui/PasswordInput";
@@ -128,13 +129,17 @@ export function ConnectionDialog({
   };
 
   const validateForm = (): string | null => {
-    if (!form.name.trim()) {
+    if (!form.name.trim() && form.engine !== "sqlite") {
       return t("database.dialog.nameRequired");
     }
     if (!isSupportedEngine(form.engine)) {
       return t("database.dialog.unsupportedEngine");
     }
-    if (!form.host.trim()) {
+    if (form.engine === "sqlite") {
+      if (!form.database.trim()) {
+        return t("database.dialog.databasePathRequired");
+      }
+    } else if (!form.host.trim()) {
       return t("database.dialog.hostRequired");
     }
     if (!form.group.trim()) {
@@ -142,6 +147,28 @@ export function ConnectionDialog({
     }
     return null;
   };
+
+  const handleBrowseDatabaseFile = useCallback(async () => {
+    const selected = await openFileDialog({
+      multiple: false,
+      filters: [
+        { name: "SQLite", extensions: ["db", "sqlite", "sqlite3", "db3"] },
+      ],
+    });
+    if (typeof selected === "string" && selected.trim()) {
+      setStatus(null);
+      setForm((prev) => {
+        const next = { ...prev, database: selected };
+        if (!next.name.trim()) {
+          const base = selected.split(/[/\\]/).pop();
+          if (base) {
+            next.name = base;
+          }
+        }
+        return next;
+      });
+    }
+  }, []);
 
   const handleSave = async () => {
     const validationError = validateForm();
@@ -381,19 +408,31 @@ export function ConnectionDialog({
             htmlFor="db-conn-database"
             description={t("database.dialog.databaseDescription")}
           >
-            <TextInput
-              id="db-conn-database"
-              className="input"
-              placeholder={
-                isFileBased
-                  ? "/path/to/file.db"
-                  : form.engine === "redis"
-                    ? "0"
-                    : t("database.dialog.databasePlaceholder")
-              }
-              value={form.database}
-              onChange={(value) => update("database", value)}
-            />
+            <div className={isFileBased ? "form-row form-row--align-end" : undefined}>
+              <TextInput
+                id="db-conn-database"
+                className="input"
+                style={isFileBased ? { flex: 1 } : undefined}
+                placeholder={
+                  isFileBased
+                    ? "/path/to/file.db"
+                    : form.engine === "redis"
+                      ? "0"
+                      : t("database.dialog.databasePlaceholder")
+                }
+                value={form.database}
+                onChange={(value) => update("database", value)}
+              />
+              {isFileBased ? (
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => void handleBrowseDatabaseFile()}
+                >
+                  {t("database.dialog.browseDatabaseFile")}
+                </button>
+              ) : null}
+            </div>
           </FormField>
 
           {!isFileBased && (
